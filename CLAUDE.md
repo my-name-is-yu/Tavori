@@ -8,17 +8,20 @@ Motiva — AI agent orchestrator that gives existing agents "motivation." Motiva
 
 ## Status
 
-Implementation Phase — Stage 1 complete, Stage 2 next.
+Implementation Phase — Stage 1 & 2 complete, Stage 3 next.
 
 ### Stage 1 (complete)
-- Type definitions: 11 Zod schema files in `src/types/`
+- Type definitions: 13 Zod schema files in `src/types/`
 - `src/state-manager.ts` — file-based JSON persistence (~/.motiva/, atomic writes)
 - `src/gap-calculator.ts` — 5-threshold-type pipeline (raw→normalized→weighted)
-- 79 tests passing (tests/state-manager.test.ts, tests/gap-calculator.test.ts)
 
-### Stage 2 (next)
-- Layer 1: DriveSystem, TrustManager
-- Layer 2: ObservationEngine, DriveScorer, SatisficingJudge, StallDetector
+### Stage 2 (complete)
+- Layer 1: `src/drive-system.ts` (event queue, scheduling, activation checks), `src/trust-manager.ts` (trust balance, 4-quadrant action matrix, permanent gates)
+- Layer 2: `src/observation-engine.ts` (3-layer observation, progress ceiling, contradiction resolution), `src/drive-scorer.ts` (3 drive scores: dissatisfaction/deadline/opportunity), `src/satisficing-judge.ts` (completion judgment, dimension satisfaction, threshold adjustment), `src/stall-detector.ts` (4 stall types, cause classification, escalation, decay factor)
+- 405 tests passing across 8 test files
+
+### Stage 3 (next)
+- Layer 3: SessionManager, GoalNegotiator, StrategyManager
 
 ## Core Concept
 

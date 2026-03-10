@@ -66,3 +66,36 @@ export const MotivaEventSchema = z.object({
   data: z.record(z.string(), z.unknown()),
 });
 export type MotivaEvent = z.infer<typeof MotivaEventSchema>;
+
+// --- Stage 2 additions ---
+
+export const DriveContextSchema = z.object({
+  time_since_last_attempt: z.record(z.string(), z.number()),
+  deadlines: z.record(z.string(), z.number().nullable()),
+  opportunities: z.record(z.string(), z.object({
+    value: z.number(),
+    detected_at: z.string(),
+  })),
+});
+export type DriveContext = z.infer<typeof DriveContextSchema>;
+
+export const PaceConfigSchema = z.object({
+  min_check_interval_hours: z.number().default(1),
+  max_check_interval_hours: z.number().default(24),
+  max_consecutive_actions: z.number().default(5),
+  cooldown_duration_hours: z.number().default(6),
+  significant_change_threshold: z.number().default(0.05),
+  backoff_factor: z.number().default(1.5),
+});
+export type PaceConfig = z.infer<typeof PaceConfigSchema>;
+
+export const GoalScheduleSchema = z.object({
+  goal_id: z.string(),
+  next_check_at: z.string(),
+  check_interval_hours: z.number(),
+  last_triggered_at: z.string().nullable().default(null),
+  consecutive_actions: z.number().default(0),
+  cooldown_until: z.string().nullable().default(null),
+  current_interval_hours: z.number(),
+});
+export type GoalSchedule = z.infer<typeof GoalScheduleSchema>;

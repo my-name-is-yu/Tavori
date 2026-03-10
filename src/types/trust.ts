@@ -10,10 +10,24 @@ export const TrustBalanceSchema = z.object({
 });
 export type TrustBalance = z.infer<typeof TrustBalanceSchema>;
 
+// --- Trust Override Log Entry ---
+
+export const TrustOverrideLogEntrySchema = z.object({
+  timestamp: z.string(),
+  override_type: z.enum(["trust_grant", "permanent_gate"]),
+  domain: z.string(),
+  target_category: z.string().nullable().default(null),
+  balance_before: z.number().nullable().default(null),
+  balance_after: z.number().nullable().default(null),
+});
+export type TrustOverrideLogEntry = z.infer<typeof TrustOverrideLogEntrySchema>;
+
 // --- Trust Store (all domains) ---
 
 export const TrustStoreSchema = z.object({
   balances: z.record(z.string(), TrustBalanceSchema),
+  permanent_gates: z.record(z.string(), z.array(z.string())).default({}),
+  override_log: z.array(TrustOverrideLogEntrySchema).default([]),
 });
 export type TrustStore = z.infer<typeof TrustStoreSchema>;
 

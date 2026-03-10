@@ -1,0 +1,265 @@
+import { ObservationLogEntrySchema, ObservationLogSchema } from "./types/state.js";
+import type { ObservationLogEntry, ObservationLog } from "./types/state.js";
+import type { ObservationLayer, ObservationMethod, ObservationTrigger, ConfidenceTier } from "./types/core.js";
+import type { StateManager } from "./state-manager.js";
+
+// ─── Layer Configuration ───
+
+interface LayerConfig {
+  ceiling: number;
+  tier: ConfidenceTier;
+  range: [number, number];
+}
+
+const LAYER_CONFIG: Record<ObservationLayer, LayerConfig> = {
+  mechanical: {
+    ceiling: 1.0,
+    tier: "mechanical",
+    range: [0.85, 1.0],
+  },
+  independent_review: {
+    ceiling: 0.90,
+    tier: "independent_review",
+    range: [0.50, 0.84],
+  },
+  self_report: {
+    ceiling: 0.70,
+    tier: "self_report",
+    range: [0.10, 0.49],
+  },
+};
+
+// ─── Layer Priority ───
+
+const LAYER_PRIORITY: Record<ObservationLayer, number> = {
+  mechanical: 3,
+  independent_review: 2,
+  self_report: 1,
+};
+
+/**
+ * ObservationEngine handles the 3-layer observation architecture.
+ *
+ * Layers (in descending trust order):
+ *   mechanical         — confidence [0.85, 1.0],  progress ceiling 1.00
+ *   independent_review — confidence [0.50, 0.84], progress ceiling 0.90
+ *   self_report        — confidence [0.10, 0.49], progress ceiling 0.70
+ *
+ * Observation logs are persisted via StateManager.appendObservation.
+ * Goal state updates are persisted via StateManager.saveGoal.
+ */
+export class ObservationEngine {
+  private readonly stateManager: StateManager;
+
+  constructor(stateManager: StateManager) {
+    this.stateManager = stateManager;
+  }
+
+  // ─── Progress Ceiling ───
+
+  /**
+   * Apply progress ceiling based on observation layer.
+   * Returns min(progress, ceiling).
+   */
+  applyProgressCeiling(progress: number, layer: ObservationLayer): number {
+    const config = LAYER_CONFIG[layer];
+    return Math.min(progress, config.ceiling);
+  }
+
+  // ─── Confidence Tier ───
+
+  /**
+   * Return the ConfidenceTier and valid confidence range for a given layer.
+   */
+  getConfidenceTier(layer: ObservationLayer): { tier: ConfidenceTier; range: [number, number] } {
+    const config = LAYER_CONFIG[layer];
+    return { tier: config.tier, range: config.range };
+  }
+
+  // ─── Create Observation Entry ───
+
+  /**
+   * Construct a new ObservationLogEntry.
+   * Confidence is clamped to the layer's valid range.
+   */
+  createObservationEntry(params: {
+    goalId: string;
+    dimensionName: string;
+    layer: ObservationLayer;
+    method: ObservationMethod;
+    trigger: ObservationTrigger;
+    rawResult: unknown;
+    extractedValue: number | string | boolean | null;
+    confidence: number;
+    notes?: string;
+  }): ObservationLogEntry {
+    const config = LAYER_CONFIG[params.layer];
+    const [minConf, maxConf] = config.range;
+    const clampedConfidence = Math.min(maxConf, Math.max(minConf, params.confidence));
+
+    const entry = ObservationLogEntrySchema.parse({
+      observation_id: crypto.randomUUID(),
+      timestamp: new Date().toISOString(),
+      trigger: params.trigger,
+      goal_id: params.goalId,
+      dimension_name: params.dimensionName,
+      layer: params.layer,
+      method: params.method,
+      raw_result: params.rawResult,
+      extracted_value: params.extractedValue,
+      confidence: clampedConfidence,
+      notes: params.notes ?? null,
+    });
+
+    return entry;
+  }
+
+  // ─── Evidence Gate ───
+
+  /**
+   * Returns true when effective progress meets the threshold but confidence
+   * is below 0.85, meaning a mechanical verification task should be generated.
+   */
+  needsVerificationTask(effectiveProgress: number, confidence: number, threshold: number): boolean {
+    return effectiveProgress >= threshold && confidence < 0.85;
+  }
+
+  // ─── Contradiction Resolution ───
+
+  /**
+   * Resolve contradictions among multiple observation entries.
+   *
+   * Resolution rules:
+   *   1. Higher-priority layer wins (mechanical > independent_review > self_report).
+   *   2. Within the same layer, take the pessimistic (lower) numeric value.
+   *   3. For non-numeric values, take the first entry in the winning layer.
+   *
+   * Returns the single "winning" entry.
+   * Throws if entries array is empty.
+   */
+  resolveContradiction(entries: ObservationLogEntry[]): ObservationLogEntry {
+    if (entries.length === 0) {
+      throw new Error("resolveContradiction: entries array must not be empty");
+    }
+    if (entries.length === 1) {
+      return entries[0]!;
+    }
+
+    // Find highest priority layer present
+    let maxPriority = -1;
+    for (const entry of entries) {
+      const priority = LAYER_PRIORITY[entry.layer];
+      if (priority > maxPriority) {
+        maxPriority = priority;
+      }
+    }
+
+    // Collect all entries at the winning layer
+    const winningLayer = entries.filter(
+      (e) => LAYER_PRIORITY[e.layer] === maxPriority
+    );
+
+    if (winningLayer.length === 1) {
+      return winningLayer[0]!;
+    }
+
+    // Within same layer: pessimistic (lowest numeric value)
+    let best = winningLayer[0]!;
+    for (let i = 1; i < winningLayer.length; i++) {
+      const candidate = winningLayer[i]!;
+      const bestVal = best.extracted_value;
+      const candidateVal = candidate.extracted_value;
+      if (typeof bestVal === "number" && typeof candidateVal === "number") {
+        if (candidateVal < bestVal) {
+          best = candidate;
+        }
+      }
+    }
+
+    return best;
+  }
+
+  // ─── Apply Observation to Goal ───
+
+  /**
+   * Apply an observation entry to the corresponding goal dimension.
+   *
+   * Steps:
+   *   1. Load goal via StateManager.
+   *   2. Find dimension by name.
+   *   3. Update current_value and confidence.
+   *   4. Append to dimension history.
+   *   5. Persist observation log entry via StateManager.appendObservation.
+   *   6. Persist updated goal via StateManager.saveGoal.
+   */
+  applyObservation(goalId: string, entry: ObservationLogEntry): void {
+    const goal = this.stateManager.loadGoal(goalId);
+    if (goal === null) {
+      throw new Error(`applyObservation: goal "${goalId}" not found`);
+    }
+
+    const dimIndex = goal.dimensions.findIndex((d) => d.name === entry.dimension_name);
+    if (dimIndex === -1) {
+      throw new Error(
+        `applyObservation: dimension "${entry.dimension_name}" not found in goal "${goalId}"`
+      );
+    }
+
+    const dim = goal.dimensions[dimIndex]!;
+
+    // Update dimension values
+    const updatedDim = {
+      ...dim,
+      current_value: entry.extracted_value,
+      confidence: entry.confidence,
+      last_updated: entry.timestamp,
+      history: [
+        ...dim.history,
+        {
+          value: entry.extracted_value,
+          timestamp: entry.timestamp,
+          confidence: entry.confidence,
+          source_observation_id: entry.observation_id,
+        },
+      ],
+    };
+
+    const updatedDimensions = [...goal.dimensions];
+    updatedDimensions[dimIndex] = updatedDim;
+
+    const updatedGoal = {
+      ...goal,
+      dimensions: updatedDimensions,
+      updated_at: new Date().toISOString(),
+    };
+
+    // Persist observation entry
+    this.stateManager.appendObservation(goalId, entry);
+
+    // Persist updated goal
+    this.stateManager.saveGoal(updatedGoal);
+  }
+
+  // ─── Observation Log Persistence ───
+
+  /**
+   * Load the observation log for a goal.
+   * Returns an empty log if none exists.
+   */
+  getObservationLog(goalId: string): ObservationLog {
+    const existing = this.stateManager.loadObservationLog(goalId);
+    if (existing !== null) {
+      return existing;
+    }
+    return ObservationLogSchema.parse({ goal_id: goalId, entries: [] });
+  }
+
+  /**
+   * Persist the observation log for a goal.
+   */
+  saveObservationLog(goalId: string, log: ObservationLog): void {
+    if (goalId !== log.goal_id) throw new Error("goalId mismatch");
+    const parsed = ObservationLogSchema.parse(log);
+    this.stateManager.saveObservationLog(parsed);
+  }
+}

@@ -8,3 +8,5 @@ export * from "./session.js";
 export * from "./strategy.js";
 export * from "./drive.js";
 export * from "./report.js";
+export * from "./stall.js";
+export * from "./satisficing.js";
