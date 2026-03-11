@@ -166,7 +166,8 @@ export class TrustManager {
     if (category && this.hasPermanentGate(domain, category)) {
       return true;
     }
-    return this.getActionQuadrant(domain, confidence) !== "autonomous";
+    const quadrant = this.getActionQuadrant(domain, confidence);
+    return quadrant === "observe_and_propose";
   }
 
   /**

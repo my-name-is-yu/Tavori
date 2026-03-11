@@ -212,6 +212,8 @@ export class CoreLoop {
 
     const iterations: LoopIterationResult[] = [];
     let consecutiveErrors = 0;
+    let consecutiveDenied = 0;
+    let consecutiveEscalations = 0;
     let finalStatus: LoopResult["finalStatus"] = "max_iterations";
 
     for (let loopIndex = 0; loopIndex < this.config.maxIterations; loopIndex++) {
@@ -238,6 +240,29 @@ export class CoreLoop {
         }
       } else {
         consecutiveErrors = 0;
+      }
+
+      // Check approval_denied and escalate counters
+      const taskAction = iterationResult.taskResult?.action ?? null;
+
+      if (taskAction === "approval_denied") {
+        consecutiveDenied++;
+        if (consecutiveDenied >= 3) {
+          finalStatus = "stopped";
+          break;
+        }
+      } else {
+        consecutiveDenied = 0;
+      }
+
+      if (taskAction === "escalate") {
+        consecutiveEscalations++;
+        if (consecutiveEscalations >= 3) {
+          finalStatus = "stalled";
+          break;
+        }
+      } else {
+        consecutiveEscalations = 0;
       }
 
       // Check stall escalation (escalation_level >= 3 means max escalation)

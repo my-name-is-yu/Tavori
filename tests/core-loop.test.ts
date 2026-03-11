@@ -1058,6 +1058,153 @@ describe("CoreLoop", () => {
     });
   });
 
+  // ─── approval_denied and escalate loop stopping ───
+
+  describe("approval_denied loop stopping", () => {
+    it("stops loop after 3 consecutive approval_denied results", async () => {
+      const { deps, mocks } = createMockDeps(tmpDir);
+      mocks.stateManager.saveGoal(makeGoal());
+      mocks.taskLifecycle.runTaskCycle.mockResolvedValue(
+        makeTaskCycleResult({ action: "approval_denied" })
+      );
+
+      const loop = new CoreLoop(deps, {
+        maxIterations: 100,
+        delayBetweenLoopsMs: 0,
+      });
+      const result = await loop.run("goal-1");
+
+      expect(result.finalStatus).toBe("stopped");
+      expect(result.totalIterations).toBe(3);
+    });
+
+    it("does not stop loop after only 2 consecutive approval_denied results", async () => {
+      const { deps, mocks } = createMockDeps(tmpDir);
+      mocks.stateManager.saveGoal(makeGoal());
+
+      let callCount = 0;
+      mocks.taskLifecycle.runTaskCycle.mockImplementation(async () => {
+        callCount++;
+        if (callCount <= 2) {
+          return makeTaskCycleResult({ action: "approval_denied" });
+        }
+        return makeTaskCycleResult({ action: "completed" });
+      });
+
+      const loop = new CoreLoop(deps, {
+        maxIterations: 5,
+        delayBetweenLoopsMs: 0,
+      });
+      const result = await loop.run("goal-1");
+
+      expect(result.finalStatus).toBe("max_iterations");
+      expect(result.totalIterations).toBe(5);
+    });
+
+    it("resets consecutiveDenied counter on non-denied result", async () => {
+      const { deps, mocks } = createMockDeps(tmpDir);
+      mocks.stateManager.saveGoal(makeGoal());
+
+      // Pattern: denied, denied, completed, denied, denied, denied → should stop on 6th iteration
+      const actions = [
+        "approval_denied",
+        "approval_denied",
+        "completed",
+        "approval_denied",
+        "approval_denied",
+        "approval_denied",
+      ] as const;
+      let callCount = 0;
+      mocks.taskLifecycle.runTaskCycle.mockImplementation(async () => {
+        const action = actions[callCount] ?? "completed";
+        callCount++;
+        return makeTaskCycleResult({ action });
+      });
+
+      const loop = new CoreLoop(deps, {
+        maxIterations: 100,
+        delayBetweenLoopsMs: 0,
+      });
+      const result = await loop.run("goal-1");
+
+      expect(result.finalStatus).toBe("stopped");
+      // 3 non-reset denials happen at iterations 4,5,6 (1-indexed)
+      expect(result.totalIterations).toBe(6);
+    });
+  });
+
+  describe("escalate loop stopping", () => {
+    it("stops loop after 3 consecutive escalate results", async () => {
+      const { deps, mocks } = createMockDeps(tmpDir);
+      mocks.stateManager.saveGoal(makeGoal());
+      mocks.taskLifecycle.runTaskCycle.mockResolvedValue(
+        makeTaskCycleResult({ action: "escalate" })
+      );
+
+      const loop = new CoreLoop(deps, {
+        maxIterations: 100,
+        delayBetweenLoopsMs: 0,
+      });
+      const result = await loop.run("goal-1");
+
+      expect(result.finalStatus).toBe("stalled");
+      expect(result.totalIterations).toBe(3);
+    });
+
+    it("does not stop loop after only 2 consecutive escalate results", async () => {
+      const { deps, mocks } = createMockDeps(tmpDir);
+      mocks.stateManager.saveGoal(makeGoal());
+
+      let callCount = 0;
+      mocks.taskLifecycle.runTaskCycle.mockImplementation(async () => {
+        callCount++;
+        if (callCount <= 2) {
+          return makeTaskCycleResult({ action: "escalate" });
+        }
+        return makeTaskCycleResult({ action: "completed" });
+      });
+
+      const loop = new CoreLoop(deps, {
+        maxIterations: 5,
+        delayBetweenLoopsMs: 0,
+      });
+      const result = await loop.run("goal-1");
+
+      expect(result.finalStatus).toBe("max_iterations");
+      expect(result.totalIterations).toBe(5);
+    });
+
+    it("resets consecutiveEscalations counter on non-escalated result", async () => {
+      const { deps, mocks } = createMockDeps(tmpDir);
+      mocks.stateManager.saveGoal(makeGoal());
+
+      // Pattern: escalate, escalate, completed, escalate, escalate, escalate → stops on 6th
+      const actions = [
+        "escalate",
+        "escalate",
+        "completed",
+        "escalate",
+        "escalate",
+        "escalate",
+      ] as const;
+      let callCount = 0;
+      mocks.taskLifecycle.runTaskCycle.mockImplementation(async () => {
+        const action = actions[callCount] ?? "completed";
+        callCount++;
+        return makeTaskCycleResult({ action });
+      });
+
+      const loop = new CoreLoop(deps, {
+        maxIterations: 100,
+        delayBetweenLoopsMs: 0,
+      });
+      const result = await loop.run("goal-1");
+
+      expect(result.finalStatus).toBe("stalled");
+      expect(result.totalIterations).toBe(6);
+    });
+  });
+
   // ─── LoopResult construction ───
 
   describe("LoopResult construction", () => {

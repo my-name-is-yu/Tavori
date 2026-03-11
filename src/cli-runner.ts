@@ -61,28 +61,22 @@ export class CLIRunner {
     return process.env.ANTHROPIC_API_KEY;
   }
 
-  private buildApprovalFn(): (task: Task) => Promise<boolean> {
+  private buildApprovalFn(rl: readline.Interface): (task: Task) => Promise<boolean> {
     return (task: Task): Promise<boolean> => {
       return new Promise((resolve) => {
-        const rl = readline.createInterface({
-          input: process.stdin,
-          output: process.stdout,
-        });
-
         console.log("\n--- Approval Required ---");
         console.log(`Task: ${task.work_description}`);
         console.log(`Rationale: ${task.rationale}`);
         console.log(`Reversibility: ${task.reversibility}`);
 
         rl.question("Approve this task? [y/N] ", (answer) => {
-          rl.close();
           resolve(answer.trim().toLowerCase() === "y");
         });
       });
     };
   }
 
-  private buildDeps(apiKey: string, config?: LoopConfig) {
+  private buildDeps(apiKey: string, config?: LoopConfig, approvalFn?: (task: Task) => Promise<boolean>) {
     const stateManager = this.stateManager;
     const llmClient = new LLMClient(apiKey);
     const trustManager = new TrustManager(stateManager);
@@ -106,7 +100,7 @@ export class CLIRunner {
       trustManager,
       strategyManager,
       stallDetector,
-      { approvalFn: this.buildApprovalFn() }
+      { approvalFn }
     );
 
     const reportingEngine = new ReportingEngine(stateManager);
@@ -162,10 +156,18 @@ export class CLIRunner {
       return 1;
     }
 
+    // Create a single readline interface for the entire loop run.
+    // It is reused across all approval prompts and closed when the loop ends.
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+
     let deps: ReturnType<typeof this.buildDeps>;
     try {
-      deps = this.buildDeps(apiKey, loopConfig);
+      deps = this.buildDeps(apiKey, loopConfig, this.buildApprovalFn(rl));
     } catch (err) {
+      rl.close();
       const message = err instanceof Error ? err.message : String(err);
       console.error(`Error: Failed to initialise dependencies: ${message}`);
       return 1;
@@ -176,6 +178,7 @@ export class CLIRunner {
     // Validate goal exists before starting
     const goal = this.stateManager.loadGoal(goalId);
     if (!goal) {
+      rl.close();
       console.error(`Error: Goal "${goalId}" not found.`);
       return 1;
     }
@@ -204,12 +207,14 @@ export class CLIRunner {
       process.off("SIGINT", shutdown);
       process.off("SIGTERM", shutdown);
       this.activeCoreLoop = null;
+      rl.close();
       return 1;
     }
 
     process.off("SIGINT", shutdown);
     process.off("SIGTERM", shutdown);
     this.activeCoreLoop = null;
+    rl.close();
 
     console.log(`\n--- Loop Result ---`);
     console.log(`Goal ID:          ${result.goalId}`);

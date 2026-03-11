@@ -232,15 +232,15 @@ describe("TrustManager", () => {
       expect(manager.requiresApproval("reversible", "trusted", 1.0)).toBe(false);
     });
 
-    it("returns true for reversible action in execute_with_confirm quadrant (high trust, low confidence)", () => {
+    it("returns false for reversible action in execute_with_confirm quadrant (high trust, low confidence)", () => {
       manager.setOverride("domain", HIGH_TRUST_THRESHOLD, "test");
       const confidence = HIGH_CONFIDENCE_THRESHOLD - 0.01; // 0.49 → execute_with_confirm
-      expect(manager.requiresApproval("reversible", "domain", confidence)).toBe(true);
+      expect(manager.requiresApproval("reversible", "domain", confidence)).toBe(false);
     });
 
-    it("returns true for reversible action in execute_with_confirm quadrant (low trust, high confidence)", () => {
-      // Default trust = 0 < 20
-      expect(manager.requiresApproval("reversible", "low-trust-domain", 0.99)).toBe(true);
+    it("returns false for reversible action in execute_with_confirm quadrant (low trust, high confidence)", () => {
+      // Default trust = 0 < 20, confidence = 0.99 → execute_with_confirm
+      expect(manager.requiresApproval("reversible", "low-trust-domain", 0.99)).toBe(false);
     });
 
     it("returns true for reversible action in observe_and_propose quadrant", () => {

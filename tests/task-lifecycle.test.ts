@@ -1600,6 +1600,122 @@ describe("TaskLifecycle", () => {
       expect(result.task.completed_at).toBeDefined();
       expect(typeof result.task.completed_at).toBe("string");
     });
+
+    it("pass updates last_updated on matching goal dimension", async () => {
+      const llm = createMockLLMClient([]);
+      const lifecycle = createLifecycle(llm);
+      const task = makeTask({ primary_dimension: "coverage" });
+      const vr = makeVerificationResult({ verdict: "pass" });
+
+      // Write goal with a dimension whose last_updated is null
+      const oldTimestamp = null;
+      stateManager.writeRaw("goals/goal-1.json", {
+        id: "goal-1",
+        title: "Test Goal",
+        status: "active",
+        dimensions: [
+          { name: "coverage", label: "Coverage", current_value: 0.5, last_updated: oldTimestamp },
+          { name: "performance", label: "Performance", current_value: 0.8, last_updated: null },
+        ],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+
+      const before = new Date().toISOString();
+      await lifecycle.handleVerdict(task, vr);
+      const after = new Date().toISOString();
+
+      const goal = stateManager.readRaw("goals/goal-1.json") as Record<string, unknown>;
+      const dims = goal.dimensions as Array<Record<string, unknown>>;
+      const coverageDim = dims.find((d) => d.name === "coverage");
+      const performanceDim = dims.find((d) => d.name === "performance");
+
+      expect(coverageDim).toBeDefined();
+      expect(typeof coverageDim!.last_updated).toBe("string");
+      expect(coverageDim!.last_updated as string >= before).toBe(true);
+      expect(coverageDim!.last_updated as string <= after).toBe(true);
+
+      // Unrelated dimension should remain untouched
+      expect(performanceDim!.last_updated).toBeNull();
+    });
+
+    it("pass updates last_updated even when dimension already had a timestamp", async () => {
+      const llm = createMockLLMClient([]);
+      const lifecycle = createLifecycle(llm);
+      const task = makeTask({ primary_dimension: "coverage" });
+      const vr = makeVerificationResult({ verdict: "pass" });
+
+      const oldTimestamp = "2020-01-01T00:00:00.000Z";
+      stateManager.writeRaw("goals/goal-1.json", {
+        id: "goal-1",
+        title: "Test Goal",
+        status: "active",
+        dimensions: [
+          { name: "coverage", label: "Coverage", current_value: 0.5, last_updated: oldTimestamp },
+        ],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+
+      await lifecycle.handleVerdict(task, vr);
+
+      const goal = stateManager.readRaw("goals/goal-1.json") as Record<string, unknown>;
+      const dims = goal.dimensions as Array<Record<string, unknown>>;
+      const coverageDim = dims.find((d) => d.name === "coverage");
+
+      expect(coverageDim!.last_updated).not.toBe(oldTimestamp);
+      expect(coverageDim!.last_updated as string > oldTimestamp).toBe(true);
+    });
+
+    it("pass does not modify goal when goal does not exist in state", async () => {
+      const llm = createMockLLMClient([]);
+      const lifecycle = createLifecycle(llm);
+      const task = makeTask({ primary_dimension: "coverage" });
+      const vr = makeVerificationResult({ verdict: "pass" });
+
+      // No goal written to state — should complete without throwing
+      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      const result = await lifecycle.handleVerdict(task, vr);
+
+      expect(result.action).toBe("completed");
+    });
+
+    it("fail verdict does NOT update goal dimension last_updated", async () => {
+      const llm = createMockLLMClient([]);
+      const lifecycle = createLifecycle(llm);
+      const task = makeTask({ primary_dimension: "coverage" });
+      const vr = makeVerificationResult({
+        verdict: "fail",
+        evidence: [
+          { layer: "independent_review", description: "Failed", confidence: 0.8 },
+          { layer: "self_report", description: "Could not complete", confidence: 0.3 },
+        ],
+      });
+
+      const oldTimestamp = "2020-01-01T00:00:00.000Z";
+      stateManager.writeRaw("goals/goal-1.json", {
+        id: "goal-1",
+        title: "Test Goal",
+        status: "active",
+        dimensions: [
+          { name: "coverage", label: "Coverage", current_value: 0.5, last_updated: oldTimestamp },
+        ],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+
+      await lifecycle.handleVerdict(task, vr);
+
+      const goal = stateManager.readRaw("goals/goal-1.json") as Record<string, unknown>;
+      const dims = goal.dimensions as Array<Record<string, unknown>>;
+      const coverageDim = dims.find((d) => d.name === "coverage");
+
+      // Fail path should not touch the goal dimension
+      expect(coverageDim!.last_updated).toBe(oldTimestamp);
+    });
   });
 
   // ─────────────────────────────────────────────

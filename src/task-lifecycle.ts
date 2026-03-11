@@ -61,7 +61,7 @@ const LLMGeneratedTaskSchema = z.object({
     blast_radius: z.string(),
   }),
   constraints: z.array(z.string()),
-  reversibility: z.enum(["reversible", "irreversible", "unknown"]).default("unknown"),
+  reversibility: z.enum(["reversible", "irreversible", "unknown"]).default("reversible"),
   estimated_duration: z
     .object({
       value: z.number(),
@@ -435,17 +435,36 @@ export class TaskLifecycle {
         // Record success
         this.trustManager.recordSuccess(task.task_category);
 
+        const now = new Date().toISOString();
+
         // Reset consecutive failure count
         const completedTask = {
           ...task,
           consecutive_failure_count: 0,
           status: "completed" as const,
-          completed_at: new Date().toISOString(),
+          completed_at: now,
         };
         this.stateManager.writeRaw(
           `tasks/${task.goal_id}/${task.id}.json`,
           completedTask
         );
+
+        // Update the dimension's last_updated so the drive scorer sees a
+        // changed time_since_last_attempt on the next iteration and avoids
+        // selecting the same dimension again immediately.
+        const goalData = this.stateManager.readRaw(`goals/${task.goal_id}.json`);
+        if (goalData && typeof goalData === "object") {
+          const goal = goalData as Record<string, unknown>;
+          const dimensions = goal.dimensions as Array<Record<string, unknown>> | undefined;
+          if (dimensions) {
+            for (const dim of dimensions) {
+              if (dim.name === task.primary_dimension) {
+                dim.last_updated = now;
+              }
+            }
+            this.stateManager.writeRaw(`goals/${task.goal_id}.json`, goal);
+          }
+        }
 
         // Update task history
         this.appendTaskHistory(task.goal_id, completedTask);
