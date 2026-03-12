@@ -1,0 +1,10 @@
+src/
+tests/
+docs/
+memory/
+.claude/
+*.test.ts
+*.test.js
+tsconfig.json
+vitest.config.*
+.gitignore

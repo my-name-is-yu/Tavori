@@ -29,7 +29,6 @@ import * as DriveScorer from "../drive-scorer.js";
 import type { GapCalculatorModule, DriveScorerModule } from "../core-loop.js";
 
 import { App, type ApprovalRequest } from "./app.js";
-import { LoopController } from "./use-loop.js";
 import { ActionHandler } from "./actions.js";
 import { IntentRecognizer } from "./intent-recognizer.js";
 import type { Task } from "../types/task.js";
@@ -146,7 +145,8 @@ export async function startTUI(): Promise<void> {
   const { stateManager, llmClient, trustManager, coreLoop, goalNegotiator, reportingEngine, setRequestApproval } = deps;
 
   // 3. Create TUI-specific instances
-  const loopController = new LoopController(coreLoop, stateManager, trustManager);
+  // Note: LoopController is no longer instantiated here — App uses the
+  // useLoop() hook internally and creates the controller inside React.
   const actionHandler = new ActionHandler({
     stateManager,
     goalNegotiator,
@@ -154,18 +154,21 @@ export async function startTUI(): Promise<void> {
   });
   const intentRecognizer = new IntentRecognizer(llmClient);
 
-  // 4. Handle SIGINT/SIGTERM gracefully before rendering
+  // 4. Handle SIGINT/SIGTERM gracefully before rendering.
+  // Stop the core loop directly (same effect as LoopController.stop()).
   const shutdown = () => {
-    loopController.stop();
+    coreLoop.stop();
     process.exit(0);
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  // 5. Render Ink app
+  // 5. Render Ink app — loop deps passed directly; App calls useLoop() internally
   const { waitUntilExit } = render(
     React.createElement(App, {
-      loopController,
+      coreLoop,
+      stateManager,
+      trustManager,
       actionHandler,
       intentRecognizer,
       onApprovalReady: setRequestApproval,

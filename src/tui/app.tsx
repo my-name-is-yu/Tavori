@@ -1,8 +1,9 @@
 // ─── App ───
 //
 // Root Ink component that composes Dashboard + Chat and manages shared state.
-// Wires LoopController state updates into React state and routes chat input
-// through IntentRecognizer → ActionHandler.
+// Layout: horizontal split — Dashboard sidebar (left, ~30%) + Chat (right, ~70%).
+// Uses the useLoop() hook internally for loop state management.
+// Routes chat input through IntentRecognizer → ActionHandler.
 
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { Box, Text, useInput } from "ink";
@@ -10,9 +11,12 @@ import { Dashboard } from "./dashboard.js";
 import { Chat, type ChatMessage } from "./chat.js";
 import { HelpOverlay } from "./help-overlay.js";
 import { ApprovalOverlay } from "./approval-overlay.js";
-import type { LoopController, LoopState } from "./use-loop.js";
+import { useLoop } from "./use-loop.js";
 import type { ActionHandler } from "./actions.js";
 import type { IntentRecognizer } from "./intent-recognizer.js";
+import type { CoreLoop } from "../core-loop.js";
+import type { StateManager } from "../state-manager.js";
+import type { TrustManager } from "../trust-manager.js";
 import type { Task } from "../types/task.js";
 
 const MAX_MESSAGES = 200;
@@ -23,7 +27,9 @@ export interface ApprovalRequest {
 }
 
 interface AppProps {
-  loopController: LoopController;
+  coreLoop: CoreLoop;
+  stateManager: StateManager;
+  trustManager: TrustManager;
   actionHandler: ActionHandler;
   intentRecognizer: IntentRecognizer;
   onApprovalReady?: (requestFn: (req: ApprovalRequest) => void) => void;
@@ -49,8 +55,17 @@ const StatusBar: React.FC<{
   </Box>
 );
 
-export function App({ loopController, actionHandler, intentRecognizer, onApprovalReady }: AppProps) {
-  const [loopState, setLoopState] = useState<LoopState>(loopController.getState());
+export function App({
+  coreLoop,
+  stateManager,
+  trustManager,
+  actionHandler,
+  intentRecognizer,
+  onApprovalReady,
+}: AppProps) {
+  // ── Loop state via hook ──
+  const { loopState, start, stop, getController } = useLoop(coreLoop, stateManager, trustManager);
+
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: "motiva",
@@ -63,11 +78,6 @@ export function App({ loopController, actionHandler, intentRecognizer, onApprova
   const [showHelp, setShowHelp] = useState(false);
   const [approvalRequest, setApprovalRequest] = useState<ApprovalRequest | null>(null);
   const approvalRequestRef = useRef<ApprovalRequest | null>(null);
-
-  useEffect(() => {
-    loopController.setOnUpdate(setLoopState);
-    return () => loopController.setOnUpdate(null);
-  }, [loopController]);
 
   // Expose setApprovalRequest to entry.ts via callback prop
   useEffect(() => {
@@ -127,7 +137,7 @@ export function App({ loopController, actionHandler, intentRecognizer, onApprova
 
       // Handle loop signals
       if (result.startLoop) {
-        void loopController.start(result.startLoop.goalId);
+        start(result.startLoop.goalId);
       }
       if (result.stopLoop) {
         // Reject any pending approval before stopping
@@ -136,16 +146,26 @@ export function App({ loopController, actionHandler, intentRecognizer, onApprova
           approvalRequestRef.current = null;
           setApprovalRequest(null);
         }
-        loopController.stop();
+        stop();
       }
 
       setIsProcessing(false);
     },
-    [intentRecognizer, actionHandler, loopController]
+    [intentRecognizer, actionHandler, start, stop]
   );
+
+  // Expose controller for SIGINT shutdown in entry.ts
+  // (called once, ref is stable)
+  useEffect(() => {
+    // nothing — getController() is available synchronously when needed
+  }, [getController]);
 
   // goalCount: 1 when there is an active goal in the loop, 0 otherwise
   const goalCount = loopState.goalId !== null ? 1 : 0;
+
+  // ─── Sidebar layout ───
+  // Horizontal split: Dashboard sidebar (~30%) on the left, Chat (~70%) on the right.
+  // Overlays (approval, help) replace the chat pane when active.
 
   return (
     <Box flexDirection="column" height={process.stdout.rows || 24}>
@@ -154,22 +174,37 @@ export function App({ loopController, actionHandler, intentRecognizer, onApprova
         [ MOTIVA ]
       </Text>
 
-      <Dashboard state={loopState} />
+      {/* Main content: sidebar + chat */}
+      <Box flexDirection="row" flexGrow={1}>
+        {/* ── Left sidebar: Dashboard ── */}
+        <Box
+          flexDirection="column"
+          width="30%"
+          borderStyle="single"
+          borderColor="gray"
+          paddingX={1}
+        >
+          <Dashboard state={loopState} />
+        </Box>
 
-      {approvalRequest !== null ? (
-        <ApprovalOverlay
-          task={approvalRequest.task}
-          onDecision={(approved) => {
-            approvalRequest.resolve(approved);
-            approvalRequestRef.current = null;
-            setApprovalRequest(null);
-          }}
-        />
-      ) : showHelp ? (
-        <HelpOverlay onDismiss={() => setShowHelp(false)} />
-      ) : (
-        <Chat messages={messages} onSubmit={handleInput} isProcessing={isProcessing} />
-      )}
+        {/* ── Right pane: Chat / overlays ── */}
+        <Box flexDirection="column" flexGrow={1}>
+          {approvalRequest !== null ? (
+            <ApprovalOverlay
+              task={approvalRequest.task}
+              onDecision={(approved) => {
+                approvalRequest.resolve(approved);
+                approvalRequestRef.current = null;
+                setApprovalRequest(null);
+              }}
+            />
+          ) : showHelp ? (
+            <HelpOverlay onDismiss={() => setShowHelp(false)} />
+          ) : (
+            <Chat messages={messages} onSubmit={handleInput} isProcessing={isProcessing} />
+          )}
+        </Box>
+      </Box>
 
       <StatusBar
         goalCount={goalCount}

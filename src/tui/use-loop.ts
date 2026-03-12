@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef, useCallback } from "react";
 import type { CoreLoop, LoopResult } from "../core-loop.js";
 import type { StateManager } from "../state-manager.js";
 import type { TrustManager } from "../trust-manager.js";
@@ -164,7 +165,7 @@ export class LoopController {
   stop(): void {
     this.coreLoop.stop();
     this.clearPoll();
-    this.setState({ running: false, status: "stopped" });
+    this.setState({ running: false, status: "stopped", goalId: null });
   }
 
   refreshState(goalId: string): void {
@@ -199,4 +200,59 @@ export class LoopController {
       this.pollInterval = null;
     }
   }
+}
+
+// ─── useLoop hook ───
+//
+// React hook that wraps LoopController and exposes loop state + control
+// functions directly to React components. Eliminates the need to pass a
+// LoopController instance as a prop from entry.ts into App.
+//
+// Usage:
+//   const { loopState, start, stop, setApprovalReadyCallback } = useLoop(coreLoop, stateManager, trustManager);
+
+export interface UseLoopResult {
+  loopState: LoopState;
+  start: (goalId: string) => void;
+  stop: () => void;
+  /** Register a callback that will be invoked whenever a LoopController
+   *  onUpdate notification would have fired (used by entry.ts approval wiring). */
+  getController: () => LoopController;
+}
+
+export function useLoop(
+  coreLoop: CoreLoop,
+  stateManager: StateManager,
+  trustManager: TrustManager
+): UseLoopResult {
+  // Stable controller reference — created once per mount
+  const controllerRef = useRef<LoopController | null>(null);
+  if (controllerRef.current === null) {
+    controllerRef.current = new LoopController(coreLoop, stateManager, trustManager);
+  }
+  const controller = controllerRef.current;
+
+  const [loopState, setLoopState] = useState<LoopState>(() => controller.getState());
+
+  useEffect(() => {
+    controller.setOnUpdate(setLoopState);
+    return () => {
+      controller.setOnUpdate(null);
+    };
+  }, [controller]);
+
+  const start = useCallback(
+    (goalId: string) => {
+      void controller.start(goalId);
+    },
+    [controller]
+  );
+
+  const stop = useCallback(() => {
+    controller.stop();
+  }, [controller]);
+
+  const getController = useCallback(() => controller, [controller]);
+
+  return { loopState, start, stop, getController };
 }

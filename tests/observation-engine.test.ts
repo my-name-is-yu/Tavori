@@ -7,6 +7,7 @@ import { StateManager } from "../src/state-manager.js";
 import type { Goal } from "../src/types/goal.js";
 import type { ObservationLogEntry } from "../src/types/state.js";
 import type { ObservationLayer, ObservationMethod, ObservationTrigger } from "../src/types/core.js";
+import type { KnowledgeGapSignal } from "../src/types/knowledge.js";
 
 // ─── Helpers ───
 
@@ -605,6 +606,60 @@ describe("ObservationEngine", () => {
       const loaded = engine.getObservationLog("goal-4");
       expect(loaded.entries).toHaveLength(1);
       expect(loaded.entries[0]!.observation_id).toBe("obs-b");
+    });
+  });
+
+  // ─── detectKnowledgeGap ───
+
+  describe("detectKnowledgeGap", () => {
+    it("returns null when entries array is empty", () => {
+      const result = engine.detectKnowledgeGap([]);
+      expect(result).toBeNull();
+    });
+
+    it("returns null when all entries have confidence >= 0.3", () => {
+      const entry = makeEntry({ layer: "self_report", confidence: 0.30 });
+      const result = engine.detectKnowledgeGap([entry]);
+      expect(result).toBeNull();
+    });
+
+    it("returns null when at least one entry has confidence >= 0.3", () => {
+      const low = makeEntry({ layer: "self_report", confidence: 0.10 });
+      const ok = makeEntry({ layer: "self_report", confidence: 0.40 });
+      const result = engine.detectKnowledgeGap([low, ok]);
+      expect(result).toBeNull();
+    });
+
+    it("returns interpretation_difficulty signal when all entries have confidence < 0.3", () => {
+      const e1 = makeEntry({ layer: "self_report", confidence: 0.10 });
+      const e2 = makeEntry({ layer: "self_report", confidence: 0.20 });
+      const result = engine.detectKnowledgeGap([e1, e2]);
+      expect(result).not.toBeNull();
+      expect(result!.signal_type).toBe("interpretation_difficulty");
+    });
+
+    it("signal has source_step = gap_recognition", () => {
+      const entry = makeEntry({ layer: "self_report", confidence: 0.10 });
+      const result = engine.detectKnowledgeGap([entry]);
+      expect(result!.source_step).toBe("gap_recognition");
+    });
+
+    it("signal has non-empty missing_knowledge description", () => {
+      const entry = makeEntry({ layer: "self_report", confidence: 0.10 });
+      const result = engine.detectKnowledgeGap([entry]);
+      expect(result!.missing_knowledge.length).toBeGreaterThan(0);
+    });
+
+    it("signal carries the provided dimensionName in related_dimension", () => {
+      const entry = makeEntry({ layer: "self_report", confidence: 0.10 });
+      const result = engine.detectKnowledgeGap([entry], "coverage");
+      expect(result!.related_dimension).toBe("coverage");
+    });
+
+    it("related_dimension is null when dimensionName is omitted", () => {
+      const entry = makeEntry({ layer: "self_report", confidence: 0.10 });
+      const result = engine.detectKnowledgeGap([entry]);
+      expect(result!.related_dimension).toBeNull();
     });
   });
 });

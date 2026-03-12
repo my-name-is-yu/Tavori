@@ -698,6 +698,80 @@ describe("getPortfolio", () => {
   });
 });
 
+// ─── detectStrategyGap ───
+
+describe("detectStrategyGap", () => {
+  it("returns strategy_deadlock signal when candidates array is empty", () => {
+    const mock = createMockLLMClient([]);
+    const manager = new StrategyManager(stateManager, mock);
+    const result = manager.detectStrategyGap([]);
+    expect(result).not.toBeNull();
+    expect(result!.signal_type).toBe("strategy_deadlock");
+  });
+
+  it("returns null when candidates array has a viable strategy (no effectiveness score)", async () => {
+    const mock = createMockLLMClient([CANDIDATE_RESPONSE_ONE]);
+    const manager = new StrategyManager(stateManager, mock);
+    const candidates = await manager.generateCandidates("goal-1", "word_count", ["word_count"], {
+      currentGap: 0.7,
+      pastStrategies: [],
+    });
+    const result = manager.detectStrategyGap(candidates);
+    // Candidates have effectiveness_score=null (unscored), so no deadlock
+    expect(result).toBeNull();
+  });
+
+  it("returns strategy_deadlock when all candidates have effectiveness_score < 0.3", async () => {
+    const mock = createMockLLMClient([CANDIDATE_RESPONSE_ONE]);
+    const manager = new StrategyManager(stateManager, mock);
+    const candidates = await manager.generateCandidates("goal-1", "word_count", ["word_count"], {
+      currentGap: 0.7,
+      pastStrategies: [],
+    });
+    // Simulate low effectiveness
+    const lowCandidates = candidates.map((c) => ({ ...c, effectiveness_score: 0.1 }));
+    const result = manager.detectStrategyGap(lowCandidates);
+    expect(result).not.toBeNull();
+    expect(result!.signal_type).toBe("strategy_deadlock");
+  });
+
+  it("returns null when at least one candidate has effectiveness_score >= 0.3", async () => {
+    const mock = createMockLLMClient([CANDIDATE_RESPONSE_TWO]);
+    const manager = new StrategyManager(stateManager, mock);
+    const candidates = await manager.generateCandidates("goal-1", "research_depth", ["research_depth"], {
+      currentGap: 0.5,
+      pastStrategies: [],
+    });
+    const mixed = candidates.map((c, i) => ({
+      ...c,
+      effectiveness_score: i === 0 ? 0.8 : 0.1,
+    }));
+    const result = manager.detectStrategyGap(mixed);
+    expect(result).toBeNull();
+  });
+
+  it("empty signal has source_step = strategy_selection", () => {
+    const mock = createMockLLMClient([]);
+    const manager = new StrategyManager(stateManager, mock);
+    const result = manager.detectStrategyGap([]);
+    expect(result!.source_step).toBe("strategy_selection");
+  });
+
+  it("signal has non-empty missing_knowledge description", () => {
+    const mock = createMockLLMClient([]);
+    const manager = new StrategyManager(stateManager, mock);
+    const result = manager.detectStrategyGap([]);
+    expect(result!.missing_knowledge.length).toBeGreaterThan(0);
+  });
+
+  it("related_dimension is null for strategy deadlock signal", () => {
+    const mock = createMockLLMClient([]);
+    const manager = new StrategyManager(stateManager, mock);
+    const result = manager.detectStrategyGap([]);
+    expect(result!.related_dimension).toBeNull();
+  });
+});
+
 // ─── getStrategyHistory ───
 
 describe("getStrategyHistory", () => {

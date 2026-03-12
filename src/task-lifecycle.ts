@@ -11,6 +11,8 @@ import { TaskSchema, VerificationResultSchema } from "./types/task.js";
 import type { Task, VerificationResult } from "./types/task.js";
 import type { GapVector } from "./types/gap.js";
 import type { DriveContext } from "./types/drive.js";
+import type { EthicsGate } from "./ethics-gate.js";
+import type { CapabilityDetector } from "./capability-detector.js";
 
 // ─── Adapter types (re-exported from adapter-layer) ───
 
@@ -85,6 +87,8 @@ export class TaskLifecycle {
   private readonly strategyManager: StrategyManager;
   private readonly stallDetector: StallDetector;
   private readonly approvalFn: (task: Task) => Promise<boolean>;
+  private readonly ethicsGate?: EthicsGate;
+  private readonly capabilityDetector?: CapabilityDetector;
 
   constructor(
     stateManager: StateManager,
@@ -93,7 +97,11 @@ export class TaskLifecycle {
     trustManager: TrustManager,
     strategyManager: StrategyManager,
     stallDetector: StallDetector,
-    options?: { approvalFn?: (task: Task) => Promise<boolean> }
+    options?: {
+      approvalFn?: (task: Task) => Promise<boolean>;
+      ethicsGate?: EthicsGate;
+      capabilityDetector?: CapabilityDetector;
+    }
   ) {
     this.stateManager = stateManager;
     this.llmClient = llmClient;
@@ -102,6 +110,8 @@ export class TaskLifecycle {
     this.strategyManager = strategyManager;
     this.stallDetector = stallDetector;
     this.approvalFn = options?.approvalFn ?? ((_task: Task) => Promise.resolve(false));
+    this.ethicsGate = options?.ethicsGate;
+    this.capabilityDetector = options?.capabilityDetector;
   }
 
   // ─── selectTargetDimension ───
@@ -139,9 +149,10 @@ export class TaskLifecycle {
   async generateTask(
     goalId: string,
     targetDimension: string,
-    strategyId?: string
+    strategyId?: string,
+    knowledgeContext?: string
   ): Promise<Task> {
-    const prompt = this.buildTaskGenerationPrompt(goalId, targetDimension);
+    const prompt = this.buildTaskGenerationPrompt(goalId, targetDimension, knowledgeContext);
 
     const response = await this.llmClient.sendMessage(
       [{ role: "user", content: prompt }],
@@ -193,8 +204,6 @@ export class TaskLifecycle {
    * @param task - the task to check
    * @param confidence - observation confidence for the approval check (default 0.5)
    * @returns true if approved or approval not needed; false if approval was denied
-   *
-   * // FIXME: Phase 2 — EthicsGate integration for task means check
    */
   async checkIrreversibleApproval(task: Task, confidence: number = 0.5): Promise<boolean> {
     const domain = task.task_category;
@@ -403,12 +412,51 @@ export class TaskLifecycle {
       },
     ];
 
+    // Build dimension_updates from task's target dimensions based on verdict.
+    // pass: significant progress (+0.4), partial: moderate progress (+0.15), fail: no update.
+    const progressByVerdict: Record<string, number> = {
+      pass: 0.4,
+      partial: 0.15,
+      fail: 0,
+    };
+    const progressDelta = progressByVerdict[verdict] ?? 0;
+
+    // Read goal state to get actual current dimension values for previous_value / new_value.
+    const goalDataForUpdate = this.stateManager.readRaw(`goals/${task.goal_id}.json`);
+    const goalDimsForUpdate =
+      goalDataForUpdate && typeof goalDataForUpdate === "object"
+        ? ((goalDataForUpdate as Record<string, unknown>).dimensions as
+            | Array<Record<string, unknown>>
+            | undefined)
+        : undefined;
+
+    const dimension_updates =
+      verdict === "fail"
+        ? []
+        : task.target_dimensions.map((dimName) => {
+            const dim = goalDimsForUpdate?.find((d) => d.name === dimName);
+            const prevVal =
+              dim !== undefined && typeof dim.current_value === "number"
+                ? (dim.current_value as number)
+                : null;
+            const newVal =
+              prevVal !== null
+                ? Math.min(1, Math.max(0, prevVal + progressDelta))
+                : progressDelta;
+            return {
+              dimension_name: dimName,
+              previous_value: prevVal,
+              new_value: newVal,
+              confidence,
+            };
+          });
+
     const verificationResult = VerificationResultSchema.parse({
       task_id: task.id,
       verdict,
       confidence,
       evidence,
-      dimension_updates: [],
+      dimension_updates,
       timestamp: now,
     });
 
@@ -449,15 +497,21 @@ export class TaskLifecycle {
           completedTask
         );
 
-        // Update the dimension's last_updated so the drive scorer sees a
-        // changed time_since_last_attempt on the next iteration and avoids
-        // selecting the same dimension again immediately.
+        // Apply dimension_updates and update last_updated for the primary dimension.
         const goalData = this.stateManager.readRaw(`goals/${task.goal_id}.json`);
         if (goalData && typeof goalData === "object") {
           const goal = goalData as Record<string, unknown>;
           const dimensions = goal.dimensions as Array<Record<string, unknown>> | undefined;
           if (dimensions) {
             for (const dim of dimensions) {
+              // Apply current_value updates from verification result
+              const update = verificationResult.dimension_updates.find(
+                (u) => u.dimension_name === dim.name
+              );
+              if (update !== undefined && typeof update.new_value === "number") {
+                dim.current_value = update.new_value;
+              }
+              // Update last_updated for the primary dimension
               if (dim.name === task.primary_dimension) {
                 dim.last_updated = now;
               }
@@ -475,6 +529,23 @@ export class TaskLifecycle {
         // Check direction from evidence
         const directionCorrect = this.isDirectionCorrect(verificationResult);
         if (directionCorrect) {
+          // Apply partial dimension_updates to goal state
+          const goalDataPartial = this.stateManager.readRaw(`goals/${task.goal_id}.json`);
+          if (goalDataPartial && typeof goalDataPartial === "object") {
+            const goal = goalDataPartial as Record<string, unknown>;
+            const dimensions = goal.dimensions as Array<Record<string, unknown>> | undefined;
+            if (dimensions) {
+              for (const dim of dimensions) {
+                const update = verificationResult.dimension_updates.find(
+                  (u) => u.dimension_name === dim.name
+                );
+                if (update !== undefined && typeof update.new_value === "number") {
+                  dim.current_value = update.new_value;
+                }
+              }
+              this.stateManager.writeRaw(`goals/${task.goal_id}.json`, goal);
+            }
+          }
           this.appendTaskHistory(task.goal_id, task);
           return { action: "keep", task };
         }
@@ -563,15 +634,86 @@ export class TaskLifecycle {
     goalId: string,
     gapVector: GapVector,
     driveContext: DriveContext,
-    adapter: IAdapter
+    adapter: IAdapter,
+    knowledgeContext?: string
   ): Promise<TaskCycleResult> {
     // 1. Select target dimension
     const targetDimension = this.selectTargetDimension(gapVector, driveContext);
 
-    // 2. Generate task
-    const task = await this.generateTask(goalId, targetDimension);
+    // 2. Generate task (optionally with injected knowledge context)
+    const task = await this.generateTask(goalId, targetDimension, undefined, knowledgeContext);
 
-    // 3. Check approval
+    // 3a. Ethics means check (reject → skip, flag → require approval, pass → proceed)
+    if (this.ethicsGate) {
+      const ethicsVerdict = await this.ethicsGate.checkMeans(
+        task.id,
+        task.work_description,
+        task.approach
+      );
+      if (ethicsVerdict.verdict === "reject") {
+        const rejectedResult = VerificationResultSchema.parse({
+          task_id: task.id,
+          verdict: "fail",
+          confidence: 1.0,
+          evidence: [
+            {
+              layer: "mechanical",
+              description: `Ethics gate rejected task: ${ethicsVerdict.reasoning}`,
+              confidence: 1.0,
+            },
+          ],
+          dimension_updates: [],
+          timestamp: new Date().toISOString(),
+        });
+        return { task, verificationResult: rejectedResult, action: "discard" };
+      }
+      if (ethicsVerdict.verdict === "flag") {
+        // Treat flag as requiring human approval via the existing approvalFn
+        const approved = await this.approvalFn(task);
+        if (!approved) {
+          const flagDeniedResult = VerificationResultSchema.parse({
+            task_id: task.id,
+            verdict: "fail",
+            confidence: 1.0,
+            evidence: [
+              {
+                layer: "mechanical",
+                description: `Ethics flag: approval denied. Reasoning: ${ethicsVerdict.reasoning}`,
+                confidence: 1.0,
+              },
+            ],
+            dimension_updates: [],
+            timestamp: new Date().toISOString(),
+          });
+          return { task, verificationResult: flagDeniedResult, action: "approval_denied" };
+        }
+      }
+      // verdict === "pass" → fall through
+    }
+
+    // 3b. Capability check
+    if (this.capabilityDetector) {
+      const gap = await this.capabilityDetector.detectDeficiency(task);
+      if (gap !== null) {
+        const capabilityResult = VerificationResultSchema.parse({
+          task_id: task.id,
+          verdict: "fail",
+          confidence: 1.0,
+          evidence: [
+            {
+              layer: "mechanical",
+              description: `Capability deficiency: ${gap.missing_capability.name} — ${gap.reason}`,
+              confidence: 1.0,
+            },
+          ],
+          dimension_updates: [],
+          timestamp: new Date().toISOString(),
+        });
+        return { task, verificationResult: capabilityResult, action: "escalate" };
+      }
+    }
+
+    // 3c. Check irreversible approval
     const approved = await this.checkIrreversibleApproval(task);
     if (!approved) {
       // Build a minimal verification result for the cycle result
@@ -616,10 +758,15 @@ export class TaskLifecycle {
 
   private buildTaskGenerationPrompt(
     goalId: string,
-    targetDimension: string
+    targetDimension: string,
+    knowledgeContext?: string
   ): string {
-    return `Generate a task to improve the "${targetDimension}" dimension for goal "${goalId}".
+    const knowledgeSection = knowledgeContext
+      ? `\nRelevant domain knowledge:\n${knowledgeContext}\n`
+      : "";
 
+    return `Generate a task to improve the "${targetDimension}" dimension for goal "${goalId}".
+${knowledgeSection}
 The task should be concrete, actionable, and achievable in a single work session.
 
 Return a JSON object with the following schema:

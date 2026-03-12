@@ -1391,7 +1391,8 @@ describe("CoreLoop", () => {
         "goal-1",
         expect.any(Object), // gapVector
         expect.any(Object), // driveContext
-        mocks.adapter
+        mocks.adapter,
+        undefined // knowledgeContext (no knowledge manager configured)
       );
     });
   });
@@ -1629,6 +1630,297 @@ describe("CoreLoop", () => {
       const result = await loop.run("goal-1");
       expect(result.finalStatus).toBe("stopped");
       expect(result.totalIterations).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // ─── KnowledgeManager integration ───
+
+  describe("KnowledgeManager integration", () => {
+    function makeAcquisitionTask() {
+      return {
+        id: "acq-task-1",
+        goal_id: "goal-1",
+        strategy_id: null,
+        target_dimensions: [],
+        primary_dimension: "knowledge",
+        work_description: "Research task: missing knowledge",
+        rationale: "Knowledge gap detected",
+        approach: "Research questions",
+        success_criteria: [
+          {
+            description: "All questions answered",
+            verification_method: "Manual review",
+            is_blocking: true,
+          },
+        ],
+        scope_boundary: {
+          in_scope: ["Information collection"],
+          out_of_scope: ["System modifications"],
+          blast_radius: "None — read-only research task",
+        },
+        constraints: ["No system modifications allowed"],
+        plateau_until: null,
+        estimated_duration: { value: 4, unit: "hours" as const },
+        consecutive_failure_count: 0,
+        reversibility: "reversible" as const,
+        task_category: "knowledge_acquisition" as const,
+        status: "pending" as const,
+        started_at: null,
+        completed_at: null,
+        timeout_at: null,
+        heartbeat_at: null,
+        created_at: new Date().toISOString(),
+      };
+    }
+
+    it("generates acquisition task when knowledge gap detected", async () => {
+      const { deps, mocks } = createMockDeps(tmpDir);
+      mocks.stateManager.saveGoal(makeGoal());
+
+      const gapSignal = {
+        signal_type: "interpretation_difficulty" as const,
+        missing_knowledge: "Unknown domain",
+        source_step: "gap_recognition",
+        related_dimension: null,
+      };
+
+      const acquisitionTask = makeAcquisitionTask();
+
+      const knowledgeManager = {
+        detectKnowledgeGap: vi.fn().mockResolvedValue(gapSignal),
+        generateAcquisitionTask: vi.fn().mockResolvedValue(acquisitionTask),
+        getRelevantKnowledge: vi.fn().mockResolvedValue([]),
+        saveKnowledge: vi.fn(),
+        loadKnowledge: vi.fn().mockResolvedValue([]),
+        checkContradiction: vi.fn(),
+      };
+
+      const depsWithKM = { ...deps, knowledgeManager: knowledgeManager as any };
+      const loop = new CoreLoop(depsWithKM, { delayBetweenLoopsMs: 0 });
+      const result = await loop.runOneIteration("goal-1", 0);
+
+      expect(knowledgeManager.detectKnowledgeGap).toHaveBeenCalledOnce();
+      expect(knowledgeManager.generateAcquisitionTask).toHaveBeenCalledWith(gapSignal, "goal-1");
+      // runTaskCycle should NOT have been called — early return with acquisition task
+      expect(mocks.taskLifecycle.runTaskCycle).not.toHaveBeenCalled();
+      expect(result.taskResult).not.toBeNull();
+      expect(result.taskResult?.task.task_category).toBe("knowledge_acquisition");
+      expect(result.taskResult?.action).toBe("completed");
+    });
+
+    it("proceeds with normal task cycle when no knowledge gap detected", async () => {
+      const { deps, mocks } = createMockDeps(tmpDir);
+      mocks.stateManager.saveGoal(makeGoal());
+
+      const knowledgeManager = {
+        detectKnowledgeGap: vi.fn().mockResolvedValue(null),
+        generateAcquisitionTask: vi.fn(),
+        getRelevantKnowledge: vi.fn().mockResolvedValue([]),
+        saveKnowledge: vi.fn(),
+        loadKnowledge: vi.fn().mockResolvedValue([]),
+        checkContradiction: vi.fn(),
+      };
+
+      const depsWithKM = { ...deps, knowledgeManager: knowledgeManager as any };
+      const loop = new CoreLoop(depsWithKM, { delayBetweenLoopsMs: 0 });
+      await loop.runOneIteration("goal-1", 0);
+
+      expect(knowledgeManager.detectKnowledgeGap).toHaveBeenCalledOnce();
+      expect(knowledgeManager.generateAcquisitionTask).not.toHaveBeenCalled();
+      expect(mocks.taskLifecycle.runTaskCycle).toHaveBeenCalledOnce();
+    });
+
+    it("injects relevant knowledge into task generation context", async () => {
+      const { deps, mocks } = createMockDeps(tmpDir);
+      mocks.stateManager.saveGoal(makeGoal());
+
+      const knowledgeEntries = [
+        {
+          entry_id: "e1",
+          question: "What is the auth pattern?",
+          answer: "JWT tokens",
+          sources: [],
+          confidence: 0.9,
+          acquired_at: new Date().toISOString(),
+          acquisition_task_id: "t1",
+          superseded_by: null,
+          tags: ["dim2"],
+        },
+      ];
+
+      const knowledgeManager = {
+        detectKnowledgeGap: vi.fn().mockResolvedValue(null),
+        generateAcquisitionTask: vi.fn(),
+        getRelevantKnowledge: vi.fn().mockResolvedValue(knowledgeEntries),
+        saveKnowledge: vi.fn(),
+        loadKnowledge: vi.fn().mockResolvedValue(knowledgeEntries),
+        checkContradiction: vi.fn(),
+      };
+
+      const depsWithKM = { ...deps, knowledgeManager: knowledgeManager as any };
+      const loop = new CoreLoop(depsWithKM, { delayBetweenLoopsMs: 0 });
+      await loop.runOneIteration("goal-1", 0);
+
+      expect(knowledgeManager.getRelevantKnowledge).toHaveBeenCalledWith("goal-1", expect.any(String));
+      // runTaskCycle should receive knowledgeContext as the 5th argument
+      const callArgs = mocks.taskLifecycle.runTaskCycle.mock.calls[0];
+      expect(callArgs![4]).toContain("JWT tokens");
+    });
+
+    it("skips knowledge injection gracefully when getRelevantKnowledge returns empty", async () => {
+      const { deps, mocks } = createMockDeps(tmpDir);
+      mocks.stateManager.saveGoal(makeGoal());
+
+      const knowledgeManager = {
+        detectKnowledgeGap: vi.fn().mockResolvedValue(null),
+        generateAcquisitionTask: vi.fn(),
+        getRelevantKnowledge: vi.fn().mockResolvedValue([]),
+        saveKnowledge: vi.fn(),
+        loadKnowledge: vi.fn().mockResolvedValue([]),
+        checkContradiction: vi.fn(),
+      };
+
+      const depsWithKM = { ...deps, knowledgeManager: knowledgeManager as any };
+      const loop = new CoreLoop(depsWithKM, { delayBetweenLoopsMs: 0 });
+      await loop.runOneIteration("goal-1", 0);
+
+      const callArgs = mocks.taskLifecycle.runTaskCycle.mock.calls[0];
+      // knowledgeContext should be undefined when no entries found
+      expect(callArgs![4]).toBeUndefined();
+    });
+
+    it("continues normally when knowledgeManager is undefined", async () => {
+      const { deps, mocks } = createMockDeps(tmpDir);
+      mocks.stateManager.saveGoal(makeGoal());
+
+      // No knowledgeManager in deps
+      const loop = new CoreLoop(deps, { delayBetweenLoopsMs: 0 });
+      const result = await loop.runOneIteration("goal-1", 0);
+
+      expect(result.error).toBeNull();
+      expect(mocks.taskLifecycle.runTaskCycle).toHaveBeenCalledOnce();
+    });
+
+    it("non-fatal: continues when detectKnowledgeGap throws", async () => {
+      const { deps, mocks } = createMockDeps(tmpDir);
+      mocks.stateManager.saveGoal(makeGoal());
+
+      const knowledgeManager = {
+        detectKnowledgeGap: vi.fn().mockRejectedValue(new Error("LLM failure")),
+        generateAcquisitionTask: vi.fn(),
+        getRelevantKnowledge: vi.fn().mockResolvedValue([]),
+        saveKnowledge: vi.fn(),
+        loadKnowledge: vi.fn().mockResolvedValue([]),
+        checkContradiction: vi.fn(),
+      };
+
+      const depsWithKM = { ...deps, knowledgeManager: knowledgeManager as any };
+      const loop = new CoreLoop(depsWithKM, { delayBetweenLoopsMs: 0 });
+      const result = await loop.runOneIteration("goal-1", 0);
+
+      // Should fall through to normal task cycle
+      expect(result.error).toBeNull();
+      expect(mocks.taskLifecycle.runTaskCycle).toHaveBeenCalledOnce();
+    });
+  });
+
+  // ─── CapabilityDetector integration ───
+
+  describe("CapabilityDetector integration", () => {
+    function makeCapabilityGap() {
+      return {
+        missing_capability: { name: "bash_execution", type: "tool" as const },
+        reason: "Task requires running shell commands",
+        alternatives: ["Use a subprocess adapter"],
+        impact_description: "Cannot execute shell-based tasks",
+        related_task_id: "task-preview-1",
+      };
+    }
+
+    it("delegates capability detection to TaskLifecycle when capabilityDetector provided and deficiency detected", async () => {
+      // Capability detection is handled inside TaskLifecycle.runTaskCycle, not CoreLoop.
+      // CoreLoop must still call runTaskCycle and return whatever result TaskLifecycle produces.
+      const { deps, mocks } = createMockDeps(tmpDir);
+      mocks.stateManager.saveGoal(makeGoal());
+
+      const escalateResult = makeTaskCycleResult({ action: "escalate" });
+      mocks.taskLifecycle.runTaskCycle.mockResolvedValue(escalateResult);
+
+      const capabilityDetector = {
+        detectDeficiency: vi.fn(),
+        escalateToUser: vi.fn(),
+        loadRegistry: vi.fn(),
+        saveRegistry: vi.fn(),
+        registerCapability: vi.fn(),
+        confirmDeficiency: vi.fn(),
+      };
+
+      const depsWithCD = { ...deps, capabilityDetector: capabilityDetector as any };
+      const loop = new CoreLoop(depsWithCD, { delayBetweenLoopsMs: 0 });
+      const result = await loop.runOneIteration("goal-1", 0);
+
+      // CoreLoop must delegate to runTaskCycle — capability detection is TaskLifecycle's concern
+      expect(mocks.taskLifecycle.runTaskCycle).toHaveBeenCalledOnce();
+      // CoreLoop must NOT call detectDeficiency directly (avoids duplicate calls + orphan tasks)
+      expect(capabilityDetector.detectDeficiency).not.toHaveBeenCalled();
+      expect(result.taskResult?.action).toBe("escalate");
+    });
+
+    it("proceeds with runTaskCycle when capabilityDetector provided and no deficiency", async () => {
+      const { deps, mocks } = createMockDeps(tmpDir);
+      mocks.stateManager.saveGoal(makeGoal());
+
+      const capabilityDetector = {
+        detectDeficiency: vi.fn(),
+        escalateToUser: vi.fn(),
+        loadRegistry: vi.fn(),
+        saveRegistry: vi.fn(),
+        registerCapability: vi.fn(),
+        confirmDeficiency: vi.fn(),
+      };
+
+      const depsWithCD = { ...deps, capabilityDetector: capabilityDetector as any };
+      const loop = new CoreLoop(depsWithCD, { delayBetweenLoopsMs: 0 });
+      await loop.runOneIteration("goal-1", 0);
+
+      // CoreLoop delegates to runTaskCycle; capability detection is inside TaskLifecycle
+      expect(mocks.taskLifecycle.runTaskCycle).toHaveBeenCalledOnce();
+      expect(capabilityDetector.detectDeficiency).not.toHaveBeenCalled();
+      expect(capabilityDetector.escalateToUser).not.toHaveBeenCalled();
+    });
+
+    it("continues normally when capabilityDetector is undefined", async () => {
+      const { deps, mocks } = createMockDeps(tmpDir);
+      mocks.stateManager.saveGoal(makeGoal());
+
+      const loop = new CoreLoop(deps, { delayBetweenLoopsMs: 0 });
+      const result = await loop.runOneIteration("goal-1", 0);
+
+      expect(result.error).toBeNull();
+      expect(mocks.taskLifecycle.runTaskCycle).toHaveBeenCalledOnce();
+    });
+
+    it("always calls runTaskCycle even when capabilityDetector is present", async () => {
+      // CoreLoop no longer calls detectDeficiency directly — TaskLifecycle owns that.
+      // Verify CoreLoop always reaches runTaskCycle regardless of capabilityDetector presence.
+      const { deps, mocks } = createMockDeps(tmpDir);
+      mocks.stateManager.saveGoal(makeGoal());
+
+      const capabilityDetector = {
+        detectDeficiency: vi.fn(),
+        escalateToUser: vi.fn(),
+        loadRegistry: vi.fn(),
+        saveRegistry: vi.fn(),
+        registerCapability: vi.fn(),
+        confirmDeficiency: vi.fn(),
+      };
+
+      const depsWithCD = { ...deps, capabilityDetector: capabilityDetector as any };
+      const loop = new CoreLoop(depsWithCD, { delayBetweenLoopsMs: 0 });
+      const result = await loop.runOneIteration("goal-1", 0);
+
+      expect(result.error).toBeNull();
+      expect(mocks.taskLifecycle.runTaskCycle).toHaveBeenCalledOnce();
     });
   });
 });

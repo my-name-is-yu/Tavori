@@ -2,6 +2,8 @@ import { ObservationLogEntrySchema, ObservationLogSchema } from "./types/state.j
 import type { ObservationLogEntry, ObservationLog } from "./types/state.js";
 import type { ObservationLayer, ObservationMethod, ObservationTrigger, ConfidenceTier } from "./types/core.js";
 import type { StateManager } from "./state-manager.js";
+import { KnowledgeGapSignalSchema } from "./types/knowledge.js";
+import type { KnowledgeGapSignal } from "./types/knowledge.js";
 
 // ─── Layer Configuration ───
 
@@ -261,5 +263,33 @@ export class ObservationEngine {
     if (goalId !== log.goal_id) throw new Error("goalId mismatch");
     const parsed = ObservationLogSchema.parse(log);
     this.stateManager.saveObservationLog(parsed);
+  }
+
+  // ─── Knowledge Gap Detection ───
+
+  /**
+   * Detect whether a set of observation entries indicates a knowledge gap.
+   *
+   * Rule: if ALL entries have confidence < 0.3, interpretation is too
+   * uncertain — emit an `interpretation_difficulty` signal.
+   *
+   * Returns null when confidence is sufficient (no gap detected).
+   */
+  detectKnowledgeGap(
+    entries: ObservationLogEntry[],
+    dimensionName?: string
+  ): KnowledgeGapSignal | null {
+    if (entries.length === 0) return null;
+
+    const allLowConfidence = entries.every((e) => e.confidence < 0.3);
+    if (!allLowConfidence) return null;
+
+    return KnowledgeGapSignalSchema.parse({
+      signal_type: "interpretation_difficulty",
+      missing_knowledge:
+        "Observation confidence is too low to interpret results reliably",
+      source_step: "gap_recognition",
+      related_dimension: dimensionName ?? null,
+    });
   }
 }

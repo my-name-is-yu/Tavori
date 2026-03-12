@@ -5,6 +5,8 @@ import { StrategySchema, PortfolioSchema } from "./types/strategy.js";
 import type { Strategy, Portfolio } from "./types/strategy.js";
 import type { StrategyState } from "./types/core.js";
 import type { ILLMClient } from "./llm-client.js";
+import { KnowledgeGapSignalSchema } from "./types/knowledge.js";
+import type { KnowledgeGapSignal } from "./types/knowledge.js";
 
 // ─── Valid state transitions ───
 
@@ -325,6 +327,48 @@ export class StrategyManager {
     if (raw === null) return [];
     const parsed = raw as unknown[];
     return parsed.map((s) => StrategySchema.parse(s));
+  }
+
+  // ─── Knowledge Gap Detection ───
+
+  /**
+   * Detect whether a set of strategy candidates indicates a knowledge gap.
+   *
+   * Rules:
+   *   - Zero candidates → `strategy_deadlock` (no hypotheses can be formed)
+   *   - All candidates have effectiveness_score < 0.3 AND not null →
+   *     `strategy_deadlock` (all known approaches exhausted)
+   *
+   * Returns null when candidates look viable.
+   */
+  detectStrategyGap(candidates: Strategy[]): KnowledgeGapSignal | null {
+    if (candidates.length === 0) {
+      return KnowledgeGapSignalSchema.parse({
+        signal_type: "strategy_deadlock",
+        missing_knowledge:
+          "No strategies available — domain knowledge needed to generate hypotheses",
+        source_step: "strategy_selection",
+        related_dimension: null,
+      });
+    }
+
+    const scoredCandidates = candidates.filter(
+      (c) => c.effectiveness_score !== null
+    );
+    if (
+      scoredCandidates.length > 0 &&
+      scoredCandidates.every((c) => (c.effectiveness_score ?? 1) < 0.3)
+    ) {
+      return KnowledgeGapSignalSchema.parse({
+        signal_type: "strategy_deadlock",
+        missing_knowledge:
+          "All known strategies have low effectiveness — domain knowledge needed to form new hypotheses",
+        source_step: "strategy_selection",
+        related_dimension: null,
+      });
+    }
+
+    return null;
   }
 
   // ─── Private Helpers ───

@@ -35,6 +35,8 @@ export { ClaudeCodeCLIAdapter } from "./adapters/claude-code-cli.js";
 export { ClaudeAPIAdapter } from "./adapters/claude-api.js";
 export { TaskLifecycle } from "./task-lifecycle.js";
 export { ReportingEngine } from "./reporting-engine.js";
+export { KnowledgeManager } from "./knowledge-manager.js";
+export { CapabilityDetector } from "./capability-detector.js";
 export { CoreLoop } from "./core-loop.js";
 export type { CoreLoopDeps, LoopConfig, LoopResult } from "./core-loop.js";
 export { CLIRunner } from "./cli-runner.js";

@@ -5,6 +5,7 @@ import * as os from "node:os";
 import { StateManager } from "../src/state-manager.js";
 import { SessionManager, DEFAULT_CONTEXT_BUDGET } from "../src/session-manager.js";
 import type { Session } from "../src/types/session.js";
+import type { KnowledgeEntry } from "../src/types/knowledge.js";
 
 // ─── Helpers ───
 
@@ -442,6 +443,76 @@ describe("SessionManager", () => {
       for (const s of sessions) {
         expect(s.goal_id).toBe("goal-X");
       }
+    });
+  });
+
+  // ─── injectKnowledgeContext ───
+
+  describe("injectKnowledgeContext", () => {
+    function makeKnowledgeEntry(overrides: Partial<KnowledgeEntry> = {}): KnowledgeEntry {
+      const now = new Date().toISOString();
+      return {
+        entry_id: crypto.randomUUID(),
+        question: "What is the test framework?",
+        answer: "Vitest",
+        sources: [],
+        confidence: 0.9,
+        acquired_at: now,
+        acquisition_task_id: "task-k1",
+        superseded_by: null,
+        tags: ["testing"],
+        ...overrides,
+      };
+    }
+
+    it("returns slots unchanged when entries array is empty", () => {
+      const slots = manager.buildTaskExecutionContext("goal-1", "task-1");
+      const original = slots.length;
+      const result = manager.injectKnowledgeContext(slots, []);
+      expect(result).toHaveLength(original);
+    });
+
+    it("adds a domain_knowledge slot when entries are provided", () => {
+      const slots = manager.buildTaskExecutionContext("goal-1", "task-1");
+      const entry = makeKnowledgeEntry();
+      const result = manager.injectKnowledgeContext(slots, [entry]);
+      const knowledgeSlot = result.find((s) => s.label === "domain_knowledge");
+      expect(knowledgeSlot).toBeDefined();
+    });
+
+    it("knowledge slot has priority higher than all existing slots", () => {
+      const slots = manager.buildTaskExecutionContext("goal-1", "task-1");
+      const entry = makeKnowledgeEntry();
+      const result = manager.injectKnowledgeContext(slots, [entry]);
+      const maxExisting = slots.reduce((m, s) => Math.max(m, s.priority), 0);
+      const knowledgeSlot = result.find((s) => s.label === "domain_knowledge")!;
+      expect(knowledgeSlot.priority).toBeGreaterThan(maxExisting);
+    });
+
+    it("knowledge slot content contains question and answer", () => {
+      const slots = manager.buildGoalReviewContext("goal-1");
+      const entry = makeKnowledgeEntry({
+        question: "What language is used?",
+        answer: "TypeScript",
+      });
+      const result = manager.injectKnowledgeContext(slots, [entry]);
+      const knowledgeSlot = result.find((s) => s.label === "domain_knowledge")!;
+      expect(knowledgeSlot.content).toContain("What language is used?");
+      expect(knowledgeSlot.content).toContain("TypeScript");
+    });
+
+    it("superseded entries are excluded from knowledge slot", () => {
+      const slots = manager.buildObservationContext("goal-1", ["dim_a"]);
+      const active = makeKnowledgeEntry({ question: "Active entry?", answer: "Yes" });
+      const superseded = makeKnowledgeEntry({
+        question: "Old entry?",
+        answer: "Old answer",
+        superseded_by: "newer-entry-id",
+      });
+      const result = manager.injectKnowledgeContext(slots, [active, superseded]);
+      const knowledgeSlot = result.find((s) => s.label === "domain_knowledge")!;
+      expect(knowledgeSlot.content).toContain("Active entry?");
+      expect(knowledgeSlot.content).not.toContain("Old entry?");
     });
   });
 

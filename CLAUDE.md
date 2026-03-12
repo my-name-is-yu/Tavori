@@ -8,7 +8,7 @@ Motiva — AI agent orchestrator that gives existing agents "motivation." Motiva
 
 ## Status
 
-Implementation Phase — Stage 1-6 complete (MVP).
+Implementation Phase — Stage 1-8 complete.
 
 ### Stage 1 (complete)
 - Type definitions: 14 Zod schema files in `src/types/`
@@ -31,6 +31,18 @@ Implementation Phase — Stage 1-6 complete (MVP).
 ### Stage 6 (complete)
 - Layer 6: `src/cli-runner.ts` (5 subcommands: run, goal add, goal list, status, report), `src/index.ts` (full module exports)
 - 983 tests passing across 18 test files
+
+### Stage 7 (complete)
+- TUI UX: sidebar layout (Dashboard left/Chat right), ReportView component, useLoop hook化, message 200-cap
+- Task verification: `verifyTask()` dimension_updates now applied to goal state
+- npm publish prep: package.json fields, LICENSE (MIT), .npmignore
+
+### Stage 8 (complete)
+- `src/knowledge-manager.ts` — knowledge gap detection (interpretation_difficulty, strategy_deadlock), acquisition task generation, knowledge CRUD, contradiction detection
+- `src/capability-detector.ts` — capability deficiency detection, registry management, user escalation
+- `src/types/knowledge.ts`, `src/types/capability.ts` — 2 new Zod schema files (total: 16)
+- Integration: ObservationEngine + StrategyManager emit knowledge gap signals, SessionManager injects knowledge context, TaskLifecycle wires EthicsGate.checkMeans() + CapabilityDetector
+- 1191 tests passing across 23 test files
 
 ## Core Concept
 

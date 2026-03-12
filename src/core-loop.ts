@@ -6,6 +6,8 @@ import type { StallDetector } from "./stall-detector.js";
 import type { StrategyManager } from "./strategy-manager.js";
 import type { DriveSystem } from "./drive-system.js";
 import type { AdapterRegistry, IAdapter } from "./adapter-layer.js";
+import type { KnowledgeManager } from "./knowledge-manager.js";
+import type { CapabilityDetector } from "./capability-detector.js";
 import type { Goal } from "./types/goal.js";
 import type { GapVector } from "./types/gap.js";
 import type { DriveContext, DriveScore } from "./types/drive.js";
@@ -111,6 +113,8 @@ export interface CoreLoopDeps {
   reportingEngine: ReportingEngine;
   driveSystem: DriveSystem;
   adapterRegistry: AdapterRegistry;
+  knowledgeManager?: KnowledgeManager;
+  capabilityDetector?: CapabilityDetector;
 }
 
 // ─── Helpers ───
@@ -418,6 +422,65 @@ export class CoreLoop {
       return result;
     }
 
+    // ─── 4b. Knowledge Gap Check ───
+    // Runs after drive scoring so strategies can be populated from actual strategy data.
+    // strategies: null means "not yet loaded" (different from [] meaning "tried and found none").
+    if (this.deps.knowledgeManager) {
+      try {
+        let strategies: unknown[] | null = null;
+        try {
+          const portfolio = this.deps.strategyManager.getPortfolio(goalId);
+          strategies = portfolio !== null ? portfolio.strategies : null;
+        } catch {
+          // If strategy loading fails, leave as null (not yet available)
+        }
+
+        const observationContext = {
+          observations: goal.dimensions.map((d) => ({
+            name: d.name,
+            current_value: d.current_value,
+            confidence: d.confidence,
+          })),
+          strategies,
+          confidence: gapVector.gaps.reduce((sum, g) => sum + g.confidence, 0) /
+            Math.max(gapVector.gaps.length, 1),
+        };
+
+        const gapSignal = await this.deps.knowledgeManager.detectKnowledgeGap(observationContext);
+        if (gapSignal !== null) {
+          // Knowledge gap detected — generate acquisition task and return early
+          const acquisitionTask = await this.deps.knowledgeManager.generateAcquisitionTask(
+            gapSignal,
+            goalId
+          );
+          const acquisitionVerification = {
+            task_id: acquisitionTask.id,
+            verdict: "pass" as const,
+            confidence: 0.9,
+            evidence: [
+              {
+                layer: "mechanical" as const,
+                description: "Knowledge acquisition task generated for gap: " + gapSignal.signal_type,
+                confidence: 0.9,
+              },
+            ],
+            dimension_updates: [],
+            timestamp: new Date().toISOString(),
+          };
+          result.taskResult = {
+            task: acquisitionTask,
+            verificationResult: acquisitionVerification,
+            action: "completed",
+          };
+          this.tryGenerateReport(goalId, loopIndex, result, goal);
+          result.elapsedMs = Date.now() - startTime;
+          return result;
+        }
+      } catch {
+        // Knowledge gap detection failure is non-fatal — continue with normal flow
+      }
+    }
+
     // ─── 5. Completion Check ───
     try {
       const judgment = this.deps.satisficingJudge.isGoalComplete(goal);
@@ -513,11 +576,38 @@ export class CoreLoop {
       const driveContext = buildDriveContext(goal);
       const adapter = this.deps.adapterRegistry.getAdapter(this.config.adapterType);
 
+      // ─── 7a. Collect relevant knowledge context ───
+      let knowledgeContext: string | undefined;
+      if (this.deps.knowledgeManager) {
+        try {
+          const topDimension = driveScores[0]?.dimension_name ?? goal.dimensions[0]?.name;
+          if (topDimension) {
+            const entries = await this.deps.knowledgeManager.getRelevantKnowledge(
+              goalId,
+              topDimension
+            );
+            if (entries.length > 0) {
+              knowledgeContext = entries
+                .map((e) => `Q: ${e.question}\nA: ${e.answer}`)
+                .join("\n\n");
+            }
+          }
+        } catch {
+          // Knowledge retrieval failure is non-fatal
+        }
+      }
+
+      // ─── 7b. Pre-task capability check ───
+      // Capability detection is handled inside TaskLifecycle.runTaskCycle to avoid
+      // generating a persisted preview task that would become an orphan if no gap
+      // is found. Duplicate detectDeficiency calls are also avoided this way.
+
       const taskResult = await this.deps.taskLifecycle.runTaskCycle(
         goalId,
         gapVector,
         driveContext,
-        adapter
+        adapter,
+        knowledgeContext
       );
       result.taskResult = taskResult;
 

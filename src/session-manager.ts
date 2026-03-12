@@ -1,6 +1,7 @@
 import { SessionSchema } from "./types/session.js";
 import type { Session, SessionType, ContextSlot } from "./types/session.js";
 import type { StateManager } from "./state-manager.js";
+import type { KnowledgeEntry } from "./types/knowledge.js";
 
 // ─── Constants ───
 
@@ -276,6 +277,44 @@ export class SessionManager {
         token_estimate: 0,
       },
     ];
+  }
+
+  // ─── Knowledge Context Injection ───
+
+  /**
+   * Inject relevant KnowledgeEntry items into an existing set of context slots.
+   *
+   * Each non-superseded entry is formatted as structured text and appended as
+   * a new low-priority context slot (`domain_knowledge`). Empty entry arrays
+   * are a no-op — the original slots are returned unchanged.
+   */
+  injectKnowledgeContext(
+    slots: ContextSlot[],
+    entries: KnowledgeEntry[]
+  ): ContextSlot[] {
+    const activeEntries = entries.filter((e) => e.superseded_by === null);
+    if (activeEntries.length === 0) return slots;
+
+    const content = activeEntries
+      .map(
+        (e) =>
+          `[Knowledge] Q: ${e.question}\nA: ${e.answer} (confidence: ${e.confidence})`
+      )
+      .join("\n\n");
+
+    const maxPriority = slots.reduce(
+      (max, s) => (s.priority > max ? s.priority : max),
+      0
+    );
+
+    const knowledgeSlot: ContextSlot = {
+      priority: maxPriority + 1,
+      label: "domain_knowledge",
+      content,
+      token_estimate: 0,
+    };
+
+    return [...slots, knowledgeSlot];
   }
 
   // ─── Private Helpers ───

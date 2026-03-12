@@ -1438,6 +1438,197 @@ describe("TaskLifecycle", () => {
       // Should be truncated to 2000 chars
       expect(l2Prompt.length).toBeLessThan(longOutput.length + 500);
     });
+
+    // ─── dimension_updates tests ───
+
+    it("dimension_updates is empty on fail verdict", async () => {
+      const llm = createMockLLMClient([LLM_REVIEW_FAIL, LLM_REVIEW_FAIL]);
+      const lifecycle = createLifecycle(llm);
+      const task = makeTask();
+      const result = makeExecutionResult();
+
+      const verification = await lifecycle.verifyTask(task, result);
+      expect(verification.verdict).toBe("fail");
+      expect(verification.dimension_updates).toHaveLength(0);
+    });
+
+    it("dimension_updates has one entry per target_dimension on pass verdict", async () => {
+      const llm = createMockLLMClient([LLM_REVIEW_PASS]);
+      const lifecycle = createLifecycle(llm);
+      const task = makeTask({ target_dimensions: ["coverage", "reliability"] });
+      const result = makeExecutionResult();
+
+      const verification = await lifecycle.verifyTask(task, result);
+      expect(verification.verdict).toBe("pass");
+      expect(verification.dimension_updates).toHaveLength(2);
+      const names = verification.dimension_updates.map((u) => u.dimension_name);
+      expect(names).toContain("coverage");
+      expect(names).toContain("reliability");
+    });
+
+    it("dimension_updates new_value is significant (>=0.3) on pass verdict", async () => {
+      const llm = createMockLLMClient([LLM_REVIEW_PASS]);
+      const lifecycle = createLifecycle(llm);
+      const task = makeTask({ target_dimensions: ["performance"] });
+      const result = makeExecutionResult();
+
+      const verification = await lifecycle.verifyTask(task, result);
+      expect(verification.verdict).toBe("pass");
+      const update = verification.dimension_updates[0]!;
+      expect(typeof update.new_value).toBe("number");
+      expect(update.new_value as number).toBeGreaterThanOrEqual(0.3);
+    });
+
+    it("dimension_updates new_value is moderate (0.1-0.25) on partial verdict", async () => {
+      const llm = createMockLLMClient([LLM_REVIEW_PARTIAL]);
+      const lifecycle = createLifecycle(llm);
+      const task = makeTask({
+        target_dimensions: ["quality"],
+        success_criteria: [
+          {
+            description: "Code is clean",
+            verification_method: "Manual review",
+            is_blocking: true,
+          },
+        ],
+      });
+      const result = makeExecutionResult();
+
+      const verification = await lifecycle.verifyTask(task, result);
+      expect(verification.verdict).toBe("partial");
+      expect(verification.dimension_updates).toHaveLength(1);
+      const update = verification.dimension_updates[0]!;
+      expect(update.dimension_name).toBe("quality");
+      expect(typeof update.new_value).toBe("number");
+      expect(update.new_value as number).toBeGreaterThanOrEqual(0.1);
+      expect(update.new_value as number).toBeLessThanOrEqual(0.25);
+    });
+
+    it("dimension_updates entries carry confidence matching the verdict confidence", async () => {
+      const llm = createMockLLMClient([LLM_REVIEW_PASS]);
+      const lifecycle = createLifecycle(llm);
+      const task = makeTask({ target_dimensions: ["dim"] });
+      const result = makeExecutionResult();
+
+      const verification = await lifecycle.verifyTask(task, result);
+      expect(verification.verdict).toBe("pass");
+      const update = verification.dimension_updates[0]!;
+      expect(update.confidence).toBe(verification.confidence);
+    });
+
+    it("dimension_updates previous_value is null when goal has no matching dimension in state", async () => {
+      const llm = createMockLLMClient([LLM_REVIEW_PASS]);
+      const lifecycle = createLifecycle(llm);
+      const task = makeTask({ target_dimensions: ["dim"] });
+      const result = makeExecutionResult();
+
+      // No goal written to state → previous_value falls back to null
+      const verification = await lifecycle.verifyTask(task, result);
+      expect(verification.dimension_updates[0]!.previous_value).toBeNull();
+    });
+
+    it("dimension_updates reads previous_value from goal state when available", async () => {
+      const llm = createMockLLMClient([LLM_REVIEW_PASS]);
+      const lifecycle = createLifecycle(llm);
+      const task = makeTask({ target_dimensions: ["dim"] });
+      const result = makeExecutionResult();
+
+      stateManager.writeRaw("goals/goal-1.json", {
+        id: "goal-1",
+        title: "Test Goal",
+        status: "active",
+        dimensions: [
+          { name: "dim", label: "Dim", current_value: 0.3, last_updated: null },
+        ],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+      const verification = await lifecycle.verifyTask(task, result);
+      expect(verification.verdict).toBe("pass");
+      expect(verification.dimension_updates[0]!.previous_value).toBe(0.3);
+    });
+
+    it("dimension_updates new_value is previous_value + delta (clamped) on pass", async () => {
+      const llm = createMockLLMClient([LLM_REVIEW_PASS]);
+      const lifecycle = createLifecycle(llm);
+      const task = makeTask({ target_dimensions: ["dim"] });
+      const result = makeExecutionResult();
+
+      stateManager.writeRaw("goals/goal-1.json", {
+        id: "goal-1",
+        title: "Test Goal",
+        status: "active",
+        dimensions: [
+          { name: "dim", label: "Dim", current_value: 0.3, last_updated: null },
+        ],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+      const verification = await lifecycle.verifyTask(task, result);
+      expect(verification.verdict).toBe("pass");
+      const update = verification.dimension_updates[0]!;
+      // pass delta = 0.4; new_value = clamp(0.3 + 0.4, 0, 1) = 0.7
+      expect(update.new_value).toBeCloseTo(0.7, 5);
+    });
+
+    it("dimension_updates new_value is clamped to 1 when previous_value + delta exceeds 1", async () => {
+      const llm = createMockLLMClient([LLM_REVIEW_PASS]);
+      const lifecycle = createLifecycle(llm);
+      const task = makeTask({ target_dimensions: ["dim"] });
+      const result = makeExecutionResult();
+
+      stateManager.writeRaw("goals/goal-1.json", {
+        id: "goal-1",
+        title: "Test Goal",
+        status: "active",
+        dimensions: [
+          { name: "dim", label: "Dim", current_value: 0.9, last_updated: null },
+        ],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+      const verification = await lifecycle.verifyTask(task, result);
+      expect(verification.verdict).toBe("pass");
+      // 0.9 + 0.4 = 1.3 → clamped to 1.0
+      expect(verification.dimension_updates[0]!.new_value).toBe(1);
+    });
+
+    it("dimension_updates new_value is previous_value + partial_delta on partial verdict", async () => {
+      const llm = createMockLLMClient([LLM_REVIEW_PARTIAL]);
+      const lifecycle = createLifecycle(llm);
+      const task = makeTask({
+        target_dimensions: ["quality"],
+        success_criteria: [
+          {
+            description: "Code is clean",
+            verification_method: "Manual review",
+            is_blocking: true,
+          },
+        ],
+      });
+      const result = makeExecutionResult();
+
+      stateManager.writeRaw("goals/goal-1.json", {
+        id: "goal-1",
+        title: "Test Goal",
+        status: "active",
+        dimensions: [
+          { name: "quality", label: "Quality", current_value: 0.2, last_updated: null },
+        ],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+      const verification = await lifecycle.verifyTask(task, result);
+      expect(verification.verdict).toBe("partial");
+      const update = verification.dimension_updates[0]!;
+      // partial delta = 0.15; new_value = clamp(0.2 + 0.15, 0, 1) = 0.35
+      expect(update.previous_value).toBe(0.2);
+      expect(update.new_value).toBeCloseTo(0.35, 5);
+    });
   });
 
   // ─────────────────────────────────────────────
@@ -1715,6 +1906,154 @@ describe("TaskLifecycle", () => {
 
       // Fail path should not touch the goal dimension
       expect(coverageDim!.last_updated).toBe(oldTimestamp);
+    });
+
+    // ─── dimension_updates applied to goal state ───
+
+    it("pass verdict applies dimension_updates.new_value to goal current_value", async () => {
+      const llm = createMockLLMClient([]);
+      const lifecycle = createLifecycle(llm);
+      const task = makeTask({ primary_dimension: "coverage", target_dimensions: ["coverage"] });
+
+      // dimension_updates with an explicit new_value
+      const vr = makeVerificationResult({
+        verdict: "pass",
+        dimension_updates: [
+          { dimension_name: "coverage", previous_value: 0.3, new_value: 0.7, confidence: 0.9 },
+        ],
+      });
+
+      stateManager.writeRaw("goals/goal-1.json", {
+        id: "goal-1",
+        title: "Test Goal",
+        status: "active",
+        dimensions: [
+          { name: "coverage", label: "Coverage", current_value: 0.3, last_updated: null },
+        ],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+
+      await lifecycle.handleVerdict(task, vr);
+
+      const goal = stateManager.readRaw("goals/goal-1.json") as Record<string, unknown>;
+      const dims = goal.dimensions as Array<Record<string, unknown>>;
+      const coverageDim = dims.find((d) => d.name === "coverage");
+
+      // current_value must now reflect the new_value from dimension_updates
+      expect(coverageDim!.current_value).toBe(0.7);
+    });
+
+    it("pass verdict does not change current_value when dimension_updates has no numeric new_value", async () => {
+      const llm = createMockLLMClient([]);
+      const lifecycle = createLifecycle(llm);
+      const task = makeTask({ primary_dimension: "coverage", target_dimensions: ["coverage"] });
+
+      // dimension_updates for an unrelated dimension
+      const vr = makeVerificationResult({
+        verdict: "pass",
+        dimension_updates: [
+          { dimension_name: "other_dim", previous_value: 0.1, new_value: 0.5, confidence: 0.9 },
+        ],
+      });
+
+      stateManager.writeRaw("goals/goal-1.json", {
+        id: "goal-1",
+        title: "Test Goal",
+        status: "active",
+        dimensions: [
+          { name: "coverage", label: "Coverage", current_value: 0.3, last_updated: null },
+        ],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+
+      await lifecycle.handleVerdict(task, vr);
+
+      const goal = stateManager.readRaw("goals/goal-1.json") as Record<string, unknown>;
+      const dims = goal.dimensions as Array<Record<string, unknown>>;
+      const coverageDim = dims.find((d) => d.name === "coverage");
+
+      // coverage was not in dimension_updates, so current_value unchanged
+      expect(coverageDim!.current_value).toBe(0.3);
+    });
+
+    it("partial verdict with correct direction applies dimension_updates to goal current_value", async () => {
+      const llm = createMockLLMClient([]);
+      const lifecycle = createLifecycle(llm);
+      const task = makeTask({ primary_dimension: "quality", target_dimensions: ["quality"] });
+
+      // direction = correct (partial verdict)
+      const vr = makeVerificationResult({
+        verdict: "partial",
+        evidence: [
+          { layer: "independent_review", description: "Some progress made", confidence: 0.6 },
+          { layer: "self_report", description: "Partially done", confidence: 0.3 },
+        ],
+        dimension_updates: [
+          { dimension_name: "quality", previous_value: 0.2, new_value: 0.35, confidence: 0.6 },
+        ],
+      });
+
+      stateManager.writeRaw("goals/goal-1.json", {
+        id: "goal-1",
+        title: "Test Goal",
+        status: "active",
+        dimensions: [
+          { name: "quality", label: "Quality", current_value: 0.2, last_updated: null },
+        ],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+
+      const result = await lifecycle.handleVerdict(task, vr);
+      expect(result.action).toBe("keep");
+
+      const goal = stateManager.readRaw("goals/goal-1.json") as Record<string, unknown>;
+      const dims = goal.dimensions as Array<Record<string, unknown>>;
+      const qualityDim = dims.find((d) => d.name === "quality");
+
+      // current_value must advance
+      expect(qualityDim!.current_value).toBe(0.35);
+    });
+
+    it("fail verdict does NOT modify goal dimension current_value", async () => {
+      const llm = createMockLLMClient([]);
+      const lifecycle = createLifecycle(llm);
+      const task = makeTask({ primary_dimension: "coverage", target_dimensions: ["coverage"] });
+
+      const vr = makeVerificationResult({
+        verdict: "fail",
+        evidence: [
+          { layer: "independent_review", description: "Failed", confidence: 0.8 },
+          { layer: "self_report", description: "Could not complete", confidence: 0.3 },
+        ],
+        dimension_updates: [],
+      });
+
+      stateManager.writeRaw("goals/goal-1.json", {
+        id: "goal-1",
+        title: "Test Goal",
+        status: "active",
+        dimensions: [
+          { name: "coverage", label: "Coverage", current_value: 0.5, last_updated: null },
+        ],
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+
+      await lifecycle.handleVerdict(task, vr);
+
+      const goal = stateManager.readRaw("goals/goal-1.json") as Record<string, unknown>;
+      const dims = goal.dimensions as Array<Record<string, unknown>>;
+      const coverageDim = dims.find((d) => d.name === "coverage");
+
+      // Fail path should leave current_value unchanged
+      expect(coverageDim!.current_value).toBe(0.5);
     });
   });
 

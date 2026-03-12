@@ -12,3 +12,5 @@ export * from "./stall.js";
 export * from "./satisficing.js";
 export * from "./ethics.js";
 export * from "./negotiation.js";
+export * from "./knowledge.js";
+export * from "./capability.js";
