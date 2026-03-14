@@ -4,6 +4,8 @@ import type { ObservationLayer, ObservationMethod, ObservationTrigger, Confidenc
 import type { StateManager } from "./state-manager.js";
 import { KnowledgeGapSignalSchema } from "./types/knowledge.js";
 import type { KnowledgeGapSignal } from "./types/knowledge.js";
+import type { IDataSourceAdapter } from "./data-source-adapter.js";
+import type { DataSourceQuery } from "./types/data-source.js";
 
 // ─── Layer Configuration ───
 
@@ -52,9 +54,14 @@ const LAYER_PRIORITY: Record<ObservationLayer, number> = {
  */
 export class ObservationEngine {
   private readonly stateManager: StateManager;
+  private readonly dataSources: IDataSourceAdapter[];
 
-  constructor(stateManager: StateManager) {
+  constructor(
+    stateManager: StateManager,
+    dataSources: IDataSourceAdapter[] = []
+  ) {
     this.stateManager = stateManager;
+    this.dataSources = dataSources;
   }
 
   // ─── Progress Ceiling ───
@@ -263,6 +270,88 @@ export class ObservationEngine {
     if (goalId !== log.goal_id) throw new Error("goalId mismatch");
     const parsed = ObservationLogSchema.parse(log);
     this.stateManager.saveObservationLog(parsed);
+  }
+
+  // ─── Data Source Observation ───
+
+  /**
+   * Observe a goal dimension by querying a registered data source.
+   *
+   * Steps:
+   *   1. Find the data source by sourceId.
+   *   2. Build a DataSourceQuery, using dimension_mapping if configured.
+   *   3. Call source.query().
+   *   4. Convert result value to numeric if possible.
+   *   5. Create and persist an ObservationLogEntry.
+   *   6. Return the entry.
+   */
+  async observeFromDataSource(
+    goalId: string,
+    dimensionName: string,
+    sourceId: string
+  ): Promise<ObservationLogEntry> {
+    const source = this.dataSources.find((s) => s.sourceId === sourceId);
+    if (!source) {
+      throw new Error(
+        `observeFromDataSource: data source "${sourceId}" not found. ` +
+          `Available: [${this.dataSources.map((s) => s.sourceId).join(", ")}]`
+      );
+    }
+
+    const query: DataSourceQuery = {
+      dimension_name: dimensionName,
+      timeout_ms: 10000,
+    };
+
+    const expression = source.config.dimension_mapping?.[dimensionName];
+    if (expression !== undefined) {
+      query.expression = expression;
+    }
+
+    const result = await source.query(query);
+
+    let extractedValue: number | string | boolean | null;
+    if (typeof result.value === "number") {
+      extractedValue = result.value;
+    } else if (typeof result.value === "string") {
+      const parsed = parseFloat(result.value);
+      extractedValue = isNaN(parsed) ? result.value : parsed;
+    } else if (typeof result.value === "boolean" || result.value === null) {
+      extractedValue = result.value;
+    } else {
+      extractedValue = 0;
+    }
+
+    const entry = ObservationLogEntrySchema.parse({
+      observation_id: crypto.randomUUID(),
+      timestamp: result.timestamp,
+      trigger: "periodic",
+      goal_id: goalId,
+      dimension_name: dimensionName,
+      layer: "mechanical",
+      method: {
+        type: "mechanical",
+        source: "data_source",
+        schedule: null,
+        endpoint: sourceId,
+        confidence_tier: "mechanical",
+      },
+      raw_result: result.raw,
+      extracted_value: extractedValue,
+      confidence: 0.90,
+      notes: `Data source: ${sourceId}`,
+    });
+
+    this.applyObservation(goalId, entry);
+
+    return entry;
+  }
+
+  /**
+   * Return the registered data source adapters.
+   */
+  getDataSources(): IDataSourceAdapter[] {
+    return this.dataSources;
   }
 
   // ─── Knowledge Gap Detection ───

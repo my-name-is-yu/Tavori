@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
@@ -8,6 +8,8 @@ import type { Goal } from "../src/types/goal.js";
 import type { ObservationLogEntry } from "../src/types/state.js";
 import type { ObservationLayer, ObservationMethod, ObservationTrigger } from "../src/types/core.js";
 import type { KnowledgeGapSignal } from "../src/types/knowledge.js";
+import type { IDataSourceAdapter } from "../src/data-source-adapter.js";
+import type { DataSourceConfig } from "../src/types/data-source.js";
 
 // ─── Helpers ───
 
@@ -661,5 +663,168 @@ describe("ObservationEngine", () => {
       const result = engine.detectKnowledgeGap([entry]);
       expect(result!.related_dimension).toBeNull();
     });
+  });
+});
+
+// ─── observeFromDataSource ───
+
+function makeDsConfig(overrides: Partial<DataSourceConfig> = {}): DataSourceConfig {
+  return {
+    id: "mock-ds",
+    name: "Mock Data Source",
+    type: "file",
+    connection: { path: "/tmp/mock.json" },
+    enabled: true,
+    created_at: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+function makeMockDataSource(overrides: Partial<IDataSourceAdapter> = {}): IDataSourceAdapter {
+  return {
+    sourceId: "mock-ds",
+    sourceType: "file",
+    config: makeDsConfig(),
+    connect: vi.fn().mockResolvedValue(undefined),
+    query: vi.fn().mockResolvedValue({
+      value: 42,
+      raw: { metrics: { cpu: 42 } },
+      timestamp: new Date().toISOString(),
+      source_id: "mock-ds",
+    }),
+    disconnect: vi.fn().mockResolvedValue(undefined),
+    healthCheck: vi.fn().mockResolvedValue(true),
+    ...overrides,
+  };
+}
+
+describe("observeFromDataSource", () => {
+  let tmpDir: string;
+  let stateManager: StateManager;
+  let mockDs: IDataSourceAdapter;
+  let engineWithDs: ObservationEngine;
+
+  beforeEach(() => {
+    tmpDir = makeTempDir();
+    stateManager = new StateManager(tmpDir);
+    mockDs = makeMockDataSource();
+    engineWithDs = new ObservationEngine(stateManager, [mockDs]);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("creates observation entry from data source query result", async () => {
+    const goal = makeGoal({
+      id: "goal-ds-1",
+      dimensions: [
+        {
+          name: "cpu",
+          label: "CPU Usage",
+          current_value: 0,
+          threshold: { type: "max", value: 80 },
+          confidence: 0.5,
+          observation_method: defaultMethod,
+          last_updated: new Date().toISOString(),
+          history: [],
+          weight: 1.0,
+          uncertainty_weight: null,
+          state_integrity: "ok",
+        },
+      ],
+    });
+    stateManager.saveGoal(goal);
+
+    const entry = await engineWithDs.observeFromDataSource("goal-ds-1", "cpu", "mock-ds");
+
+    expect(entry).not.toBeNull();
+    expect(entry.goal_id).toBe("goal-ds-1");
+    expect(entry.dimension_name).toBe("cpu");
+    expect(entry.extracted_value).toBe(42);
+    expect(entry.layer).toBe("mechanical");
+    expect(typeof entry.observation_id).toBe("string");
+    expect(entry.observation_id.length).toBeGreaterThan(0);
+  });
+
+  it("throws when source is not found in dataSources", async () => {
+    await expect(
+      engineWithDs.observeFromDataSource("goal-ds-1", "cpu", "nonexistent-ds")
+    ).rejects.toThrow(/nonexistent-ds/);
+  });
+
+  it("uses dimension_mapping from config to build expression when present", async () => {
+    const dsWithMapping = makeMockDataSource({
+      sourceId: "mapped-ds",
+      config: makeDsConfig({
+        id: "mapped-ds",
+        dimension_mapping: { cpu: "metrics.cpu" },
+      }),
+    });
+    const engineMapped = new ObservationEngine(stateManager, [dsWithMapping]);
+
+    const goal = makeGoal({
+      id: "goal-mapped",
+      dimensions: [
+        {
+          name: "cpu",
+          label: "CPU",
+          current_value: 0,
+          threshold: { type: "max", value: 90 },
+          confidence: 0.6,
+          observation_method: defaultMethod,
+          last_updated: new Date().toISOString(),
+          history: [],
+          weight: 1.0,
+          uncertainty_weight: null,
+          state_integrity: "ok",
+        },
+      ],
+    });
+    stateManager.saveGoal(goal);
+
+    await engineMapped.observeFromDataSource("goal-mapped", "cpu", "mapped-ds");
+
+    // query should have been called with expression from dimension_mapping
+    const queryMock = dsWithMapping.query as ReturnType<typeof vi.fn>;
+    expect(queryMock).toHaveBeenCalledWith(
+      expect.objectContaining({ expression: "metrics.cpu" })
+    );
+  });
+
+  it("handles non-numeric values from data source", async () => {
+    const stringDs = makeMockDataSource({
+      query: vi.fn().mockResolvedValue({
+        value: "healthy",
+        raw: { status: "healthy" },
+        timestamp: new Date().toISOString(),
+        source_id: "mock-ds",
+      }),
+    });
+    const engineStr = new ObservationEngine(stateManager, [stringDs]);
+
+    const goal = makeGoal({
+      id: "goal-str",
+      dimensions: [
+        {
+          name: "test_dim",
+          label: "Status",
+          current_value: 0,
+          threshold: { type: "min", value: 1 },
+          confidence: 0.5,
+          observation_method: defaultMethod,
+          last_updated: new Date().toISOString(),
+          history: [],
+          weight: 1.0,
+          uncertainty_weight: null,
+          state_integrity: "ok",
+        },
+      ],
+    });
+    stateManager.saveGoal(goal);
+
+    const entry = await engineStr.observeFromDataSource("goal-str", "test_dim", "mock-ds");
+
+    expect(entry.extracted_value).toBe("healthy");
   });
 });

@@ -50,7 +50,7 @@ export const TaskSchema = z.object({
 
   // Task category — enumerated to enable stall detection comparisons
   task_category: z
-    .enum(["normal", "knowledge_acquisition", "verification", "observation"])
+    .enum(["normal", "knowledge_acquisition", "verification", "observation", "capability_acquisition"])
     .default("normal"),
 
   status: TaskStatusEnum.default("pending"),

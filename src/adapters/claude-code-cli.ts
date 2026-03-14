@@ -48,6 +48,13 @@ export class ClaudeCodeCLIAdapter implements IAdapter {
         child.kill("SIGTERM");
       }, task.timeout_ms);
 
+      // Suppress EPIPE errors on stdin: the spawned process may exit and close
+      // its stdin pipe before we finish writing (race condition in tests).
+      child.stdin.on("error", (err: NodeJS.ErrnoException) => {
+        if (err.code !== "EPIPE") throw err;
+        // EPIPE = process already closed stdin; safe to ignore
+      });
+
       // Write the prompt to stdin and close it so the CLI knows input is done.
       child.stdin.write(task.prompt, "utf8");
       child.stdin.end();

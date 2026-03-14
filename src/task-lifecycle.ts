@@ -13,6 +13,7 @@ import type { GapVector } from "./types/gap.js";
 import type { DriveContext } from "./types/drive.js";
 import type { EthicsGate } from "./ethics-gate.js";
 import type { CapabilityDetector } from "./capability-detector.js";
+import type { CapabilityAcquisitionTask } from "./types/capability.js";
 
 // ─── Adapter types (re-exported from adapter-layer) ───
 
@@ -31,7 +32,8 @@ export interface ExecutorReport {
 export interface TaskCycleResult {
   task: Task;
   verificationResult: VerificationResult;
-  action: "completed" | "keep" | "discard" | "escalate" | "approval_denied";
+  action: "completed" | "keep" | "discard" | "escalate" | "approval_denied" | "capability_acquiring";
+  acquisition_task?: CapabilityAcquisitionTask;
 }
 
 export interface VerdictResult {
@@ -712,7 +714,8 @@ export class TaskLifecycle {
     }
 
     // 3b. Capability check
-    if (this.capabilityDetector) {
+    // Skip for capability_acquisition tasks to prevent infinite delegation loops.
+    if (this.capabilityDetector && task.task_category !== "capability_acquisition") {
       const gap = await this.capabilityDetector.detectDeficiency(task);
       if (gap !== null) {
         const capabilityResult = VerificationResultSchema.parse({
@@ -729,7 +732,28 @@ export class TaskLifecycle {
           dimension_updates: [],
           timestamp: new Date().toISOString(),
         });
-        return { task, verificationResult: capabilityResult, action: "escalate" };
+
+        // Determine acquisition method. Permissions always require human approval.
+        const acquisitionTask = this.capabilityDetector.planAcquisition(gap);
+
+        if (acquisitionTask.method === "permission_request") {
+          // Permissions cannot be autonomously acquired — escalate to human.
+          return { task, verificationResult: capabilityResult, action: "escalate" };
+        }
+
+        // For tool_creation and service_setup: mark as acquiring and delegate.
+        await this.capabilityDetector.setCapabilityStatus(
+          gap.missing_capability.name,
+          gap.missing_capability.type,
+          "acquiring"
+        );
+
+        return {
+          action: "capability_acquiring" as const,
+          task,
+          verificationResult: capabilityResult,
+          acquisition_task: acquisitionTask,
+        };
       }
     }
 

@@ -562,6 +562,144 @@ export class CLIRunner {
     }
   }
 
+  // ─── Datasource Subcommands ───
+
+  private async cmdDatasourceAdd(argv: string[]): Promise<number> {
+    const type = argv[0];
+    if (!type) {
+      console.error("Error: type is required. Usage: motiva datasource add <type> [options]");
+      console.error("  Types: file, http_api");
+      return 1;
+    }
+
+    if (type !== "file" && type !== "http_api") {
+      console.error(`Error: unsupported type "${type}". Supported: file, http_api`);
+      return 1;
+    }
+
+    let values: { name?: string; path?: string; url?: string };
+    try {
+      ({ values } = parseArgs({
+        args: argv.slice(1),
+        options: {
+          name: { type: "string" },
+          path: { type: "string" },
+          url: { type: "string" },
+        },
+        strict: false,
+      }) as { values: { name?: string; path?: string; url?: string } });
+    } catch {
+      values = {};
+    }
+
+    const id = `ds_${Date.now()}`;
+    const name = values.name ?? (type === "file" ? `file:${values.path ?? id}` : `http_api:${values.url ?? id}`);
+
+    const connection: Record<string, string> = {};
+    if (type === "file") {
+      if (!values.path) {
+        console.error("Error: --path is required for file data source");
+        return 1;
+      }
+      connection["path"] = values.path;
+    } else {
+      if (!values.url) {
+        console.error("Error: --url is required for http_api data source");
+        return 1;
+      }
+      connection["url"] = values.url;
+      connection["method"] = "GET";
+    }
+
+    const config = {
+      id,
+      name,
+      type,
+      connection,
+      enabled: true,
+      created_at: new Date().toISOString(),
+    };
+
+    const datasourcesDir = path.join(this.stateManager.getBaseDir(), "datasources");
+    if (!fs.existsSync(datasourcesDir)) {
+      fs.mkdirSync(datasourcesDir, { recursive: true });
+    }
+
+    const configPath = path.join(datasourcesDir, `${id}.json`);
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+
+    console.log(`Data source registered successfully!`);
+    console.log(`  ID:   ${id}`);
+    console.log(`  Type: ${type}`);
+    console.log(`  Name: ${name}`);
+
+    return 0;
+  }
+
+  private cmdDatasourceList(): number {
+    const datasourcesDir = path.join(this.stateManager.getBaseDir(), "datasources");
+
+    if (!fs.existsSync(datasourcesDir)) {
+      console.log("No data sources registered. Use `motiva datasource add` to register one.");
+      return 0;
+    }
+
+    let entries: string[];
+    try {
+      entries = fs.readdirSync(datasourcesDir);
+    } catch {
+      console.error("Error reading datasources directory.");
+      return 1;
+    }
+
+    const jsonFiles = entries.filter((e) => e.endsWith(".json"));
+
+    if (jsonFiles.length === 0) {
+      console.log("No data sources registered. Use `motiva datasource add` to register one.");
+      return 0;
+    }
+
+    console.log(`Found ${jsonFiles.length} data source(s):\n`);
+    console.log("ID                          TYPE       ENABLED  NAME");
+    console.log("─".repeat(72));
+
+    for (const file of jsonFiles) {
+      try {
+        const raw = fs.readFileSync(path.join(datasourcesDir, file), "utf-8");
+        const cfg = JSON.parse(raw) as { id?: string; type?: string; name?: string; enabled?: boolean };
+        const id = cfg.id ?? file.replace(".json", "");
+        const type = cfg.type ?? "unknown";
+        const enabled = cfg.enabled !== false ? "yes" : "no";
+        const name = cfg.name ?? "(unnamed)";
+        console.log(`${id.padEnd(28)} ${type.padEnd(10)} ${enabled.padEnd(8)} ${name}`);
+      } catch {
+        console.log(`(could not parse: ${file})`);
+      }
+    }
+
+    return 0;
+  }
+
+  private async cmdDatasourceRemove(argv: string[]): Promise<number> {
+    const id = argv[0];
+    if (!id) {
+      console.error("Error: id is required. Usage: motiva datasource remove <id>");
+      return 1;
+    }
+
+    const configPath = path.join(this.stateManager.getBaseDir(), "datasources", `${id}.json`);
+
+    if (!fs.existsSync(configPath)) {
+      console.error(`Error: Data source "${id}" not found.`);
+      return 1;
+    }
+
+    fs.unlinkSync(configPath);
+    console.log(`Data source "${id}" removed.`);
+
+    return 0;
+  }
+
   private cmdConfigCharacter(argv: string[]): number {
     let values: {
       show?: boolean;
@@ -826,6 +964,31 @@ Options:
       return 0;
     }
 
+    if (subcommand === "datasource") {
+      const dsSubcommand = argv[1];
+
+      if (!dsSubcommand) {
+        console.error("Error: datasource subcommand required. Available: datasource add, datasource list, datasource remove");
+        return 1;
+      }
+
+      if (dsSubcommand === "add") {
+        return await this.cmdDatasourceAdd(argv.slice(2));
+      }
+
+      if (dsSubcommand === "list") {
+        return this.cmdDatasourceList();
+      }
+
+      if (dsSubcommand === "remove") {
+        return await this.cmdDatasourceRemove(argv.slice(2));
+      }
+
+      console.error(`Unknown datasource subcommand: "${dsSubcommand}"`);
+      console.error("Available: datasource add, datasource list, datasource remove");
+      return 1;
+    }
+
     if (subcommand === "config") {
       const configSubcommand = argv[1];
 
@@ -878,6 +1041,9 @@ Usage:
   motiva stop                         Stop the running daemon
   motiva cron --goal <id>             Print crontab entry for a goal
   motiva config character             Show or update character configuration
+  motiva datasource add <type>        Register a new data source (file | http_api)
+  motiva datasource list              List all registered data sources
+  motiva datasource remove <id>       Remove a data source by ID
 
 Options (motiva run):
   --goal <id>                         Goal ID to run (required)
@@ -896,6 +1062,11 @@ Options (motiva config character):
   --communication-directness <1-5>    Output style (1=considerate, 5=direct)
   --proactivity-level <1-5>           Report verbosity (1=events-only, 5=always-detailed)
 
+Options (motiva datasource add):
+  --name <name>                       Human-readable name for the data source
+  --path <path>                       File path (required for type=file)
+  --url <url>                         HTTP URL (required for type=http_api)
+
 Environment:
   ANTHROPIC_API_KEY                   Required for LLM-powered commands
 
@@ -907,6 +1078,10 @@ Examples:
   motiva report --goal <id>
   motiva config character --show
   motiva config character --caution-level 3
+  motiva datasource add file --path /path/to/metrics.json --name "My Metrics"
+  motiva datasource add http_api --url https://api.example.com/metrics --name "API"
+  motiva datasource list
+  motiva datasource remove ds_1234567890
 `.trim());
 }
 

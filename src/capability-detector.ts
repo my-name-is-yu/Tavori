@@ -7,12 +7,18 @@ import {
   CapabilitySchema,
   CapabilityRegistrySchema,
   CapabilityGapSchema,
+  CapabilityAcquisitionTaskSchema,
 } from "./types/capability.js";
 import type {
   Capability,
   CapabilityRegistry,
   CapabilityGap,
+  CapabilityStatus,
+  AcquisitionContext,
+  CapabilityAcquisitionTask,
+  CapabilityVerificationResult,
 } from "./types/capability.js";
+import type { AgentResult } from "./adapter-layer.js";
 
 // ─── Constants ───
 
@@ -145,8 +151,14 @@ export class CapabilityDetector {
 
   /**
    * Adds a capability to the registry (or updates an existing one by id) and saves.
+   * If context is provided, sets acquisition_context and acquired_at on the capability.
    */
-  async registerCapability(cap: Capability): Promise<void> {
+  async registerCapability(cap: Capability, context?: AcquisitionContext): Promise<void> {
+    if (context !== undefined) {
+      cap.acquisition_context = context;
+      cap.acquired_at = context.acquired_at;
+    }
+
     const parsed = CapabilitySchema.parse(cap);
     const registry = await this.loadRegistry();
 
@@ -169,6 +181,186 @@ export class CapabilityDetector {
    */
   confirmDeficiency(_taskId: string, consecutiveFailures: number): boolean {
     return consecutiveFailures >= CONSECUTIVE_FAILURE_THRESHOLD;
+  }
+
+  // ─── planAcquisition ───
+
+  /**
+   * Deterministically creates a CapabilityAcquisitionTask from a CapabilityGap.
+   * Pure synchronous function — no LLM needed. Rules from design doc §5.3.
+   */
+  planAcquisition(gap: CapabilityGap): CapabilityAcquisitionTask {
+    const capabilityName = gap.missing_capability.name;
+    const capabilityType = gap.missing_capability.type;
+
+    let method: CapabilityAcquisitionTask["method"];
+    let task_description: string;
+
+    if (capabilityType === "tool") {
+      method = "tool_creation";
+      task_description =
+        `Create a tool named "${capabilityName}" that fulfills the following need: ${gap.reason}. ` +
+        `The tool should be implemented and made available for use. ` +
+        `Impact if unavailable: ${gap.impact_description}`;
+    } else if (capabilityType === "permission") {
+      method = "permission_request";
+      task_description =
+        `Request permission for "${capabilityName}" from the user or system administrator. ` +
+        `Reason the permission is needed: ${gap.reason}. ` +
+        `Impact if unavailable: ${gap.impact_description}`;
+    } else if (capabilityType === "service") {
+      method = "service_setup";
+      task_description =
+        `Set up the service "${capabilityName}" required for the following reason: ${gap.reason}. ` +
+        `Configure and verify the service is operational. ` +
+        `Impact if unavailable: ${gap.impact_description}`;
+    } else {
+      // data_source — treated as a form of service setup
+      method = "service_setup";
+      task_description =
+        `Set up access to the data source "${capabilityName}" required for the following reason: ${gap.reason}. ` +
+        `Configure and verify the data source is accessible. ` +
+        `Impact if unavailable: ${gap.impact_description}`;
+    }
+
+    return CapabilityAcquisitionTaskSchema.parse({
+      gap,
+      method,
+      task_description,
+      success_criteria: [
+        "capability registered in registry",
+        `${capabilityName} is operational and accessible`,
+      ],
+      verification_attempts: 0,
+      max_verification_attempts: 3,
+    });
+  }
+
+  // ─── verifyAcquiredCapability ───
+
+  /**
+   * Uses LLM to verify a newly acquired capability.
+   * Checks basic operation, error handling, and scope boundary.
+   * Returns "pass", "fail", or "escalate" (if max verification attempts reached).
+   */
+  async verifyAcquiredCapability(
+    capability: Capability,
+    acquisitionTask: CapabilityAcquisitionTask,
+    agentResult: AgentResult
+  ): Promise<CapabilityVerificationResult> {
+    const systemPrompt =
+      "You are a capability verifier for an AI orchestration system. " +
+      "Your job is to assess whether a newly acquired capability is ready for use. " +
+      "Respond with valid JSON only — no markdown, no explanation outside the JSON.";
+
+    const userMessage =
+      `Verify the following acquired capability.\n\n` +
+      `Capability name: ${capability.name}\n` +
+      `Capability type: ${capability.type}\n` +
+      `Capability description: ${capability.description}\n\n` +
+      `Acquisition task: ${acquisitionTask.task_description}\n` +
+      `Success criteria: ${acquisitionTask.success_criteria.join("; ")}\n\n` +
+      `Agent result output:\n${agentResult.output}\n\n` +
+      `Evaluate the following three criteria:\n` +
+      `1. Basic operation — does the capability work as described?\n` +
+      `2. Error handling — does it handle edge cases gracefully?\n` +
+      `3. Scope boundary — does it only do what is intended and nothing more?\n\n` +
+      `Respond with JSON in this format:\n` +
+      `{ "verdict": "pass" | "fail", "reason": "<explanation>" }`;
+
+    const VerificationResponseSchema = z.object({
+      verdict: z.enum(["pass", "fail"]),
+      reason: z.string(),
+    });
+
+    const response = await this.llmClient.sendMessage(
+      [{ role: "user", content: userMessage }],
+      { system: systemPrompt }
+    );
+
+    const parsed = this.llmClient.parseJSON(response.content, VerificationResponseSchema);
+
+    if (parsed.verdict === "fail") {
+      acquisitionTask.verification_attempts += 1;
+      if (acquisitionTask.verification_attempts >= acquisitionTask.max_verification_attempts) {
+        return "escalate";
+      }
+      return "fail";
+    }
+
+    return "pass";
+  }
+
+  // ─── removeCapability ───
+
+  /**
+   * Removes a capability from the registry by id and saves.
+   */
+  async removeCapability(capabilityId: string): Promise<void> {
+    const registry = await this.loadRegistry();
+    registry.capabilities = registry.capabilities.filter((c) => c.id !== capabilityId);
+    registry.last_checked = new Date().toISOString();
+    await this.saveRegistry(registry);
+  }
+
+  // ─── findCapabilityByName ───
+
+  /**
+   * Finds the first capability in the registry matching the given name (case-insensitive).
+   * Returns null if no match is found.
+   */
+  async findCapabilityByName(name: string): Promise<Capability | null> {
+    const registry = await this.loadRegistry();
+    const lowerName = name.toLowerCase();
+    const found = registry.capabilities.find((c) => c.name.toLowerCase() === lowerName);
+    return found ?? null;
+  }
+
+  // ─── getAcquisitionHistory ───
+
+  /**
+   * Returns all AcquisitionContext entries for capabilities acquired in service of a given goal.
+   */
+  async getAcquisitionHistory(goalId: string): Promise<AcquisitionContext[]> {
+    const registry = await this.loadRegistry();
+    return registry.capabilities
+      .filter(
+        (c) =>
+          c.acquisition_context !== undefined && c.acquisition_context.goal_id === goalId
+      )
+      .map((c) => c.acquisition_context as AcquisitionContext);
+  }
+
+  // ─── setCapabilityStatus ───
+
+  /**
+   * Updates the status of a capability in the registry by name, or creates a
+   * placeholder entry if no capability with that name exists yet.
+   */
+  async setCapabilityStatus(
+    capabilityName: string,
+    capabilityType: CapabilityGap["missing_capability"]["type"],
+    status: CapabilityStatus
+  ): Promise<void> {
+    const registry = await this.loadRegistry();
+    const existing = registry.capabilities.find((c) => c.name === capabilityName);
+
+    if (existing) {
+      existing.status = status;
+    } else {
+      registry.capabilities.push(
+        CapabilitySchema.parse({
+          id: capabilityName.toLowerCase().replace(/\s+/g, "_"),
+          name: capabilityName,
+          description: "Auto-registered during acquisition flow",
+          type: capabilityType,
+          status,
+        })
+      );
+    }
+
+    registry.last_checked = new Date().toISOString();
+    await this.saveRegistry(registry);
   }
 
   // ─── escalateToUser ───

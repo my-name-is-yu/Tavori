@@ -92,3 +92,7 @@ export type {
 export { type IEmbeddingClient, MockEmbeddingClient, OllamaEmbeddingClient, OpenAIEmbeddingClient, cosineSimilarity } from "./embedding-client.js";
 export { VectorIndex } from "./vector-index.js";
 export type { EmbeddingConfig, EmbeddingEntry, VectorSearchResult } from "./types/embedding.js";
+
+// --- Data source ---
+export { DataSourceRegistry, FileDataSourceAdapter, HttpApiDataSourceAdapter, getNestedValue } from "./data-source-adapter.js";
+export type { IDataSourceAdapter } from "./data-source-adapter.js";

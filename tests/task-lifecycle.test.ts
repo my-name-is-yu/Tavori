@@ -3446,4 +3446,173 @@ describe("TaskLifecycle", () => {
       expect(result.verificationResult.dimension_updates).toEqual([]);
     });
   });
+
+  // ─────────────────────────────────────────────
+  // capability acquisition flow
+  // ─────────────────────────────────────────────
+
+  describe("capability acquisition flow", () => {
+    function createMockCapabilityDetector(overrides: Partial<any> = {}) {
+      return {
+        detectDeficiency: vi.fn().mockResolvedValue(null),
+        planAcquisition: vi.fn().mockReturnValue({
+          gap: { missing_capability: { name: "test-tool", type: "tool" }, reason: "not available", alternatives: [], impact_description: "cannot proceed" },
+          method: "tool_creation",
+          task_description: "Create the test tool",
+          success_criteria: ["capability registered in registry"],
+          verification_attempts: 0,
+          max_verification_attempts: 3,
+        }),
+        escalateToUser: vi.fn().mockResolvedValue(undefined),
+        confirmDeficiency: vi.fn().mockReturnValue(true),
+        setCapabilityStatus: vi.fn().mockResolvedValue(undefined),
+        ...overrides,
+      };
+    }
+
+    it("skips detectDeficiency for capability_acquisition tasks", async () => {
+      const capabilityDetector = createMockCapabilityDetector();
+      const llm = createMockLLMClient([VALID_TASK_RESPONSE, LLM_REVIEW_PASS]);
+      const lifecycle = createLifecycle(llm, {
+        approvalFn: async () => true,
+        capabilityDetector: capabilityDetector as unknown as import("../src/capability-detector.js").CapabilityDetector,
+      });
+
+      // Spy on generateTask to return a task with task_category = "capability_acquisition"
+      const originalGenerateTask = lifecycle.generateTask.bind(lifecycle);
+      vi.spyOn(lifecycle, "generateTask").mockImplementation(async (...args: Parameters<typeof lifecycle.generateTask>) => {
+        const task = await originalGenerateTask(...args);
+        (task as any).task_category = "capability_acquisition";
+        return task;
+      });
+
+      const gapVector = makeGapVector("goal-1", [{ name: "coverage", gap: 0.5 }]);
+      const context = makeDriveContext(["coverage"]);
+      const adapter = createMockAdapter([{ success: true, output: "Done" }]);
+
+      await lifecycle.runTaskCycle("goal-1", gapVector, context, adapter);
+
+      expect(capabilityDetector.detectDeficiency).not.toHaveBeenCalled();
+    });
+
+    it("returns capability_acquiring for tool gap", async () => {
+      const toolGap = {
+        missing_capability: { name: "code-formatter", type: "tool" as const },
+        reason: "No code formatting tool available",
+        alternatives: [],
+        impact_description: "Cannot format code automatically",
+      };
+      const acquisitionTask = {
+        gap: toolGap,
+        method: "tool_creation" as const,
+        task_description: "Create a code formatting tool",
+        success_criteria: ["capability registered in registry"],
+        verification_attempts: 0,
+        max_verification_attempts: 3,
+      };
+      const capabilityDetector = createMockCapabilityDetector({
+        detectDeficiency: vi.fn().mockResolvedValue(toolGap),
+        planAcquisition: vi.fn().mockReturnValue(acquisitionTask),
+      });
+
+      const llm = createMockLLMClient([VALID_TASK_RESPONSE]);
+      const lifecycle = createLifecycle(llm, {
+        approvalFn: async () => true,
+        capabilityDetector: capabilityDetector as unknown as import("../src/capability-detector.js").CapabilityDetector,
+      });
+
+      const gapVector = makeGapVector("goal-1", [{ name: "coverage", gap: 0.5 }]);
+      const context = makeDriveContext(["coverage"]);
+      const adapter = createMockAdapter([]);
+
+      const result = await lifecycle.runTaskCycle("goal-1", gapVector, context, adapter);
+
+      expect(result.action).toBe("capability_acquiring");
+      expect(result.acquisition_task).toBeDefined();
+      expect(result.acquisition_task!.method).toBe("tool_creation");
+      expect(capabilityDetector.setCapabilityStatus).toHaveBeenCalledWith(
+        "code-formatter",
+        "tool",
+        "acquiring"
+      );
+    });
+
+    it("escalates for permission gap", async () => {
+      const permissionGap = {
+        missing_capability: { name: "admin-access", type: "permission" as const },
+        reason: "Requires admin privileges",
+        alternatives: [],
+        impact_description: "Cannot modify system settings",
+      };
+      const acquisitionTask = {
+        gap: permissionGap,
+        method: "permission_request" as const,
+        task_description: "Request admin access from user",
+        success_criteria: ["admin access granted"],
+        verification_attempts: 0,
+        max_verification_attempts: 3,
+      };
+      const capabilityDetector = createMockCapabilityDetector({
+        detectDeficiency: vi.fn().mockResolvedValue(permissionGap),
+        planAcquisition: vi.fn().mockReturnValue(acquisitionTask),
+      });
+
+      const llm = createMockLLMClient([VALID_TASK_RESPONSE]);
+      const lifecycle = createLifecycle(llm, {
+        approvalFn: async () => true,
+        capabilityDetector: capabilityDetector as unknown as import("../src/capability-detector.js").CapabilityDetector,
+      });
+
+      const gapVector = makeGapVector("goal-1", [{ name: "coverage", gap: 0.5 }]);
+      const context = makeDriveContext(["coverage"]);
+      const adapter = createMockAdapter([]);
+
+      const result = await lifecycle.runTaskCycle("goal-1", gapVector, context, adapter);
+
+      expect(result.action).toBe("escalate");
+      expect(capabilityDetector.setCapabilityStatus).not.toHaveBeenCalled();
+    });
+
+    it("returns capability_acquiring for service gap", async () => {
+      const serviceGap = {
+        missing_capability: { name: "redis-cache", type: "service" as const },
+        reason: "Redis service not running",
+        alternatives: [],
+        impact_description: "Cannot use caching layer",
+      };
+      const acquisitionTask = {
+        gap: serviceGap,
+        method: "service_setup" as const,
+        task_description: "Set up Redis cache service",
+        success_criteria: ["Redis service is running and accessible"],
+        verification_attempts: 0,
+        max_verification_attempts: 3,
+      };
+      const capabilityDetector = createMockCapabilityDetector({
+        detectDeficiency: vi.fn().mockResolvedValue(serviceGap),
+        planAcquisition: vi.fn().mockReturnValue(acquisitionTask),
+      });
+
+      const llm = createMockLLMClient([VALID_TASK_RESPONSE]);
+      const lifecycle = createLifecycle(llm, {
+        approvalFn: async () => true,
+        capabilityDetector: capabilityDetector as unknown as import("../src/capability-detector.js").CapabilityDetector,
+      });
+
+      const gapVector = makeGapVector("goal-1", [{ name: "coverage", gap: 0.5 }]);
+      const context = makeDriveContext(["coverage"]);
+      const adapter = createMockAdapter([]);
+
+      const result = await lifecycle.runTaskCycle("goal-1", gapVector, context, adapter);
+
+      expect(result.action).toBe("capability_acquiring");
+      expect(result.acquisition_task).toBeDefined();
+      expect(result.acquisition_task!.method).toBe("service_setup");
+      expect(capabilityDetector.setCapabilityStatus).toHaveBeenCalledWith(
+        "redis-cache",
+        "service",
+        "acquiring"
+      );
+    });
+  });
 });
