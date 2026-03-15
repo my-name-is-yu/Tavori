@@ -18,9 +18,8 @@ import * as readline from "node:readline";
 import { parseArgs } from "node:util";
 
 import { StateManager } from "./state-manager.js";
-import { LLMClient } from "./llm-client.js";
-import { OllamaLLMClient } from "./ollama-client.js";
 import type { ILLMClient } from "./llm-client.js";
+import { buildLLMClient, buildAdapterRegistry } from "./provider-factory.js";
 import { TrustManager } from "./trust-manager.js";
 import { DriveSystem } from "./drive-system.js";
 import { ObservationEngine } from "./observation-engine.js";
@@ -30,9 +29,6 @@ import { EthicsGate } from "./ethics-gate.js";
 import { SessionManager } from "./session-manager.js";
 import { StrategyManager } from "./strategy-manager.js";
 import { GoalNegotiator, EthicsRejectedError } from "./goal-negotiator.js";
-import { AdapterRegistry } from "./adapter-layer.js";
-import { ClaudeCodeCLIAdapter } from "./adapters/claude-code-cli.js";
-import { ClaudeAPIAdapter } from "./adapters/claude-api.js";
 import { TaskLifecycle } from "./task-lifecycle.js";
 import { ReportingEngine } from "./reporting-engine.js";
 import { CoreLoop } from "./core-loop.js";
@@ -77,21 +73,6 @@ export class CLIRunner {
     return process.env.ANTHROPIC_API_KEY;
   }
 
-  /**
-   * Build the LLM client based on environment configuration.
-   * When MOTIVA_LLM_PROVIDER=ollama, returns an OllamaLLMClient.
-   * Otherwise returns a LLMClient (Anthropic).
-   */
-  private buildLLMClient(apiKey?: string): ILLMClient {
-    const provider = process.env.MOTIVA_LLM_PROVIDER;
-    if (provider === "ollama") {
-      const baseUrl = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434";
-      const model = process.env.OLLAMA_MODEL ?? "qwen3:4b";
-      return new OllamaLLMClient({ baseUrl, model });
-    }
-    return new LLMClient(apiKey);
-  }
-
   private buildApprovalFn(rl: readline.Interface): (task: Task) => Promise<boolean> {
     return (task: Task): Promise<boolean> => {
       return new Promise((resolve) => {
@@ -107,10 +88,10 @@ export class CLIRunner {
     };
   }
 
-  private buildDeps(apiKey: string | undefined, config?: LoopConfig, approvalFn?: (task: Task) => Promise<boolean>) {
+  private buildDeps(_apiKey: string | undefined, config?: LoopConfig, approvalFn?: (task: Task) => Promise<boolean>) {
     const stateManager = this.stateManager;
     const characterConfig = this.characterConfigManager.load();
-    const llmClient = this.buildLLMClient(apiKey);
+    const llmClient = buildLLMClient();
     const trustManager = new TrustManager(stateManager);
     const driveSystem = new DriveSystem(stateManager);
     const observationEngine = new ObservationEngine(stateManager);
@@ -119,11 +100,7 @@ export class CLIRunner {
     const ethicsGate = new EthicsGate(stateManager, llmClient);
     const sessionManager = new SessionManager(stateManager);
     const strategyManager = new StrategyManager(stateManager, llmClient);
-    const adapterRegistry = new AdapterRegistry();
-
-    // Register default adapters
-    adapterRegistry.register(new ClaudeCodeCLIAdapter());
-    adapterRegistry.register(new ClaudeAPIAdapter(llmClient));
+    const adapterRegistry = buildAdapterRegistry(llmClient);
 
     const taskLifecycle = new TaskLifecycle(
       stateManager,
@@ -194,10 +171,12 @@ export class CLIRunner {
     loopConfig?: LoopConfig
   ): Promise<number> {
     const apiKey = this.getApiKey();
-    if (!apiKey && process.env.MOTIVA_LLM_PROVIDER !== "ollama") {
+    const provider = process.env.MOTIVA_LLM_PROVIDER;
+    if (!apiKey && provider !== "ollama" && provider !== "openai") {
       console.error(
         "Error: ANTHROPIC_API_KEY environment variable is not set.\n" +
           "Set it with: export ANTHROPIC_API_KEY=<your-key>\n" +
+          "Or use OpenAI: export MOTIVA_LLM_PROVIDER=openai\n" +
           "Or use Ollama: export MOTIVA_LLM_PROVIDER=ollama"
       );
       return 1;
@@ -292,10 +271,12 @@ export class CLIRunner {
     opts: { deadline?: string; constraints?: string[] }
   ): Promise<number> {
     const apiKey = this.getApiKey();
-    if (!apiKey && process.env.MOTIVA_LLM_PROVIDER !== "ollama") {
+    const provider2 = process.env.MOTIVA_LLM_PROVIDER;
+    if (!apiKey && provider2 !== "ollama" && provider2 !== "openai") {
       console.error(
         "Error: ANTHROPIC_API_KEY environment variable is not set.\n" +
           "Set it with: export ANTHROPIC_API_KEY=<your-key>\n" +
+          "Or use OpenAI: export MOTIVA_LLM_PROVIDER=openai\n" +
           "Or use Ollama: export MOTIVA_LLM_PROVIDER=ollama"
       );
       return 1;

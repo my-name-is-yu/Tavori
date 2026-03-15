@@ -27,6 +27,8 @@ export type { ILLMClient, LLMMessage, LLMRequestOptions, LLMResponse } from "./l
 export { LLMClient, MockLLMClient, extractJSON } from "./llm-client.js";
 export { OllamaLLMClient } from "./ollama-client.js";
 export type { OllamaClientConfig } from "./ollama-client.js";
+export { OpenAILLMClient } from "./openai-client.js";
+export type { OpenAIClientConfig } from "./openai-client.js";
 export { EthicsGate } from "./ethics-gate.js";
 export { SessionManager } from "./session-manager.js";
 export { StrategyManager } from "./strategy-manager.js";
@@ -35,6 +37,9 @@ export { AdapterRegistry } from "./adapter-layer.js";
 export type { IAdapter, AgentTask, AgentResult } from "./adapter-layer.js";
 export { ClaudeCodeCLIAdapter } from "./adapters/claude-code-cli.js";
 export { ClaudeAPIAdapter } from "./adapters/claude-api.js";
+export { OpenAICodexCLIAdapter } from "./adapters/openai-codex.js";
+export type { OpenAICodexCLIAdapterConfig } from "./adapters/openai-codex.js";
+export { buildLLMClient, buildAdapterRegistry } from "./provider-factory.js";
 export { TaskLifecycle } from "./task-lifecycle.js";
 export { ReportingEngine } from "./reporting-engine.js";
 export { KnowledgeManager } from "./knowledge-manager.js";

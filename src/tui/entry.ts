@@ -8,7 +8,7 @@ import { render } from "ink";
 import React from "react";
 
 import { StateManager } from "../state-manager.js";
-import { LLMClient } from "../llm-client.js";
+import { buildLLMClient, buildAdapterRegistry } from "../provider-factory.js";
 import { TrustManager } from "../trust-manager.js";
 import { DriveSystem } from "../drive-system.js";
 import { ObservationEngine } from "../observation-engine.js";
@@ -18,9 +18,6 @@ import { EthicsGate } from "../ethics-gate.js";
 import { SessionManager } from "../session-manager.js";
 import { StrategyManager } from "../strategy-manager.js";
 import { GoalNegotiator } from "../goal-negotiator.js";
-import { AdapterRegistry } from "../adapter-layer.js";
-import { ClaudeCodeCLIAdapter } from "../adapters/claude-code-cli.js";
-import { ClaudeAPIAdapter } from "../adapters/claude-api.js";
 import { TaskLifecycle } from "../task-lifecycle.js";
 import { ReportingEngine } from "../reporting-engine.js";
 import { CoreLoop } from "../core-loop.js";
@@ -35,9 +32,9 @@ import type { Task } from "../types/task.js";
 
 // ─── Dependency Wiring ───
 
-function buildDeps(apiKey: string) {
+function buildDeps() {
   const stateManager = new StateManager();
-  const llmClient = new LLMClient(apiKey);
+  const llmClient = buildLLMClient();
   const trustManager = new TrustManager(stateManager);
   const driveSystem = new DriveSystem(stateManager);
   const observationEngine = new ObservationEngine(stateManager);
@@ -46,11 +43,7 @@ function buildDeps(apiKey: string) {
   const ethicsGate = new EthicsGate(stateManager, llmClient);
   const sessionManager = new SessionManager(stateManager);
   const strategyManager = new StrategyManager(stateManager, llmClient);
-  const adapterRegistry = new AdapterRegistry();
-
-  // Register default adapters
-  adapterRegistry.register(new ClaudeCodeCLIAdapter());
-  adapterRegistry.register(new ClaudeAPIAdapter(llmClient));
+  const adapterRegistry = buildAdapterRegistry(llmClient);
 
   // TUI approval: routed through ApprovalOverlay in the Ink render loop.
   // requestApproval is set once the App component mounts and calls onApprovalReady.
@@ -122,12 +115,14 @@ function buildDeps(apiKey: string) {
 // ─── TUI Entry ───
 
 export async function startTUI(): Promise<void> {
-  // 1. Require API key
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
+  // 1. Check API key requirements (deferred to buildLLMClient via provider-factory)
+  const provider = process.env.MOTIVA_LLM_PROVIDER;
+  if (!process.env.ANTHROPIC_API_KEY && provider !== "ollama" && provider !== "openai") {
     console.error(
       "Error: ANTHROPIC_API_KEY environment variable is not set.\n" +
-        "Set it with: export ANTHROPIC_API_KEY=<your-key>"
+        "Set it with: export ANTHROPIC_API_KEY=<your-key>\n" +
+        "Or use OpenAI: export MOTIVA_LLM_PROVIDER=openai\n" +
+        "Or use Ollama: export MOTIVA_LLM_PROVIDER=ollama"
     );
     process.exit(1);
   }
@@ -135,7 +130,7 @@ export async function startTUI(): Promise<void> {
   // 2. Wire all dependencies
   let deps: ReturnType<typeof buildDeps>;
   try {
-    deps = buildDeps(apiKey);
+    deps = buildDeps();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`Error: Failed to initialise dependencies: ${message}`);
