@@ -922,6 +922,13 @@ Target: ${targetDesc}`;
     let adapterSection = "";
     if (adapterType === "github_issue") {
       adapterSection = `\nExecution context: This task will be executed via GitHub issue creation.\nIMPORTANT: The work_description should contain the issue title on the first line, followed by the issue body. Generate a SPECIFIC, actionable issue — not a vague review task.\n`;
+    } else if (adapterType === "openai_codex_cli" || adapterType === "claude_code_cli") {
+      adapterSection = `\nExecution context: This task will be executed via the "${adapterType}" adapter (a CLI-based code agent).
+IMPORTANT constraints for success_criteria:
+- The agent runs in a sandbox and CANNOT perform git commit, git push, or merge operations.
+- Success criteria MUST focus on file creation/modification only (e.g., "file X exists with content Y").
+- Do NOT include "merged into repository", "committed", or "pushed" as success criteria.
+- The verification_method should check file existence or content (e.g., "test -f README.md").\n`;
     } else if (adapterType) {
       adapterSection = `\nExecution context: This task will be executed via the "${adapterType}" adapter.\n`;
     }
