@@ -1112,3 +1112,150 @@ describe("getAcquisitionHistory", () => {
     expect(history[0]!.goal_id).toBe("goal-x");
   });
 });
+
+// ─── detectGoalCapabilityGap ───
+
+const NO_GOAL_GAP_RESPONSE = JSON.stringify({ has_gap: false });
+
+const GOAL_GAP_SERVICE_RESPONSE = JSON.stringify({
+  has_gap: true,
+  missing_capability: { name: "close_github_issue", type: "service" },
+  reason: "Goal requires closing resolved issues but adapter only supports creating them",
+  alternatives: ["Manually close issues via GitHub UI", "Use a different adapter that supports issue management"],
+  impact_description: "Cannot automatically close issues when tasks are completed",
+  acquirable: true,
+});
+
+const GOAL_GAP_NOT_ACQUIRABLE_RESPONSE = JSON.stringify({
+  has_gap: true,
+  missing_capability: { name: "production_db_write", type: "permission" },
+  reason: "Goal requires writing to production database",
+  alternatives: [],
+  impact_description: "Cannot persist results without production write access",
+  acquirable: false,
+});
+
+describe("detectGoalCapabilityGap", () => {
+  it("returns null when no capability gap detected", async () => {
+    const llm = createMockLLMClient([NO_GOAL_GAP_RESPONSE]);
+    const detector = new CapabilityDetector(stateManager, llm, reportingEngine);
+
+    const result = await detector.detectGoalCapabilityGap(
+      "Create GitHub issues for each open task",
+      ["create_github_issue"]
+    );
+
+    expect(result).toBeNull();
+  });
+
+  it("returns CapabilityGap when goal requires unavailable capability", async () => {
+    const llm = createMockLLMClient([GOAL_GAP_SERVICE_RESPONSE]);
+    const detector = new CapabilityDetector(stateManager, llm, reportingEngine);
+
+    const result = await detector.detectGoalCapabilityGap(
+      "Manage GitHub issues: create and close them as tasks complete",
+      ["create_github_issue"]
+    );
+
+    expect(result).not.toBeNull();
+    expect(result!.gap.missing_capability.name).toBe("close_github_issue");
+    expect(result!.gap.missing_capability.type).toBe("service");
+    expect(result!.gap.reason).toContain("closing resolved issues");
+    expect(result!.gap.alternatives).toHaveLength(2);
+  });
+
+  it("includes registry capabilities in available list (prompt context)", async () => {
+    const llm = createMockLLMClient([NO_GOAL_GAP_RESPONSE]);
+    const detector = new CapabilityDetector(stateManager, llm, reportingEngine);
+
+    // Pre-register a registry capability so it should appear in the prompt
+    await detector.registerCapability(makeCapability({
+      id: "cap-registry",
+      name: "Jira API",
+      description: "Access to Jira project management",
+      type: "service",
+      status: "available",
+    }));
+
+    let capturedMessages: LLMMessage[] = [];
+    const originalSend = llm.sendMessage.bind(llm);
+    llm.sendMessage = async (messages, options) => {
+      capturedMessages = messages;
+      return originalSend(messages, options);
+    };
+
+    await detector.detectGoalCapabilityGap(
+      "Track project tasks in Jira",
+      ["execute_code"]
+    );
+
+    expect(capturedMessages[0]!.content).toContain("Jira API");
+    expect(capturedMessages[0]!.content).toContain("execute_code");
+  });
+
+  it("handles LLM failure gracefully — returns null", async () => {
+    // MockLLMClient throws when responses are exhausted
+    const llm = createMockLLMClient([]);
+    const detector = new CapabilityDetector(stateManager, llm, reportingEngine);
+
+    const result = await detector.detectGoalCapabilityGap(
+      "Some goal description",
+      ["create_github_issue"]
+    );
+
+    expect(result).toBeNull();
+  });
+
+  it("returns gap with related_task_id undefined — goal-level gap has no task", async () => {
+    const llm = createMockLLMClient([GOAL_GAP_SERVICE_RESPONSE]);
+    const detector = new CapabilityDetector(stateManager, llm, reportingEngine);
+
+    const result = await detector.detectGoalCapabilityGap(
+      "Manage GitHub issues end-to-end",
+      ["create_github_issue"]
+    );
+
+    expect(result).not.toBeNull();
+    expect(result!.gap.related_task_id).toBeUndefined();
+  });
+
+  it("returns acquirable=true when capability can be acquired", async () => {
+    const llm = createMockLLMClient([GOAL_GAP_SERVICE_RESPONSE]);
+    const detector = new CapabilityDetector(stateManager, llm, reportingEngine);
+
+    const result = await detector.detectGoalCapabilityGap(
+      "Manage GitHub issues end-to-end",
+      ["create_github_issue"]
+    );
+
+    expect(result).not.toBeNull();
+    expect(result!.acquirable).toBe(true);
+    expect(result!.gap.alternatives.length).toBeGreaterThan(0);
+  });
+
+  it("returns acquirable=false when capability cannot be acquired", async () => {
+    const llm = createMockLLMClient([GOAL_GAP_NOT_ACQUIRABLE_RESPONSE]);
+    const detector = new CapabilityDetector(stateManager, llm, reportingEngine);
+
+    const result = await detector.detectGoalCapabilityGap(
+      "Persist results to production database",
+      []
+    );
+
+    expect(result).not.toBeNull();
+    expect(result!.acquirable).toBe(false);
+    expect(result!.gap.missing_capability.name).toBe("production_db_write");
+  });
+
+  it("handles malformed LLM response gracefully — returns null", async () => {
+    const llm = createMockLLMClient(["not valid json"]);
+    const detector = new CapabilityDetector(stateManager, llm, reportingEngine);
+
+    const result = await detector.detectGoalCapabilityGap(
+      "Some goal description",
+      ["create_github_issue"]
+    );
+
+    expect(result).toBeNull();
+  });
+});

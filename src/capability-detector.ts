@@ -43,6 +43,25 @@ const DeficiencyResponseSchema = z.union([
   }),
 ]);
 
+// ─── LLM response schema for goal-level capability gap detection ───
+
+const GoalCapabilityGapResponseSchema = z.union([
+  z.object({
+    has_gap: z.literal(false),
+  }),
+  z.object({
+    has_gap: z.literal(true),
+    missing_capability: z.object({
+      name: z.string(),
+      type: z.enum(["tool", "permission", "service", "data_source"]),
+    }),
+    reason: z.string(),
+    alternatives: z.array(z.string()),
+    impact_description: z.string(),
+    acquirable: z.boolean(),
+  }),
+]);
+
 // ─── CapabilityDetector ───
 
 export class CapabilityDetector {
@@ -118,6 +137,88 @@ export class CapabilityDetector {
     });
 
     return gap;
+  }
+
+  // ─── detectGoalCapabilityGap ───
+
+  /**
+   * Goal-level analog of detectDeficiency(). Takes a goal description and a flat
+   * list of adapter capability strings (e.g. ["create_github_issue", "execute_code"]),
+   * combines them with registry capabilities, and uses LLM to determine if any
+   * capabilities required by the goal are missing.
+   *
+   * Returns a CapabilityGap (without related_task_id) if a gap is found, or null if
+   * all required capabilities are available.
+   */
+  async detectGoalCapabilityGap(
+    goalDescription: string,
+    adapterCapabilities: string[]
+  ): Promise<{ gap: CapabilityGap; acquirable: boolean } | null> {
+    try {
+      const registry = await this.loadRegistry();
+
+      const registryCapabilityLines = registry.capabilities
+        .filter((c) => c.status === "available")
+        .map((c) => `- ${c.name} (${c.type}): ${c.description}`);
+
+      const adapterCapabilityLines = adapterCapabilities.map(
+        (cap) => `- ${cap} (adapter-declared)`
+      );
+
+      const allAvailableLines = [...registryCapabilityLines, ...adapterCapabilityLines];
+      const availableCapabilities =
+        allAvailableLines.length > 0 ? allAvailableLines.join("\n") : "(none registered)";
+
+      const systemPrompt =
+        "You are a capability analyzer for an AI orchestration system. " +
+        "Your job is to determine whether a given goal can be achieved with the available capabilities. " +
+        "Respond with valid JSON only — no markdown, no explanation outside the JSON.";
+
+      const userMessage =
+        `Analyze the following goal and determine if any required capabilities are missing.\n\n` +
+        `Goal description: ${goalDescription}\n\n` +
+        `Available capabilities (from capability registry and declared adapter capabilities):\n${availableCapabilities}\n\n` +
+        `Respond with JSON in one of these two formats:\n` +
+        `If all capabilities are available:\n` +
+        `{ "has_gap": false }\n\n` +
+        `If a capability is missing:\n` +
+        `{\n` +
+        `  "has_gap": true,\n` +
+        `  "missing_capability": { "name": "<name>", "type": "tool|permission|service|data_source" },\n` +
+        `  "reason": "<why this capability is needed>",\n` +
+        `  "alternatives": ["<alternative approach 1>", "<alternative approach 2>"],\n` +
+        `  "impact_description": "<impact if capability remains unavailable>",\n` +
+        `  "acquirable": true|false\n` +
+        `}`;
+
+      const response = await this.llmClient.sendMessage(
+        [{ role: "user", content: userMessage }],
+        { system: systemPrompt }
+      );
+
+      let parsed: z.infer<typeof GoalCapabilityGapResponseSchema>;
+      try {
+        parsed = this.llmClient.parseJSON(response.content, GoalCapabilityGapResponseSchema);
+      } catch {
+        return null;
+      }
+
+      if (!parsed.has_gap) {
+        return null;
+      }
+
+      const gap = CapabilityGapSchema.parse({
+        missing_capability: parsed.missing_capability,
+        reason: parsed.reason,
+        alternatives: parsed.alternatives,
+        impact_description: parsed.impact_description,
+        // related_task_id intentionally omitted — this is goal-level, not task-level
+      });
+
+      return { gap, acquirable: parsed.acquirable ?? false };
+    } catch {
+      return null;
+    }
   }
 
   // ─── loadRegistry ───
