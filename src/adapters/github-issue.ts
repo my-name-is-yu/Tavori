@@ -1,0 +1,433 @@
+// ─── GitHubIssueAdapter ───
+//
+// IAdapter implementation that creates GitHub issues via the `gh` CLI.
+// The task prompt is parsed for issue details; a ```github-issue JSON``` block
+// is preferred, falling back to first-line-as-title / rest-as-body.
+//
+// Environment variables:
+//   MOTIVA_GITHUB_REPO — "owner/name", overrides auto-detection
+
+import { spawn } from "node:child_process";
+import type { IAdapter, AgentTask, AgentResult } from "../adapter-layer.js";
+
+// ─── Config ───
+
+export interface GitHubIssueAdapterConfig {
+  /** "owner/name". Reads MOTIVA_GITHUB_REPO env var if not set; auto-detects via gh CLI otherwise. */
+  repo?: string;
+  /** Labels always applied to every created issue. Default: ["motiva"] */
+  defaultLabels?: string[];
+  /** Path to the gh executable. Default: "gh" */
+  ghPath?: string;
+  /** When true, log the command instead of running it. Default: false */
+  dryRun?: boolean;
+  /** Ignored — kept for API compatibility. Timeout is taken from AgentTask.timeout_ms. */
+  timeout_ms?: number;
+}
+
+// ─── Parsed issue details ───
+
+export interface ParsedIssue {
+  title: string;
+  body: string;
+  labels: string[];
+}
+
+// ─── Adapter ───
+
+export class GitHubIssueAdapter implements IAdapter {
+  readonly adapterType = "github_issue";
+
+  private readonly repo: string | undefined;
+  private readonly defaultLabels: string[];
+  private readonly ghPath: string;
+  private readonly dryRun: boolean;
+
+  constructor(config?: GitHubIssueAdapterConfig) {
+    this.repo = config?.repo ?? process.env["MOTIVA_GITHUB_REPO"];
+    this.defaultLabels = config?.defaultLabels ?? ["motiva"];
+    this.ghPath = config?.ghPath ?? "gh";
+    this.dryRun = config?.dryRun ?? false;
+  }
+
+  execute(task: AgentTask): Promise<AgentResult> {
+    const startedAt = Date.now();
+    const parsed = this.parsePrompt(task.prompt);
+
+    return new Promise<AgentResult>((resolve) => {
+      // ── Dry-run mode ──────────────────────────────────────────────────────
+      if (this.dryRun) {
+        const repo = this.repo ?? "(auto-detect)";
+        const cmd = this.buildGhArgs(parsed, repo).join(" ");
+        const dryMsg = `[dry-run] Would run: ${this.ghPath} ${cmd}`;
+        console.log(dryMsg);
+        resolve({
+          success: true,
+          output: dryMsg,
+          error: null,
+          exit_code: 0,
+          elapsed_ms: Date.now() - startedAt,
+          stopped_reason: "completed",
+        });
+        return;
+      }
+
+      const knownRepo = this.repo;
+
+      if (knownRepo) {
+        // ── Repo already known — spawn gh issue create directly ─────────────
+        this.spawnCreate(parsed, knownRepo, task.timeout_ms, startedAt, resolve);
+      } else {
+        // ── Auto-detect: spawn gh repo view, then spawn gh issue create ─────
+        // This uses nested callbacks (not await) so that the second spawn() call
+        // happens synchronously inside the close handler of the first spawn.
+        // This ensures event listeners are registered before the test emits events.
+        this.spawnDetect(task.timeout_ms, (repo, detectErr) => {
+          if (detectErr !== null || !repo) {
+            resolve({
+              success: false,
+              output: "",
+              error: `Failed to detect GitHub repo: ${detectErr ?? "no repo found"}`,
+              exit_code: null,
+              elapsed_ms: Date.now() - startedAt,
+              stopped_reason: "error",
+            });
+            return;
+          }
+          this.spawnCreate(parsed, repo, task.timeout_ms, startedAt, resolve);
+        });
+      }
+    });
+  }
+
+  /**
+   * Parse the task prompt to extract issue title, body, and labels.
+   *
+   * Preferred format — a fenced ```github-issue block containing JSON:
+   *   ```github-issue
+   *   { "title": "...", "body": "...", "labels": ["bug"] }
+   *   ```
+   *
+   * Fallback: first non-empty line = title, remainder = body, labels = defaultLabels only.
+   *
+   * Labels from the JSON block are merged with defaultLabels (deduplicated).
+   */
+  parsePrompt(prompt: string): ParsedIssue {
+    const fenceMatch = prompt.match(/```github-issue\s*\n([\s\S]*?)```/);
+    if (fenceMatch) {
+      try {
+        const raw = JSON.parse(fenceMatch[1].trim()) as {
+          title?: unknown;
+          body?: unknown;
+          labels?: unknown;
+        };
+
+        const title =
+          typeof raw.title === "string" && raw.title.trim() !== ""
+            ? raw.title.trim()
+            : "(no title)";
+
+        const body = typeof raw.body === "string" ? raw.body : "";
+
+        const extraLabels: string[] = Array.isArray(raw.labels)
+          ? (raw.labels as unknown[]).filter((l): l is string => typeof l === "string")
+          : [];
+
+        const labels = dedupeLabels([...this.defaultLabels, ...extraLabels]);
+
+        return { title, body, labels };
+      } catch {
+        // JSON parse failed — fall through to plain-text fallback
+      }
+    }
+
+    // Plain-text fallback
+    const lines = prompt.split("\n");
+    const firstNonEmpty = lines.find((l) => l.trim() !== "");
+    const title = firstNonEmpty?.trim() ?? "(no title)";
+    const afterFirst = lines
+      .slice(lines.indexOf(firstNonEmpty ?? "") + 1)
+      .join("\n")
+      .trim();
+
+    return {
+      title,
+      body: afterFirst,
+      labels: [...this.defaultLabels],
+    };
+  }
+
+  // ─── Private helpers ───
+
+  private buildGhArgs(parsed: ParsedIssue, repo: string): string[] {
+    const args: string[] = [
+      "issue",
+      "create",
+      "--title",
+      parsed.title,
+      "--body",
+      parsed.body,
+    ];
+
+    for (const label of parsed.labels) {
+      args.push("--label", label);
+    }
+
+    args.push("--repo", repo);
+
+    return args;
+  }
+
+  /**
+   * Spawn `gh repo view --json nameWithOwner` and call back with the detected
+   * repo string or an error message. Uses raw callbacks (not Promise/await) so
+   * the callback fires synchronously inside the close event handler, allowing
+   * the caller to immediately spawn the next child process without any
+   * microtask gap.
+   */
+  private spawnDetect(
+    timeoutMs: number,
+    cb: (repo: string | null, err: string | null) => void
+  ): void {
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    let resolved = false;
+    const startedAt = Date.now();
+
+    const child = spawn(this.ghPath, ["repo", "view", "--json", "nameWithOwner"], {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    const timeoutHandle = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+    }, timeoutMs);
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString("utf8");
+    });
+
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString("utf8");
+    });
+
+    child.on("error", (err: Error) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeoutHandle);
+      const remainingMs = timeoutMs - (Date.now() - startedAt);
+      if (remainingMs <= 0) {
+        cb(null, err.message);
+        return;
+      }
+      this.spawnGitRemote(remainingMs, cb);
+    });
+
+    child.on("close", (code: number | null) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeoutHandle);
+
+      if (timedOut || code !== 0) {
+        // Fall back to git remote parsing with remaining budget
+        const remainingMs = timeoutMs - (Date.now() - startedAt);
+        if (remainingMs <= 0) {
+          cb(null, "Could not detect GitHub repo: timed out.");
+          return;
+        }
+        this.spawnGitRemote(remainingMs, cb);
+        return;
+      }
+
+      const text = stdout.trim();
+      try {
+        const parsed = JSON.parse(text) as { nameWithOwner?: string };
+        const name = parsed.nameWithOwner?.trim();
+        if (name && name.includes("/")) {
+          cb(name, null);
+          return;
+        }
+      } catch {
+        // Not JSON — check plain "owner/repo"
+        if (text.includes("/")) {
+          cb(text, null);
+          return;
+        }
+      }
+
+      // Could not parse — fall back with remaining budget
+      const remainingMs = timeoutMs - (Date.now() - startedAt);
+      if (remainingMs <= 0) {
+        cb(null, "Could not detect GitHub repo: timed out.");
+        return;
+      }
+      this.spawnGitRemote(remainingMs, cb);
+    });
+  }
+
+  /**
+   * Fallback: parse git remote URL. Same callback-based pattern.
+   */
+  private spawnGitRemote(
+    timeoutMs: number,
+    cb: (repo: string | null, err: string | null) => void
+  ): void {
+    let stdout = "";
+    let timedOut = false;
+    let resolved = false;
+
+    const child = spawn("git", ["remote", "get-url", "origin"], {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    const timeoutHandle = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+    }, timeoutMs);
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString("utf8");
+    });
+
+    child.on("error", (err: Error) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeoutHandle);
+      cb(
+        null,
+        "Could not detect GitHub repo. Set MOTIVA_GITHUB_REPO or run inside a GitHub-backed git repo. " +
+          `(git error: ${err.message})`
+      );
+    });
+
+    child.on("close", (code: number | null) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timeoutHandle);
+
+      const url = stdout.trim();
+      if (timedOut || code !== 0 || !url) {
+        cb(
+          null,
+          "Could not detect GitHub repo. Set MOTIVA_GITHUB_REPO or run inside a GitHub-backed git repo."
+        );
+        return;
+      }
+
+      // Parse SSH: git@github.com:owner/repo.git
+      const sshMatch = url.match(/git@github\.com:([^/]+\/[^/]+?)(?:\.git)?$/);
+      if (sshMatch) {
+        cb(sshMatch[1], null);
+        return;
+      }
+
+      // Parse HTTPS: https://github.com/owner/repo[.git]
+      const httpsMatch = url.match(/github\.com\/([^/]+\/[^/]+?)(?:\.git)?(?:\/|$)/);
+      if (httpsMatch) {
+        cb(httpsMatch[1], null);
+        return;
+      }
+
+      cb(
+        null,
+        `Could not parse GitHub repo from git remote URL: ${url}. ` +
+          "Set MOTIVA_GITHUB_REPO to 'owner/name' explicitly."
+      );
+    });
+  }
+
+  /**
+   * Spawn `gh issue create` and resolve the outer Promise. Uses raw callbacks
+   * for the same reason as spawnDetect — synchronous close-handler chaining.
+   */
+  private spawnCreate(
+    parsed: ParsedIssue,
+    repo: string,
+    timeoutMs: number,
+    startedAt: number,
+    resolve: (result: AgentResult) => void
+  ): void {
+    const args = this.buildGhArgs(parsed, repo);
+
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+
+    const child = spawn(this.ghPath, args, { stdio: ["ignore", "pipe", "pipe"] });
+
+    const timeoutHandle = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+    }, timeoutMs);
+
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString("utf8");
+    });
+
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString("utf8");
+    });
+
+    child.on("error", (err: Error) => {
+      clearTimeout(timeoutHandle);
+      resolve({
+        success: false,
+        output: stdout,
+        error: this.classifyGhError(err.message),
+        exit_code: null,
+        elapsed_ms: Date.now() - startedAt,
+        stopped_reason: "error",
+      });
+    });
+
+    child.on("close", (code: number | null) => {
+      clearTimeout(timeoutHandle);
+      const elapsed = Date.now() - startedAt;
+
+      if (timedOut) {
+        resolve({
+          success: false,
+          output: stdout,
+          error: `Timed out after ${timeoutMs}ms`,
+          exit_code: code,
+          elapsed_ms: elapsed,
+          stopped_reason: "timeout",
+        });
+        return;
+      }
+
+      const success = code === 0;
+      resolve({
+        success,
+        output: stdout,
+        error: success
+          ? null
+          : this.classifyGhError(stderr) || `gh exited with code ${code}`,
+        exit_code: code,
+        elapsed_ms: elapsed,
+        stopped_reason: success ? "completed" : "error",
+      });
+    });
+  }
+
+  private classifyGhError(msg: string): string {
+    const lower = msg.toLowerCase();
+    if (lower.includes("executable file not found") || lower.includes("enoent")) {
+      return "gh CLI not found. Install the GitHub CLI (https://cli.github.com/).";
+    }
+    if (lower.includes("not logged into") || lower.includes("authentication token")) {
+      return "gh CLI not authenticated. Run `gh auth login`.";
+    }
+    if (lower.includes("could not resolve") || lower.includes("repository not found")) {
+      return `Repository not found or no access. Check MOTIVA_GITHUB_REPO. Original: ${msg}`;
+    }
+    return msg;
+  }
+}
+
+// ─── Utility ───
+
+function dedupeLabels(labels: string[]): string[] {
+  return [...new Set(labels)];
+}

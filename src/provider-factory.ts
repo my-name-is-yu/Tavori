@@ -12,6 +12,7 @@ import { AdapterRegistry } from "./adapter-layer.js";
 import { ClaudeCodeCLIAdapter } from "./adapters/claude-code-cli.js";
 import { ClaudeAPIAdapter } from "./adapters/claude-api.js";
 import { OpenAICodexCLIAdapter } from "./adapters/openai-codex.js";
+import { GitHubIssueAdapter } from "./adapters/github-issue.js";
 
 /**
  * Build an LLM client based on provider configuration.
@@ -63,12 +64,13 @@ export function buildLLMClient(): ILLMClient {
 
 /**
  * Build an AdapterRegistry pre-populated with the standard adapters.
- * Registers ClaudeCodeCLIAdapter, ClaudeAPIAdapter, and OpenAICodexCLIAdapter.
+ * Registers ClaudeCodeCLIAdapter, ClaudeAPIAdapter, OpenAICodexCLIAdapter, and GitHubIssueAdapter.
  */
 export function buildAdapterRegistry(llmClient: ILLMClient): AdapterRegistry {
   const registry = new AdapterRegistry();
   registry.register(new ClaudeCodeCLIAdapter());
   registry.register(new ClaudeAPIAdapter(llmClient));
   registry.register(new OpenAICodexCLIAdapter());
+  registry.register(new GitHubIssueAdapter());
   return registry;
 }
