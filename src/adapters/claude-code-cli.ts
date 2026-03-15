@@ -15,6 +15,7 @@ import type { IAdapter, AgentTask, AgentResult } from "../adapter-layer.js";
 
 export class ClaudeCodeCLIAdapter implements IAdapter {
   readonly adapterType = "claude_code_cli";
+  readonly capabilities = ["execute_code", "read_files", "write_files", "run_commands"] as const;
 
   /**
    * The executable name / path for the claude CLI.

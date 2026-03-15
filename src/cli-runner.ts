@@ -5,8 +5,11 @@
 //   motiva run --goal <id>            Run CoreLoop once for a given goal
 //   motiva goal add "<description>"   Negotiate and register a new goal (interactive)
 //   motiva goal list                  List all registered goals
+//   motiva goal show <id>             Show goal details
+//   motiva goal reset <id>            Reset goal state for re-running
 //   motiva status --goal <id>         Show current progress report
 //   motiva report --goal <id>         Show latest report
+//   motiva log --goal <id>            View execution/observation log
 //   motiva start --goal <id>          Start daemon mode for one or more goals
 //   motiva stop                       Stop the running daemon
 //   motiva cron --goal <id>           Print crontab entry for a goal
@@ -185,7 +188,9 @@ export class CLIRunner {
       ethicsGate,
       observationEngine,
       characterConfig,
-      satisficingJudge
+      satisficingJudge,
+      goalTreeManager,
+      adapterRegistry.getAdapterCapabilities()
     );
 
     return { coreLoop, goalNegotiator, reportingEngine, stateManager, driveSystem };
@@ -339,8 +344,36 @@ export class CLIRunner {
         constraints: opts.constraints,
       });
 
-      // Persist the negotiated goal
-      this.stateManager.saveGoal(goal);
+      // Handle counter_propose: ask user whether to accept before registering
+      if (response.type === "counter_propose") {
+        console.log(`\nCounter-proposal: ${response.message}`);
+        if (response.counter_proposal) {
+          console.log(`Suggested target: ${response.counter_proposal.realistic_target}`);
+          console.log(`Reasoning: ${response.counter_proposal.reasoning}`);
+        }
+
+        const accepted = await new Promise<boolean>((resolve) => {
+          const rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout,
+          });
+          process.stdout.write("\nAccept this counter-proposal and register the goal? [y/N] ");
+          rl.once("line", (answer) => {
+            rl.close();
+            resolve(answer.trim().toLowerCase() === "y");
+          });
+        });
+
+        if (!accepted) {
+          // Goal was saved inside negotiate(); remove it since user declined
+          this.stateManager.deleteGoal(goal.id);
+          console.log("Goal not registered.");
+          return 0;
+        }
+      }
+
+      // For accept/flag_as_ambitious, goal is already saved inside negotiate().
+      // No need to call saveGoal again.
 
       console.log(`Goal registered successfully!`);
       console.log(`Goal ID:    ${goal.id}`);
@@ -454,6 +487,122 @@ export class CLIRunner {
       console.log(latest.content);
     } else {
       console.log(`\n_No execution reports yet. Run \`motiva run --goal ${goalId}\` to start._`);
+    }
+
+    return 0;
+  }
+
+  private cmdGoalShow(goalId: string): number {
+    const goal = this.stateManager.loadGoal(goalId);
+    if (!goal) {
+      console.error(`Error: Goal "${goalId}" not found.`);
+      return 1;
+    }
+
+    console.log(`# Goal: ${goal.title}`);
+    console.log(`\nID:          ${goal.id}`);
+    console.log(`Status:      ${goal.status}`);
+    console.log(`Description: ${goal.description || "(none)"}`);
+    if (goal.deadline) {
+      console.log(`Deadline:    ${goal.deadline}`);
+    }
+    console.log(`Created at:  ${goal.created_at}`);
+
+    if (goal.dimensions.length > 0) {
+      console.log(`\nDimensions:`);
+      for (const dim of goal.dimensions) {
+        console.log(`  - ${dim.label} (${dim.name})`);
+        console.log(`    Threshold type:  ${dim.threshold.type}`);
+        console.log(`    Threshold value: ${JSON.stringify((dim.threshold as { value?: unknown }).value ?? dim.threshold)}`);
+      }
+    } else {
+      console.log(`\nDimensions: (none)`);
+    }
+
+    if (goal.constraints.length > 0) {
+      console.log(`\nConstraints:`);
+      for (const c of goal.constraints) {
+        console.log(`  - ${c}`);
+      }
+    }
+
+    return 0;
+  }
+
+  private cmdGoalReset(goalId: string): number {
+    const goal = this.stateManager.loadGoal(goalId);
+    if (!goal) {
+      console.error(`Error: Goal "${goalId}" not found.`);
+      return 1;
+    }
+
+    const now = new Date().toISOString();
+    const resetDimensions = goal.dimensions.map((dim) => ({
+      ...dim,
+      current_value: null,
+      confidence: 0,
+      last_updated: null,
+      history: [],
+    }));
+
+    const resetGoal = {
+      ...goal,
+      status: "active" as const,
+      loop_status: "idle" as const,
+      dimensions: resetDimensions,
+      updated_at: now,
+    };
+
+    this.stateManager.saveGoal(resetGoal);
+
+    console.log(`Goal "${goalId}" reset to active.`);
+    console.log(`  Status:      active`);
+    console.log(`  Dimensions:  ${resetDimensions.length} dimension(s) cleared`);
+    console.log(`\nRun \`motiva run --goal ${goalId}\` to restart the loop.`);
+
+    return 0;
+  }
+
+  private cmdLog(goalId: string): number {
+    const observationLog = this.stateManager.loadObservationLog(goalId);
+    const gapHistory = this.stateManager.loadGapHistory(goalId);
+
+    if ((!observationLog || observationLog.entries.length === 0) && gapHistory.length === 0) {
+      console.log(`No logs found for goal ${goalId}`);
+      return 0;
+    }
+
+    if (observationLog && observationLog.entries.length > 0) {
+      console.log(`# Observation Log (${observationLog.entries.length} entries, newest first)\n`);
+      const sorted = [...observationLog.entries].sort((a, b) =>
+        a.timestamp < b.timestamp ? 1 : -1
+      );
+      for (const entry of sorted) {
+        console.log(`[${entry.timestamp}]`);
+        console.log(`  Dimension:  ${entry.dimension_name}`);
+        console.log(`  Confidence: ${(entry.confidence * 100).toFixed(1)}%`);
+        console.log(`  Layer:      ${entry.layer}`);
+        console.log(`  Trigger:    ${entry.trigger}`);
+        console.log();
+      }
+    }
+
+    if (gapHistory.length > 0) {
+      console.log(`# Gap History (${gapHistory.length} entries, newest first)\n`);
+      const sorted = [...gapHistory].sort((a, b) =>
+        a.timestamp < b.timestamp ? 1 : -1
+      );
+      for (const entry of sorted) {
+        const avgGap =
+          entry.gap_vector.length > 0
+            ? entry.gap_vector.reduce((sum, g) => sum + g.normalized_weighted_gap, 0) /
+              entry.gap_vector.length
+            : 0;
+        console.log(`[${entry.timestamp}]`);
+        console.log(`  Iteration: ${entry.iteration}`);
+        console.log(`  Avg gap:   ${avgGap.toFixed(4)} (across ${entry.gap_vector.length} dimension(s))`);
+        console.log();
+      }
     }
 
     return 0;
@@ -963,7 +1112,7 @@ Options:
       const goalSubcommand = argv[1];
 
       if (!goalSubcommand) {
-        console.error("Error: goal subcommand required. Available: goal add, goal list");
+        console.error("Error: goal subcommand required. Available: goal add, goal list, goal remove, goal show, goal reset");
         return 1;
       }
 
@@ -998,8 +1147,42 @@ Options:
         return this.cmdGoalList();
       }
 
+      if (goalSubcommand === "remove") {
+        const goalId = argv[2];
+        if (!goalId) {
+          console.error("Error: goal ID is required. Usage: motiva goal remove <id>");
+          return 1;
+        }
+        const deleted = this.stateManager.deleteGoal(goalId);
+        if (deleted) {
+          console.log(`Goal ${goalId} removed.`);
+          return 0;
+        } else {
+          console.error(`Goal not found: ${goalId}`);
+          return 1;
+        }
+      }
+
+      if (goalSubcommand === "show") {
+        const goalId = argv[2];
+        if (!goalId) {
+          console.error("Error: goal ID is required. Usage: motiva goal show <id>");
+          return 1;
+        }
+        return this.cmdGoalShow(goalId);
+      }
+
+      if (goalSubcommand === "reset") {
+        const goalId = argv[2];
+        if (!goalId) {
+          console.error("Error: goal ID is required. Usage: motiva goal reset <id>");
+          return 1;
+        }
+        return this.cmdGoalReset(goalId);
+      }
+
       console.error(`Unknown goal subcommand: "${goalSubcommand}"`);
-      console.error("Available: goal add, goal list");
+      console.error("Available: goal add, goal list, goal remove, goal show, goal reset");
       return 1;
     }
 
@@ -1047,6 +1230,29 @@ Options:
       }
 
       return this.cmdReport(goalId);
+    }
+
+    if (subcommand === "log") {
+      let values: { goal?: string | undefined };
+      try {
+        ({ values } = parseArgs({
+          args: argv.slice(1),
+          options: {
+            goal: { type: "string" },
+          },
+          strict: false,
+        }) as { values: { goal?: string } });
+      } catch {
+        values = {};
+      }
+
+      const goalId = values.goal;
+      if (!goalId || typeof goalId !== "string") {
+        console.error("Error: --goal <id> is required for `motiva log`.");
+        return 1;
+      }
+
+      return this.cmdLog(goalId);
     }
 
     if (subcommand === "start") {
@@ -1138,8 +1344,12 @@ Usage:
   motiva run --goal <id>              Run CoreLoop for a goal
   motiva goal add "<description>"     Register a new goal (interactive)
   motiva goal list                    List all registered goals
+  motiva goal remove <id>             Remove a goal by ID
+  motiva goal show <id>               Show goal details (dimensions, constraints, deadline)
+  motiva goal reset <id>              Reset goal state for re-running
   motiva status --goal <id>           Show current status and progress
   motiva report --goal <id>           Show latest report
+  motiva log --goal <id>              View observation and gap history log
   motiva tui                          Launch the interactive TUI
   motiva start --goal <id>            Start daemon mode for one or more goals
   motiva stop                         Stop the running daemon
@@ -1185,9 +1395,12 @@ Environment:
 Examples:
   motiva goal add "Increase test coverage to 90%"
   motiva goal list
+  motiva goal show <id>
+  motiva goal reset <id>
   motiva run --goal <id>
   motiva status --goal <id>
   motiva report --goal <id>
+  motiva log --goal <id>
   motiva config character --show
   motiva config character --caution-level 3
   motiva datasource add file --path /path/to/metrics.json --name "My Metrics"

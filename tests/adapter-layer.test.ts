@@ -227,6 +227,63 @@ describe("ClaudeAPIAdapter", () => {
   });
 });
 
+// ─── getAdapterCapabilities ───
+
+describe("getAdapterCapabilities", () => {
+  let registry: AdapterRegistry;
+
+  beforeEach(() => {
+    registry = new AdapterRegistry();
+  });
+
+  it("returns capabilities from adapters that define them", () => {
+    const adapter: IAdapter = {
+      adapterType: "issue_tracker",
+      capabilities: ["create_issue"] as const,
+      async execute(_task: AgentTask): Promise<AgentResult> {
+        return { success: true, output: "", error: null, exit_code: 0, elapsed_ms: 0, stopped_reason: "completed" };
+      },
+    };
+    registry.register(adapter);
+    const result = registry.getAdapterCapabilities();
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({ adapterType: "issue_tracker", capabilities: ["create_issue"] });
+  });
+
+  it("returns ['general_purpose'] default for adapters without capabilities", () => {
+    const adapter = createMockAdapter("plain_adapter");
+    registry.register(adapter);
+    const result = registry.getAdapterCapabilities();
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({ adapterType: "plain_adapter", capabilities: ["general_purpose"] });
+  });
+
+  it("returns capabilities for multiple adapters", () => {
+    const adapterA: IAdapter = {
+      adapterType: "adapter_a",
+      capabilities: ["create_issue", "close_issue"] as const,
+      async execute(_task: AgentTask): Promise<AgentResult> {
+        return { success: true, output: "", error: null, exit_code: 0, elapsed_ms: 0, stopped_reason: "completed" };
+      },
+    };
+    const adapterB: IAdapter = {
+      adapterType: "adapter_b",
+      capabilities: ["read_file"] as const,
+      async execute(_task: AgentTask): Promise<AgentResult> {
+        return { success: true, output: "", error: null, exit_code: 0, elapsed_ms: 0, stopped_reason: "completed" };
+      },
+    };
+    registry.register(adapterA);
+    registry.register(adapterB);
+    const result = registry.getAdapterCapabilities();
+    expect(result).toHaveLength(2);
+    const typeA = result.find((r) => r.adapterType === "adapter_a");
+    const typeB = result.find((r) => r.adapterType === "adapter_b");
+    expect(typeA?.capabilities).toEqual(["create_issue", "close_issue"]);
+    expect(typeB?.capabilities).toEqual(["read_file"]);
+  });
+});
+
 // ─── ClaudeCodeCLIAdapter ───
 
 describe("ClaudeCodeCLIAdapter", () => {

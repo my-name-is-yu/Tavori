@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import * as _fs from "node:fs";
+import * as _path from "node:path";
 import { z } from "zod";
 import { StateManager } from "./state-manager.js";
 import type { ILLMClient } from "./llm-client.js";
@@ -164,9 +166,10 @@ export class TaskLifecycle {
     targetDimension: string,
     strategyId?: string,
     knowledgeContext?: string,
-    adapterType?: string
+    adapterType?: string,
+    existingTasks?: string[]
   ): Promise<Task> {
-    const prompt = this.buildTaskGenerationPrompt(goalId, targetDimension, knowledgeContext, adapterType);
+    const prompt = this.buildTaskGenerationPrompt(goalId, targetDimension, knowledgeContext, adapterType, existingTasks);
 
     const response = await this.llmClient.sendMessage(
       [{ role: "user", content: prompt }],
@@ -179,7 +182,7 @@ export class TaskLifecycle {
 
     let generated: ReturnType<typeof LLMGeneratedTaskSchema.parse>;
     try {
-      generated = this.llmClient.parseJSON(response.content, LLMGeneratedTaskSchema);
+      generated = this.llmClient.parseJSON(response.content, LLMGeneratedTaskSchema) as ReturnType<typeof LLMGeneratedTaskSchema.parse>;
     } catch (err) {
       console.error(
         "Task generation failed: LLM response did not match expected schema.\n" +
@@ -268,10 +271,21 @@ export class TaskLifecycle {
     );
 
     // Convert to AgentTask
-    const prompt = contextSlots
-      .sort((a, b) => a.priority - b.priority)
-      .map((slot) => `[${slot.label}]\n${slot.content}`)
-      .join("\n\n");
+    let prompt: string;
+    if (adapter.adapterType === "github_issue") {
+      // For github_issue adapter, format as a structured JSON block so
+      // GitHubIssueAdapter.parsePrompt extracts a proper title instead of
+      // picking up the context-slot label as the issue title.
+      const titleLine = task.work_description.split("\n")[0]?.trim() ?? task.work_description;
+      const title = titleLine.length > 120 ? titleLine.slice(0, 117) + "..." : titleLine;
+      const issuePayload = JSON.stringify({ title, body: task.work_description });
+      prompt = `\`\`\`github-issue\n${issuePayload}\n\`\`\``;
+    } else {
+      prompt = contextSlots
+        .sort((a, b) => a.priority - b.priority)
+        .map((slot) => `[${slot.label}]\n${slot.content}`)
+        .join("\n\n");
+    }
 
     const timeoutMs = task.estimated_duration
       ? this.durationToMs(task.estimated_duration)
@@ -695,13 +709,14 @@ export class TaskLifecycle {
     gapVector: GapVector,
     driveContext: DriveContext,
     adapter: IAdapter,
-    knowledgeContext?: string
+    knowledgeContext?: string,
+    existingTasks?: string[]
   ): Promise<TaskCycleResult> {
     // 1. Select target dimension
     const targetDimension = this.selectTargetDimension(gapVector, driveContext);
 
     // 2. Generate task (optionally with injected knowledge context)
-    const task = await this.generateTask(goalId, targetDimension, undefined, knowledgeContext, adapter.adapterType);
+    const task = await this.generateTask(goalId, targetDimension, undefined, knowledgeContext, adapter.adapterType, existingTasks);
 
     // 3a. Ethics means check (reject → skip, flag → require approval, pass → proceed)
     if (this.ethicsGate) {
@@ -852,7 +867,8 @@ export class TaskLifecycle {
     goalId: string,
     targetDimension: string,
     knowledgeContext?: string,
-    adapterType?: string
+    adapterType?: string,
+    existingTasks?: string[]
   ): string {
     // Load goal context to enrich the prompt
     const goal = this.stateManager.loadGoal(goalId);
@@ -906,9 +922,39 @@ Target: ${targetDesc}`;
       ? `\nRelevant domain knowledge:\n${knowledgeContext}\n`
       : "";
 
+    // Read package.json for project identity (best-effort, no throw)
+    let projectName = "";
+    let projectDescription = "";
+    try {
+      const pkgPath = _path.join(process.cwd(), "package.json");
+      if (_fs.existsSync(pkgPath)) {
+        const pkg = JSON.parse(_fs.readFileSync(pkgPath, "utf-8")) as {
+          name?: string;
+          description?: string;
+        };
+        projectName = pkg.name ?? "";
+        projectDescription = pkg.description ?? "";
+      }
+    } catch {
+      // silently ignore — repo context is best-effort
+    }
+
+    const repoContextParts: string[] = [];
+    if (projectName) repoContextParts.push(`Project name: ${projectName}`);
+    if (projectDescription) repoContextParts.push(`Project description: ${projectDescription}`);
+    const repoSection = repoContextParts.length > 0
+      ? `\nRepository context:\n${repoContextParts.join("\n")}\n`
+      : "";
+
+    const existingTasksSection = existingTasks && existingTasks.length > 0
+      ? `\nEXISTING OPEN TASKS (do NOT create duplicates of these):\n${existingTasks.map((t) => `- ${t}`).join("\n")}\nGenerate a task that addresses a DIFFERENT aspect of the goal than the existing tasks above.\n`
+      : "";
+
     return `${goalSection}
 ${dimensionSection}
-${adapterSection}${knowledgeSection}
+${repoSection}${adapterSection}${knowledgeSection}${existingTasksSection}
+IMPORTANT: Generate a task that is SPECIFIC to the actual project described above (goal title, description, and repository context). Do NOT suggest generic software improvements (e.g., user authentication, social media login, unrelated features) unless they are explicitly mentioned in the goal description. Base the task entirely on what the goal and project are actually about.
+
 Generate ONE specific, concrete, actionable task that will directly improve the "${targetDimension}" dimension toward its target. The task should produce a single measurable output achievable in a single work session. Do not generate vague review or triage tasks — generate a task with a precise, well-defined deliverable.
 
 Return a JSON object with the following schema:

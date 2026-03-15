@@ -11,6 +11,7 @@ import {
   DimensionDecompositionSchema,
   NegotiationLogSchema,
   FeasibilityResultSchema,
+  CapabilityCheckLogSchema,
 } from "./types/negotiation.js";
 import type {
   DimensionDecomposition,
@@ -57,15 +58,15 @@ function buildDecompositionPrompt(
 
   const dataSourcesSection =
     availableDataSources && availableDataSources.length > 0
-      ? `\nAvailable Data Sources:\nYou MUST use the exact dimension names listed below. These are the only dimensions that can be automatically observed.\nDo NOT invent alternative names — use these exact strings as dimension names.\nIf you need dimensions not listed here, you may add them, but prefer the ones below.\n\n${availableDataSources.map((ds) => `- "${ds.name}" provides: ${ds.dimensions.join(", ")}`).join("\n")}`
+      ? `\nCRITICAL CONSTRAINT: If DataSource dimensions are listed below, you MUST use those exact dimension names as your dimension \`name\` fields. Do NOT invent new dimension names when DataSource dimensions are available. Map your conceptual dimensions to the closest matching DataSource dimension.\n\nAvailable Data Sources:\n${availableDataSources.map((ds) => `- "${ds.name}" provides: ${ds.dimensions.join(", ")}`).join("\n")}\n`
       : "";
 
   return `Decompose the following goal into measurable dimensions.
 
 Goal: ${description}${constraintsSection}
-
+${dataSourcesSection}
 For each dimension, provide:
-- name: a snake_case identifier
+- name: a snake_case identifier (MUST match a DataSource dimension name if one is listed above)
 - label: human-readable label
 - threshold_type: one of "min", "max", "range", "present", "match"
 - threshold_value: the target value (number, string, or boolean), or null if not yet determined
@@ -81,7 +82,7 @@ Return a JSON array of dimension objects. Example:
     "observation_method_hint": "Run test suite and check coverage report"
   }
 ]
-${dataSourcesSection}
+
 Return ONLY a JSON array, no other text.`;
 }
 
@@ -142,6 +143,48 @@ ${instruction}
 Return a brief, user-facing message (1-3 sentences). Return ONLY the message text, no JSON.`;
 }
 
+function buildCapabilityCheckPrompt(
+  goalDescription: string,
+  dimensions: DimensionDecomposition[],
+  adapterCapabilities: Array<{ adapterType: string; capabilities: string[] }>
+): string {
+  const dimensionsList = dimensions
+    .map((d) => `- ${d.name}: ${d.label} (threshold_type: ${d.threshold_type}, observation_hint: ${d.observation_method_hint})`)
+    .join("\n");
+
+  const capabilitiesList = adapterCapabilities
+    .map((ac) => `- ${ac.adapterType}: ${ac.capabilities.join(", ")}`)
+    .join("\n");
+
+  return `You are assessing whether an agent can achieve each dimension of a goal given its available capabilities.
+
+Goal: ${goalDescription}
+
+Dimensions to achieve:
+${dimensionsList}
+
+Available adapter capabilities:
+${capabilitiesList}
+
+For each dimension that requires a capability NOT available in the listed adapters, report it as a gap.
+Also indicate whether the missing capability is acquirable (i.e., can the agent learn or install it during execution).
+
+Return a JSON object:
+{
+  "gaps": [
+    {
+      "dimension": "dimension_name",
+      "required_capability": "capability_name",
+      "acquirable": false,
+      "reason": "brief explanation why this capability is missing and whether it can be acquired"
+    }
+  ]
+}
+
+If all dimensions can be achieved with the available capabilities, return { "gaps": [] }.
+Return ONLY a JSON object, no other text.`;
+}
+
 function buildSubgoalDecompositionPrompt(parentGoal: Goal): string {
   const dimensionsList = parentGoal.dimensions
     .map((d) => `- ${d.label} (${d.name}): target=${JSON.stringify(d.threshold)}`)
@@ -178,6 +221,17 @@ Return a JSON array of subgoal objects:
 
 Return ONLY a JSON array, no other text.`;
 }
+
+// ─── Capability check schema for LLM parsing ───
+
+const CapabilityCheckResultSchema = z.object({
+  gaps: z.array(z.object({
+    dimension: z.string(),
+    required_capability: z.string(),
+    acquirable: z.boolean(),
+    reason: z.string(),
+  })),
+});
 
 // ─── Subgoal schema for LLM parsing ───
 
@@ -265,6 +319,7 @@ export class GoalNegotiator {
   private readonly characterConfig: CharacterConfig;
   private readonly satisficingJudge?: SatisficingJudge;
   private readonly goalTreeManager?: GoalTreeManager;
+  private readonly adapterCapabilities?: Array<{ adapterType: string; capabilities: string[] }>;
 
   constructor(
     stateManager: StateManager,
@@ -273,7 +328,8 @@ export class GoalNegotiator {
     observationEngine: ObservationEngine,
     characterConfig?: CharacterConfig,
     satisficingJudge?: SatisficingJudge,  // Phase 2: auto-mapping proposals
-    goalTreeManager?: GoalTreeManager
+    goalTreeManager?: GoalTreeManager,
+    adapterCapabilities?: Array<{ adapterType: string; capabilities: string[] }>
   ) {
     this.stateManager = stateManager;
     this.llmClient = llmClient;
@@ -282,6 +338,7 @@ export class GoalNegotiator {
     this.characterConfig = characterConfig ?? DEFAULT_CHARACTER_CONFIG;
     this.satisficingJudge = satisficingJudge;
     this.goalTreeManager = goalTreeManager;
+    this.adapterCapabilities = adapterCapabilities;
   }
 
   /**
@@ -429,6 +486,52 @@ export class GoalNegotiator {
       path: overallPath,
       dimensions: feasibilityResults,
     };
+
+    // Step 4b: Capability Check
+    if (this.adapterCapabilities && this.adapterCapabilities.length > 0) {
+      try {
+        const capCheckPrompt = buildCapabilityCheckPrompt(
+          rawGoalDescription,
+          dimensions,
+          this.adapterCapabilities
+        );
+        const capCheckResponse = await this.llmClient.sendMessage(
+          [{ role: "user", content: capCheckPrompt }],
+          { temperature: 0 }
+        );
+        const capCheckResult = this.llmClient.parseJSON(
+          capCheckResponse.content,
+          CapabilityCheckResultSchema
+        );
+
+        const allCapabilities = this.adapterCapabilities.flatMap((ac) => ac.capabilities);
+        const infeasibleDimensions: string[] = [];
+
+        for (const gap of capCheckResult.gaps) {
+          if (!gap.acquirable) {
+            const existing = feasibilityResults.find((r) => r.dimension === gap.dimension);
+            if (existing) {
+              existing.assessment = "infeasible";
+              existing.reasoning = `Capability gap: ${gap.reason}`;
+            }
+            infeasibleDimensions.push(gap.dimension);
+          }
+        }
+
+        log.step4_capability_check = CapabilityCheckLogSchema.parse({
+          capabilities_available: allCapabilities,
+          gaps_detected: capCheckResult.gaps.map((g) => ({
+            dimension: g.dimension,
+            required_capability: g.required_capability,
+            acquirable: g.acquirable,
+          })),
+          infeasible_dimensions: infeasibleDimensions,
+        });
+      } catch {
+        // Non-critical: capability check failure should not block negotiation
+        console.warn("[GoalNegotiator] Step 4b capability check failed, continuing without it");
+      }
+    }
 
     // Step 5: Response Generation
     const { responseType, counterProposal, initialConfidence } =
@@ -760,6 +863,52 @@ export class GoalNegotiator {
       path: feasibilityResults.some((r) => r.path === "quantitative") ? "hybrid" : "qualitative",
       dimensions: feasibilityResults,
     };
+
+    // Step 4b: Capability Check
+    if (this.adapterCapabilities && this.adapterCapabilities.length > 0) {
+      try {
+        const capCheckPrompt = buildCapabilityCheckPrompt(
+          existingGoal.description,
+          dimensions,
+          this.adapterCapabilities
+        );
+        const capCheckResponse = await this.llmClient.sendMessage(
+          [{ role: "user", content: capCheckPrompt }],
+          { temperature: 0 }
+        );
+        const capCheckResult = this.llmClient.parseJSON(
+          capCheckResponse.content,
+          CapabilityCheckResultSchema
+        );
+
+        const allCapabilities = this.adapterCapabilities.flatMap((ac) => ac.capabilities);
+        const infeasibleDimensions: string[] = [];
+
+        for (const gap of capCheckResult.gaps) {
+          if (!gap.acquirable) {
+            const existing = feasibilityResults.find((r) => r.dimension === gap.dimension);
+            if (existing) {
+              existing.assessment = "infeasible";
+              existing.reasoning = `Capability gap: ${gap.reason}`;
+            }
+            infeasibleDimensions.push(gap.dimension);
+          }
+        }
+
+        log.step4_capability_check = CapabilityCheckLogSchema.parse({
+          capabilities_available: allCapabilities,
+          gaps_detected: capCheckResult.gaps.map((g) => ({
+            dimension: g.dimension,
+            required_capability: g.required_capability,
+            acquirable: g.acquirable,
+          })),
+          infeasible_dimensions: infeasibleDimensions,
+        });
+      } catch {
+        // Non-critical: capability check failure should not block renegotiation
+        console.warn("[GoalNegotiator] Step 4b capability check failed, continuing without it");
+      }
+    }
 
     // Step 5: Response generation
     const { responseType, counterProposal, initialConfidence } =

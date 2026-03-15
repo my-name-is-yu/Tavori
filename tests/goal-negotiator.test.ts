@@ -1798,4 +1798,172 @@ describe("GoalNegotiator CharacterConfig integration", () => {
     const r2 = await negotiatorExplicit.negotiate("Goal B");
     expect(r1.response.type).toBe(r2.response.type);
   });
+
+  // ─── capability-aware negotiation ───
+
+  describe("capability-aware negotiation", () => {
+    it("no capabilities provided — backward compat: negotiate() works normally without crash or counter_propose", async () => {
+      const mockLLM = createMockLLMClient([
+        PASS_VERDICT,
+        SINGLE_DIMENSION_RESPONSE,
+        FEASIBILITY_REALISTIC,
+        RESPONSE_MESSAGE_ACCEPT,
+      ]);
+      const ethicsGate = new EthicsGate(stateManager, mockLLM);
+      // No adapterCapabilities passed — backward-compatible constructor call
+      const negotiator = new GoalNegotiator(stateManager, mockLLM, ethicsGate, observationEngine);
+
+      const result = await negotiator.negotiate("Improve software quality");
+      expect(result.goal).toBeDefined();
+      expect(result.response).toBeDefined();
+      expect(result.response.type).not.toBe("counter_propose");
+    });
+
+    it("all capabilities sufficient — normal negotiation proceeds", async () => {
+      const capabilityCheckResponse = JSON.stringify({ gaps: [] });
+      const mockLLM = createMockLLMClient([
+        PASS_VERDICT,              // ethics
+        SINGLE_DIMENSION_RESPONSE, // decomposition
+        FEASIBILITY_REALISTIC,     // feasibility
+        capabilityCheckResponse,   // capability check (step 4b)
+        RESPONSE_MESSAGE_ACCEPT,   // response generation
+      ]);
+      const ethicsGate = new EthicsGate(stateManager, mockLLM);
+      const negotiator = new GoalNegotiator(
+        stateManager,
+        mockLLM,
+        ethicsGate,
+        observationEngine,
+        undefined,
+        undefined,
+        undefined,
+        [{ adapterType: "github_issue", capabilities: ["create_issue", "close_issue"] }]
+      );
+
+      const result = await negotiator.negotiate("Close all open issues");
+      expect(result.response.type).not.toBe("counter_propose");
+      expect(result.goal).toBeDefined();
+    });
+
+    it("non-acquirable capability gap — counter_propose returned and infeasible dimension noted", async () => {
+      const capabilityCheckResponse = JSON.stringify({
+        gaps: [
+          {
+            dimension: "completion_rate",
+            required_capability: "close_issue",
+            acquirable: false,
+            reason: "The adapter cannot close issues; it only creates them.",
+          },
+        ],
+      });
+      const mockLLM = createMockLLMClient([
+        PASS_VERDICT,              // ethics
+        SINGLE_DIMENSION_RESPONSE, // decomposition (returns completion_rate dim)
+        FEASIBILITY_REALISTIC,     // feasibility (initially realistic)
+        capabilityCheckResponse,   // capability check marks it infeasible
+        RESPONSE_MESSAGE_COUNTER,  // counter-proposal message
+      ]);
+      const ethicsGate = new EthicsGate(stateManager, mockLLM);
+      const negotiator = new GoalNegotiator(
+        stateManager,
+        mockLLM,
+        ethicsGate,
+        observationEngine,
+        undefined,
+        undefined,
+        undefined,
+        [{ adapterType: "github_issue", capabilities: ["create_issue"] }]
+      );
+
+      const result = await negotiator.negotiate("Complete all tasks");
+      expect(result.response.type).toBe("counter_propose");
+      // The infeasible dimension should be recorded in the capability check log
+      expect(result.log.step4_capability_check).toBeDefined();
+      expect(result.log.step4_capability_check?.infeasible_dimensions).toContain("completion_rate");
+    });
+
+    it("acquirable capability gap — dimension is NOT marked infeasible", async () => {
+      const capabilityCheckResponse = JSON.stringify({
+        gaps: [
+          {
+            dimension: "completion_rate",
+            required_capability: "close_issue",
+            acquirable: true,
+            reason: "The agent can install the close_issue plugin during execution.",
+          },
+        ],
+      });
+      const mockLLM = createMockLLMClient([
+        PASS_VERDICT,              // ethics
+        SINGLE_DIMENSION_RESPONSE, // decomposition
+        FEASIBILITY_REALISTIC,     // feasibility (realistic)
+        capabilityCheckResponse,   // capability check — acquirable=true, no infeasible
+        RESPONSE_MESSAGE_ACCEPT,   // response generation
+      ]);
+      const ethicsGate = new EthicsGate(stateManager, mockLLM);
+      const negotiator = new GoalNegotiator(
+        stateManager,
+        mockLLM,
+        ethicsGate,
+        observationEngine,
+        undefined,
+        undefined,
+        undefined,
+        [{ adapterType: "github_issue", capabilities: ["create_issue"] }]
+      );
+
+      const result = await negotiator.negotiate("Complete all tasks");
+      // Acquirable gap should NOT trigger counter_propose
+      expect(result.response.type).not.toBe("counter_propose");
+      // infeasible_dimensions should be empty
+      if (result.log.step4_capability_check) {
+        expect(result.log.step4_capability_check.infeasible_dimensions).toHaveLength(0);
+      }
+    });
+
+    it("LLM failure during capability check — graceful degradation, negotiate() still completes", async () => {
+      // The capability check LLM call throws, but negotiate() should still succeed
+      let callCount = 0;
+      const failingCapCheckLLM = {
+        async sendMessage(_messages: unknown[], _options?: unknown): Promise<{ content: string; usage: { input_tokens: number; output_tokens: number }; stop_reason: string }> {
+          callCount++;
+          // Call order: 1=ethics, 2=decomposition, 3=feasibility, 4=capability check (throw), 5=response
+          if (callCount === 4) {
+            throw new Error("LLM timeout during capability check");
+          }
+          const responses: Record<number, string> = {
+            1: PASS_VERDICT,
+            2: SINGLE_DIMENSION_RESPONSE,
+            3: FEASIBILITY_REALISTIC,
+            5: RESPONSE_MESSAGE_ACCEPT,
+          };
+          const content = responses[callCount] ?? RESPONSE_MESSAGE_ACCEPT;
+          return { content, usage: { input_tokens: 10, output_tokens: content.length }, stop_reason: "end_turn" };
+        },
+        parseJSON<T>(content: string, schema: { parse: (v: unknown) => T }): T {
+          const jsonText = content.trim();
+          return schema.parse(JSON.parse(jsonText));
+        },
+      };
+
+      const ethicsGate = new EthicsGate(stateManager, failingCapCheckLLM as never);
+      const negotiator = new GoalNegotiator(
+        stateManager,
+        failingCapCheckLLM as never,
+        ethicsGate,
+        observationEngine,
+        undefined,
+        undefined,
+        undefined,
+        [{ adapterType: "github_issue", capabilities: ["create_issue"] }]
+      );
+
+      // Should not throw despite LLM failure during capability check
+      const result = await negotiator.negotiate("Complete all tasks");
+      expect(result.goal).toBeDefined();
+      expect(result.response).toBeDefined();
+      // No capability check log since it failed (null or undefined, not populated)
+      expect(result.log.step4_capability_check ?? null).toBeNull();
+    });
+  });
 });

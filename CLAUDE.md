@@ -68,6 +68,7 @@ Design docs are the source of truth for implementation. When in doubt, read the 
 
 ## Key Constraints
 
+- **テスト失敗時はコードのバグを先に疑う** — テストが落ちたとき、テストを修正する前に必ずプロダクションコード側にバグがないか検証すること。テストは仕様の表現であり、安易にテストを書き換えると本物のバグを見逃す
 - Evidence-based progress observation (never count tool calls as progress)
 - Irreversible actions always require human approval regardless of trust/confidence
 - Trust balance: asymmetric (failure penalty > success reward), [-100,+100], Δs=+3, Δf=-10

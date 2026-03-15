@@ -883,13 +883,24 @@ export class CoreLoop {
       // generating a persisted preview task that would become an orphan if no gap
       // is found. Duplicate detectDeficiency calls are also avoided this way.
 
+      // ─── 7c. Fetch existing tasks for dedup context (adapter-agnostic) ───
+      let existingTasks: string[] | undefined;
+      if (adapter.listExistingTasks) {
+        try {
+          existingTasks = await adapter.listExistingTasks();
+        } catch {
+          // Non-fatal: proceed without existing tasks context
+        }
+      }
+
       console.log(`[DEBUG] About to run task cycle with adapter: ${adapter.adapterType}`);
       const taskResult = await this.deps.taskLifecycle.runTaskCycle(
         goalId,
         gapVector,
         driveContext,
         adapter,
-        knowledgeContext
+        knowledgeContext,
+        existingTasks
       );
       console.log(`[DEBUG] Task cycle result: action=${taskResult.action}, task_id=${taskResult.task.id}`);
       result.taskResult = taskResult;

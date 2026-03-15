@@ -36,6 +36,9 @@ export interface AgentResult {
 export interface IAdapter {
   execute(task: AgentTask): Promise<AgentResult>;
   readonly adapterType: string;
+  readonly capabilities?: readonly string[];
+  /** Optional: return titles of existing tasks for dedup context injection into prompts. */
+  listExistingTasks?(): Promise<string[]>;
 }
 
 // ─── AdapterRegistry ───
@@ -75,5 +78,16 @@ export class AdapterRegistry {
    */
   listAdapters(): string[] {
     return Array.from(this.adapters.keys()).sort();
+  }
+
+  /**
+   * Returns capabilities for all registered adapters.
+   * For adapters without capabilities defined, returns ["general_purpose"] as default.
+   */
+  getAdapterCapabilities(): Array<{ adapterType: string; capabilities: string[] }> {
+    return Array.from(this.adapters.entries()).map(([type, adapter]) => ({
+      adapterType: type,
+      capabilities: adapter.capabilities ? Array.from(adapter.capabilities) : ["general_purpose"],
+    }));
   }
 }

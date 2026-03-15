@@ -92,7 +92,10 @@ vi.mock("../src/strategy-manager.js", () => ({
 }));
 
 vi.mock("../src/adapter-layer.js", () => ({
-  AdapterRegistry: vi.fn().mockImplementation(() => ({ register: vi.fn() })),
+  AdapterRegistry: vi.fn().mockImplementation(() => ({
+    register: vi.fn(),
+    getAdapterCapabilities: vi.fn().mockReturnValue([]),
+  })),
 }));
 
 vi.mock("../src/adapters/claude-code-cli.js", () => ({
@@ -942,7 +945,12 @@ describe("directory initialisation", () => {
 describe("integration: goal add then goal list", () => {
   it("a goal added via negotiate() appears in goal list output", async () => {
     const goal = makeGoal({ id: "integ-goal", title: "Integration Test Goal" });
-    const mockNegotiate = vi.fn().mockResolvedValue(makeNegotiationResult(goal));
+    // The real GoalNegotiator.negotiate() saves the goal internally before returning.
+    // Simulate that behaviour in the mock so goal list can find it.
+    const mockNegotiate = vi.fn().mockImplementation(async () => {
+      stateManager.saveGoal(goal);
+      return makeNegotiationResult(goal);
+    });
     vi.mocked(GoalNegotiator).mockImplementation(
       () => ({ negotiate: mockNegotiate } as unknown as GoalNegotiator)
     );

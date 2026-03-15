@@ -1046,6 +1046,57 @@ describe("TaskLifecycle", () => {
       expect(receivedPrompt).toContain("goal-1");
     });
 
+    it("builds github-issue JSON block for github_issue adapter", async () => {
+      const llm = createMockLLMClient([]);
+      const lifecycle = createLifecycle(llm);
+      let receivedPrompt = "";
+      const adapter: import("../src/task-lifecycle.js").IAdapter = {
+        adapterType: "github_issue",
+        async execute(agentTask) {
+          receivedPrompt = agentTask.prompt;
+          return {
+            success: true, output: "https://github.com/owner/repo/issues/1", error: null,
+            exit_code: 0, elapsed_ms: 10, stopped_reason: "completed" as const,
+          };
+        },
+      };
+      const task = makeTask({ work_description: "Fix memory leak in cache module" });
+
+      await lifecycle.executeTask(task, adapter);
+      expect(receivedPrompt).toContain("```github-issue");
+      const jsonMatch = receivedPrompt.match(/```github-issue\s*([\s\S]*?)```/);
+      expect(jsonMatch).not.toBeNull();
+      const parsed = JSON.parse(jsonMatch![1].trim());
+      expect(parsed.title).toBe("Fix memory leak in cache module");
+      expect(parsed.body).toBe("Fix memory leak in cache module");
+      expect(receivedPrompt).not.toContain("task_definition_and_success_criteria");
+    });
+
+    it("truncates long work_description title to 120 chars for github_issue adapter", async () => {
+      const llm = createMockLLMClient([]);
+      const lifecycle = createLifecycle(llm);
+      let receivedPrompt = "";
+      const adapter: import("../src/task-lifecycle.js").IAdapter = {
+        adapterType: "github_issue",
+        async execute(agentTask) {
+          receivedPrompt = agentTask.prompt;
+          return {
+            success: true, output: "https://github.com/owner/repo/issues/2", error: null,
+            exit_code: 0, elapsed_ms: 10, stopped_reason: "completed" as const,
+          };
+        },
+      };
+      const longDesc = "A".repeat(200);
+      const task = makeTask({ work_description: longDesc });
+
+      await lifecycle.executeTask(task, adapter);
+      const jsonMatch = receivedPrompt.match(/```github-issue\s*([\s\S]*?)```/);
+      expect(jsonMatch).not.toBeNull();
+      const parsed = JSON.parse(jsonMatch![1].trim());
+      expect(parsed.title.length).toBeLessThanOrEqual(120);
+      expect(parsed.body).toBe(longDesc);
+    });
+
     it("sets timeout_ms from estimated_duration", async () => {
       const llm = createMockLLMClient([]);
       const lifecycle = createLifecycle(llm);

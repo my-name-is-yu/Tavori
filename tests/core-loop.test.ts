@@ -1402,7 +1402,8 @@ describe("CoreLoop", () => {
         expect.any(Object), // gapVector
         expect.any(Object), // driveContext
         mocks.adapter,
-        undefined // knowledgeContext (no knowledge manager configured)
+        undefined, // knowledgeContext (no knowledge manager configured)
+        undefined  // existingTasks (adapter has no listExistingTasks)
       );
     });
   });

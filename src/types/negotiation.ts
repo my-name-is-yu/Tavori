@@ -35,6 +35,17 @@ export const FeasibilityResultSchema = z.object({
 });
 export type FeasibilityResult = z.infer<typeof FeasibilityResultSchema>;
 
+export const CapabilityCheckLogSchema = z.object({
+  capabilities_available: z.array(z.string()),
+  gaps_detected: z.array(z.object({
+    dimension: z.string(),
+    required_capability: z.string(),
+    acquirable: z.boolean(),
+  })),
+  infeasible_dimensions: z.array(z.string()),
+}).strict();
+export type CapabilityCheckLog = z.infer<typeof CapabilityCheckLogSchema>;
+
 export const NegotiationLogSchema = z.object({
   goal_id: z.string(),
   timestamp: z.string(),
@@ -59,6 +70,8 @@ export const NegotiationLogSchema = z.object({
     path: FeasibilityPathEnum,
     dimensions: z.array(FeasibilityResultSchema),
   }).nullable().default(null),
+
+  step4_capability_check: CapabilityCheckLogSchema.nullable().default(null),
 
   step5_response: z.object({
     type: NegotiationResponseTypeEnum,

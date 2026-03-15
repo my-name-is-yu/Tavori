@@ -37,6 +37,7 @@ export interface ParsedIssue {
 
 export class GitHubIssueAdapter implements IAdapter {
   readonly adapterType = "github_issue";
+  readonly capabilities = ["create_issue"] as const;
 
   private readonly repo: string | undefined;
   private readonly defaultLabels: string[];
@@ -50,28 +51,42 @@ export class GitHubIssueAdapter implements IAdapter {
     this.dryRun = config?.dryRun ?? false;
   }
 
-  execute(task: AgentTask): Promise<AgentResult> {
+  async execute(task: AgentTask): Promise<AgentResult> {
     const startedAt = Date.now();
     const parsed = this.parsePrompt(task.prompt);
 
-    return new Promise<AgentResult>((resolve) => {
-      // ── Dry-run mode ──────────────────────────────────────────────────────
-      if (this.dryRun) {
-        const repo = this.repo ?? "(auto-detect)";
-        const cmd = this.buildGhArgs(parsed, repo).join(" ");
-        const dryMsg = `[dry-run] Would run: ${this.ghPath} ${cmd}`;
-        console.log(dryMsg);
-        resolve({
-          success: true,
-          output: dryMsg,
-          error: null,
-          exit_code: 0,
-          elapsed_ms: Date.now() - startedAt,
-          stopped_reason: "completed",
-        });
-        return;
-      }
+    // ── Dry-run mode ──────────────────────────────────────────────────────
+    if (this.dryRun) {
+      const repo = this.repo ?? "(auto-detect)";
+      const cmd = this.buildGhArgs(parsed, repo).join(" ");
+      const dryMsg = `[dry-run] Would run: ${this.ghPath} ${cmd}`;
+      console.log(dryMsg);
+      return {
+        success: true,
+        output: dryMsg,
+        error: null,
+        exit_code: 0,
+        elapsed_ms: Date.now() - startedAt,
+        stopped_reason: "completed",
+      };
+    }
 
+    // ── Duplicate detection ───────────────────────────────────────────────
+    const dupResult = await this.checkOpenIssueExists(parsed.title);
+    if (dupResult !== null) {
+      const skipMsg = `Skipped: similar issue already exists (#${dupResult})`;
+      console.debug(`[GitHubIssueAdapter] ${skipMsg}`);
+      return {
+        success: true,
+        output: skipMsg,
+        error: null,
+        exit_code: 0,
+        elapsed_ms: Date.now() - startedAt,
+        stopped_reason: "completed",
+      };
+    }
+
+    return new Promise<AgentResult>((resolve) => {
       const knownRepo = this.repo;
 
       if (knownRepo) {
@@ -97,6 +112,129 @@ export class GitHubIssueAdapter implements IAdapter {
           this.spawnCreate(parsed, repo, task.timeout_ms, startedAt, resolve);
         });
       }
+    });
+  }
+
+  /**
+   * Check whether an open GitHub issue with a similar title already exists.
+   *
+   * Runs `gh issue list --state open --label <label> --search "<title>" --json number,title --limit 10`
+   * and returns the issue number of the first match (>60% word overlap), or null if no match / on any error.
+   *
+   * Returns null (not a match) on any error so the adapter stays functional when gh is unavailable.
+   */
+  async checkOpenIssueExists(title: string): Promise<number | null> {
+    const label = this.defaultLabels[0] ?? "motiva";
+    const args = [
+      "issue",
+      "list",
+      "--state",
+      "open",
+      "--label",
+      label,
+      "--search",
+      title,
+      "--json",
+      "number,title",
+      "--limit",
+      "10",
+    ];
+
+    if (this.repo) {
+      args.push("--repo", this.repo);
+    }
+
+    return new Promise<number | null>((resolve) => {
+      let stdout = "";
+      let resolved = false;
+
+      const child = spawn(this.ghPath, args, { stdio: ["ignore", "pipe", "pipe"] });
+
+      child.stdout.on("data", (chunk: Buffer) => {
+        stdout += chunk.toString("utf8");
+      });
+
+      child.on("error", () => {
+        if (resolved) return;
+        resolved = true;
+        resolve(null);
+      });
+
+      child.on("close", (code: number | null) => {
+        if (resolved) return;
+        resolved = true;
+
+        if (code !== 0) {
+          resolve(null);
+          return;
+        }
+
+        try {
+          const issues = JSON.parse(stdout.trim()) as Array<{ number: number; title: string }>;
+          const match = issues.find((issue) => titlesOverlap(title, issue.title));
+          resolve(match?.number ?? null);
+        } catch {
+          resolve(null);
+        }
+      });
+    });
+  }
+
+  /**
+   * Return titles of all open issues labelled with the default label (e.g. "motiva").
+   * Used by CoreLoop to inject existing task context into the prompt so the LLM can
+   * avoid creating duplicates.
+   *
+   * Runs `gh issue list --state open --label <label> --json title --limit 20`.
+   * Returns an empty array on any error (fail-open).
+   */
+  async listExistingTasks(): Promise<string[]> {
+    const label = this.defaultLabels[0] ?? "motiva";
+    const args = [
+      "issue",
+      "list",
+      "--state",
+      "open",
+      "--label",
+      label,
+      "--json",
+      "title",
+      "--limit",
+      "20",
+    ];
+
+    return new Promise<string[]>((resolve) => {
+      let stdout = "";
+      let resolved = false;
+
+      const child = spawn(this.ghPath, args, { stdio: ["ignore", "pipe", "pipe"] });
+
+      child.stdout.on("data", (chunk: Buffer) => {
+        stdout += chunk.toString("utf8");
+      });
+
+      child.on("error", () => {
+        if (resolved) return;
+        resolved = true;
+        resolve([]);
+      });
+
+      child.on("close", (code: number | null) => {
+        if (resolved) return;
+        resolved = true;
+
+        if (code !== 0) {
+          resolve([]);
+          return;
+        }
+
+        try {
+          const issues = JSON.parse(stdout.trim()) as Array<{ title: string }>;
+          resolve(issues.map((issue) => issue.title));
+        } catch {
+          resolve([]);
+        }
+      });
     });
   }
 
@@ -430,4 +568,31 @@ export class GitHubIssueAdapter implements IAdapter {
 
 function dedupeLabels(labels: string[]): string[] {
   return [...new Set(labels)];
+}
+
+/**
+ * Returns true when two issue titles have >60% word overlap (case-insensitive).
+ * Short stop-words (≤2 chars) are excluded from the comparison.
+ */
+function titlesOverlap(a: string, b: string): boolean {
+  const tokenize = (s: string): Set<string> =>
+    new Set(
+      s
+        .toLowerCase()
+        .split(/\W+/)
+        .filter((w) => w.length > 2)
+    );
+
+  const setA = tokenize(a);
+  const setB = tokenize(b);
+
+  if (setA.size === 0 || setB.size === 0) return false;
+
+  let overlap = 0;
+  for (const word of setA) {
+    if (setB.has(word)) overlap++;
+  }
+
+  const ratio = overlap / Math.min(setA.size, setB.size);
+  return ratio > 0.6;
 }

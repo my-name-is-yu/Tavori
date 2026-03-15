@@ -136,6 +136,33 @@ describe("GitHubIssueAdapter constructor", () => {
   });
 });
 
+// ─── Helpers for dedup-aware tests ───
+//
+// execute() now fires a `gh issue list` spawn (dedup check) BEFORE the
+// issue-create (or repo-detect) spawn. Each execute test that is NOT dry-run
+// must queue a dedup child first via makeDedupChild().
+
+/**
+ * Queue a fake child for the dedup check that returns no matching issues (empty array).
+ * This is the "no duplicate found" case — execution continues normally.
+ */
+function makeDedupChild(): FakeChildProcess {
+  const child = new FakeChildProcess();
+  mockSpawn.mockReturnValueOnce(child);
+  // Emit an empty JSON array so checkOpenIssueExists returns null immediately.
+  // We emit synchronously here so the Promise resolves before execute() proceeds.
+  // (The close event is what triggers resolution; stdout data just sets the buffer.)
+  return child;
+}
+
+async function resolveDedupChildNoMatch(child: FakeChildProcess): Promise<void> {
+  child.stdout.emit("data", Buffer.from("[]"));
+  child.emit("close", 0);
+  // Flush the microtask queue so the awaited checkOpenIssueExists() Promise
+  // settles and execute() resumes before the caller emits on the create child.
+  await new Promise<void>((r) => setTimeout(r, 0));
+}
+
 // ─── execute tests ───
 
 describe("GitHubIssueAdapter.execute", () => {
@@ -150,9 +177,11 @@ describe("GitHubIssueAdapter.execute", () => {
 
   it("returns success result with issue URL when gh CLI exits with code 0", async () => {
     const adapter = new GitHubIssueAdapter({ repo: "owner/repo" });
+    const dedupChild = makeDedupChild();
     const child = makeFakeChild();
 
     const executePromise = adapter.execute(makeTask());
+    await resolveDedupChildNoMatch(dedupChild);
     child.stdout.emit("data", Buffer.from("https://github.com/owner/repo/issues/42\n"));
     child.emit("close", 0);
     const result = await executePromise;
@@ -165,9 +194,11 @@ describe("GitHubIssueAdapter.execute", () => {
 
   it("returns error result when gh CLI exits with non-zero code", async () => {
     const adapter = new GitHubIssueAdapter({ repo: "owner/repo" });
+    const dedupChild = makeDedupChild();
     const child = makeFakeChild();
 
     const executePromise = adapter.execute(makeTask());
+    await resolveDedupChildNoMatch(dedupChild);
     child.stderr.emit("data", Buffer.from("gh: not authenticated"));
     child.emit("close", 1);
     const result = await executePromise;
@@ -181,9 +212,16 @@ describe("GitHubIssueAdapter.execute", () => {
     vi.useFakeTimers();
 
     const adapter = new GitHubIssueAdapter({ repo: "owner/repo" });
+    const dedupChild = makeDedupChild();
     const child = makeFakeChild();
 
     const executePromise = adapter.execute(makeTask({ timeout_ms: 500 }));
+
+    // Resolve the dedup check first; use advanceTimersByTimeAsync to flush
+    // the setTimeout(0) inside resolveDedupChildNoMatch under fake timers.
+    dedupChild.stdout.emit("data", Buffer.from("[]"));
+    dedupChild.emit("close", 0);
+    await vi.advanceTimersByTimeAsync(10);
 
     await vi.advanceTimersByTimeAsync(501);
     child.emit("close", null);
@@ -209,38 +247,44 @@ describe("GitHubIssueAdapter.execute", () => {
   it("uses MOTIVA_GITHUB_REPO env var when config.repo is empty", async () => {
     process.env["MOTIVA_GITHUB_REPO"] = "env-owner/env-repo";
     const adapter = new GitHubIssueAdapter();
+    const dedupChild = makeDedupChild();
     const child = makeFakeChild();
 
-    // We also need a second fake child if auto-detection spawns a process;
-    // to keep it simple: if MOTIVA_GITHUB_REPO is set, no auto-detect spawn happens.
     const executePromise = adapter.execute(makeTask());
+    await resolveDedupChildNoMatch(dedupChild);
     child.stdout.emit("data", Buffer.from("https://github.com/env-owner/env-repo/issues/1\n"));
     child.emit("close", 0);
     const result = await executePromise;
 
     expect(result.success).toBe(true);
-    // Verify the repo was passed to gh (check spawn args)
+    // Verify the repo was passed to gh (check spawn args — find the issue create call)
     const spawnCalls = mockSpawn.mock.calls;
-    const ghCall = spawnCalls.find(([cmd]: [string]) => cmd === "gh");
-    expect(ghCall).toBeDefined();
-    const args: string[] = ghCall![1] as string[];
+    const createCall = spawnCalls.find(
+      ([cmd, args]: [string, string[]]) => cmd === "gh" && args.includes("create")
+    );
+    expect(createCall).toBeDefined();
+    const args: string[] = createCall![1] as string[];
     expect(args.join(" ")).toContain("env-owner/env-repo");
   });
 
   it("config.repo takes priority over MOTIVA_GITHUB_REPO env var", async () => {
     process.env["MOTIVA_GITHUB_REPO"] = "env-owner/env-repo";
     const adapter = new GitHubIssueAdapter({ repo: "config-owner/config-repo" });
+    const dedupChild = makeDedupChild();
     const child = makeFakeChild();
 
     const executePromise = adapter.execute(makeTask());
+    await resolveDedupChildNoMatch(dedupChild);
     child.stdout.emit("data", Buffer.from("https://github.com/config-owner/config-repo/issues/7\n"));
     child.emit("close", 0);
     await executePromise;
 
     const spawnCalls = mockSpawn.mock.calls;
-    const ghCall = spawnCalls.find(([cmd]: [string]) => cmd === "gh");
-    expect(ghCall).toBeDefined();
-    const args: string[] = ghCall![1] as string[];
+    const createCall = spawnCalls.find(
+      ([cmd, args]: [string, string[]]) => cmd === "gh" && args.includes("create")
+    );
+    expect(createCall).toBeDefined();
+    const args: string[] = createCall![1] as string[];
     expect(args.join(" ")).toContain("config-owner/config-repo");
     expect(args.join(" ")).not.toContain("env-owner/env-repo");
   });
@@ -250,6 +294,7 @@ describe("GitHubIssueAdapter.execute", () => {
       repo: "owner/repo",
       defaultLabels: ["motiva", "automated"],
     });
+    const dedupChild = makeDedupChild();
     const child = makeFakeChild();
 
     const executePromise = adapter.execute(
@@ -257,14 +302,17 @@ describe("GitHubIssueAdapter.execute", () => {
         prompt: "```github-issue\n{\"title\":\"T\",\"body\":\"B\",\"labels\":[\"bug\"]}\n```",
       })
     );
+    await resolveDedupChildNoMatch(dedupChild);
     child.stdout.emit("data", Buffer.from("https://github.com/owner/repo/issues/99\n"));
     child.emit("close", 0);
     await executePromise;
 
     const spawnCalls = mockSpawn.mock.calls;
-    const ghCall = spawnCalls.find(([cmd]: [string]) => cmd === "gh");
-    expect(ghCall).toBeDefined();
-    const args: string[] = ghCall![1] as string[];
+    const createCall = spawnCalls.find(
+      ([cmd, args]: [string, string[]]) => cmd === "gh" && args.includes("create")
+    );
+    expect(createCall).toBeDefined();
+    const args: string[] = createCall![1] as string[];
 
     // --label should appear at least once per label
     const labelFlags = args.filter((a) => a === "--label");
@@ -275,12 +323,15 @@ describe("GitHubIssueAdapter.execute", () => {
     delete process.env["MOTIVA_GITHUB_REPO"];
     const adapter = new GitHubIssueAdapter();
 
-    // First spawn: gh repo view (auto-detect)
+    // Spawn order: dedup check, then gh repo view (auto-detect), then gh issue create
+    const dedupChild = makeDedupChild();
     const detectChild = makeFakeChild();
-    // Second spawn: gh issue create
     const createChild = makeFakeChild();
 
     const executePromise = adapter.execute(makeTask());
+
+    // Resolve dedup check first
+    await resolveDedupChildNoMatch(dedupChild);
 
     // Simulate `gh repo view --json nameWithOwner` output
     detectChild.stdout.emit(
@@ -298,5 +349,153 @@ describe("GitHubIssueAdapter.execute", () => {
 
     const result = await executePromise;
     expect(result.success).toBe(true);
+  });
+});
+
+// ─── checkOpenIssueExists tests ───
+
+describe("GitHubIssueAdapter.checkOpenIssueExists", () => {
+  beforeEach(() => {
+    mockSpawn.mockReset();
+  });
+
+  it("returns null when gh issue list returns empty array", async () => {
+    const adapter = new GitHubIssueAdapter({ repo: "owner/repo" });
+    const child = makeFakeChild();
+
+    const promise = adapter.checkOpenIssueExists("Fix login bug");
+    child.stdout.emit("data", Buffer.from("[]"));
+    child.emit("close", 0);
+
+    const result = await promise;
+    expect(result).toBeNull();
+  });
+
+  it("returns issue number when a matching issue exists", async () => {
+    const adapter = new GitHubIssueAdapter({ repo: "owner/repo" });
+    const child = makeFakeChild();
+
+    const issues = [{ number: 18, title: "Fix login authentication bug" }];
+    const promise = adapter.checkOpenIssueExists("Fix login authentication issue");
+    child.stdout.emit("data", Buffer.from(JSON.stringify(issues)));
+    child.emit("close", 0);
+
+    const result = await promise;
+    expect(result).toBe(18);
+  });
+
+  it("returns null when existing issue title has low word overlap", async () => {
+    const adapter = new GitHubIssueAdapter({ repo: "owner/repo" });
+    const child = makeFakeChild();
+
+    const issues = [{ number: 5, title: "Improve database performance" }];
+    const promise = adapter.checkOpenIssueExists("Fix login authentication bug");
+    child.stdout.emit("data", Buffer.from(JSON.stringify(issues)));
+    child.emit("close", 0);
+
+    const result = await promise;
+    expect(result).toBeNull();
+  });
+
+  it("returns null when gh exits with non-zero code (fail-open)", async () => {
+    const adapter = new GitHubIssueAdapter({ repo: "owner/repo" });
+    const child = makeFakeChild();
+
+    const promise = adapter.checkOpenIssueExists("Some title");
+    child.emit("close", 1);
+
+    const result = await promise;
+    expect(result).toBeNull();
+  });
+
+  it("returns null when gh emits an error (fail-open)", async () => {
+    const adapter = new GitHubIssueAdapter({ repo: "owner/repo" });
+    const child = makeFakeChild();
+
+    const promise = adapter.checkOpenIssueExists("Some title");
+    child.emit("error", new Error("gh not found"));
+
+    const result = await promise;
+    expect(result).toBeNull();
+  });
+
+  it("returns null when stdout is not valid JSON (fail-open)", async () => {
+    const adapter = new GitHubIssueAdapter({ repo: "owner/repo" });
+    const child = makeFakeChild();
+
+    const promise = adapter.checkOpenIssueExists("Some title");
+    child.stdout.emit("data", Buffer.from("not json"));
+    child.emit("close", 0);
+
+    const result = await promise;
+    expect(result).toBeNull();
+  });
+
+  it("includes --repo flag in gh issue list command when repo is configured", async () => {
+    const adapter = new GitHubIssueAdapter({ repo: "owner/repo" });
+    const child = makeFakeChild();
+
+    const promise = adapter.checkOpenIssueExists("Fix bug");
+    child.stdout.emit("data", Buffer.from("[]"));
+    child.emit("close", 0);
+    await promise;
+
+    const spawnCalls = mockSpawn.mock.calls;
+    const listCall = spawnCalls.find(
+      ([cmd, args]: [string, string[]]) => cmd === "gh" && args.includes("list")
+    );
+    expect(listCall).toBeDefined();
+    const args: string[] = listCall![1] as string[];
+    expect(args.join(" ")).toContain("owner/repo");
+  });
+});
+
+// ─── Dedup integration in execute() tests ───
+
+describe("GitHubIssueAdapter.execute dedup", () => {
+  beforeEach(() => {
+    mockSpawn.mockReset();
+  });
+
+  afterEach(() => {
+    delete process.env["MOTIVA_GITHUB_REPO"];
+  });
+
+  it("skips issue creation when a similar open issue exists", async () => {
+    const adapter = new GitHubIssueAdapter({ repo: "owner/repo" });
+    const dedupChild = makeFakeChild();
+
+    const issues = [{ number: 18, title: "Fix login authentication bug" }];
+    const executePromise = adapter.execute(
+      makeTask({ prompt: "Fix login authentication issue" })
+    );
+    dedupChild.stdout.emit("data", Buffer.from(JSON.stringify(issues)));
+    dedupChild.emit("close", 0);
+
+    const result = await executePromise;
+
+    // Only one spawn (the dedup check) — no create spawn
+    expect(mockSpawn).toHaveBeenCalledTimes(1);
+    expect(result.success).toBe(true);
+    expect(result.stopped_reason).toBe("completed");
+    expect(result.output).toMatch(/Skipped.*#18/);
+  });
+
+  it("proceeds with creation when dedup check fails with an error (fail-open)", async () => {
+    const adapter = new GitHubIssueAdapter({ repo: "owner/repo" });
+    const dedupChild = makeFakeChild();
+    const createChild = makeFakeChild();
+
+    const executePromise = adapter.execute(makeTask());
+    dedupChild.emit("error", new Error("gh not found"));
+    // Flush microtasks so execute() resumes after checkOpenIssueExists() resolves.
+    await new Promise<void>((r) => setTimeout(r, 0));
+    createChild.stdout.emit("data", Buffer.from("https://github.com/owner/repo/issues/99\n"));
+    createChild.emit("close", 0);
+
+    const result = await executePromise;
+
+    expect(result.success).toBe(true);
+    expect(result.output).toContain("https://github.com/owner/repo/issues/99");
   });
 });

@@ -28,6 +28,7 @@ export interface OpenAICodexCLIAdapterConfig {
 
 export class OpenAICodexCLIAdapter implements IAdapter {
   readonly adapterType = "openai_codex_cli";
+  readonly capabilities = ["execute_code", "read_files", "write_files", "run_commands"] as const;
 
   private readonly cliPath: string;
   private readonly fullAuto: boolean;

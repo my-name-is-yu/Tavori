@@ -102,7 +102,11 @@ function buildDeps() {
     stateManager,
     llmClient,
     ethicsGate,
-    observationEngine
+    observationEngine,
+    undefined,
+    undefined,
+    undefined,
+    adapterRegistry.getAdapterCapabilities()
   );
 
   const setRequestApproval = (fn: (req: ApprovalRequest) => void) => {

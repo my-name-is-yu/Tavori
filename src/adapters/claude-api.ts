@@ -9,6 +9,7 @@ import type { ILLMClient } from "../llm-client.js";
 
 export class ClaudeAPIAdapter implements IAdapter {
   readonly adapterType = "claude_api";
+  readonly capabilities = ["text_generation", "analysis", "planning"] as const;
 
   private readonly llmClient: ILLMClient;
 

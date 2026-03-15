@@ -182,10 +182,12 @@ describe("goal add with real GoalNegotiator", () => {
     // to inject our mock before construction. We do this by overriding the
     // LLMClient mock implementation for this test.
     const { LLMClient } = await import("../src/llm-client.js");
+    const capabilityCheck = JSON.stringify({ gaps: [] });
     const mockLLM = createMockLLMClient([
       ethicsPass,
       decomposition,
       feasibility,
+      capabilityCheck,
       negotiationResponse,
     ]);
     vi.mocked(LLMClient).mockImplementation(() => mockLLM as unknown as InstanceType<typeof LLMClient>);
@@ -247,11 +249,13 @@ describe("goal add with real GoalNegotiator", () => {
       counter_target: null,
     });
 
+    const capabilityCheck = JSON.stringify({ gaps: [] });
     const { LLMClient } = await import("../src/llm-client.js");
     const mockLLM = createMockLLMClient([
       ethicsPass,
       decomposition,
       feasibility,
+      capabilityCheck,
       negotiationResponse,
     ]);
     vi.mocked(LLMClient).mockImplementation(() => mockLLM as unknown as InstanceType<typeof LLMClient>);

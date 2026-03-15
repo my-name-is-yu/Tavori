@@ -133,6 +133,7 @@ describe("CodexLLMClient", () => {
     });
 
     it("omits --model flag when no model is configured", async () => {
+      vi.stubEnv("OPENAI_MODEL", "");
       const client = new CodexLLMClient();
       const child = makeFakeChild();
 
