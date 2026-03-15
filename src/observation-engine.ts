@@ -64,15 +64,18 @@ export class ObservationEngine {
   private readonly stateManager: StateManager;
   private readonly dataSources: IDataSourceAdapter[];
   private readonly llmClient?: ILLMClient;
+  private readonly contextProvider?: () => Promise<string>;
 
   constructor(
     stateManager: StateManager,
     dataSources: IDataSourceAdapter[] = [],
-    llmClient?: ILLMClient
+    llmClient?: ILLMClient,
+    contextProvider?: () => Promise<string>
   ) {
     this.stateManager = stateManager;
     this.dataSources = dataSources;
     this.llmClient = llmClient;
+    this.contextProvider = contextProvider;
   }
 
   // ─── Progress Ceiling ───
@@ -316,7 +319,34 @@ export class ObservationEngine {
       throw new Error(`observe: goal "${goalId}" not found`);
     }
 
-    const observeCount = methods.length > 0 ? Math.min(goal.dimensions.length, methods.length) : goal.dimensions.length;
+    // When methods array is non-empty, only observe the dimensions corresponding to
+    // the provided methods (the caller is explicitly selecting which dimensions to observe).
+    // When methods is empty (e.g. CoreLoop passes []), observe all dimensions.
+    const observeCount = methods.length > 0 ? methods.length : goal.dimensions.length;
+
+    // Workspace context for LLM observations — fetched lazily on first LLM call.
+    // This avoids calling contextProvider when all dimensions are covered by DataSources.
+    let workspaceContext: string | undefined;
+    let workspaceContextFetched = false;
+
+    const fetchWorkspaceContext = async (): Promise<string | undefined> => {
+      if (workspaceContextFetched) return workspaceContext;
+      workspaceContextFetched = true;
+      if (this.contextProvider) {
+        try {
+          workspaceContext = await this.contextProvider();
+        } catch (err) {
+          console.warn(
+            `[ObservationEngine] contextProvider failed: ${err instanceof Error ? err.message : String(err)}. LLM observation will proceed without workspace context.`
+          );
+        }
+      } else {
+        console.warn(
+          `[ObservationEngine] No contextProvider configured. LLM observation will proceed without workspace context (scores may be unreliable).`
+        );
+      }
+      return workspaceContext;
+    };
 
     for (let idx = 0; idx < observeCount; idx++) {
       const dim = goal.dimensions[idx]!;
@@ -331,13 +361,15 @@ export class ObservationEngine {
 
       // 2. Try LLM if available
       if (this.llmClient) {
+        const ctx = await fetchWorkspaceContext();
         try {
           await this.observeWithLLM(
             goalId,
             dim.name,
             goal.description,
             dim.label ?? dim.name,
-            JSON.stringify(dim.threshold)
+            JSON.stringify(dim.threshold),
+            ctx
           );
           continue;
         } catch (err) {
@@ -494,18 +526,24 @@ export class ObservationEngine {
     dimensionName: string,
     goalDescription: string,
     dimensionLabel: string,
-    thresholdDescription: string
+    thresholdDescription: string,
+    workspaceContext?: string
   ): Promise<ObservationLogEntry> {
     if (!this.llmClient) {
       throw new Error("observeWithLLM: llmClient is not configured");
     }
 
+    const contextSection = workspaceContext
+      ? `\n=== Current Workspace State ===\n${workspaceContext}\n=== End Workspace State ===\n`
+      : "";
+
     const prompt =
       `以下のゴールの次元を0.0〜1.0で評価してください。\n\n` +
       `ゴール: ${goalDescription}\n` +
       `評価次元: ${dimensionLabel}\n` +
-      `目標値: ${thresholdDescription}\n\n` +
-      `現在の状態を考慮して、この次元の達成度を0.0（未達成）〜1.0（完全達成）で評価してください。\n\n` +
+      `目標値: ${thresholdDescription}\n` +
+      contextSection +
+      `\n現在の状態を考慮して、この次元の達成度を0.0（未達成）〜1.0（完全達成）で評価してください。\n\n` +
       `回答はJSON形式で: {"score": 0.0〜1.0, "reason": "評価理由"}`;
 
     const response = await this.llmClient.sendMessage([

@@ -805,12 +805,12 @@ export class CLIRunner {
     const type = argv[0];
     if (!type) {
       console.error("Error: type is required. Usage: motiva datasource add <type> [options]");
-      console.error("  Types: file, http_api");
+      console.error("  Types: file, http_api, github_issue, file_existence");
       return 1;
     }
 
-    if (type !== "file" && type !== "http_api" && type !== "github_issue") {
-      console.error(`Error: unsupported type "${type}". Supported: file, http_api, github_issue`);
+    if (type !== "file" && type !== "http_api" && type !== "github_issue" && type !== "file_existence") {
+      console.error(`Error: unsupported type "${type}". Supported: file, http_api, github_issue, file_existence`);
       return 1;
     }
 
@@ -830,15 +830,31 @@ export class CLIRunner {
     }
 
     const id = `ds_${Date.now()}`;
-    const name = values.name ?? (type === "file" ? `file:${values.path ?? id}` : `http_api:${values.url ?? id}`);
+    const name =
+      values.name ??
+      (type === "file"
+        ? `file:${values.path ?? id}`
+        : type === "file_existence"
+          ? `file_existence:${values.path ?? id}`
+          : type === "github_issue"
+            ? `github_issue:${id}`
+            : `http_api:${values.url ?? id}`);
 
     const connection: Record<string, string> = {};
+    let extraConfig: Record<string, unknown> = {};
     if (type === "file") {
       if (!values.path) {
         console.error("Error: --path is required for file data source");
         return 1;
       }
       connection["path"] = values.path;
+    } else if (type === "file_existence") {
+      if (!values.path) {
+        console.error("Error: --path is required for file_existence data source");
+        return 1;
+      }
+      connection["path"] = values.path;
+      extraConfig = { filePaths: { file_exists: values.path } };
     } else if (type === "github_issue") {
       // No connection params needed — uses `gh` CLI
     } else {
@@ -855,6 +871,7 @@ export class CLIRunner {
       name,
       type,
       connection,
+      ...extraConfig,
       enabled: true,
       created_at: new Date().toISOString(),
     };

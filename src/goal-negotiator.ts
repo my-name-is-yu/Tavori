@@ -58,7 +58,7 @@ function buildDecompositionPrompt(
 
   const dataSourcesSection =
     availableDataSources && availableDataSources.length > 0
-      ? `CRITICAL CONSTRAINT: When available data source dimensions are listed below, you MUST use those exact dimension names as your decomposition dimensions. Do NOT invent new dimension names if a data source dimension exists that measures the same concept. Map your dimensions 1:1 to data source dimensions whenever possible. Only create new dimension names for concepts that have NO matching data source dimension.
+      ? `CRITICAL CONSTRAINT: For dimensions that overlap with the available data sources below, you MUST use those exact dimension names so mechanical measurements can be wired automatically. However, you SHOULD ALSO add additional quality-oriented and semantic dimensions that directly reflect the goal description (e.g., readability, correctness, completeness) — do NOT limit yourself to only DataSource dimensions.
 
 Available Data Sources and their exact dimension names:
 ${availableDataSources.map((ds) => `- "${ds.name}" provides: ${ds.dimensions.join(", ")}`).join("\n")}
@@ -1214,7 +1214,7 @@ function findBestDimensionMatch(name: string, candidates: string[]): string | nu
     // Count overlapping tokens
     const overlap = nameTokens.filter(t => candidateTokens.includes(t)).length;
     const score = overlap / Math.max(nameTokens.length, candidateTokens.length);
-    if (score > bestScore && score >= 0.3) {  // At least 30% token overlap
+    if (score > bestScore && score >= 0.6) {  // At least 60% token overlap
       bestScore = score;
       bestMatch = candidate;
     }
