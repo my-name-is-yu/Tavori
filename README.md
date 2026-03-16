@@ -6,7 +6,7 @@ AI agent orchestrator that gives existing agents "motivation" — goal-driven ta
 
 ## What is Motiva?
 
-Motiva is a **task discovery engine**. You give it a long-term goal — "double revenue in 6 months," "keep my dog healthy and happy" — and it pursues that goal autonomously, indefinitely. It observes the real world, calculates the gap between the goal and current reality, generates the next task to close that gap, delegates it to an agent (Claude Code, Claude API, or a custom adapter), and verifies the result. Then it loops.
+Motiva is a **task discovery engine**. You give it a long-term goal — "double revenue in 6 months," "keep my dog healthy and happy" — and it pursues that goal autonomously, indefinitely. It observes the real world, calculates the gap between the goal and current reality, generates the next task to close that gap, delegates it to an AI agent (CLI-type, API-type, or a custom adapter — e.g., Claude Code, OpenAI Codex CLI), and verifies the result. Then it loops.
 
 The key distinction from existing tools: Motiva doesn't execute. It orchestrates. It makes agents think, then verifies that their thinking produced real progress. Every action is delegated; Motiva's direct operations are limited to LLM calls (for reasoning) and state file read/write.
 
@@ -148,7 +148,7 @@ import { CoreLoop, CLIRunner } from "motiva";
 │                     Execution Layer (existing systems)                │
 │                                                                       │
 │  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────────────┐ │
-│  │ Claude Code │ │ Claude API │ │ Custom     │ │ Human              │ │
+│  │ CLI Agent  │ │ LLM API    │ │ Custom     │ │ Human              │ │
 │  │ (implement) │ │ (analysis) │ │ Agents     │ │ (approve/decide)   │ │
 │  └────────────┘ └────────────┘ └────────────┘ └────────────────────┘ │
 │                                                                       │
@@ -243,7 +243,7 @@ State files are written to `~/.motiva/`. Reports are saved to `~/.motiva/reports
 
 - Stage 1-2: Type system, state persistence, gap calculation, drive scoring, observation, stall detection, satisficing
 - Stage 3: LLM client, ethics gate, session management, strategy management, goal negotiation
-- Stage 4: Adapter layer (Claude Code CLI + Claude API), task lifecycle
+- Stage 4: Adapter layer (CLI agents, LLM APIs, custom adapters), task lifecycle
 - Stage 5: Core loop, reporting engine
 - Stage 6: CLI runner (5 subcommands)
 

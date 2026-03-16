@@ -15,14 +15,14 @@ See `docs/status.md` for stage-by-stage details.
 
 - 4-element model: Goal (with thresholds) → Current State (observation + confidence) → Gap → Constraints
 - Orchestrator loop: observe → gap → score → task → execute → verify (NEVER STOP)
-- Adapter pattern: agent-agnostic (Claude Code CLI, Claude API, custom adapters)
+- Adapter pattern: agent-agnostic (various AI agents: CLI-type, API-type, custom adapters — e.g., Claude Code CLI, Claude API, OpenAI Codex CLI)
 - Motiva calls LLMs (for goal decomposition, observation) — it is the caller, not the callee
 - Execution boundary: Motiva always delegates. Direct actions are LLM calls (for thinking) and state read/write only
 
 ## Tech Stack
 
 - Node.js 18+, TypeScript 5.3+
-- Anthropic SDK (for LLM calls)
+- LLM SDK（Anthropic/OpenAI等）(for LLM calls)
 - Zod (schema validation)
 - State persistence: file-based JSON (~/.motiva/)
 - Test: vitest
