@@ -9,6 +9,24 @@ import type { IDataSourceAdapter } from "./data-source-adapter.js";
 import type { DataSourceQuery } from "./types/data-source.js";
 import type { ILLMClient } from "./llm-client.js";
 
+// ─── Options ───
+
+export interface ObservationEngineOptions {
+  crossValidationEnabled?: boolean; // default: false
+  divergenceThreshold?: number;     // default: 0.20
+}
+
+// ─── Cross-Validation Result ───
+
+export interface CrossValidationResult {
+  dimensionName: string;
+  mechanicalValue: number;
+  llmValue: number;
+  diverged: boolean;
+  divergenceRatio: number;
+  resolution: "mechanical_wins";
+}
+
 // ─── Layer Configuration ───
 
 interface LayerConfig {
@@ -65,17 +83,56 @@ export class ObservationEngine {
   private dataSources: IDataSourceAdapter[];
   private readonly llmClient?: ILLMClient;
   private readonly contextProvider?: (goalId: string, dimensionName: string) => Promise<string>;
+  private readonly options: ObservationEngineOptions;
 
   constructor(
     stateManager: StateManager,
     dataSources: IDataSourceAdapter[] = [],
     llmClient?: ILLMClient,
-    contextProvider?: (goalId: string, dimensionName: string) => Promise<string>
+    contextProvider?: (goalId: string, dimensionName: string) => Promise<string>,
+    options: ObservationEngineOptions = {}
   ) {
     this.stateManager = stateManager;
     this.dataSources = dataSources;
     this.llmClient = llmClient;
     this.contextProvider = contextProvider;
+    this.options = options;
+  }
+
+  // ─── Cross-Validation ───
+
+  /**
+   * Compare a mechanical observation value against an LLM-produced value.
+   * Logs a warning when the two diverge beyond the configured threshold.
+   * The mechanical value always wins — LLM is used for diagnostics only.
+   */
+  private crossValidate(
+    goalId: string,
+    dimensionName: string,
+    mechanicalValue: number,
+    llmValue: number
+  ): CrossValidationResult {
+    const threshold = this.options.divergenceThreshold ?? 0.20;
+    const denominator = Math.max(Math.abs(mechanicalValue), Math.abs(llmValue), 1);
+    const ratio = Math.abs(mechanicalValue - llmValue) / denominator;
+    const diverged = ratio > threshold;
+
+    if (diverged) {
+      console.warn(
+        `[CrossValidation] DIVERGED goal="${goalId}" dim="${dimensionName}" ` +
+        `mechanical=${mechanicalValue} llm=${llmValue} ` +
+        `ratio=${ratio.toFixed(3)} threshold=${threshold} resolution=mechanical_wins`
+      );
+    }
+
+    return {
+      dimensionName,
+      mechanicalValue,
+      llmValue,
+      diverged,
+      divergenceRatio: ratio,
+      resolution: "mechanical_wins",
+    };
   }
 
   // ─── Progress Ceiling ───
@@ -215,13 +272,34 @@ export class ObservationEngine {
    *   5. Persist observation log entry via StateManager.appendObservation.
    *   6. Persist updated goal via StateManager.saveGoal.
    */
+  // ─── Dimension Name Normalization ───
+
+  /**
+   * Strip trailing _2, _3, ... _N suffixes that LLMs sometimes append to
+   * deduplicate JSON keys.  Only applied to names from external (LLM) input.
+   *
+   * Examples:
+   *   "todo_count_2"  → "todo_count"
+   *   "quality_3"     → "quality"
+   *   "step_count"    → "step_count"  (trailing token is not a digit-only suffix)
+   *   "coverage"      → "coverage"
+   */
+  private normalizeDimensionName(name: string): string {
+    const stripped = name.replace(/_\d+$/, "");
+    if (stripped !== name) {
+      console.warn(`[ObservationEngine] normalizeDimensionName: stripped "${name}" → "${stripped}"`);
+    }
+    return stripped;
+  }
+
   applyObservation(goalId: string, entry: ObservationLogEntry): void {
     const goal = this.stateManager.loadGoal(goalId);
     if (goal === null) {
       throw new Error(`applyObservation: goal "${goalId}" not found`);
     }
 
-    const dimIndex = goal.dimensions.findIndex((d) => d.name === entry.dimension_name);
+    const safeName = this.normalizeDimensionName(entry.dimension_name);
+    const dimIndex = goal.dimensions.findIndex((d) => d.name === safeName);
     if (dimIndex === -1) {
       throw new Error(
         `applyObservation: dimension "${entry.dimension_name}" not found in goal "${goalId}"`
@@ -375,6 +453,32 @@ export class ObservationEngine {
       if (dataSource) {
         try {
           await this.observeFromDataSource(goalId, dim.name, dataSource.sourceId);
+
+          // Cross-validation: also run LLM and compare (for logging/diagnostics only)
+          if (this.options.crossValidationEnabled && this.llmClient) {
+            try {
+              const updatedGoal = this.stateManager.loadGoal(goalId);
+              const dimState = updatedGoal?.dimensions.find((d) => d.name === dim.name);
+              const mechanicalValue = typeof dimState?.current_value === "number" ? dimState.current_value : 0;
+
+              const ctx = await fetchWorkspaceContext(goalId, dim.name);
+              const llmEntry = await this.observeWithLLM(
+                goalId,
+                dim.name,
+                goal.description,
+                dim.label ?? dim.name,
+                JSON.stringify(dim.threshold),
+                ctx,
+                mechanicalValue,
+                true // dryRun — do NOT write to state
+              );
+              const llmValue = typeof llmEntry.extracted_value === "number" ? llmEntry.extracted_value : 0;
+              this.crossValidate(goalId, dim.name, mechanicalValue, llmValue);
+            } catch (err) {
+              console.warn(`[CrossValidation] LLM comparison failed for "${dim.name}": ${err}`);
+            }
+          }
+
           continue;
         } catch (err) {
           console.warn(
@@ -559,7 +663,8 @@ export class ObservationEngine {
     dimensionLabel: string,
     thresholdDescription: string,
     workspaceContext?: string,
-    previousScore?: number | null
+    previousScore?: number | null,
+    dryRun?: boolean
   ): Promise<ObservationLogEntry> {
     if (!this.llmClient) {
       throw new Error("observeWithLLM: llmClient is not configured");
@@ -571,34 +676,42 @@ export class ObservationEngine {
 
     const hasContext = !!workspaceContext && workspaceContext.trim().length > 0;
 
-    const contextSection = hasContext
-      ? `\n=== Current Workspace State ===\n${workspaceContext}\n=== End Workspace State ===\n`
-      : "";
-
-    // When no relevant content was found in the workspace, the LLM must treat
-    // absence of evidence as evidence of absence (score = 0.0), not as
-    // "unknown" (which can cause the LLM to default to a high score).
-    const absentContentWarning = !hasContext
-      ? `\nWARNING: No relevant files or content were found in the workspace for this dimension. ` +
-        `If the target artifact does not exist yet, the score MUST be 0.0. ` +
-        `Do NOT assume the artifact exists or invent a score — if you cannot observe it, score it 0.0.\n`
-      : "";
-
-    const previousScoreSection =
+    const previousScoreText =
       previousScore !== undefined && previousScore !== null
-        ? `\n前回の観測結果: スコア ${previousScore.toFixed(2)}\n`
-        : "";
+        ? previousScore.toFixed(2)
+        : "none";
+
+    const contextContent = hasContext
+      ? workspaceContext!
+      : "WARNING: No workspace content was provided. Score MUST be 0.0 per Rule 2.";
 
     const prompt =
-      `以下のゴールの次元を0.0〜1.0で評価してください。\n\n` +
-      `ゴール: ${goalDescription}\n` +
-      `評価次元: ${dimensionLabel}\n` +
-      `目標値: ${thresholdDescription}\n` +
-      contextSection +
-      absentContentWarning +
-      previousScoreSection +
-      `\n上記の実際のファイル内容に基づいて評価してください。ワークスペース状態が提供されていない場合、対象物が存在しないとみなし0.0を返してください。\n\n` +
-      `回答はJSON形式で: {"score": 0.0〜1.0, "reason": "評価理由"}`;
+      `You are an independent observer evaluating a goal dimension.\n` +
+      `Your task: score the dimension from 0.0 (not achieved) to 1.0 (fully achieved).\n\n` +
+      `CRITICAL RULES:\n` +
+      `1. Base your score ONLY on the evidence in the workspace content below. Do not invent or assume.\n` +
+      `2. If no workspace content is provided, score MUST be 0.0.\n` +
+      `3. Read every line of the provided content before scoring.\n` +
+      `4. Return ONLY valid JSON: {"score": <0.0-1.0>, "reason": "<one sentence>"}\n\n` +
+      `Goal: ${goalDescription}\n` +
+      `Dimension: ${dimensionLabel}\n` +
+      `Target threshold: ${thresholdDescription}\n` +
+      `Previous score: ${previousScoreText}\n\n` +
+      `=== FEW-SHOT CALIBRATION ===\n` +
+      `Example A — evidence confirms achievement:\n` +
+      `  Context: grep output shows 0 TODO matches in codebase\n` +
+      `  Output: {"score": 1.0, "reason": "No TODOs found; target of 0 achieved"}\n\n` +
+      `Example B — evidence shows shortfall:\n` +
+      `  Context: grep output shows 3 matches: src/foo.ts:42: TODO fix this\n` +
+      `  Output: {"score": 0.0, "reason": "3 TODOs remain; target is 0"}\n\n` +
+      `Example C — no content provided:\n` +
+      `  Context: (empty)\n` +
+      `  Output: {"score": 0.0, "reason": "No evidence available; cannot confirm achievement"}\n` +
+      `=== END CALIBRATION ===\n\n` +
+      `=== WORKSPACE CONTENT ===\n` +
+      `${contextContent}\n` +
+      `=== END CONTENT ===\n\n` +
+      `Score the dimension now based strictly on the above content.`;
 
     const response = await this.llmClient.sendMessage([
       { role: "user", content: prompt },
@@ -643,7 +756,9 @@ export class ObservationEngine {
       notes: `LLM evaluation: ${parsed.reason}`,
     });
 
-    this.applyObservation(goalId, entry);
+    if (!dryRun) {
+      this.applyObservation(goalId, entry);
+    }
 
     return entry;
   }

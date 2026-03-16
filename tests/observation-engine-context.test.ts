@@ -284,7 +284,7 @@ describe("ObservationEngine contextProvider integration", () => {
 
     expect(capturedPrompt).toBeDefined();
     // The prompt should mention the previous score (0.63)
-    expect(capturedPrompt).toContain("前回の観測結果");
+    expect(capturedPrompt).toContain("Previous score");
     expect(capturedPrompt).toContain("0.63");
   });
 

@@ -25,6 +25,7 @@ export const DataSourceConfigSchema = z.object({
     method: z.enum(["GET", "POST"]).optional(),
     headers: z.record(z.string(), z.string()).optional(),
     body_template: z.string().optional(),
+    commands: z.record(z.string(), z.unknown()).optional(),
   }),
   polling: PollingConfigSchema.optional(),
   auth: z
