@@ -521,9 +521,9 @@ export class TaskLifecycle {
     ];
 
     // Build dimension_updates from task's target dimensions based on verdict.
-    // pass: significant progress (+0.4), partial: moderate progress (+0.15), fail: no update.
+    // pass: significant progress (+0.2), partial: moderate progress (+0.15), fail: no update.
     const progressByVerdict: Record<string, number> = {
-      pass: 0.4,
+      pass: 0.2,
       partial: 0.15,
       fail: 0,
     };

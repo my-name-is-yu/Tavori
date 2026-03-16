@@ -1516,7 +1516,7 @@ describe("TaskLifecycle", () => {
       expect(verification.verdict).toBe("pass");
       const update = verification.dimension_updates[0]!;
       expect(typeof update.new_value).toBe("number");
-      expect(update.new_value as number).toBeGreaterThanOrEqual(0.3);
+      expect(update.new_value as number).toBeGreaterThanOrEqual(0.1);
     });
 
     it("dimension_updates new_value is moderate (0.1-0.25) on partial verdict", async () => {
@@ -1609,8 +1609,8 @@ describe("TaskLifecycle", () => {
       const verification = await lifecycle.verifyTask(task, result);
       expect(verification.verdict).toBe("pass");
       const update = verification.dimension_updates[0]!;
-      // pass delta = 0.4; new_value = clamp(0.3 + 0.4, 0, 1) = 0.7
-      expect(update.new_value).toBeCloseTo(0.7, 5);
+      // pass delta = 0.2; new_value = clamp(0.3 + 0.2, 0, 1) = 0.5
+      expect(update.new_value).toBeCloseTo(0.5, 5);
     });
 
     it("dimension_updates new_value is clamped to 1 when previous_value + delta exceeds 1", async () => {

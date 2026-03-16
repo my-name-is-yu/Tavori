@@ -230,6 +230,19 @@ export class ObservationEngine {
 
     const dim = goal.dimensions[dimIndex]!;
 
+    // Monotonic progress: for min thresholds, never decrease; for max, never increase.
+    // This prevents temperature-induced noise from regressing observed progress.
+    let effectiveValue = entry.extracted_value;
+    if (typeof effectiveValue === 'number' && typeof dim.current_value === 'number') {
+      // NOTE: range thresholds intentionally not clamped — progress direction is ambiguous.
+      // Assumes earlier observations are reliable; no mechanism to override a false-high floor.
+      if (dim.threshold.type === 'min' && effectiveValue < dim.current_value) {
+        effectiveValue = dim.current_value;
+      } else if (dim.threshold.type === 'max' && effectiveValue > dim.current_value) {
+        effectiveValue = dim.current_value;
+      }
+    }
+
     // Determine if the incoming observation should update the dimension's confidence.
     // Only allow confidence updates from an equal or higher-priority layer.
     // This prevents a low-layer self_report from downgrading confidence that was
@@ -242,7 +255,7 @@ export class ObservationEngine {
     // Update dimension values
     const updatedDim = {
       ...dim,
-      current_value: entry.extracted_value,
+      current_value: effectiveValue,
       confidence: shouldUpdateConfidence ? entry.confidence : dim.confidence,
       last_updated: entry.timestamp,
       history: [

@@ -6,7 +6,7 @@ import { extractJSON, type ILLMClient, type LLMMessage, type LLMRequestOptions, 
 
 const DEFAULT_MODEL = "gpt-4o";
 const DEFAULT_MAX_TOKENS = 4096;
-const DEFAULT_TEMPERATURE = 0;
+const DEFAULT_TEMPERATURE = 0.2;
 const MAX_RETRY_ATTEMPTS = 3;
 
 /** Exponential backoff delays in milliseconds: 1s, 2s, 4s */

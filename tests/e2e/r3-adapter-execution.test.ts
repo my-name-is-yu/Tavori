@@ -472,9 +472,9 @@ describe("R3: full pipeline with CoreLoop — task results update goal state", (
     expect(updatedGoal).not.toBeNull();
     const updatedDim = updatedGoal!.dimensions.find((d) => d.name === "quality");
     expect(updatedDim).toBeDefined();
-    // Pass verdict adds +0.4 progress delta, so new_value = min(1, 0.2 + 0.4) = 0.6
+    // Pass verdict adds +0.2 progress delta, so new_value = min(1, 0.2 + 0.2) = 0.4
     expect(updatedDim!.current_value as number).toBeGreaterThan(initialValue);
-    expect(updatedDim!.current_value as number).toBeCloseTo(0.6, 5);
+    expect(updatedDim!.current_value as number).toBeCloseTo(0.4, 5);
   });
 
   it("CoreLoop with real TaskLifecycle runs one iteration and task cycle executes", async () => {

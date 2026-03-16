@@ -1,26 +1,23 @@
-# In-Progress: R8 — contextProvider統合によるLLM観測精度改善
+# In-Progress: R9完了、次ステップ検討中
 
-## 背景
-R7完了。テスト4件パス（2924テスト、74ファイル）。commit 385a2fc。
-Dogfooding実施: 5イテレーション完走、Codexタスク実行成功。
+## 完了済み
 
-## R7 Dogfooding結果
-- ループ: 5イテレーション完走（max_iterations）
-- observe→gap→task→execute→verify: 全サイクル正常動作
-- Codex: 毎回タスク実行成功
-- 所要時間: 約9分（5iter）
+### R9 — 3+イテレーション反復改善 実Dogfooding
+- 3回実行、Run 3で**部分成功**: 6イテレーション、全3次元でスコア変動、段階的改善確認
+- jsdoc: 0.50→0.85、help_messages: 0.00→0.75、gap: 1.30→0.22
+- コード変更: temperature 0→0.2、auto-progress 0.4→0.2（テスト修正済み）
+- 発見: FileExistence次元が反復改善を妨害（高gap独占→タスク逸れ）
+- 詳細: `memory/r9-dogfooding-result.md`
 
-## 発見したバグ（R8で対処すべき）
-1. **LLM観測のスコアが変化しない**: contextProviderが未設定のため、LLMがワークスペースのファイル内容を読めず、毎回同じスコア（0.6, 0.6, 0.5）を返す
-2. **反復改善が実質機能しない**: Codexがファイルを編集してもLLM観測が変化を検知できない
-3. verifyTaskのauto-progress(+0.4)でcurrent_valueは上がるが、次iterのobserveで元に戻る
+### R7-R8（前回完了）
+- R7: 反復改善テスト4本実装、contextProvider課題発見
+- R8: contextProviderパス優先ロジック追加
 
-## R8の方針
-- CoreLoop/CLIRunnerにcontextProviderを設定する仕組みを追加
-- contextProvider: 対象ファイルの内容を読んでLLMに渡す関数
-- `--workspace-dir` CLIオプション or ゴール設定でワークスペースパスを指定
-- これにより「Codexが編集 → 次iterでLLMが変更後の内容を評価」のフィードバックループが成立
+## 現在の状態
+- 2928テスト全パス（74ファイル）
+- ブランチ: main
 
-## 修正済みバグ（R7で発見・修正）
-1. MockAdapterのadapterType不一致（openai_codex_cli）
-2. verifyTaskのauto-progress(+0.4)未考慮のテスト設計
+## 次のステップ候補
+- R9発見課題の修正（FileExistence次元妨害、gap振動対策）
+- Milestone 4（永続ランタイム Phase 2）
+- docs/roadmap.md 参照

@@ -60,19 +60,27 @@ import type { ProgressEvent } from "./core-loop.js";
 
 // ─── CLIRunner ───
 
+/**
+ * @description Coordinates CLI argument parsing, dependency wiring, and subcommand execution for the Motiva command-line interface.
+ */
 export class CLIRunner {
   private readonly stateManager: StateManager;
   private readonly characterConfigManager: CharacterConfigManager;
   private activeCoreLoop: CoreLoop | null = null;
 
+  /**
+   * @description Creates a CLI runner with state and character configuration managers rooted at the optional base directory.
+   * @param {string} [baseDir] Optional base directory for Motiva state storage.
+   * @returns {void} Does not return a value.
+   */
   constructor(baseDir?: string) {
     this.stateManager = new StateManager(baseDir);
     this.characterConfigManager = new CharacterConfigManager(this.stateManager);
   }
 
   /**
-   * Stop the active CoreLoop (if one is running).
-   * Safe to call before run() or when no loop is active.
+   * @description Stops the active core loop if one is currently running. Safe to call before `run()` or when no loop is active.
+   * @returns {void} Does not return a value.
    */
   stop(): void {
     if (this.activeCoreLoop) {
@@ -129,7 +137,9 @@ export class CLIRunner {
           }
         }
       }
-    } catch { /* ignore errors */ }
+    } catch (err) {
+      console.error(formatOperationError(`load datasource configurations from "${dsDir}"`, err));
+    }
 
     const contextProvider = createWorkspaceContextProvider(
       { workDir: process.cwd() },
@@ -137,7 +147,10 @@ export class CLIRunner {
         try {
           const goal = stateManager.loadGoal(goalId);
           return goal?.description;
-        } catch { return undefined; }
+        } catch (err) {
+          console.error(formatOperationError(`resolve workspace context goal description for "${goalId}"`, err));
+          return undefined;
+        }
       }
     );
 
@@ -297,8 +310,7 @@ export class CLIRunner {
       deps = this.buildDeps(apiKey, loopConfig, approvalFn, logger, onProgress);
     } catch (err) {
       rl?.close();
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`Error: Failed to initialise dependencies: ${message}`);
+      console.error(formatOperationError("initialise dependencies", err));
       if (verbose || process.env.DEBUG) {
         console.error(err instanceof Error ? err.stack : String(err));
       }
@@ -337,8 +349,7 @@ export class CLIRunner {
     try {
       result = await coreLoop.run(goalId);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`Error: ${message}`);
+      console.error(formatOperationError(`run core loop for goal "${goalId}"`, err));
       console.error(`Hint: Check ~/.motiva/logs/ for details or re-run with DEBUG=1 for stack traces.`);
       if (verbose || process.env.DEBUG) {
         console.error(err instanceof Error ? err.stack : String(err));
@@ -398,8 +409,7 @@ export class CLIRunner {
     try {
       deps = this.buildDeps(apiKey);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`Error: Failed to initialise dependencies: ${message}`);
+      console.error(formatOperationError("initialise goal negotiation dependencies", err));
       return 1;
     }
 
@@ -478,11 +488,11 @@ export class CLIRunner {
       return 0;
     } catch (err) {
       if (err instanceof EthicsRejectedError) {
-        console.error(`Goal rejected by ethics gate: ${err.verdict.reasoning}`);
+        console.error(formatOperationError(`negotiate goal "${description}" via ethics gate`, err));
+        console.error(`Ethics gate reasoning: ${err.verdict.reasoning}`);
         return 1;
       }
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`Error: ${message}`);
+      console.error(formatOperationError(`negotiate goal "${description}"`, err));
       return 1;
     }
   }
@@ -496,15 +506,16 @@ export class CLIRunner {
       let entries: string[];
       try {
         entries = fs.readdirSync(goalsDir);
-      } catch {
-        console.error("Error reading goals directory.");
+      } catch (err) {
+        console.error(formatOperationError("read goals directory", err));
         return 1;
       }
 
       const goalDirs = entries.filter((e) => {
         try {
           return fs.statSync(path.join(goalsDir, e)).isDirectory();
-        } catch {
+        } catch (err) {
+          console.error(formatOperationError(`inspect goal directory entry "${e}"`, err));
           return false;
         }
       });
@@ -553,7 +564,9 @@ export class CLIRunner {
             status = raw.status ?? status;
             dimCount = raw.dimensions?.length ?? 0;
           }
-        } catch { /* ignore */ }
+        } catch (err) {
+          console.error(formatOperationError(`read archived goal metadata for "${goalId}"`, err));
+        }
         console.log(`[${goalId}] status: ${status} — ${title} (dimensions: ${dimCount})`);
       }
     } else {
@@ -771,7 +784,8 @@ export class CLIRunner {
         },
         strict: false,
       }) as { values: { "api-key"?: string; config?: string; goal?: string[] } });
-    } catch {
+    } catch (err) {
+      console.error(formatOperationError("parse start command arguments", err));
       values = {};
     }
 
@@ -824,7 +838,7 @@ export class CLIRunner {
         process.kill(info.pid, "SIGTERM");
         console.log("Stop signal sent");
       } catch (err) {
-        console.error(`Failed to stop daemon: ${err}`);
+        console.error(formatOperationError(`stop daemon process ${info.pid}`, err));
         pidManager.cleanup();
       }
     }
@@ -841,7 +855,8 @@ export class CLIRunner {
         },
         strict: false,
       }) as { values: { goal?: string[]; interval?: string } });
-    } catch {
+    } catch (err) {
+      console.error(formatOperationError("parse cron command arguments", err));
       values = {};
     }
 
@@ -872,6 +887,17 @@ export class CLIRunner {
         /_exists$|_file$|file_existence/.test(d.name)
       );
       if (fileExistenceDims.length === 0) return;
+
+      // Guard: skip auto-registration if goal has quality dimensions
+      const nonFileExistenceDims = dimensions.filter((d) =>
+        !/_exists$|_file$|file_existence/.test(d.name)
+      );
+      if (nonFileExistenceDims.length >= 1) {
+        console.log(
+          `[auto] Skipping FileExistenceDataSource auto-registration: goal has ${nonFileExistenceDims.length} non-FileExistence dimensions that should take priority`
+        );
+        return;
+      }
 
       const filePathPattern = /\b([\w.\-/]+\.\w{1,10})\b/g;
       const candidateFiles: string[] = [];
@@ -949,8 +975,8 @@ export class CLIRunner {
       console.log(
         `[auto] Registered FileExistenceDataSource for: ${Object.keys(dimensionMapping).join(", ")}`
       );
-    } catch {
-      // Best-effort — never block goal registration
+    } catch (err) {
+      console.error(formatOperationError("auto-register file existence data sources", err));
     }
   }
 
@@ -980,7 +1006,8 @@ export class CLIRunner {
         },
         strict: false,
       }) as { values: { name?: string; path?: string; url?: string } });
-    } catch {
+    } catch (err) {
+      console.error(formatOperationError(`parse datasource add arguments for type "${type}"`, err));
       values = {};
     }
 
@@ -1058,8 +1085,8 @@ export class CLIRunner {
     let entries: string[];
     try {
       entries = fs.readdirSync(datasourcesDir);
-    } catch {
-      console.error("Error reading datasources directory.");
+    } catch (err) {
+      console.error(formatOperationError("read datasources directory", err));
       return 1;
     }
 
@@ -1083,8 +1110,8 @@ export class CLIRunner {
         const enabled = cfg.enabled !== false ? "yes" : "no";
         const name = cfg.name ?? "(unnamed)";
         console.log(`${id.padEnd(28)} ${type.padEnd(10)} ${enabled.padEnd(8)} ${name}`);
-      } catch {
-        console.log(`(could not parse: ${file})`);
+      } catch (err) {
+        console.error(formatOperationError(`parse datasource config "${file}" during datasource listing`, err));
       }
     }
 
@@ -1143,7 +1170,8 @@ export class CLIRunner {
           "proactivity-level"?: string;
         };
       });
-    } catch {
+    } catch (err) {
+      console.error(formatOperationError("parse character config arguments", err));
       values = {};
     }
 
@@ -1211,8 +1239,7 @@ Options:
       printCharacterConfig(updated);
       return 0;
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`Error: Failed to update character config: ${message}`);
+      console.error(formatOperationError("update character config", err));
       return 1;
     }
   }
@@ -1277,9 +1304,13 @@ Options:
             if (raw.goal_id && !activeGoalIds.has(raw.goal_id)) {
               staleReports.push(file);
             }
-          } catch { /* skip */ }
+          } catch (err) {
+            console.error(formatOperationError(`read report metadata from "${file}"`, err));
+          }
         }
-      } catch { /* skip */ }
+      } catch (err) {
+        console.error(formatOperationError(`scan reports directory "${reportsDir}"`, err));
+      }
     }
 
     if (staleReports.length > 0) {
@@ -1327,7 +1358,8 @@ Options:
           },
           strict: false,
         }) as { values: { llm?: string; adapter?: string } });
-      } catch {
+      } catch (err) {
+        console.error(formatOperationError("parse provider set arguments", err));
         values = {};
       }
 
@@ -1370,11 +1402,9 @@ Options:
   // ─── Main dispatch ───
 
   /**
-   * Parse argv and run the appropriate subcommand.
-   * argv should be the raw subcommand arguments (e.g. ["run", "--goal", "id"]).
-   * Does NOT include "node" or script path — pure subcommand args.
-   *
-   * Returns an exit code: 0 (success), 1 (error), 2 (stall escalation).
+   * @description Parses CLI arguments, dispatches the matching Motiva subcommand, and returns the resulting exit code.
+   * @param {string[]} argv Raw subcommand arguments, excluding the `node` executable and script path.
+   * @returns {Promise<number>} A promise that resolves to `0` for success, `1` for errors, or `2` for stall escalation.
    */
   async run(argv: string[]): Promise<number> {
     if (argv.length === 0) {
@@ -1412,7 +1442,8 @@ Options:
           },
           strict: false,
         }) as { values: { goal?: string; "max-iterations"?: string; adapter?: string; tree?: boolean; yes?: boolean; verbose?: boolean } });
-      } catch {
+      } catch (err) {
+        console.error(formatOperationError("parse run command arguments", err));
         values = {};
       }
 
@@ -1465,7 +1496,8 @@ Options:
             },
             strict: false,
           }) as { values: { deadline?: string; constraint?: string[]; yes?: boolean } });
-        } catch {
+        } catch (err) {
+          console.error(formatOperationError("parse goal add arguments", err));
           values = {};
         }
 
@@ -1484,7 +1516,10 @@ Options:
             options: { archived: { type: "boolean" } },
             strict: false,
           }) as { values: { archived?: boolean } });
-        } catch { listValues = {}; }
+        } catch (err) {
+          console.error(formatOperationError("parse goal list arguments", err));
+          listValues = {};
+        }
         return this.cmdGoalList({ archived: listValues.archived });
       }
 
@@ -1504,7 +1539,10 @@ Options:
             },
             strict: false,
           }) as { values: { yes?: boolean; force?: boolean } });
-        } catch { archiveValues = {}; }
+        } catch (err) {
+          console.error(formatOperationError("parse goal archive arguments", err));
+          archiveValues = {};
+        }
         return await this.cmdGoalArchive(goalId, { ...archiveValues, yes: globalYes || archiveValues.yes });
       }
 
@@ -1557,7 +1595,8 @@ Options:
           },
           strict: false,
         }) as { values: { goal?: string } });
-      } catch {
+      } catch (err) {
+        console.error(formatOperationError("parse status command arguments", err));
         values = {};
       }
 
@@ -1580,7 +1619,8 @@ Options:
           },
           strict: false,
         }) as { values: { goal?: string } });
-      } catch {
+      } catch (err) {
+        console.error(formatOperationError("parse report command arguments", err));
         values = {};
       }
 
@@ -1603,7 +1643,8 @@ Options:
           },
           strict: false,
         }) as { values: { goal?: string } });
-      } catch {
+      } catch (err) {
+        console.error(formatOperationError("parse log command arguments", err));
         values = {};
       }
 
@@ -1700,6 +1741,14 @@ Options:
 }
 
 // ─── Usage ───
+
+function formatOperationError(operation: string, err: unknown): string {
+  if (err instanceof Error) {
+    return `Operation "${operation}" failed. Original error: ${err.name}: ${err.message}`;
+  }
+
+  return `Operation "${operation}" failed. Original error: ${String(err)}`;
+}
 
 function printUsage(): void {
   console.log(`
@@ -1801,8 +1850,7 @@ async function main(): Promise<void> {
     const code = await runner.run(argv);
     process.exit(code);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`Error: ${message}`);
+    console.error(formatOperationError("execute CLI entry point", err));
     process.exit(1);
   }
 }
@@ -1818,7 +1866,8 @@ const isMain = (() => {
     const thisFile = realpathSync(fileURLToPath(import.meta.url));
     const entryFile = realpathSync(process.argv[1]);
     return thisFile === entryFile;
-  } catch {
+  } catch (err) {
+    console.error(formatOperationError("resolve CLI entry point path", err));
     return false;
   }
 })();
