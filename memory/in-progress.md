@@ -1,22 +1,26 @@
-# In-Progress: R7 — 反復改善の検証完了、Dogfooding待ち
+# In-Progress: R8 — contextProvider統合によるLLM観測精度改善
 
 ## 背景
-R5-R6完了。R7テスト実装完了。2924テスト全パス（74ファイル）。
+R7完了。テスト4件パス（2924テスト、74ファイル）。commit 385a2fc。
+Dogfooding実施: 5イテレーション完走、Codexタスク実行成功。
 
-## R7で検証したこと（テスト実装済み）
-1. **3+イテレーションの反復改善** (R7-1): 2次元ゴール（code_quality min:0.8, test_coverage min:0.7）で3イテレーション反復改善を検証。LLMスコアが段階的に上昇し、3イテレーション目でthreshold到達→completed。
-2. **StallDetectorによる戦略転換** (R7-2): checkDimensionStallがstallReportを返した場合にstallDetected=true, pivotOccurred=trueが記録されることを検証。StrategyManager.onStallDetectedが呼ばれることを確認。
-3. **LLM観測のmin型スケーリング正確性** (R7-3): LLMスコアがthreshold未満→タスク実行→auto-progress→LLMスコアがthreshold超え→completedのパスを検証。verifyTaskのauto-progress（pass=+0.4）を考慮したテスト設計。
+## R7 Dogfooding結果
+- ループ: 5イテレーション完走（max_iterations）
+- observe→gap→task→execute→verify: 全サイクル正常動作
+- Codex: 毎回タスク実行成功
+- 所要時間: 約9分（5iter）
 
-## 修正したバグ
-1. **MockAdapterのadapterType不一致**: CoreLoopのデフォルトadapterTypeが`openai_codex_cli`に変更されていたが、テストのMockAdapterは`claude_api`で登録。`openai_codex_cli`に修正。
-2. **verifyTaskのauto-progress未考慮**: verifyTask(verdict=pass)はdimension_updatesに+0.4の自動進捗を生成する。R7-3テストでLLMスコア0.75+0.4=1.15→1.0でiter1完了してしまう問題。初期スコアを0.35に修正。
+## 発見したバグ（R8で対処すべき）
+1. **LLM観測のスコアが変化しない**: contextProviderが未設定のため、LLMがワークスペースのファイル内容を読めず、毎回同じスコア（0.6, 0.6, 0.5）を返す
+2. **反復改善が実質機能しない**: Codexがファイルを編集してもLLM観測が変化を検知できない
+3. verifyTaskのauto-progress(+0.4)でcurrent_valueは上がるが、次iterのobserveで元に戻る
 
-## 発見した設計上の知見
-- verifyTask の pass/partial はそれぞれ +0.4/+0.15 の自動進捗更新を dimension_updates に生成する
-- これにより1イテレーションでの大幅な進捗が可能（テスト設計時に考慮が必要）
-- CoreLoopのデフォルトアダプタは `openai_codex_cli` に変更済み
+## R8の方針
+- CoreLoop/CLIRunnerにcontextProviderを設定する仕組みを追加
+- contextProvider: 対象ファイルの内容を読んでLLMに渡す関数
+- `--workspace-dir` CLIオプション or ゴール設定でワークスペースパスを指定
+- これにより「Codexが編集 → 次iterでLLMが変更後の内容を評価」のフィードバックループが成立
 
-## 次のステップ
-1. R7テストをコミット
-2. Dogfooding: ChatGPT/Codex（openai_codex_cli）でMotivaを実際に稼働させ、3+イテレーションの反復改善を実環境で検証
+## 修正済みバグ（R7で発見・修正）
+1. MockAdapterのadapterType不一致（openai_codex_cli）
+2. verifyTaskのauto-progress(+0.4)未考慮のテスト設計
