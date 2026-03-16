@@ -48,6 +48,7 @@ import { TreeLoopOrchestrator } from "./tree-loop-orchestrator.js";
 import { GoalTreeManager } from "./goal-tree-manager.js";
 import { StateAggregator } from "./state-aggregator.js";
 import { GoalDependencyGraph } from "./goal-dependency-graph.js";
+import { MemoryLifecycleManager } from "./memory-lifecycle.js";
 import { DaemonRunner } from "./daemon-runner.js";
 import { PIDManager } from "./pid-manager.js";
 import { Logger } from "./logger.js";
@@ -158,7 +159,12 @@ export class CLIRunner {
     const stallDetector = new StallDetector(stateManager, characterConfig);
     const satisficingJudge = new SatisficingJudge(stateManager);
     const ethicsGate = new EthicsGate(stateManager, llmClient);
-    const sessionManager = new SessionManager(stateManager);
+
+    // Stage 14 — tree mode dependencies (created early so SessionManager can reference goalDependencyGraph)
+    const goalDependencyGraph = new GoalDependencyGraph(stateManager, llmClient);
+
+    // C. Pass goalDependencyGraph to SessionManager so it can resolve cross-goal context
+    const sessionManager = new SessionManager(stateManager, goalDependencyGraph);
     const strategyManager = new StrategyManager(stateManager, llmClient);
     const adapterRegistry = buildAdapterRegistry(llmClient);
 
@@ -174,8 +180,6 @@ export class CLIRunner {
 
     const reportingEngine = new ReportingEngine(stateManager, undefined, characterConfig);
 
-    // Stage 14 — tree mode dependencies
-    const goalDependencyGraph = new GoalDependencyGraph(stateManager, llmClient);
     const goalTreeManager = new GoalTreeManager(
       stateManager, llmClient, ethicsGate, goalDependencyGraph
     );
@@ -183,6 +187,23 @@ export class CLIRunner {
     const treeLoopOrchestrator = new TreeLoopOrchestrator(
       stateManager, goalTreeManager, stateAggregator, satisficingJudge
     );
+
+    // A. MemoryLifecycleManager — wires 3-tier memory model into CoreLoop.
+    // VectorIndex/EmbeddingClient are skipped for MVP (require external embedding service).
+    const motivaBaseDir = path.join(os.homedir(), ".motiva");
+    let memoryLifecycleManager: MemoryLifecycleManager | undefined;
+    try {
+      memoryLifecycleManager = new MemoryLifecycleManager(
+        motivaBaseDir,
+        llmClient,
+        undefined  // use default RetentionConfig
+        // embeddingClient and vectorIndex omitted — MVP uses LLM-only compression
+      );
+      memoryLifecycleManager.initializeDirectories();
+    } catch (err) {
+      console.warn(`[motiva] MemoryLifecycleManager init failed — memory features disabled: ${err instanceof Error ? err.message : String(err)}`);
+      memoryLifecycleManager = undefined;
+    }
 
     // Wrap pure-function modules to satisfy the CoreLoopDeps interface
     const gapCalculator: GapCalculatorModule = {
@@ -196,6 +217,7 @@ export class CLIRunner {
       rankDimensions: DriveScorer.rankDimensions,
     };
 
+    // D. Pass memoryLifecycleManager and goalDependencyGraph to CoreLoop
     const coreLoop = new CoreLoop({
       stateManager,
       observationEngine,
@@ -211,6 +233,8 @@ export class CLIRunner {
       goalTreeManager,
       stateAggregator,
       treeLoopOrchestrator,
+      goalDependencyGraph,
+      memoryLifecycleManager,
       logger,
       contextProvider,
       onProgress,
