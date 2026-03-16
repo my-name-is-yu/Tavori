@@ -10,7 +10,7 @@ export type CapabilityStatus = z.infer<typeof CapabilityStatusEnum>;
 
 // --- Acquisition Context (defined before CapabilitySchema to allow reference) ---
 
-export const AcquisitionMethodEnum = z.enum(["tool_creation", "permission_request", "service_setup"]);
+export const AcquisitionMethodEnum = z.enum(["tool_creation", "permission_request", "service_setup", "data_source_setup"]);
 export type AcquisitionMethod = z.infer<typeof AcquisitionMethodEnum>;
 
 export const AcquisitionContextSchema = z.object({

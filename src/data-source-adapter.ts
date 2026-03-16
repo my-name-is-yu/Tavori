@@ -275,4 +275,11 @@ export class DataSourceRegistry {
   has(id: string): boolean {
     return this.sources.has(id);
   }
+
+  upsert(adapter: IDataSourceAdapter): void {
+    if (this.has(adapter.sourceId)) {
+      this.remove(adapter.sourceId);
+    }
+    this.register(adapter);
+  }
 }

@@ -16,6 +16,7 @@ import type { DriveSystem } from "./drive-system.js";
 import type { AdapterRegistry, IAdapter } from "./adapter-layer.js";
 import type { KnowledgeManager } from "./knowledge-manager.js";
 import type { CapabilityDetector } from "./capability-detector.js";
+import type { CapabilityAcquisitionTask } from "./types/capability.js";
 import type { PortfolioManager } from "./portfolio-manager.js";
 import type { GoalDependencyGraph } from "./goal-dependency-graph.js";
 import type { LearningPipeline } from "./learning-pipeline.js";
@@ -245,6 +246,8 @@ export class CoreLoop {
   private stopped = false;
   private lastLearningReviewAt: number = Date.now();
   private transferCheckCounter: number = 0;
+  /** Tracks consecutive capability acquisition failures per capability name */
+  private capabilityAcquisitionFailures: Map<string, number> = new Map();
 
   constructor(deps: CoreLoopDeps, config?: LoopConfig) {
     this.deps = deps;
@@ -975,6 +978,11 @@ export class CoreLoop {
           : undefined,
       });
 
+      // ─── Handle capability_acquiring: delegate acquisition to agent ───
+      if (taskResult.action === "capability_acquiring" && taskResult.acquisition_task) {
+        await this.handleCapabilityAcquisition(taskResult.acquisition_task, goalId, adapter);
+      }
+
       // Portfolio: record task completion for the strategy that generated this task
       if (this.deps.portfolioManager && taskResult.action === "completed" && taskResult.task.strategy_id) {
         try {
@@ -1171,6 +1179,146 @@ export class CoreLoop {
     if (remainingDays <= 30) return 72 * 3600 * 1000;     // 短期: 72h
     if (remainingDays <= 180) return 168 * 3600 * 1000;   // 中期: 1week
     return 336 * 3600 * 1000;                              // 長期: 2weeks
+  }
+
+  // ─── Capability Acquisition Handler ───
+
+  /**
+   * Handles the "capability_acquiring" action from TaskLifecycle.
+   * Delegates acquisition to an adapter, verifies the result, and registers
+   * the capability on success. Retries up to 3 times before escalating.
+   */
+  private async handleCapabilityAcquisition(
+    acquisitionTask: CapabilityAcquisitionTask,
+    goalId: string,
+    adapter: IAdapter
+  ): Promise<void> {
+    const capabilityDetector = this.deps.capabilityDetector;
+    if (!capabilityDetector) {
+      this.logger?.warn("CoreLoop: capability_acquiring action received but no capabilityDetector configured — skipping");
+      return;
+    }
+
+    const capName = acquisitionTask.gap.missing_capability.name;
+    const capType = acquisitionTask.gap.missing_capability.type;
+
+    this.logger?.info("CoreLoop: handling capability acquisition", { capName, capType, method: acquisitionTask.method });
+
+    // Build prompt from the acquisition task
+    const prompt =
+      `Capability Acquisition Task\n` +
+      `Method: ${acquisitionTask.method}\n` +
+      `Description: ${acquisitionTask.task_description}\n` +
+      `Success criteria: ${acquisitionTask.success_criteria.join("; ")}\n\n` +
+      `Instructions: Please acquire or set up the capability "${capName}" (${capType}). ` +
+      `Follow the method "${acquisitionTask.method}" and ensure the success criteria are met.`;
+
+    // Execute via adapter
+    let agentResult;
+    try {
+      agentResult = await adapter.execute({ prompt, timeout_ms: 120000, adapter_type: adapter.adapterType });
+    } catch (err) {
+      this.logger?.error("CoreLoop: adapter execution failed during capability acquisition", {
+        capName,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      await this.recordCapabilityFailure(capabilityDetector, acquisitionTask, goalId);
+      return;
+    }
+
+    // Build a Capability object for verification
+    const capability = {
+      id: capName.toLowerCase().replace(/\s+/g, "_"),
+      name: capName,
+      description: acquisitionTask.task_description,
+      type: capType,
+      status: "acquiring" as const,
+    };
+
+    // Verify the acquired capability
+    let verificationResult;
+    try {
+      verificationResult = await capabilityDetector.verifyAcquiredCapability(
+        capability,
+        acquisitionTask,
+        agentResult
+      );
+    } catch (err) {
+      this.logger?.error("CoreLoop: capability verification threw an error", {
+        capName,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      await this.recordCapabilityFailure(capabilityDetector, acquisitionTask, goalId);
+      return;
+    }
+
+    if (verificationResult === "pass") {
+      // Success: register capability and set status to available
+      this.capabilityAcquisitionFailures.delete(capName);
+      try {
+        await capabilityDetector.registerCapability(capability, {
+          goal_id: goalId,
+          originating_task_id: acquisitionTask.gap.related_task_id,
+          acquired_at: new Date().toISOString(),
+        });
+        await capabilityDetector.setCapabilityStatus(capName, capType, "available");
+        this.logger?.info("CoreLoop: capability acquired and registered successfully", { capName });
+      } catch (err) {
+        this.logger?.error("CoreLoop: failed to register capability after verification pass", {
+          capName,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    } else if (verificationResult === "escalate") {
+      // Max verification attempts reached — escalate immediately
+      this.capabilityAcquisitionFailures.delete(capName);
+      await this.escalateCapability(capabilityDetector, acquisitionTask, goalId);
+    } else {
+      // "fail" — record failure and check threshold
+      await this.recordCapabilityFailure(capabilityDetector, acquisitionTask, goalId);
+    }
+  }
+
+  /**
+   * Records a capability acquisition failure and escalates after 3 consecutive failures.
+   */
+  private async recordCapabilityFailure(
+    capabilityDetector: CapabilityDetector,
+    acquisitionTask: CapabilityAcquisitionTask,
+    goalId: string
+  ): Promise<void> {
+    const capName = acquisitionTask.gap.missing_capability.name;
+    const currentCount = (this.capabilityAcquisitionFailures.get(capName) ?? 0) + 1;
+    this.capabilityAcquisitionFailures.set(capName, currentCount);
+
+    this.logger?.warn("CoreLoop: capability acquisition failed", { capName, failureCount: currentCount });
+
+    if (currentCount >= 3) {
+      await this.escalateCapability(capabilityDetector, acquisitionTask, goalId);
+    }
+  }
+
+  /**
+   * Escalates a capability acquisition failure to the user and marks status as verification_failed.
+   */
+  private async escalateCapability(
+    capabilityDetector: CapabilityDetector,
+    acquisitionTask: CapabilityAcquisitionTask,
+    goalId: string
+  ): Promise<void> {
+    const capName = acquisitionTask.gap.missing_capability.name;
+    const capType = acquisitionTask.gap.missing_capability.type;
+
+    this.logger?.warn("CoreLoop: escalating capability acquisition to user", { capName });
+    try {
+      await capabilityDetector.escalateToUser(acquisitionTask.gap, goalId);
+      await capabilityDetector.setCapabilityStatus(capName, capType, "verification_failed");
+    } catch (err) {
+      this.logger?.error("CoreLoop: escalation failed", {
+        capName,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   private tryGenerateReport(

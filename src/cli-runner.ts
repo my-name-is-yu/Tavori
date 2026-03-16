@@ -15,6 +15,8 @@
 //   motiva stop                       Stop the running daemon
 //   motiva cron --goal <id>           Print crontab entry for a goal
 //   motiva cleanup                    Archive all completed goals and remove stale data
+//   motiva capability list            List all registered capabilities
+//   motiva capability remove <name>   Remove a capability by name
 
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -53,6 +55,7 @@ import { DaemonRunner } from "./daemon-runner.js";
 import { PIDManager } from "./pid-manager.js";
 import { Logger } from "./logger.js";
 import { CharacterConfigManager } from "./character-config.js";
+import { CapabilityDetector } from "./capability-detector.js";
 import * as GapCalculator from "./gap-calculator.js";
 import * as DriveScorer from "./drive-scorer.js";
 import type { GapCalculatorModule, DriveScorerModule, LoopConfig } from "./core-loop.js";
@@ -1142,6 +1145,64 @@ export class CLIRunner {
     return 0;
   }
 
+  // ─── Capability subcommands ───
+
+  private async cmdCapabilityList(): Promise<number> {
+    const llmClient = buildLLMClient();
+    const reportingEngine = new ReportingEngine(this.stateManager);
+    const capabilityDetector = new CapabilityDetector(this.stateManager, llmClient, reportingEngine);
+
+    let registry;
+    try {
+      registry = await capabilityDetector.loadRegistry();
+    } catch (err) {
+      console.error(formatOperationError("load capability registry", err));
+      return 1;
+    }
+
+    if (registry.capabilities.length === 0) {
+      console.log("No capabilities registered. Capabilities are registered automatically during goal execution.");
+      return 0;
+    }
+
+    console.log(`Found ${registry.capabilities.length} capability(ies):\n`);
+    console.log("NAME                         TYPE        STATUS               ACQUISITION_METHOD");
+    console.log("─".repeat(80));
+
+    for (const cap of registry.capabilities) {
+      const name = cap.name.padEnd(28);
+      const type = cap.type.padEnd(11);
+      const status = cap.status.padEnd(20);
+      const method = cap.acquisition_context !== undefined
+        ? "(acquired)"
+        : "(manual)";
+      console.log(`${name} ${type} ${status} ${method}`);
+    }
+
+    return 0;
+  }
+
+  private async cmdCapabilityRemove(argv: string[]): Promise<number> {
+    const name = argv[0];
+    if (!name) {
+      console.error("Error: name is required. Usage: motiva capability remove <name>");
+      return 1;
+    }
+
+    const llmClient = buildLLMClient();
+    const reportingEngine = new ReportingEngine(this.stateManager);
+    const capabilityDetector = new CapabilityDetector(this.stateManager, llmClient, reportingEngine);
+
+    try {
+      await capabilityDetector.removeCapability(name);
+      console.log(`Capability "${name}" removed.`);
+      return 0;
+    } catch (err) {
+      console.error(formatOperationError(`remove capability "${name}"`, err));
+      return 1;
+    }
+  }
+
   private async cmdDatasourceRemove(argv: string[]): Promise<number> {
     const id = argv[0];
     if (!id) {
@@ -1721,6 +1782,27 @@ Options:
       return 1;
     }
 
+    if (subcommand === "capability") {
+      const capSubcommand = argv[1];
+
+      if (!capSubcommand) {
+        console.error("Error: capability subcommand required. Available: capability list, capability remove");
+        return 1;
+      }
+
+      if (capSubcommand === "list") {
+        return await this.cmdCapabilityList();
+      }
+
+      if (capSubcommand === "remove") {
+        return await this.cmdCapabilityRemove(argv.slice(2));
+      }
+
+      console.error(`Unknown capability subcommand: "${capSubcommand}"`);
+      console.error("Available: capability list, capability remove");
+      return 1;
+    }
+
     if (subcommand === "cleanup") {
       return this.cmdCleanup();
     }
@@ -1799,6 +1881,8 @@ Usage:
   motiva datasource add <type>        Register a new data source (file | http_api)
   motiva datasource list              List all registered data sources
   motiva datasource remove <id>       Remove a data source by ID
+  motiva capability list              List all registered capabilities
+  motiva capability remove <name>     Remove a capability by name
   motiva provider show                Show current provider config
   motiva provider set                 Set LLM provider and/or default adapter
 

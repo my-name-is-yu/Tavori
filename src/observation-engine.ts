@@ -62,7 +62,7 @@ const LLMObservationResponseSchema = z.object({
  */
 export class ObservationEngine {
   private readonly stateManager: StateManager;
-  private readonly dataSources: IDataSourceAdapter[];
+  private dataSources: IDataSourceAdapter[];
   private readonly llmClient?: ILLMClient;
   private readonly contextProvider?: (goalId: string, dimensionName: string) => Promise<string>;
 
@@ -653,6 +653,27 @@ export class ObservationEngine {
    */
   getDataSources(): IDataSourceAdapter[] {
     return this.dataSources;
+  }
+
+  /**
+   * Dynamically add a data source adapter at runtime.
+   * The adapter becomes immediately available for subsequent observe() calls.
+   */
+  addDataSource(adapter: IDataSourceAdapter): void {
+    this.dataSources.push(adapter);
+  }
+
+  /**
+   * Dynamically remove a data source adapter at runtime.
+   * Returns true if the adapter was found and removed, false otherwise.
+   */
+  removeDataSource(sourceId: string): boolean {
+    const index = this.dataSources.findIndex((ds) => ds.sourceId === sourceId);
+    if (index === -1) {
+      return false;
+    }
+    this.dataSources.splice(index, 1);
+    return true;
   }
 
   /**
