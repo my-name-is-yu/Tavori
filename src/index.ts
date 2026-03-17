@@ -122,3 +122,17 @@ export { CrossGoalPortfolio } from "./strategy/cross-goal-portfolio.js";
 export { StrategyTemplateRegistry } from "./strategy/strategy-template-registry.js";
 export { LearningPipeline } from "./knowledge/learning-pipeline.js";
 export { KnowledgeTransfer } from "./knowledge/knowledge-transfer.js";
+
+// --- Plugin architecture (M12) ---
+export { NotifierRegistry } from "./runtime/notifier-registry.js";
+export { PluginLoader } from "./runtime/plugin-loader.js";
+export type {
+  ConfigField,
+  PluginManifest,
+  PluginState,
+  PluginType,
+  NotificationEventType,
+  NotificationEvent,
+  INotifier,
+} from "./types/plugin.js";
+export { ConfigFieldSchema, PluginManifestSchema, PluginStateSchema } from "./types/plugin.js";
