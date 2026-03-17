@@ -1,5 +1,3 @@
-import { randomUUID } from "node:crypto";
-import { z } from "zod";
 import type { StateManager } from "../state-manager.js";
 import type { ILLMClient } from "../llm/llm-client.js";
 import type { EthicsGate } from "./ethics-gate.js";
@@ -25,6 +23,29 @@ import type {
   CuriosityConfig,
   LearningRecord,
 } from "../types/curiosity.js";
+import {
+  buildProposalPrompt,
+  computeProposalHash,
+  isInRejectionCooldown,
+  generateProposals as generateProposalsImpl,
+} from "./curiosity-proposals.js";
+import {
+  detectSemanticTransfer as detectSemanticTransferImpl,
+  detectKnowledgeTransferOpportunities as detectKnowledgeTransferOpportunitiesImpl,
+} from "./curiosity-transfer.js";
+
+// ─── Re-exports for backward compatibility ───
+
+export {
+  buildProposalPrompt,
+  computeProposalHash,
+  isInRejectionCooldown,
+} from "./curiosity-proposals.js";
+
+export {
+  detectSemanticTransfer as detectSemanticTransferFn,
+  detectKnowledgeTransferOpportunities as detectKnowledgeTransferOpportunitiesFn,
+} from "./curiosity-transfer.js";
 
 // ─── Constants ───
 
@@ -44,35 +65,6 @@ export interface CuriosityEngineDeps {
   knowledgeTransfer?: KnowledgeTransfer;  // Stage 14F: cross-goal transfer detection
   config?: Partial<CuriosityConfig>;
 }
-
-// ─── LLM Proposal Schema (for parsing LLM output) ───
-
-const LLMProposalItemSchema = z.object({
-  description: z.string(),
-  rationale: z.string(),
-  suggested_dimensions: z
-    .array(
-      z.object({
-        name: z.string(),
-        threshold_type: z.string(),
-        target: z.number(),
-      })
-    )
-    .default([]),
-  scope_domain: z.string(),
-  detection_method: z
-    .enum([
-      "observation_log",
-      "stall_pattern",
-      "cross_goal_transfer",
-      "llm_heuristic",
-      "periodic_review",
-      "embedding_similarity",
-    ])
-    .default("llm_heuristic"),
-});
-
-const LLMProposalsResponseSchema = z.array(LLMProposalItemSchema);
 
 // ─── CuriosityEngine ───
 
@@ -331,83 +323,6 @@ export class CuriosityEngine {
     return null;
   }
 
-  // ─── LLM Prompt Building ───
-
-  private buildProposalPrompt(
-    trigger: CuriosityTrigger,
-    goals: Goal[],
-    learningRecords: LearningRecord[]
-  ): string {
-    const activeGoalsSummary = goals
-      .filter((g) => g.status === "active" || g.status === "waiting")
-      .map((g) => {
-        const dimNames = g.dimensions.map((d) => d.name).join(", ");
-        return `- Goal "${g.id}" (${g.title}): dimensions=[${dimNames}], origin=${g.origin ?? "user"}`;
-      })
-      .join("\n");
-
-    const recentLearning = learningRecords
-      .slice(-10) // last 10 records
-      .map(
-        (r) =>
-          `- Goal ${r.goal_id}, dim "${r.dimension_name}", approach "${r.approach}": ${r.outcome} (improvement_ratio=${r.improvement_ratio.toFixed(2)})`
-      )
-      .join("\n");
-
-    return `You are Motiva, an AI agent orchestrator analyzing curiosity triggers to propose new exploration goals.
-
-## Current Trigger
-Type: ${trigger.type}
-Details: ${trigger.details}
-Severity: ${trigger.severity}
-${trigger.source_goal_id ? `Source goal: ${trigger.source_goal_id}` : ""}
-
-## Active Goals
-${activeGoalsSummary || "(none)"}
-
-## Recent Learning Records
-${recentLearning || "(none)"}
-
-## Task
-Based on the trigger and learning history, propose 1-3 curiosity goals that:
-1. Are grounded in the trigger and learning evidence (not generic advice)
-2. Are directly related to the user's current goal domains or 1-step adjacent
-3. Have clear rationale based on observed patterns
-
-Return a JSON array of proposal objects. Each object must have:
-- description: string — what to explore (specific, actionable)
-- rationale: string — why this is worth exploring (cite the trigger/learning evidence)
-- suggested_dimensions: array of { name: string, threshold_type: string, target: number }
-- scope_domain: string — domain this exploration belongs to
-- detection_method: one of "observation_log" | "stall_pattern" | "cross_goal_transfer" | "llm_heuristic" | "periodic_review"
-
-Return only valid JSON array, no markdown, no explanation outside the JSON.`;
-  }
-
-  // ─── Proposal Hash (for rejection cooldown dedup) ───
-
-  /**
-   * Compute a simple hash for a proposal description to track rejected proposals.
-   * Uses a normalized lowercase version of the first 100 chars.
-   */
-  private computeProposalHash(description: string): string {
-    const normalized = description.toLowerCase().trim().slice(0, 100);
-    // Simple djb2-style hash as a hex string
-    let hash = 5381;
-    for (let i = 0; i < normalized.length; i++) {
-      hash = (hash * 33) ^ normalized.charCodeAt(i);
-    }
-    return (hash >>> 0).toString(16);
-  }
-
-  /**
-   * Check if a proposal description is currently in rejection cooldown.
-   */
-  private isInRejectionCooldown(description: string): boolean {
-    const hash = this.computeProposalHash(description);
-    return this.state.rejected_proposal_hashes.includes(hash);
-  }
-
   // ─── Public API ───
 
   /**
@@ -450,205 +365,21 @@ Return only valid JSON array, no markdown, no explanation outside the JSON.`;
     triggers: CuriosityTrigger[],
     goals: Goal[]
   ): Promise<CuriosityProposal[]> {
-    if (!this.config.enabled || triggers.length === 0) return [];
-
-    // Check capacity
     const activeProposals = this.getActiveProposals();
-    if (activeProposals.length >= this.config.max_active_proposals) {
-      return [];
-    }
 
-    const newProposals: CuriosityProposal[] = [];
-    const now = new Date();
-    const expiresAt = new Date(
-      now.getTime() + this.config.proposal_expiry_hours * 60 * 60 * 1000
+    const newProposals = await generateProposalsImpl(
+      triggers,
+      goals,
+      this.state,
+      activeProposals.length,
+      {
+        llmClient: this.llmClient,
+        ethicsGate: this.ethicsGate,
+        vectorIndex: this.vectorIndex,
+        knowledgeTransfer: this.knowledgeTransfer,
+        config: this.config,
+      }
     );
-
-    // Update last_exploration_at for periodic triggers
-    const hasPeriodicTrigger = triggers.some(
-      (t) => t.type === "periodic_exploration"
-    );
-    if (hasPeriodicTrigger) {
-      this.state.last_exploration_at = now.toISOString();
-    }
-
-    // Process each trigger (stop when at capacity)
-    for (const trigger of triggers) {
-      if (
-        activeProposals.length + newProposals.length >=
-        this.config.max_active_proposals
-      ) {
-        break;
-      }
-
-      type LLMProposalItem = {
-        description: string;
-        rationale: string;
-        suggested_dimensions: Array<{ name: string; threshold_type: string; target: number }>;
-        scope_domain: string;
-        detection_method: "observation_log" | "stall_pattern" | "cross_goal_transfer" | "llm_heuristic" | "periodic_review" | "embedding_similarity";
-      };
-      let llmItems: LLMProposalItem[] = [];
-
-      try {
-        const prompt = this.buildProposalPrompt(
-          trigger,
-          goals,
-          this.state.learning_records
-        );
-        const response = await this.llmClient.sendMessage(
-          [{ role: "user", content: prompt }],
-          { temperature: 0.3 }
-        );
-        llmItems = this.llmClient.parseJSON(
-          response.content,
-          LLMProposalsResponseSchema
-        ) as LLMProposalItem[];
-      } catch (err) {
-        // Don't throw on LLM failure — return what we have so far
-        console.warn(
-          `CuriosityEngine: LLM proposal generation failed for trigger "${trigger.type}": ${err}`
-        );
-        continue;
-      }
-
-      for (const item of llmItems) {
-        if (
-          activeProposals.length + newProposals.length >=
-          this.config.max_active_proposals
-        ) {
-          break;
-        }
-
-        // Skip if in rejection cooldown
-        if (this.isInRejectionCooldown(item.description)) {
-          continue;
-        }
-
-        // Run ethics check
-        const proposalId = randomUUID();
-        let ethicsVerdict: { verdict: string } = { verdict: "pass" };
-        try {
-          ethicsVerdict = await this.ethicsGate.check(
-            "goal",
-            proposalId,
-            item.description,
-            `Curiosity proposal triggered by: ${trigger.type}`
-          );
-        } catch (err) {
-          // On ethics check failure, skip this proposal (conservative)
-          console.warn(
-            `CuriosityEngine: ethics check failed for proposal "${item.description.slice(0, 60)}": ${err}`
-          );
-          continue;
-        }
-
-        if (ethicsVerdict.verdict === "reject") {
-          continue;
-        }
-
-        // Phase 2: use embedding_similarity detection method when vectorIndex
-        // is available and the trigger is undefined_problem
-        const detectionMethod =
-          this.vectorIndex && trigger.type === "undefined_problem"
-            ? "embedding_similarity"
-            : item.detection_method;
-
-        const proposal = CuriosityProposalSchema.parse({
-          id: proposalId,
-          trigger,
-          proposed_goal: {
-            description: item.description,
-            rationale: item.rationale,
-            suggested_dimensions: item.suggested_dimensions,
-            scope_domain: item.scope_domain,
-            detection_method: detectionMethod,
-          },
-          status: "pending",
-          created_at: now.toISOString(),
-          expires_at: expiresAt.toISOString(),
-          reviewed_at: null,
-          rejection_cooldown_until: null,
-          loop_count: 0,
-          goal_id: null,
-        });
-
-        newProposals.push(proposal);
-        this.state.proposals.push(proposal);
-      }
-    }
-
-    // ─── Stage 14F: Transfer-based curiosity proposals ───
-    // If knowledgeTransfer is available, detect cross-goal transfer opportunities
-    // and add them as curiosity proposals (suggestion-only, Phase 1).
-    if (this.knowledgeTransfer && goals.length > 0) {
-      const activeGoals = goals.filter((g) => g.status === "active");
-      for (const goal of activeGoals) {
-        if (
-          activeProposals.length + newProposals.length >=
-          this.config.max_active_proposals
-        ) {
-          break;
-        }
-
-        try {
-          const transferCandidates =
-            await this.knowledgeTransfer.detectTransferOpportunities(goal.id);
-
-          for (const candidate of transferCandidates) {
-            if (
-              activeProposals.length + newProposals.length >=
-              this.config.max_active_proposals
-            ) {
-              break;
-            }
-
-            const description = `Apply pattern from goal ${candidate.source_goal_id} to goal ${candidate.target_goal_id}: ${candidate.estimated_benefit}`;
-
-            // Skip if in rejection cooldown
-            if (this.isInRejectionCooldown(description)) {
-              continue;
-            }
-
-            // Create a synthetic trigger for the transfer-based proposal.
-            // Uses "periodic_exploration" type as the closest match for
-            // cross-goal opportunity discovery (no dedicated transfer type exists).
-            const transferTrigger = CuriosityTriggerSchema.parse({
-              type: "periodic_exploration",
-              detected_at: now.toISOString(),
-              source_goal_id: candidate.source_goal_id,
-              details: `Cross-goal transfer candidate (similarity=${candidate.similarity_score.toFixed(2)}): ${candidate.estimated_benefit}`,
-              severity: candidate.similarity_score,
-            });
-
-            const proposalId = randomUUID();
-            const proposal = CuriosityProposalSchema.parse({
-              id: proposalId,
-              trigger: transferTrigger,
-              proposed_goal: {
-                description,
-                rationale: `Cross-goal knowledge transfer opportunity detected (similarity=${candidate.similarity_score.toFixed(2)}). ${candidate.estimated_benefit}`,
-                suggested_dimensions: [],
-                scope_domain: goal.id,
-                detection_method: "cross_goal_transfer",
-              },
-              status: "pending",
-              created_at: now.toISOString(),
-              expires_at: expiresAt.toISOString(),
-              reviewed_at: null,
-              rejection_cooldown_until: null,
-              loop_count: 0,
-              goal_id: null,
-            });
-
-            newProposals.push(proposal);
-            this.state.proposals.push(proposal);
-          }
-        } catch {
-          // Non-fatal: transfer detection failure should not block curiosity generation
-        }
-      }
-    }
 
     this.saveState();
     return newProposals;
@@ -722,9 +453,7 @@ Return only valid JSON array, no markdown, no explanation outside the JSON.`;
     this.state.proposals[index] = updated;
 
     // Track hash for cooldown deduplication
-    const hash = this.computeProposalHash(
-      proposal.proposed_goal.description
-    );
+    const hash = computeProposalHash(proposal.proposed_goal.description);
     if (!this.state.rejected_proposal_hashes.includes(hash)) {
       this.state.rejected_proposal_hashes.push(hash);
     }
@@ -879,25 +608,9 @@ Return only valid JSON array, no markdown, no explanation outside the JSON.`;
     goalId: string,
     dimensions: string[]
   ): Promise<Array<{ source_goal_id: string; dimension: string; similarity: number }>> {
-    if (!this.vectorIndex) return [];
-
-    const transfers: Array<{ source_goal_id: string; dimension: string; similarity: number }> = [];
-
-    for (const dim of dimensions) {
-      const results = await this.vectorIndex.search(dim, 5, 0.7);
-      for (const result of results) {
-        const sourceGoalId = result.metadata.goal_id as string;
-        if (sourceGoalId && sourceGoalId !== goalId) {
-          transfers.push({
-            source_goal_id: sourceGoalId,
-            dimension: dim,
-            similarity: result.similarity,
-          });
-        }
-      }
-    }
-
-    return transfers;
+    return detectSemanticTransferImpl(goalId, dimensions, {
+      vectorIndex: this.vectorIndex,
+    });
   }
 
   // ─── Stage 14F: KnowledgeTransfer Integration ───
@@ -913,21 +626,9 @@ Return only valid JSON array, no markdown, no explanation outside the JSON.`;
   async detectKnowledgeTransferOpportunities(
     goals: Goal[]
   ): Promise<TransferCandidate[]> {
-    if (!this.knowledgeTransfer) return [];
-
-    const activeGoals = goals.filter((g) => g.status === "active");
-    const allCandidates: TransferCandidate[] = [];
-
-    for (const goal of activeGoals) {
-      try {
-        const candidates = await this.knowledgeTransfer.detectTransferOpportunities(goal.id);
-        allCandidates.push(...candidates);
-      } catch {
-        // non-fatal: transfer detection failure should not block curiosity loop
-      }
-    }
-
-    return allCandidates;
+    return detectKnowledgeTransferOpportunitiesImpl(goals, {
+      knowledgeTransfer: this.knowledgeTransfer,
+    });
   }
 
   /**

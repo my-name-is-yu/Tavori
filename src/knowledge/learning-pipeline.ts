@@ -11,9 +11,6 @@ import {
   FeedbackEntrySchema,
   FeedbackTargetStepEnum,
   LearningPipelineConfigSchema,
-  StructuralFeedbackSchema,
-  StructuralFeedbackTypeEnum,
-  CrossGoalPatternSchema,
 } from "../types/learning.js";
 import type {
   LearningTrigger,
@@ -29,6 +26,16 @@ import type {
   PatternSharingResult,
 } from "../types/learning.js";
 import type { StallReport } from "../types/stall.js";
+import {
+  getStructuralFeedback,
+  recordStructuralFeedback,
+  aggregateFeedback,
+  autoTuneParameters,
+} from "./learning-feedback.js";
+import {
+  extractCrossGoalPatterns,
+  sharePatternsAcrossGoals,
+} from "./learning-cross-goal.js";
 
 // ─── LLM Response Schemas ───
 
@@ -591,19 +598,15 @@ export class LearningPipeline {
     this.stateManager.writeRaw(`learning/${goalId}_feedback.json`, entries);
   }
 
-  // ─── Structural Feedback (Phase 2) ───
+  // ─── Structural Feedback (thin wrappers over learning-feedback.ts) ───
 
   /**
    * Record a structural feedback entry for a goal/iteration.
-   * Validates with Zod and persists via StateManager.
    */
   recordStructuralFeedback(feedback: StructuralFeedback): void {
-    const validated = StructuralFeedbackSchema.parse(feedback);
-    const existing = this.getStructuralFeedback(validated.goalId);
-    existing.push(validated);
-    this.stateManager.writeRaw(
-      `learning/${validated.goalId}_structural_feedback.json`,
-      existing
+    recordStructuralFeedback(
+      { stateManager: this.stateManager, config: this.config },
+      feedback
     );
   }
 
@@ -611,422 +614,79 @@ export class LearningPipeline {
    * Load structural feedback for a goal.
    */
   getStructuralFeedback(goalId: string): StructuralFeedback[] {
-    const raw = this.stateManager.readRaw(
-      `learning/${goalId}_structural_feedback.json`
+    return getStructuralFeedback(
+      { stateManager: this.stateManager, config: this.config },
+      goalId
     );
-    if (!raw || !Array.isArray(raw)) return [];
-    try {
-      return (raw as unknown[]).map((item) =>
-        StructuralFeedbackSchema.parse(item)
-      );
-    } catch {
-      return [];
-    }
   }
 
   /**
    * Aggregate structural feedback for a goal, optionally filtered by type.
-   * Calculates averageDelta, recent trend (last 10 vs previous 10), and worst area.
    */
   aggregateFeedback(
     goalId: string,
     feedbackType?: StructuralFeedbackType
   ): FeedbackAggregation[] {
-    const all = this.getStructuralFeedback(goalId);
-    const types: StructuralFeedbackType[] = feedbackType
-      ? [feedbackType]
-      : (StructuralFeedbackTypeEnum.options as StructuralFeedbackType[]);
-
-    const results: FeedbackAggregation[] = [];
-
-    for (const type of types) {
-      const entries = all.filter((f) => f.feedbackType === type);
-      if (entries.length === 0) continue;
-
-      const totalCount = entries.length;
-      const averageDelta =
-        entries.reduce((sum, e) => sum + e.delta, 0) / totalCount;
-
-      // Sort by timestamp for trend calculation
-      const sorted = [...entries].sort(
-        (a, b) =>
-          new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
-      );
-
-      // Compare last 10 vs previous 10
-      const recent = sorted.slice(-10);
-      const previous = sorted.slice(-20, -10);
-
-      let recentTrend: FeedbackAggregation["recentTrend"] = "stable";
-      if (previous.length > 0 && recent.length > 0) {
-        const recentAvg =
-          recent.reduce((sum, e) => sum + e.delta, 0) / recent.length;
-        const prevAvg =
-          previous.reduce((sum, e) => sum + e.delta, 0) / previous.length;
-        const diff = recentAvg - prevAvg;
-        if (diff > 0.05) {
-          recentTrend = "improving";
-        } else if (diff < -0.05) {
-          recentTrend = "degrading";
-        }
-      }
-
-      // Worst area: find the context key or dimension with lowest average delta
-      const areaDeltas = new Map<string, number[]>();
-      for (const entry of entries) {
-        // Use context keys as area identifiers; fall back to iterationId
-        const areaKeys = Object.keys(entry.context);
-        if (areaKeys.length > 0) {
-          for (const key of areaKeys) {
-            const existing = areaDeltas.get(key) ?? [];
-            existing.push(entry.delta);
-            areaDeltas.set(key, existing);
-          }
-        } else {
-          const existing = areaDeltas.get(entry.iterationId) ?? [];
-          existing.push(entry.delta);
-          areaDeltas.set(entry.iterationId, existing);
-        }
-      }
-
-      let worstArea = "unknown";
-      let worstAvg = Infinity;
-      for (const [area, deltas] of areaDeltas) {
-        const avg = deltas.reduce((s, d) => s + d, 0) / deltas.length;
-        if (avg < worstAvg) {
-          worstAvg = avg;
-          worstArea = area;
-        }
-      }
-
-      results.push({
-        feedbackType: type,
-        totalCount,
-        averageDelta,
-        recentTrend,
-        worstArea,
-      });
-    }
-
-    return results;
+    return aggregateFeedback(
+      { stateManager: this.stateManager, config: this.config },
+      goalId,
+      feedbackType
+    );
   }
 
   /**
    * Analyze feedback history and suggest parameter adjustments.
-   * Only suggests when basedOnFeedbackCount >= 5 and confidence >= 0.6.
    */
   autoTuneParameters(goalId: string): ParameterTuning[] {
-    const all = this.getStructuralFeedback(goalId);
-    const suggestions: ParameterTuning[] = [];
-
-    const typeGroups = new Map<StructuralFeedbackType, StructuralFeedback[]>();
-    for (const entry of all) {
-      const existing = typeGroups.get(entry.feedbackType) ?? [];
-      existing.push(entry);
-      typeGroups.set(entry.feedbackType, existing);
-    }
-
-    for (const [type, entries] of typeGroups) {
-      if (entries.length < 5) continue;
-
-      const avgDelta =
-        entries.reduce((sum, e) => sum + e.delta, 0) / entries.length;
-
-      // Confidence based on consistency: proportion with same sign as average
-      const sameSign = entries.filter((e) =>
-        avgDelta >= 0 ? e.delta >= 0 : e.delta < 0
-      ).length;
-      const confidence = sameSign / entries.length;
-
-      if (confidence < 0.6) continue;
-
-      switch (type) {
-        case "observation_accuracy": {
-          // Suggest confidence threshold adjustment
-          // Negative avgDelta = observations were overconfident → raise threshold
-          // Positive avgDelta = observations were too conservative → lower threshold
-          const currentValue = this.config.min_confidence_threshold;
-          const adjustment = avgDelta < 0 ? 0.05 : -0.05;
-          const suggestedValue = Math.min(
-            1,
-            Math.max(0, currentValue + adjustment)
-          );
-          suggestions.push({
-            parameterId: `param_confidence_threshold_${goalId}`,
-            parameterName: "min_confidence_threshold",
-            currentValue,
-            suggestedValue,
-            confidence,
-            basedOnFeedbackCount: entries.length,
-            feedbackType: type,
-          });
-          break;
-        }
-        case "strategy_selection": {
-          // Suggest strategy weight change
-          // Negative avgDelta = strategies underperformed → increase exploration weight
-          // Positive avgDelta = strategies performed well → increase exploitation weight
-          const currentValue = 0.5; // default strategy weight
-          const suggestedValue = avgDelta < 0 ? 0.3 : 0.7;
-          suggestions.push({
-            parameterId: `param_strategy_weight_${goalId}`,
-            parameterName: "strategy_exploitation_weight",
-            currentValue,
-            suggestedValue,
-            confidence,
-            basedOnFeedbackCount: entries.length,
-            feedbackType: type,
-          });
-          break;
-        }
-        case "scope_sizing": {
-          // Suggest task granularity change
-          // Negative avgDelta = tasks were too large → reduce granularity
-          // Positive avgDelta = tasks were appropriately sized → maintain or increase
-          const currentValue = 1.0; // default granularity multiplier
-          const suggestedValue = avgDelta < 0 ? 0.7 : 1.2;
-          suggestions.push({
-            parameterId: `param_task_granularity_${goalId}`,
-            parameterName: "task_granularity_multiplier",
-            currentValue,
-            suggestedValue,
-            confidence,
-            basedOnFeedbackCount: entries.length,
-            feedbackType: type,
-          });
-          break;
-        }
-        case "task_generation": {
-          // Suggest prompt/template change weight
-          // Negative avgDelta = templates were ineffective → suggest template refresh
-          // Positive avgDelta = templates were effective → reinforce current template
-          const currentValue = 0.5; // default template reuse weight
-          const suggestedValue = avgDelta < 0 ? 0.2 : 0.8;
-          suggestions.push({
-            parameterId: `param_template_reuse_${goalId}`,
-            parameterName: "task_template_reuse_weight",
-            currentValue,
-            suggestedValue,
-            confidence,
-            basedOnFeedbackCount: entries.length,
-            feedbackType: type,
-          });
-          break;
-        }
-      }
-    }
-
-    return suggestions;
+    return autoTuneParameters(
+      { stateManager: this.stateManager, config: this.config },
+      goalId
+    );
   }
 
-  // ─── Cross-Goal Pattern Extraction ───
+  // ─── Cross-Goal Pattern Methods (thin wrappers over learning-cross-goal.ts) ───
 
   /**
    * Extract cross-goal patterns by analyzing structural feedback across multiple goals.
-   * A pattern is identified when the same feedbackType appears with similar delta values
-   * (within ±0.2) across 2 or more goals.
    */
   extractCrossGoalPatterns(goalIds: string[]): CrossGoalPattern[] {
-    if (goalIds.length < 2) {
-      return [];
-    }
-
-    // Collect all structural feedback grouped by feedbackType
-    const byType = new Map<
-      StructuralFeedbackType,
-      Array<{ goalId: string; feedback: StructuralFeedback }>
-    >();
-
-    for (const goalId of goalIds) {
-      const feedbacks = this.getStructuralFeedback(goalId);
-      for (const fb of feedbacks) {
-        const existing = byType.get(fb.feedbackType) ?? [];
-        existing.push({ goalId, feedback: fb });
-        byType.set(fb.feedbackType, existing);
-      }
-    }
-
-    const patterns: CrossGoalPattern[] = [];
-    const now = new Date().toISOString();
-
-    for (const [feedbackType, entries] of byType) {
-      if (entries.length < 2) continue;
-
-      // Group entries by similar delta values (within ±0.2)
-      const clustered: Array<{
-        representative: number;
-        members: Array<{ goalId: string; feedback: StructuralFeedback }>;
-      }> = [];
-
-      for (const entry of entries) {
-        const delta = entry.feedback.delta;
-        let placed = false;
-        for (const cluster of clustered) {
-          if (Math.abs(cluster.representative - delta) <= 0.2) {
-            cluster.members.push(entry);
-            // Update representative as mean
-            cluster.representative =
-              cluster.members.reduce(
-                (sum, m) => sum + m.feedback.delta,
-                0
-              ) / cluster.members.length;
-            placed = true;
-            break;
-          }
-        }
-        if (!placed) {
-          clustered.push({ representative: delta, members: [entry] });
-        }
-      }
-
-      // Only keep clusters where 2+ distinct goals are represented
-      for (const cluster of clustered) {
-        const goalSet = new Set(cluster.members.map((m) => m.goalId));
-        if (goalSet.size < 2) continue;
-
-        const avgDelta = cluster.representative;
-        const patternType: CrossGoalPattern["patternType"] =
-          avgDelta < -0.05
-            ? "success"
-            : avgDelta > 0.05
-              ? "failure"
-              : "optimization";
-
-        const sourceGoalIds = Array.from(goalSet);
-        const occurrenceCount = cluster.members.length;
-        const confidence = goalSet.size / goalIds.length;
-
-        // Build suggested action from feedbackType
-        const suggestedAction = this._buildSuggestedAction(
-          feedbackType,
-          avgDelta
-        );
-
-        // Build applicable conditions from context keys
-        const conditionSet = new Set<string>();
-        for (const m of cluster.members) {
-          for (const key of Object.keys(m.feedback.context)) {
-            conditionSet.add(key);
-          }
-        }
-        const applicableConditions = Array.from(conditionSet);
-
-        const description = `${feedbackType} pattern: avg delta=${avgDelta.toFixed(2)} observed across ${sourceGoalIds.length} goals`;
-
-        const pattern = CrossGoalPatternSchema.parse({
-          id: `cgp_${randomUUID()}`,
-          patternType,
-          description,
-          sourceGoalIds,
-          feedbackType,
-          confidence,
-          applicableConditions,
-          suggestedAction,
-          occurrenceCount,
-          lastObserved: now,
-        });
-
-        patterns.push(pattern);
-      }
-    }
-
-    return patterns;
+    return extractCrossGoalPatterns(
+      { stateManager: this.stateManager, config: this.config },
+      goalIds
+    );
   }
 
   /**
    * Apply cross-goal patterns to target goals as feedback insights.
-   * For each target goal, patterns whose applicableConditions match the goal's
-   * feedback context keys are applied.
    */
   sharePatternsAcrossGoals(
     patterns: CrossGoalPattern[],
     targetGoalIds: string[]
   ): PatternSharingResult {
-    let patternsShared = 0;
-    const newPatterns: CrossGoalPattern[] = [];
-    const affectedGoals = new Set<string>();
-
-    for (const targetGoalId of targetGoalIds) {
-      // Gather context keys from existing structural feedback
-      const existingFeedback = this.getStructuralFeedback(targetGoalId);
-      const existingContextKeys = new Set<string>();
-      for (const fb of existingFeedback) {
-        for (const key of Object.keys(fb.context)) {
-          existingContextKeys.add(key);
-        }
-      }
-
-      for (const pattern of patterns) {
-        // Skip if target goal is already a source
-        if (pattern.sourceGoalIds.includes(targetGoalId)) {
-          continue;
-        }
-
-        // Check if applicableConditions match: either no conditions (universal)
-        // or at least one condition key exists in the target's context
-        const conditionsMatch =
-          pattern.applicableConditions.length === 0 ||
-          pattern.applicableConditions.some((c) => existingContextKeys.has(c));
-
-        if (!conditionsMatch) {
-          continue;
-        }
-
-        // Generate a synthetic StructuralFeedback entry to represent this shared pattern
-        const syntheticFeedback: StructuralFeedback = StructuralFeedbackSchema.parse({
-          id: `sf_shared_${randomUUID()}`,
-          goalId: targetGoalId,
-          iterationId: `shared_from_cross_goal_pattern_${pattern.id}`,
-          feedbackType: pattern.feedbackType,
-          expected: pattern.suggestedAction,
-          actual: pattern.description,
-          delta: pattern.patternType === "success" ? -0.1 : pattern.patternType === "failure" ? 0.1 : 0,
-          timestamp: new Date().toISOString(),
-          context: {
-            cross_goal_pattern_id: pattern.id,
-            source_goal_count: pattern.sourceGoalIds.length,
-          },
-        });
-
-        this.recordStructuralFeedback(syntheticFeedback);
-
-        patternsShared++;
-        affectedGoals.add(targetGoalId);
-        newPatterns.push(pattern);
-      }
-    }
-
-    return {
-      patternsExtracted: patterns.length,
-      patternsShared,
-      targetGoalIds: Array.from(affectedGoals),
-      newPatterns,
-    };
-  }
-
-  // ─── Private helpers ───
-
-  private _buildSuggestedAction(
-    feedbackType: StructuralFeedbackType,
-    avgDelta: number
-  ): string {
-    switch (feedbackType) {
-      case "observation_accuracy":
-        return avgDelta < 0
-          ? "Improve observation accuracy by cross-checking with data sources"
-          : "Maintain current observation approach";
-      case "strategy_selection":
-        return avgDelta < 0
-          ? "Switch to incremental strategy to reduce risk"
-          : "Continue current strategy selection";
-      case "scope_sizing":
-        return avgDelta < 0
-          ? "Reduce task scope to smaller units"
-          : "Increase task scope for efficiency";
-      case "task_generation":
-        return avgDelta < 0
-          ? "Refine task generation templates"
-          : "Reinforce current task generation approach";
-    }
+    return sharePatternsAcrossGoals(
+      { stateManager: this.stateManager, config: this.config },
+      patterns,
+      targetGoalIds
+    );
   }
 }
+
+// ─── Re-exports for backward compatibility ───
+export type {
+  StructuralFeedback,
+  StructuralFeedbackType,
+  FeedbackAggregation,
+  ParameterTuning,
+  CrossGoalPattern,
+  PatternSharingResult,
+} from "../types/learning.js";
+export {
+  getStructuralFeedback,
+  recordStructuralFeedback,
+  aggregateFeedback,
+  autoTuneParameters,
+} from "./learning-feedback.js";
+export {
+  extractCrossGoalPatterns,
+  sharePatternsAcrossGoals,
+} from "./learning-cross-goal.js";
