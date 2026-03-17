@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import * as fsp from "node:fs/promises";
 import * as path from "node:path";
 import { CoreLoop } from "../core-loop.js";
 import type { LoopResult } from "../core-loop.js";
@@ -10,6 +11,20 @@ import type { EventServer } from "./event-server.js";
 import type { MotivaEvent } from "../types/drive.js";
 import type { DaemonConfig, DaemonState } from "../types/daemon.js";
 import { DaemonConfigSchema, DaemonStateSchema } from "../types/daemon.js";
+
+// ─── ShutdownMarker ───
+//
+// Written to {baseDir}/shutdown-state.json to track daemon lifecycle.
+// state: "running"        — daemon is active; if found on startup, previous instance crashed
+// state: "clean_shutdown" — daemon exited gracefully via SIGTERM/SIGINT or stop()
+
+export interface ShutdownMarker {
+  goal_ids: string[];
+  loop_index: number;
+  timestamp: string;   // ISO 8601
+  reason: "signal" | "stop" | "max_retries" | "startup";
+  state: "running" | "clean_shutdown";
+}
 
 // ─── DaemonRunner ───
 //
@@ -50,6 +65,8 @@ export class DaemonRunner {
   private shutdownHandler: (() => void) | null = null;
   private eventServer: EventServer | undefined;
   private sleepAbortController: AbortController | null = null;
+  private currentGoalIds: string[] = [];
+  private currentLoopIndex = 0;
 
   constructor(deps: DaemonDeps) {
     this.coreLoop = deps.coreLoop;
@@ -97,7 +114,11 @@ export class DaemonRunner {
     // 2. Write PID file
     this.pidManager.writePID();
 
-    // 2b. Start EventServer (if provided) and file watcher
+    // 2b. Rotate log if needed, then check for crash recovery marker
+    await this.rotateLog();
+    await this.checkCrashRecovery();
+
+    // 2c. Start EventServer (if provided) and file watcher
     if (this.eventServer) {
       await this.eventServer.start();
       this.logger.info("EventServer started", {
@@ -115,7 +136,9 @@ export class DaemonRunner {
     const shutdown = (): void => {
       if (this.shuttingDown) return;
       this.shuttingDown = true;
-      this.logger.info("Received shutdown signal, stopping daemon gracefully...");
+      this.logger.info("Shutting down gracefully...");
+      // Abort current sleep so the loop exits promptly
+      this.sleepAbortController?.abort();
       // Start a timeout to force-stop if graceful shutdown takes too long
       forceStopTimer = setTimeout(() => {
         this.logger.warn(
@@ -133,6 +156,8 @@ export class DaemonRunner {
 
     // 5. Save initial daemon state
     this.running = true;
+    this.currentGoalIds = mergedGoalIds;
+    this.currentLoopIndex = 0;
     this.state = DaemonStateSchema.parse({
       pid: process.pid,
       started_at: new Date().toISOString(),
@@ -144,6 +169,15 @@ export class DaemonRunner {
       last_error: null,
     });
     this.saveDaemonState();
+
+    // 5b. Write "running" shutdown marker (crash detection on next startup)
+    await this.writeShutdownMarker({
+      goal_ids: mergedGoalIds,
+      loop_index: 0,
+      timestamp: new Date().toISOString(),
+      reason: "startup",
+      state: "running",
+    });
 
     // 6. Log start
     this.logger.info("Daemon started", {
@@ -215,6 +249,7 @@ export class DaemonRunner {
           try {
             const result: LoopResult = await this.coreLoop.run(goalId);
             this.state.loop_count++;
+            this.currentLoopIndex = this.state.loop_count;
             this.state.last_loop_at = new Date().toISOString();
             this.logger.info(`Loop completed for goal: ${goalId}`, {
               status: result.finalStatus,
@@ -400,14 +435,34 @@ export class DaemonRunner {
 
   /**
    * Perform cleanup after the loop exits: update state, remove PID file, log.
+   * Also writes "clean_shutdown" marker to enable crash-vs-clean detection on next startup.
    */
   private cleanup(): void {
     // Only set to "stopped" if not already "crashed"
-    if (this.state.status !== "crashed") {
+    const wasCrashed = this.state.status === "crashed";
+    if (!wasCrashed) {
       this.state.status = "stopped";
     }
     this.saveDaemonState();
     this.pidManager.cleanup();
+
+    // Write clean shutdown marker (fire-and-forget; synchronous fallback)
+    const markerPath = path.join(this.baseDir, "shutdown-state.json");
+    const marker: ShutdownMarker = {
+      goal_ids: this.currentGoalIds,
+      loop_index: this.currentLoopIndex,
+      timestamp: new Date().toISOString(),
+      reason: wasCrashed ? "max_retries" : "stop",
+      state: wasCrashed ? "running" : "clean_shutdown",
+    };
+    try {
+      const tmp = markerPath + ".tmp";
+      fs.writeFileSync(tmp, JSON.stringify(marker, null, 2), "utf-8");
+      fs.renameSync(tmp, markerPath);
+    } catch {
+      // Non-fatal
+    }
+
     this.logger.info("Daemon stopped", {
       loop_count: this.state.loop_count,
       crash_count: this.state.crash_count,
@@ -444,6 +499,144 @@ export class DaemonRunner {
       event_type: event.type,
     });
     this.sleepAbortController?.abort();
+  }
+
+  // ─── Private: Shutdown Marker ───
+
+  /**
+   * Write shutdown-state.json to baseDir (async, atomic).
+   */
+  private async writeShutdownMarker(marker: ShutdownMarker): Promise<void> {
+    const markerPath = path.join(this.baseDir, "shutdown-state.json");
+    const tmpPath = markerPath + ".tmp";
+    try {
+      await fsp.writeFile(tmpPath, JSON.stringify(marker, null, 2), "utf-8");
+      await fsp.rename(tmpPath, markerPath);
+    } catch {
+      // Non-fatal — log but don't crash
+    }
+  }
+
+  /**
+   * Read shutdown-state.json from baseDir.
+   * Returns null if file doesn't exist or fails to parse.
+   */
+  async readShutdownMarker(): Promise<ShutdownMarker | null> {
+    const markerPath = path.join(this.baseDir, "shutdown-state.json");
+    try {
+      const data = await fsp.readFile(markerPath, "utf-8");
+      return JSON.parse(data) as ShutdownMarker;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Delete shutdown-state.json (after successful resume).
+   */
+  async deleteShutdownMarker(): Promise<void> {
+    const markerPath = path.join(this.baseDir, "shutdown-state.json");
+    try {
+      await fsp.unlink(markerPath);
+    } catch {
+      // File may not exist — ignore
+    }
+  }
+
+  /**
+   * Check for a previous shutdown marker and log recovery information.
+   * Called at startup before the main loop begins.
+   */
+  private async checkCrashRecovery(): Promise<void> {
+    const marker = await this.readShutdownMarker();
+    if (!marker) return;
+
+    if (marker.state === "clean_shutdown") {
+      this.logger.info("Resuming from clean shutdown", {
+        previous_loop_index: marker.loop_index,
+        previous_goals: marker.goal_ids,
+        shutdown_at: marker.timestamp,
+      });
+    } else {
+      // state === "running" — previous instance did not shut down cleanly
+      this.logger.warn(
+        "Recovering from crash — previous instance did not shut down cleanly",
+        {
+          previous_loop_index: marker.loop_index,
+          previous_goals: marker.goal_ids,
+          last_seen_at: marker.timestamp,
+        }
+      );
+    }
+
+    // Delete the marker; we'll write a fresh "running" marker in start()
+    await this.deleteShutdownMarker();
+  }
+
+  // ─── Private: Log Rotation ───
+
+  /**
+   * Rotate the main log file if it exceeds the configured size limit.
+   * Renames motiva.log to motiva.<timestamp>.log and keeps at most maxFiles rotated files.
+   * Called at daemon startup.
+   */
+  async rotateLog(): Promise<void> {
+    const logDir = path.join(this.baseDir, this.config.log_dir);
+    const logPath = path.join(logDir, "motiva.log");
+    const maxSizeBytes = this.config.log_rotation.max_size_mb * 1024 * 1024;
+    const maxFiles = this.config.log_rotation.max_files;
+
+    try {
+      // Check if log file exists and exceeds size limit
+      let stat: fs.Stats;
+      try {
+        stat = await fsp.stat(logPath);
+      } catch {
+        // File doesn't exist — nothing to rotate
+        return;
+      }
+
+      if (stat.size < maxSizeBytes) return;
+
+      // Rotate: rename current log with timestamp suffix
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const rotatedName = `motiva.${timestamp}.log`;
+      const rotatedPath = path.join(logDir, rotatedName);
+      await fsp.rename(logPath, rotatedPath);
+
+      this.logger.info("Log file rotated", {
+        rotated_to: rotatedName,
+        size_bytes: stat.size,
+      });
+
+      // Prune old rotated files: keep only the most recent maxFiles
+      await this.pruneRotatedLogs(logDir, maxFiles);
+    } catch {
+      // Non-fatal — rotation failures should not prevent daemon startup
+    }
+  }
+
+  /**
+   * Remove oldest rotated log files, keeping at most maxFiles.
+   */
+  private async pruneRotatedLogs(logDir: string, maxFiles: number): Promise<void> {
+    try {
+      const entries = await fsp.readdir(logDir);
+      // Rotated files match: motiva.<timestamp>.log (not motiva.log itself)
+      const rotated = entries
+        .filter((f) => /^motiva\..+\.log$/.test(f) && f !== "motiva.log")
+        .sort(); // ISO timestamps sort lexicographically = chronologically
+
+      // Remove oldest files beyond maxFiles
+      const excess = rotated.length - maxFiles;
+      if (excess <= 0) return;
+
+      for (let i = 0; i < excess; i++) {
+        await fsp.unlink(path.join(logDir, rotated[i]!));
+      }
+    } catch {
+      // Non-fatal
+    }
   }
 
   // ─── Static Utilities ───
