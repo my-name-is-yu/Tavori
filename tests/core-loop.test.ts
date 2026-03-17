@@ -626,6 +626,36 @@ describe("CoreLoop", () => {
       expect(history.length).toBe(1);
       expect(history[0]!.iteration).toBe(0);
     });
+
+    it("skips task generation when gapAggregate is 0", async () => {
+      const { deps, mocks } = createMockDeps(tmpDir);
+      mocks.stateManager.saveGoal(makeGoal());
+
+      // Make the gap calculator return aggregate gap=0 (goal already achieved)
+      const zeroGapVector: GapVector = {
+        goal_id: "goal-1",
+        gaps: [
+          {
+            dimension_name: "dim1",
+            raw_gap: 0,
+            normalized_gap: 0,
+            normalized_weighted_gap: 0,
+            confidence: 1.0,
+            uncertainty_weight: 1.0,
+          },
+        ],
+      };
+      mocks.gapCalculator.calculateGapVector.mockReturnValue(zeroGapVector);
+      mocks.gapCalculator.aggregateGaps.mockReturnValue(0);
+
+      const loop = new CoreLoop(deps, { delayBetweenLoopsMs: 0 });
+      const result = await loop.runOneIteration("goal-1", 0);
+
+      expect(result.gapAggregate).toBe(0);
+      expect(result.taskResult).toBeNull();
+      expect(mocks.taskLifecycle.runTaskCycle).not.toHaveBeenCalled();
+      expect(result.completionJudgment.is_complete).toBe(true);
+    });
   });
 
   // ─── Completion detection ───

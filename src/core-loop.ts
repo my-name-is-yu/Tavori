@@ -391,13 +391,6 @@ export class CoreLoop {
       );
       result.gapAggregate = gapAggregate;
 
-      this.deps.onProgress?.({
-        iteration: loopIndex + 1,
-        maxIterations: this.config.maxIterations,
-        phase: "Generating task...",
-        gap: gapAggregate,
-      });
-
       // Persist gap history entry
       this.deps.stateManager.appendGapHistoryEntry(goalId, {
         iteration: loopIndex,
@@ -417,6 +410,27 @@ export class CoreLoop {
       result.elapsedMs = Date.now() - startTime;
       return result;
     }
+
+    // ─── 3b. Gap Zero Check ───
+    if (gapAggregate === 0) {
+      this.logger?.info(`[CoreLoop] gap=0 for goal ${goalId} — skipping task generation`);
+      result.completionJudgment = {
+        is_complete: true,
+        blocking_dimensions: [],
+        low_confidence_dimensions: [],
+        needs_verification_task: false,
+        checked_at: new Date().toISOString(),
+      };
+      result.elapsedMs = Date.now() - startTime;
+      return result;
+    }
+
+    this.deps.onProgress?.({
+      iteration: loopIndex + 1,
+      maxIterations: this.config.maxIterations,
+      phase: "Generating task...",
+      gap: gapAggregate,
+    });
 
     // ─── 4. Drive Scoring ───
     let driveScores: DriveScore[];
