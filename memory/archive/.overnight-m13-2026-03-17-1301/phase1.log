@@ -1,0 +1,12 @@
+Running Motiva loop for goal: goal_1773749683802
+Goal: zero-tsc-errors
+Press Ctrl+C to stop.
+
+[1/3] Observing...
+
+--- Loop Result ---
+Goal ID:          goal_1773749683802
+Final status:     completed
+Total iterations: 1
+Started at:       2026-03-17T12:14:44.011Z
+Completed at:     2026-03-17T12:14:47.828Z

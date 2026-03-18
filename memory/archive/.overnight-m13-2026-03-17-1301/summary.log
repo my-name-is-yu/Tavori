@@ -1,0 +1,21 @@
+=== M13 Dogfooding Tue Mar 17 21:14:43 JST 2026 ===
+--- Cleaning up test plugin artifacts ---
+Removing test artifact: existing-plugin
+Removing test artifact: my-plugin
+Removing test artifact: shell-plugin
+--- Phase 1: tsc_error_count:min:0 ---
+Goal 1: goal_1773749683802
+Phase 1 exit: 0
+--- Phase 2: Plugin matching ---
+Created plugin at /Users/yuyoshimuta/.motiva/plugins/test-coverage-source
+Goal 2: goal_1773749688025
+Phase 2 exit: 0
+
+=== Dogfooding complete Tue Mar 17 21:20:14 JST 2026 ===
+Logs: memory/archive/.overnight-m13-2026-03-17-1301
+--- Plugin list ---
+Found 1 plugin(s):
+
+NAME                     VERSION    TYPE           DESCRIPTION
+────────────────────────────────────────────────────────────────────────────────
+test-coverage-source     1.0.0      data_source    Data source plugin that observes test...

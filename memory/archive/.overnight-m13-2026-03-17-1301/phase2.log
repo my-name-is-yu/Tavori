@@ -1,0 +1,33 @@
+Running Motiva loop for goal: goal_1773749688025
+Goal: improve-test-coverage
+Press Ctrl+C to stop.
+
+[1/2] Observing...
+[ShellDataSource] command failed for "test_coverage": Error: Command failed: npx vitest run --coverage --reporter=json
+ MISSING DEPENDENCY  Cannot find dependency '@vitest/coverage-v8'
+
+
+[ObservationEngine] DataSource observation failed for dimension "test_coverage" (source: ds_auto_shell_1773746975229): Data source "ds_auto_shell_1773746975229" returned null for dimension "test_coverage". Falling through to LLM fallback.
+[ObservationEngine] LLM observation for dimension "test coverage" (goal: goal_1773749688025)
+[ObservationEngine] LLM observation result for "test coverage": score=0.000
+[1/2] Generating task... gap=2.00
+[1/2] Executing task...
+[1/2] Verifying: "Add unit tests for the core functionalities in the 'src' directory. Specifically"
+[2/2] Observing...
+[ShellDataSource] command failed for "test_coverage": Error: Command failed: npx vitest run --coverage --reporter=json
+ MISSING DEPENDENCY  Cannot find dependency '@vitest/coverage-v8'
+
+
+[ObservationEngine] DataSource observation failed for dimension "test_coverage" (source: ds_auto_shell_1773746975229): Data source "ds_auto_shell_1773746975229" returned null for dimension "test_coverage". Falling through to LLM fallback.
+[ObservationEngine] LLM observation for dimension "test coverage" (goal: goal_1773749688025)
+[ObservationEngine] LLM observation result for "test coverage": score=0.000
+[2/2] Generating task... gap=1.99
+[2/2] Executing task...
+[2/2] Verifying: "Add unit tests for the GoalNegotiator class in the tests/unit/goal-negotiator.te"
+
+--- Loop Result ---
+Goal ID:          goal_1773749688025
+Final status:     max_iterations
+Total iterations: 2
+Started at:       2026-03-17T12:14:48.200Z
+Completed at:     2026-03-17T12:20:14.448Z

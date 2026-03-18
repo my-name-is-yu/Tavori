@@ -1,0 +1,12 @@
+[auto] Registered ShellDataSource for: test_coverage, test_count
+Goal registered successfully!
+Goal ID:    goal_1773749688025
+Title:      improve-test-coverage
+Status:     active
+Dimensions: 2
+
+Dimensions:
+  - test coverage (test_coverage): {"type":"min","value":80}
+  - test count (test_count): {"type":"min","value":4000}
+
+To run the loop: motiva run --goal goal_1773749688025

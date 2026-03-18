@@ -1,0 +1,11 @@
+[auto] Registered ShellDataSource for: tsc_error_count
+Goal registered successfully!
+Goal ID:    goal_1773749683802
+Title:      zero-tsc-errors
+Status:     active
+Dimensions: 1
+
+Dimensions:
+  - tsc error count (tsc_error_count): {"type":"min","value":0}
+
+To run the loop: motiva run --goal goal_1773749683802
