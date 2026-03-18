@@ -1,40 +1,27 @@
 # In-Progress
 
-## 今セッション（2026-03-18）: E2E ENOENT race condition 修正
+## 今セッション完了（2026-03-18）: #54 テスト修正 37→5件
 
-### 修正内容（未コミット）
-- `src/state-manager.ts`: atomicWrite/writeRaw に ENOENT 耐性追加（test cleanup後の書き込みを安全にスキップ）
-- `src/knowledge/learning-cross-goal.ts:228`: `recordStructuralFeedback` に `await` 追加（fire-and-forget修正）
+### コミット済み
+- c144350: E2E ENOENT race condition修正（state-manager, learning-cross-goal）
+- 298e0bd: ENOENT resilience完了（state-manager, memory-persistence）
+- fa0055a: async/mock テスト修正25件（11ファイル）
+
+### テスト状態: 5 failed / 3521 passed (3526 total, 118 files)
+- 開始時: 37 failed → 5 failed (32件修正, 86%改善)
 - tsc: 0エラー ✅
+- Unhandled Rejection: 0 ✅
 
-### E2E修正結果
-- milestone7-goal-tree.test.ts: 1 failed → **全13パス** ✅
-- milestone2-d1-readme.test.ts: 2 failed → **全4パス** ✅
-- ENOENT Unhandled Rejection エラー: **全件解消** ✅
-- 残り8件の失敗はENOENTとは別のバグ（querySharedKnowledge戻り値型、DataSource関連）
+### 残り5件の失敗（次セッションで対応）
 
-### テスト状態: ~34 failed（推定、E2Eで3件修正）
-- 前回: 37 failed / 3489 passed
+1. **tests/learning-pipeline.test.ts** (1件): まだ別のasync問題あり（要調査）
+2. **tests/strategy-manager.test.ts** (1件): terminateStrategy — last strategy termination
+3. **tests/tree-loop-orchestrator.test.ts** (1件): resumeNodeLoop — active_loops count
+4. **tests/tui/use-loop.test.ts** (2件): start() dimensions + polling interval
 
-### 残り失敗パターン（E2E以外は前回と同じ）
-
-1. ~~**E2E ENOENT race condition**~~ → ✅ 修正済み（3件修正、残り8件は別バグ）
-   - milestone5-semantic.test.ts (5): querySharedKnowledge 戻り値型問題
-   - milestone2-d2-e2e-loop.test.ts (2): DataSource関連
-   - milestone2-d3-npm-publish.test.ts (1): DataSource関連
-
-2. **core-loop-capability mock issue** (5件): mock setup が期待通りに動かない
-
-3. **reporting-engine ENOENT** (3件): atomicWrite race（StateManager修正で解消の可能性あり）
-
-4. **goal-dependency-graph persistence** (3件): writeRaw/readRaw async mock問題
-
-5. **その他1-2件ずつ** (14件):
-   - tui/use-loop (2), task-lifecycle (2), session-manager-phase2 (2)
-   - observation-engine-crossvalidation (2), curiosity-engine (2)
-   - unit/example (1), tree-loop-orchestrator (1), strategy-manager (1)
-   - observation-engine-llm (1), learning-pipeline (1), learning-cross-goal (1)
-   - event-file-watcher (1)
+### 修正アプローチ（次セッション）
+- 各ファイル個別に `npx vitest run <file>` で診断
+- パターン: async mockの不一致 or production codeのawait漏れ
 
 ---
 
@@ -44,8 +31,8 @@
 - #54 Phase 2 Batch G コミット済み（state-manager + 126ファイル）
 
 ## issueステータス
-- #54 Phase 2 Batch G テスト残り37件 — 次セッション
-- #63 CLI logger — ✅ 修正済み（このコミットに含む）
+- #54 テスト修正 残り5件 — 次セッション
+- #63 CLI logger — ✅ 修正済み
 - #64 ShellDataSource coverage 0 — 未着手
 - #65 Gap > 1.0 — 未着手
 - #52 テスト巨大ファイル — オープン
