@@ -24,6 +24,7 @@ class FakeChildProcess extends EventEmitter {
   readonly stdout = new EventEmitter();
   readonly stderr = new EventEmitter();
   readonly stdin = {
+    write: vi.fn(),
     end: vi.fn(),
     on: vi.fn(),
   };
@@ -66,7 +67,7 @@ describe("OpenAICodexCLIAdapter", () => {
   // ─── spawn args ───
 
   describe("spawn arguments", () => {
-    it("spawns codex with 'exec -s danger-full-access PROMPT' and cwd by default", async () => {
+    it("spawns codex with 'exec -s danger-full-access' and writes prompt to stdin", async () => {
       const adapter = new OpenAICodexCLIAdapter();
       const child = makeFakeChild();
 
@@ -77,8 +78,13 @@ describe("OpenAICodexCLIAdapter", () => {
       expect(mockSpawn).toHaveBeenCalledTimes(1);
       const [cliPath, spawnArgs, opts] = mockSpawn.mock.calls[0] as [string, string[], { cwd: string }];
       expect(cliPath).toBe("codex");
-      expect(spawnArgs).toEqual(["exec", "-s", "danger-full-access", "run tests"]);
+      // Prompt must NOT appear in spawn args (would expose it in `ps aux`)
+      expect(spawnArgs).toEqual(["exec", "-s", "danger-full-access"]);
+      expect(spawnArgs).not.toContain("run tests");
       expect(opts.cwd).toBe(".");
+      // Prompt is delivered via stdin instead
+      expect(child.stdin.write).toHaveBeenCalledWith("run tests", "utf8");
+      expect(child.stdin.end).toHaveBeenCalled();
     });
 
     it("uses custom cliPath when configured", async () => {
@@ -105,10 +111,10 @@ describe("OpenAICodexCLIAdapter", () => {
       expect(spawnArgs).toContain("-m");
       expect(spawnArgs).toContain("o4-mini");
       expect(spawnArgs).not.toContain("--path");
-      // Verify order: -m comes before the prompt
-      const modelIdx = spawnArgs.indexOf("-m");
-      const promptIdx = spawnArgs.indexOf("do task");
-      expect(modelIdx).toBeLessThan(promptIdx);
+      // Prompt must not appear in spawn args
+      expect(spawnArgs).not.toContain("do task");
+      // Prompt is written to stdin instead
+      expect(child.stdin.write).toHaveBeenCalledWith("do task", "utf8");
     });
 
     it("omits --model flag when no model is configured", async () => {
@@ -133,7 +139,9 @@ describe("OpenAICodexCLIAdapter", () => {
 
       const [, spawnArgs] = mockSpawn.mock.calls[0] as [string, string[]];
       expect(spawnArgs).not.toContain("-s");
-      expect(spawnArgs).toEqual(["exec", "hi"]);
+      // Prompt is not in args — it goes to stdin
+      expect(spawnArgs).toEqual(["exec"]);
+      expect(child.stdin.write).toHaveBeenCalledWith("hi", "utf8");
     });
   });
 

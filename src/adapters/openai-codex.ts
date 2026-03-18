@@ -1,16 +1,17 @@
 // ─── OpenAICodexCLIAdapter ───
 //
 // IAdapter implementation that spawns the `codex` CLI process.
-// The task prompt is passed as a positional argument to the `exec` subcommand.
+// The task prompt is written to stdin (not passed as a CLI arg) to avoid
+// exposing sensitive content in `ps aux` output.
 // Uses -s danger-full-access by default for non-interactive execution.
 //
-// Usage: codex exec [-s danger-full-access] [-m <model>] "PROMPT"
+// Usage: echo "PROMPT" | codex exec [-s danger-full-access] [-m <model>]
 //
 // Verified against codex-cli 0.114.0:
 //   - `exec` subcommand runs a single prompt non-interactively
 //   - `-s danger-full-access` sets sandbox policy to allow full disk/command access
 //   - `-m <model>` selects the model (e.g. "o4-mini", "o3")
-//   - prompt is delivered as a positional argument
+//   - When [PROMPT] arg is omitted (or `-` is given), prompt is read from stdin
 //   - NOTE: --full-auto does NOT exist in this version; use sandbox policy instead
 
 import { spawn } from "node:child_process";
@@ -52,7 +53,8 @@ export class OpenAICodexCLIAdapter implements IAdapter {
     const startedAt = Date.now();
 
     return new Promise<AgentResult>((resolve) => {
-      // Build argument list: exec [-s <policy>] [-m <model>] "<prompt>"
+      // Build argument list: exec [-s <policy>] [-m <model>]
+      // Prompt is written to stdin (not included in args) to prevent ps aux exposure.
       const spawnArgs: string[] = ["exec"];
 
       if (this.sandboxPolicy) {
@@ -63,10 +65,7 @@ export class OpenAICodexCLIAdapter implements IAdapter {
         spawnArgs.push("-m", this.model);
       }
 
-      // Prompt is passed as a positional argument to the exec subcommand.
-      // codex exec [-s <policy>] [-m <model>] "<prompt>"
       // NOTE: --path is NOT supported by codex-cli 0.114.0; use cwd instead
-      spawnArgs.push(task.prompt);
 
       const child = spawn(this.cliPath, spawnArgs, {
         stdio: ["pipe", "pipe", "pipe"],
@@ -91,7 +90,9 @@ export class OpenAICodexCLIAdapter implements IAdapter {
         // EPIPE = process already closed stdin; safe to ignore
       });
 
-      // Close stdin immediately since the prompt is passed as a positional arg.
+      // Write the prompt to stdin and close so the CLI knows input is done.
+      // This avoids exposing the prompt in `ps aux` output.
+      child.stdin.write(task.prompt, "utf8");
       child.stdin.end();
 
       child.stdout.on("data", (chunk: Buffer) => {
