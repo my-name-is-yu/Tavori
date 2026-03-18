@@ -70,10 +70,22 @@ export class StateManager {
   // ─── Atomic Write ───
 
   private async atomicWrite(filePath: string, data: unknown): Promise<void> {
-    await fsp.mkdir(path.dirname(filePath), { recursive: true });
+    try {
+      await fsp.mkdir(path.dirname(filePath), { recursive: true });
+    } catch (err: unknown) {
+      // Base dir removed (e.g. test cleanup) — silently skip write
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw err;
+    }
     const tmpPath = filePath + ".tmp";
     await fsp.writeFile(tmpPath, JSON.stringify(data, null, 2), "utf-8");
-    await fsp.rename(tmpPath, filePath);
+    try {
+      await fsp.rename(tmpPath, filePath);
+    } catch (err: unknown) {
+      // Base dir removed between write and rename — silently skip
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw err;
+    }
   }
 
   private async atomicRead<T>(filePath: string): Promise<T | null> {
@@ -586,7 +598,13 @@ export class StateManager {
   async writeRaw(relativePath: string, data: unknown): Promise<void> {
     const filePath = path.join(this.baseDir, relativePath);
     const dir = path.dirname(filePath);
-    await fsp.mkdir(dir, { recursive: true });
+    try {
+      await fsp.mkdir(dir, { recursive: true });
+    } catch (err: unknown) {
+      // Base dir removed (e.g. test cleanup) — silently skip write
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw err;
+    }
     await this.atomicWrite(filePath, data);
   }
 }

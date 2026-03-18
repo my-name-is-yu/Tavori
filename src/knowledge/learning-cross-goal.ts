@@ -225,7 +225,7 @@ export async function sharePatternsAcrossGoals(
         },
       });
 
-      recordStructuralFeedback(deps, syntheticFeedback);
+      await recordStructuralFeedback(deps, syntheticFeedback);
 
       patternsShared++;
       affectedGoals.add(targetGoalId);

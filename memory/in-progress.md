@@ -1,53 +1,52 @@
 # In-Progress
 
-## 今セッション完了（2026-03-18）
+## 今セッション（2026-03-18）: E2E ENOENT race condition 修正
 
-### コミット一覧
-- `d0e331a` refactor: split 7 God files (700+ lines) into 20 smaller modules (#49)
-- `0edb284` refactor: replace console.* with Logger in 21 engine files (#50)
-- (pending) refactor: complete Logger migration in CLI files + type assertion cleanup (#50, #53)
+### 修正内容（未コミット）
+- `src/state-manager.ts`: atomicWrite/writeRaw に ENOENT 耐性追加（test cleanup後の書き込みを安全にスキップ）
+- `src/knowledge/learning-cross-goal.ts:228`: `recordStructuralFeedback` に `await` 追加（fire-and-forget修正）
+- tsc: 0エラー ✅
 
-### クローズしたissue
-- **#49** 500行超ファイル分割 — 7ファイル→20新モジュール、6/7が500行以下
-- **#50** ロガー統一 — エンジン21ファイル + CLI12ファイル、console.error/warn→Logger完了（残り: logger.ts内部の2件のみ）
-- **#53** as any / !. クリーンアップ — 18ファイル27件→1件残（state-aggregator.ts）
+### E2E修正結果
+- milestone7-goal-tree.test.ts: 1 failed → **全13パス** ✅
+- milestone2-d1-readme.test.ts: 2 failed → **全4パス** ✅
+- ENOENT Unhandled Rejection エラー: **全件解消** ✅
+- 残り8件の失敗はENOENTとは別のバグ（querySharedKnowledge戻り値型、DataSource関連）
 
-### 成果
-- #50: CLI用シングルトンlogger(`src/cli/cli-logger.ts`)新規作成、12 CLIファイルの console.error/warn→logger置換完了
-- #53: プロダクションコード18ファイルの as any / as never / !. → 型安全コードに置換
-- テスト修正: 3テストファイル13テストをLogger移行に合わせて更新
-- テスト: 3645 pass / 118ファイル
+### テスト状態: ~34 failed（推定、E2Eで3件修正）
+- 前回: 37 failed / 3489 passed
+
+### 残り失敗パターン（E2E以外は前回と同じ）
+
+1. ~~**E2E ENOENT race condition**~~ → ✅ 修正済み（3件修正、残り8件は別バグ）
+   - milestone5-semantic.test.ts (5): querySharedKnowledge 戻り値型問題
+   - milestone2-d2-e2e-loop.test.ts (2): DataSource関連
+   - milestone2-d3-npm-publish.test.ts (1): DataSource関連
+
+2. **core-loop-capability mock issue** (5件): mock setup が期待通りに動かない
+
+3. **reporting-engine ENOENT** (3件): atomicWrite race（StateManager修正で解消の可能性あり）
+
+4. **goal-dependency-graph persistence** (3件): writeRaw/readRaw async mock問題
+
+5. **その他1-2件ずつ** (14件):
+   - tui/use-loop (2), task-lifecycle (2), session-manager-phase2 (2)
+   - observation-engine-crossvalidation (2), curiosity-engine (2)
+   - unit/example (1), tree-loop-orchestrator (1), strategy-manager (1)
+   - observation-engine-llm (1), learning-pipeline (1), learning-cross-goal (1)
+   - event-file-watcher (1)
 
 ---
 
-### issueステータス更新
-- バグ・セキュリティ: #34-#47（14件、全件クローズ済み）
-- テスト品質: #60-#61（クローズ済み）、#62未着手
-- コード品質: #48,#49,#50,#51,#53,#55-#59（**10件クローズ済み**）、#52,#54残り（2件オープン）
-- その他クローズ: #15, #23
-- ビジョン機能: #24-#33（10件、オープン）
-- 未分類オープン: #9, #11, #12, #21, #22
+## 前セッション完了
+- #54 Phase 1 完了（28モジュール）
+- #54 Phase 2 Batch F 完了（pid-manager, daemon-runner, event-server）
+- #54 Phase 2 Batch G コミット済み（state-manager + 126ファイル）
 
----
-
-## 次セッションでやるべきこと
-
-### 優先度1: 残りコード品質（2件）
-- **#52** テストファイル巨大 — task-lifecycle.test.ts 3328行
-- **#54** fs同期API多用
-
-### 優先度2: テスト品質
-- **#62** EthicsVerdict定数 9ファイル重複
-
-### 優先度3: ビジョン機能
-- **#24** 永続運用 cron/スケジューラ統合
-- **#25** プロアクティブ通知
-- **#26** 現実世界DataSource
-- **#31** CLIコマンド: motiva plugin list/install/remove
-
-### 未解決・要観察
-- cli-runner-integration.test.ts タイムアウト（既存フレーキー）
-- サブゴール品質（tree mode）→ #21
-- GitHubIssueAdapter動作検証 → #22
-- portfolio-manager.ts 552行（500超だが軽微）
-- state-aggregator.ts に `as any` 1件残存（#53）
+## issueステータス
+- #54 Phase 2 Batch G テスト残り37件 — 次セッション
+- #63 CLI logger — ✅ 修正済み（このコミットに含む）
+- #64 ShellDataSource coverage 0 — 未着手
+- #65 Gap > 1.0 — 未着手
+- #52 テスト巨大ファイル — オープン
+- #62 EthicsVerdict定数重複 — 未着手
