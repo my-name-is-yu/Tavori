@@ -292,10 +292,10 @@ export class SatisficingJudge {
    * Condition 1: >= 3 failures AND normalized_gap has not improved (no progress).
    * Condition 2: all other dimensions satisfied, this one is still far from threshold.
    */
-  detectThresholdAdjustmentNeeded(
+  async detectThresholdAdjustmentNeeded(
     goal: Goal,
     failureCounts: Map<string, number>
-  ): ThresholdAdjustmentProposal[] {
+  ): Promise<ThresholdAdjustmentProposal[]> {
     const proposals: ThresholdAdjustmentProposal[] = [];
     const dims = goal.dimensions;
 
@@ -330,7 +330,7 @@ export class SatisficingJudge {
       // but goal progress is stagnant, suggesting the threshold may be too ambitious.
       // Requires task cost history (actual_elapsed_ms + estimated_duration_ms fields).
       {
-        const rawHistory = this.stateManager.readRaw(`tasks/${goal.id}/task-history.json`);
+        const rawHistory = await this.stateManager.readRaw(`tasks/${goal.id}/task-history.json`);
         const taskHistory = Array.isArray(rawHistory) ? rawHistory : [];
 
         const dimHistory = taskHistory.filter(
@@ -397,8 +397,8 @@ export class SatisficingJudge {
    * @param rootId The ID of the root goal of the tree.
    * @returns CompletionJudgment for the root node.
    */
-  judgeTreeCompletion(rootId: string): CompletionJudgment {
-    return judgeTreeCompletionFn(rootId, this.stateManager, (goal) => this.isGoalComplete(goal));
+  async judgeTreeCompletion(rootId: string): Promise<CompletionJudgment> {
+    return await judgeTreeCompletionFn(rootId, this.stateManager, (goal) => this.isGoalComplete(goal));
   }
 
   /**
@@ -414,12 +414,12 @@ export class SatisficingJudge {
    * @param subgoalDimensions Optional subgoal dimensions for aggregation mapping.
    *   When omitted, falls back to MVP name-based matching only.
    */
-  propagateSubgoalCompletion(
+  async propagateSubgoalCompletion(
     subgoalId: string,
     parentGoalId: string,
     subgoalDimensions?: import("../types/goal.js").Dimension[]
-  ): void {
-    propagateSubgoalCompletionFn(
+  ): Promise<void> {
+    await propagateSubgoalCompletionFn(
       subgoalId,
       parentGoalId,
       this.stateManager,

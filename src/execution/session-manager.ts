@@ -81,12 +81,12 @@ export class SessionManager {
    * Creates a new session of the given type for goalId/taskId.
    * Context slots are built based on session type using fixed MVP templates.
    */
-  createSession(
+  async createSession(
     sessionType: SessionType,
     goalId: string,
     taskId: string | null,
     contextBudget: number = DEFAULT_CONTEXT_BUDGET
-  ): Session {
+  ): Promise<Session> {
     const sessionId = globalThis.crypto.randomUUID();
     const now = new Date().toISOString();
 
@@ -109,15 +109,15 @@ export class SessionManager {
       result_summary: null,
     });
 
-    this.persistSession(session);
+    await this.persistSession(session);
     return session;
   }
 
   /**
    * Marks a session as completed and records the result summary.
    */
-  endSession(sessionId: string, resultSummary: string): void {
-    const session = this.getSession(sessionId);
+  async endSession(sessionId: string, resultSummary: string): Promise<void> {
+    const session = await this.getSession(sessionId);
     if (session === null) {
       throw new Error(`SessionManager.endSession: session "${sessionId}" not found`);
     }
@@ -128,14 +128,14 @@ export class SessionManager {
       result_summary: resultSummary,
     });
 
-    this.persistSession(updated);
+    await this.persistSession(updated);
   }
 
   /**
    * Returns a session by ID, or null if not found.
    */
-  getSession(sessionId: string): Session | null {
-    const raw = this.stateManager.readRaw(`sessions/${sessionId}.json`);
+  async getSession(sessionId: string): Promise<Session | null> {
+    const raw = await this.stateManager.readRaw(`sessions/${sessionId}.json`);
     if (raw === null) return null;
     return SessionSchema.parse(raw);
   }
@@ -145,12 +145,12 @@ export class SessionManager {
    * Note: MVP scans all sessions matching goalId with status="active".
    * This reads the session index; sessions without ended_at are active.
    */
-  getActiveSessions(goalId: string): Session[] {
-    const index = this.loadSessionIndex();
+  async getActiveSessions(goalId: string): Promise<Session[]> {
+    const index = await this.loadSessionIndex();
     const sessions: Session[] = [];
 
     for (const sessionId of index) {
-      const session = this.getSession(sessionId);
+      const session = await this.getSession(sessionId);
       if (
         session !== null &&
         session.goal_id === goalId &&
@@ -560,25 +560,25 @@ export class SessionManager {
     return slots;
   }
 
-  private persistSession(session: Session): void {
-    this.stateManager.writeRaw(`sessions/${session.id}.json`, session);
-    this.updateSessionIndex(session.id);
+  private async persistSession(session: Session): Promise<void> {
+    await this.stateManager.writeRaw(`sessions/${session.id}.json`, session);
+    await this.updateSessionIndex(session.id);
   }
 
   /** Loads the session index (list of all session IDs). */
-  private loadSessionIndex(): string[] {
-    const raw = this.stateManager.readRaw("sessions/index.json");
+  private async loadSessionIndex(): Promise<string[]> {
+    const raw = await this.stateManager.readRaw("sessions/index.json");
     if (raw === null) return [];
     if (!Array.isArray(raw)) return [];
     return raw.filter((item): item is string => typeof item === "string");
   }
 
   /** Adds a session ID to the index if not already present. */
-  private updateSessionIndex(sessionId: string): void {
-    const index = this.loadSessionIndex();
+  private async updateSessionIndex(sessionId: string): Promise<void> {
+    const index = await this.loadSessionIndex();
     if (!index.includes(sessionId)) {
       index.push(sessionId);
-      this.stateManager.writeRaw("sessions/index.json", index);
+      await this.stateManager.writeRaw("sessions/index.json", index);
     }
   }
 }

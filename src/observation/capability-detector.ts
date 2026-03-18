@@ -464,11 +464,11 @@ export class CapabilityDetector {
 
   // ─── Dependency wrappers ───
 
-  addDependency(capabilityId: string, dependsOn: string[]): void {
+  async addDependency(capabilityId: string, dependsOn: string[]): Promise<void> {
     return addDependency({ stateManager: this.stateManager }, capabilityId, dependsOn);
   }
 
-  getDependencies(capabilityId: string): string[] {
+  async getDependencies(capabilityId: string): Promise<string[]> {
     return getDependencies({ stateManager: this.stateManager }, capabilityId);
   }
 
@@ -480,7 +480,7 @@ export class CapabilityDetector {
     return detectCircularDependency(dependencies);
   }
 
-  getAcquisitionOrder(gaps: CapabilityGap[]): CapabilityGap[] {
+  async getAcquisitionOrder(gaps: CapabilityGap[]): Promise<CapabilityGap[]> {
     return getAcquisitionOrder({ stateManager: this.stateManager }, gaps);
   }
 }

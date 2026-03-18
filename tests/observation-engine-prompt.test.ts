@@ -79,7 +79,7 @@ describe("observeWithLLM prompt quality", () => {
     const engine = new ObservationEngine(stateManager, [], mockLLM);
 
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     await engine.observeWithLLM(
       goal.id,
@@ -105,7 +105,7 @@ describe("observeWithLLM prompt quality", () => {
     const engine = new ObservationEngine(stateManager, [], mockLLM);
 
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     await engine.observeWithLLM(
       goal.id,
@@ -134,7 +134,7 @@ describe("observeWithLLM prompt quality", () => {
     });
 
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     await engine.observeWithLLM(
       goal.id,
@@ -160,7 +160,7 @@ describe("observeWithLLM prompt quality", () => {
     const engine = new ObservationEngine(stateManager, [], mockLLM);
 
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const workspaceContent = "src/foo.ts:42: TODO fix this auth bug";
 
@@ -188,7 +188,7 @@ describe("observeWithLLM prompt quality", () => {
     const engine = new ObservationEngine(stateManager, [], mockLLM);
 
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     await engine.observeWithLLM(
       goal.id,
@@ -214,7 +214,7 @@ describe("observeWithLLM prompt quality", () => {
     const engine = new ObservationEngine(stateManager, [], mockLLM);
 
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     await engine.observeWithLLM(
       goal.id,
@@ -240,7 +240,7 @@ describe("observeWithLLM prompt quality", () => {
     const engine = new ObservationEngine(stateManager, [], mockLLM);
 
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     await engine.observeWithLLM(
       goal.id,
@@ -268,7 +268,7 @@ describe("observeWithLLM prompt quality", () => {
     const engine = new ObservationEngine(stateManager, [], mockLLM);
 
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const entry = await engine.observeWithLLM(
       goal.id,
@@ -327,7 +327,7 @@ describe("observeWithLLM prompt quality", () => {
       tags: [],
       metadata: {},
     };
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const entry = await engine.observeWithLLM(
       goal.id,

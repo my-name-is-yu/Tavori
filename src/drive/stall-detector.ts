@@ -99,15 +99,13 @@ export class StallDetector {
       return null; // meaningful improvement
     }
 
-    const escalationLevel = this.getEscalationLevel(goalId, dimensionName);
-
     return StallReportSchema.parse({
       stall_type: "dimension_stall",
       goal_id: goalId,
       dimension_name: dimensionName,
       task_id: null,
       detected_at: new Date().toISOString(),
-      escalation_level: escalationLevel,
+      escalation_level: 0,
       suggested_cause: "approach_failure",
       decay_factor: DECAY_FACTOR_STALLED,
     });
@@ -162,15 +160,13 @@ export class StallDetector {
       return null;
     }
 
-    const escalationLevel = this.getEscalationLevel(goalId, dimensionName);
-
     return StallReportSchema.parse({
       stall_type: "consecutive_failure",
       goal_id: goalId,
       dimension_name: dimensionName,
       task_id: null,
       detected_at: new Date().toISOString(),
-      escalation_level: escalationLevel,
+      escalation_level: 0,
       suggested_cause: "approach_failure",
       decay_factor: DECAY_FACTOR_STALLED,
     });
@@ -296,8 +292,8 @@ export class StallDetector {
    * Load the StallState for a goal from StateManager.
    * Returns a default state if not found.
    */
-  getStallState(goalId: string): StallState {
-    const raw = this.stateManager.readRaw(`stalls/${goalId}.json`);
+  async getStallState(goalId: string): Promise<StallState> {
+    const raw = await this.stateManager.readRaw(`stalls/${goalId}.json`);
     if (raw === null) {
       return StallStateSchema.parse({
         goal_id: goalId,
@@ -314,16 +310,16 @@ export class StallDetector {
   /**
    * Persist the StallState for a goal via StateManager.
    */
-  saveStallState(goalId: string, state: StallState): void {
+  async saveStallState(goalId: string, state: StallState): Promise<void> {
     const parsed = StallStateSchema.parse(state);
-    this.stateManager.writeRaw(`stalls/${goalId}.json`, parsed);
+    await this.stateManager.writeRaw(`stalls/${goalId}.json`, parsed);
   }
 
   /**
    * Get the current escalation level for a dimension (default: 0).
    */
-  getEscalationLevel(goalId: string, dimensionName: string): number {
-    const state = this.getStallState(goalId);
+  async getEscalationLevel(goalId: string, dimensionName: string): Promise<number> {
+    const state = await this.getStallState(goalId);
     return state.dimension_escalation[dimensionName] ?? 0;
   }
 
@@ -331,22 +327,22 @@ export class StallDetector {
    * Increment the escalation level for a dimension (cap at ESCALATION_CAP).
    * Persists and returns the new level.
    */
-  incrementEscalation(goalId: string, dimensionName: string): number {
-    const state = this.getStallState(goalId);
+  async incrementEscalation(goalId: string, dimensionName: string): Promise<number> {
+    const state = await this.getStallState(goalId);
     const current = state.dimension_escalation[dimensionName] ?? 0;
     const next = Math.min(current + 1, ESCALATION_CAP);
     state.dimension_escalation[dimensionName] = next;
-    this.saveStallState(goalId, state);
+    await this.saveStallState(goalId, state);
     return next;
   }
 
   /**
    * Reset the escalation level for a dimension to 0 and persist.
    */
-  resetEscalation(goalId: string, dimensionName: string): void {
-    const state = this.getStallState(goalId);
+  async resetEscalation(goalId: string, dimensionName: string): Promise<void> {
+    const state = await this.getStallState(goalId);
     state.dimension_escalation[dimensionName] = 0;
-    this.saveStallState(goalId, state);
+    await this.saveStallState(goalId, state);
   }
 
   // ─── Private Helpers ───

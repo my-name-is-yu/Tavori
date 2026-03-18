@@ -102,13 +102,13 @@ describe("DaemonRunner", () => {
     it("should throw if daemon is already running (PID file from current process)", async () => {
       const deps = makeDeps(tmpDir);
       // Pre-write PID so isRunning() returns true
-      deps.pidManager.writePID();
+      await deps.pidManager.writePID();
 
       const daemon = new DaemonRunner(deps);
       await expect(daemon.start(["goal-1"])).rejects.toThrow(/already running/i);
 
       // Cleanup PID to allow afterEach cleanup to pass
-      deps.pidManager.cleanup();
+      await deps.pidManager.cleanup();
     });
 
     it("should write PID file on start", async () => {
@@ -124,7 +124,7 @@ describe("DaemonRunner", () => {
       await startPromise;
 
       // PID file should be cleaned up after stop
-      expect(deps.pidManager.readPID()).toBeNull();
+      expect(await deps.pidManager.readPID()).toBeNull();
     });
 
     it("should save daemon-state.json with status=running on start", async () => {
@@ -188,19 +188,18 @@ describe("DaemonRunner", () => {
   // ─── stop() ───
 
   describe("stop()", () => {
-    it("should set status to stopping in daemon-state.json", async () => {
+    it("should set status to stopped in daemon-state.json after stop resolves", async () => {
       const deps = makeDeps(tmpDir, { config: { check_interval_ms: 500 } });
       const daemon = new DaemonRunner(deps);
 
       const startPromise = daemon.start(["goal-1"]);
       await new Promise((resolve) => setTimeout(resolve, 20));
       daemon.stop();
+      await startPromise;
 
       const statePath = path.join(tmpDir, "daemon-state.json");
       const state = JSON.parse(fs.readFileSync(statePath, "utf-8"));
       expect(["stopping", "stopped"]).toContain(state.status);
-
-      await startPromise;
     });
 
     it("should terminate the loop and resolve the start() promise", async () => {
@@ -224,7 +223,7 @@ describe("DaemonRunner", () => {
       daemon.stop();
       await startPromise;
 
-      expect(deps.pidManager.readPID()).toBeNull();
+      expect(await deps.pidManager.readPID()).toBeNull();
     });
 
     it("should set status to stopped in daemon-state.json after loop exits", async () => {

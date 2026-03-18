@@ -233,11 +233,11 @@ export function detectKnowledgeGap(
  * Load the observation log for a goal, returning an empty log if none exists.
  * Pure function — requires stateManager passed in.
  */
-export function loadOrEmptyObservationLog(
-  stateManager: { loadObservationLog: (goalId: string) => ObservationLog | null },
+export async function loadOrEmptyObservationLog(
+  stateManager: { loadObservationLog: (goalId: string) => Promise<ObservationLog | null> },
   goalId: string
-): ObservationLog {
-  const existing = stateManager.loadObservationLog(goalId);
+): Promise<ObservationLog> {
+  const existing = await stateManager.loadObservationLog(goalId);
   if (existing !== null) {
     return existing;
   }

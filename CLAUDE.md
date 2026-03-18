@@ -87,4 +87,5 @@ Design docs are the source of truth for implementation. When in doubt, read the 
 - **LLM応答はZodパース前にサニタイズ** — LLMがenum外の値を返すことがある（例: threshold_typeに"exact"）。catchブロックでエラーを握りつぶさず、必ずログ出力すること
 - **Dogfooding推奨モデル**: gpt-5.3-codex（gpt-4o-miniより観測精度・収束速度が大幅に優れる。`~/.motiva/provider.json`で設定）
 - **KEEP THE FILES SHORT**: If the code exceeds 500 lines, consider splitting it into multiple files.
-- **KEEP THE CORD SIMPLE**: Do not overcomplicate it. Keep it as simple as possible.
+- **KEEP THE CODE SIMPLE**: Do not overcomplicate it. Keep it as simple as possible.
+- **バグ・改善点は即issue起票** — 作業中にバグ、セキュリティ問題、コード品質の改善点を見つけた場合、ユーザーの許可を待たずに `gh issue create` でissueを起票すること。修正は別途判断するが、記録は即座に行う

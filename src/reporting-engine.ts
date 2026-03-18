@@ -318,10 +318,10 @@ export class ReportingEngine {
 
   // ─── saveReport ───
 
-  saveReport(report: Report): void {
+  async saveReport(report: Report): Promise<void> {
     const goalId = report.goal_id ?? "_global";
     const relativePath = `reports/${goalId}/${report.id}.json`;
-    this.stateManager.writeRaw(relativePath, report);
+    await this.stateManager.writeRaw(relativePath, report);
   }
 
   // ─── getReport ───
@@ -373,7 +373,7 @@ export class ReportingEngine {
       // Use readRaw relative path
       const baseDir = this.stateManager.getBaseDir();
       const relativePath = path.relative(baseDir, path.join(absDir, entry));
-      const raw = this.stateManager.readRaw(relativePath);
+      const raw = await this.stateManager.readRaw(relativePath);
       if (raw === null) continue;
       try {
         const report = ReportSchema.parse(raw);
@@ -524,9 +524,9 @@ export class ReportingEngine {
    * Recursively traverses children_ids to build an indented text tree.
    * Each node shows: title, status, loop_status, specificity_score.
    */
-  generateTreeReport(rootId: string): Report {
+  async generateTreeReport(rootId: string): Promise<Report> {
     const now = new Date().toISOString();
-    const root = this.stateManager.loadGoal(rootId);
+    const root = await this.stateManager.loadGoal(rootId);
 
     let content: string;
 
@@ -535,8 +535,8 @@ export class ReportingEngine {
     } else {
       const lines: string[] = [`Goal Tree Report: ${root.title}`];
 
-      const renderNode = (goalId: string, prefix: string, isLast: boolean): void => {
-        const goal = this.stateManager.loadGoal(goalId);
+      const renderNode = async (goalId: string, prefix: string, isLast: boolean): Promise<void> => {
+        const goal = await this.stateManager.loadGoal(goalId);
         if (!goal) return;
 
         const connector = isLast ? "└── " : "├── ";
@@ -551,13 +551,13 @@ export class ReportingEngine {
         const childPrefix = prefix + (isLast ? "    " : "│   ");
         const children = goal.children_ids;
         for (let i = 0; i < children.length; i++) {
-          renderNode(children[i], childPrefix, i === children.length - 1);
+          await renderNode(children[i], childPrefix, i === children.length - 1);
         }
       };
 
       const children = root.children_ids;
       for (let i = 0; i < children.length; i++) {
-        renderNode(children[i], "", i === children.length - 1);
+        await renderNode(children[i], "", i === children.length - 1);
       }
 
       content = lines.join("\n");

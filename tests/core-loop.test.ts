@@ -319,7 +319,7 @@ function createMockDeps(tmpDir: string): {
 
 // ─── Tests ───
 
-describe("CoreLoop", () => {
+describe("CoreLoop", async () => {
   // NOTE: All collaborators are mocked. These tests verify orchestration contract
   // (correct methods called in correct order, correct exit conditions) but cannot
   // detect bugs in actual data flow between modules.
@@ -422,7 +422,7 @@ describe("CoreLoop", () => {
 
   // ─── stop() ───
 
-  describe("stop()", () => {
+  describe("stop()", async () => {
     it("sets stopped flag", () => {
       const { deps } = createMockDeps(tmpDir);
       const loop = new CoreLoop(deps);
@@ -435,7 +435,7 @@ describe("CoreLoop", () => {
     it("stops the loop on next iteration", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
       const goal = makeGoal();
-      mocks.stateManager.saveGoal(goal);
+      await mocks.stateManager.saveGoal(goal);
 
       const loop = new CoreLoop(deps, { maxIterations: 100, delayBetweenLoopsMs: 0 });
 
@@ -457,11 +457,11 @@ describe("CoreLoop", () => {
 
   // ─── runOneIteration ───
 
-  describe("runOneIteration", () => {
+  describe("runOneIteration", async () => {
     it("calls each step in correct order", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
       const goal = makeGoal();
-      mocks.stateManager.saveGoal(goal);
+      await mocks.stateManager.saveGoal(goal);
 
       const loop = new CoreLoop(deps, { delayBetweenLoopsMs: 0 });
       const result = await loop.runOneIteration("goal-1", 0);
@@ -502,7 +502,7 @@ describe("CoreLoop", () => {
 
     it("populates gapAggregate from gap calculator", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
       mocks.gapCalculator.aggregateGaps.mockReturnValue(0.75);
 
       const loop = new CoreLoop(deps, { delayBetweenLoopsMs: 0 });
@@ -513,7 +513,7 @@ describe("CoreLoop", () => {
 
     it("populates driveScores", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const loop = new CoreLoop(deps, { delayBetweenLoopsMs: 0 });
       const result = await loop.runOneIteration("goal-1", 0);
@@ -523,7 +523,7 @@ describe("CoreLoop", () => {
 
     it("populates loopIndex", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const loop = new CoreLoop(deps, { delayBetweenLoopsMs: 0 });
       const result = await loop.runOneIteration("goal-1", 7);
@@ -533,7 +533,7 @@ describe("CoreLoop", () => {
 
     it("records elapsed time", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const loop = new CoreLoop(deps, { delayBetweenLoopsMs: 0 });
       const result = await loop.runOneIteration("goal-1", 0);
@@ -543,19 +543,19 @@ describe("CoreLoop", () => {
 
     it("persists gap history entry", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const loop = new CoreLoop(deps, { delayBetweenLoopsMs: 0 });
       await loop.runOneIteration("goal-1", 0);
 
-      const history = mocks.stateManager.loadGapHistory("goal-1");
+      const history = await mocks.stateManager.loadGapHistory("goal-1");
       expect(history.length).toBe(1);
       expect(history[0]!.iteration).toBe(0);
     });
 
     it("skips task generation when gapAggregate is 0", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       // Make the gap calculator return aggregate gap=0 (goal already achieved)
       const zeroGapVector: GapVector = {
@@ -586,10 +586,10 @@ describe("CoreLoop", () => {
 
   // ─── Completion detection ───
 
-  describe("completion detection", () => {
+  describe("completion detection", async () => {
     it("returns completed result when goal is complete", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       mocks.satisficingJudge.isGoalComplete.mockReturnValue(
         makeCompletionJudgment({ is_complete: true, blocking_dimensions: [] })
@@ -606,7 +606,7 @@ describe("CoreLoop", () => {
 
     it("stops the loop when goal is complete", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       mocks.satisficingJudge.isGoalComplete.mockReturnValue(
         makeCompletionJudgment({ is_complete: true, blocking_dimensions: [] })
@@ -622,7 +622,7 @@ describe("CoreLoop", () => {
     it("stops loop when post-task completion check passes", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
       const goal = makeGoal();
-      mocks.stateManager.saveGoal(goal);
+      await mocks.stateManager.saveGoal(goal);
 
       // First call: not complete. Second call (post-task): complete.
       let callCount = 0;
@@ -643,10 +643,10 @@ describe("CoreLoop", () => {
 
   // ─── Error handling ───
 
-  describe("error handling", () => {
+  describe("error handling", async () => {
     it("handles gap calculation failure gracefully", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
       mocks.gapCalculator.calculateGapVector.mockImplementation(() => {
         throw new Error("Gap calculation error");
       });
@@ -661,7 +661,7 @@ describe("CoreLoop", () => {
 
     it("handles drive scoring failure gracefully", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
       mocks.driveScorer.scoreAllDimensions.mockImplementation(() => {
         throw new Error("Drive scoring error");
       });
@@ -674,7 +674,7 @@ describe("CoreLoop", () => {
 
     it("handles completion check failure gracefully", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
       mocks.satisficingJudge.isGoalComplete.mockImplementation(() => {
         throw new Error("Completion check error");
       });
@@ -687,7 +687,7 @@ describe("CoreLoop", () => {
 
     it("handles task cycle failure gracefully", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
       mocks.taskLifecycle.runTaskCycle.mockRejectedValue(
         new Error("Task cycle error")
       );
@@ -700,7 +700,7 @@ describe("CoreLoop", () => {
 
     it("stall detection failure does not crash the iteration", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
       mocks.stallDetector.checkDimensionStall.mockImplementation(() => {
         throw new Error("Stall detection error");
       });
@@ -715,7 +715,7 @@ describe("CoreLoop", () => {
 
     it("report generation failure does not crash the iteration", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
       mocks.reportingEngine.generateExecutionSummary.mockImplementation(() => {
         throw new Error("Report error");
       });
@@ -730,10 +730,10 @@ describe("CoreLoop", () => {
 
   // ─── Consecutive error limit ───
 
-  describe("consecutive error limit", () => {
+  describe("consecutive error limit", async () => {
     it("stops loop after maxConsecutiveErrors", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
       mocks.taskLifecycle.runTaskCycle.mockRejectedValue(
         new Error("Persistent error")
       );
@@ -751,7 +751,7 @@ describe("CoreLoop", () => {
 
     it("resets consecutive errors on success", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       let callCount = 0;
       mocks.taskLifecycle.runTaskCycle.mockImplementation(async () => {
@@ -777,7 +777,7 @@ describe("CoreLoop", () => {
 
     it("accumulates consecutive errors correctly", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       let callCount = 0;
       mocks.taskLifecycle.runTaskCycle.mockImplementation(async () => {
@@ -801,10 +801,10 @@ describe("CoreLoop", () => {
 
   // ─── Max iterations ───
 
-  describe("max iterations", () => {
+  describe("max iterations", async () => {
     it("stops loop at maxIterations", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const loop = new CoreLoop(deps, {
         maxIterations: 5,
@@ -818,7 +818,7 @@ describe("CoreLoop", () => {
 
     it("respects maxIterations of 1", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const loop = new CoreLoop(deps, {
         maxIterations: 1,
@@ -832,10 +832,10 @@ describe("CoreLoop", () => {
 
   // ─── Stall detection + pivot ───
 
-  describe("stall detection", () => {
+  describe("stall detection", async () => {
     it("detects dimension stall", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       mocks.stallDetector.checkDimensionStall.mockReturnValue(makeStallReport());
 
@@ -848,7 +848,7 @@ describe("CoreLoop", () => {
 
     it("calls strategyManager.onStallDetected when stall detected", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       mocks.stallDetector.checkDimensionStall.mockReturnValue(makeStallReport());
 
@@ -863,7 +863,7 @@ describe("CoreLoop", () => {
 
     it("records pivot when strategy manager returns new strategy", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       mocks.stallDetector.checkDimensionStall.mockReturnValue(makeStallReport());
       mocks.strategyManager.onStallDetected.mockResolvedValue({
@@ -879,7 +879,7 @@ describe("CoreLoop", () => {
 
     it("does not record pivot when strategy manager returns null", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       mocks.stallDetector.checkDimensionStall.mockReturnValue(makeStallReport());
       mocks.strategyManager.onStallDetected.mockResolvedValue(null);
@@ -892,7 +892,7 @@ describe("CoreLoop", () => {
 
     it("increments escalation on stall", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       mocks.stallDetector.checkDimensionStall.mockReturnValue(makeStallReport());
 
@@ -907,7 +907,7 @@ describe("CoreLoop", () => {
 
     it("detects global stall when no dimension stall", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       mocks.stallDetector.checkDimensionStall.mockReturnValue(null);
       mocks.stallDetector.checkGlobalStall.mockReturnValue(
@@ -923,7 +923,7 @@ describe("CoreLoop", () => {
 
     it("stops loop on high escalation level stall", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       mocks.stallDetector.checkDimensionStall.mockReturnValue(
         makeStallReport({ escalation_level: 3 })
@@ -940,7 +940,7 @@ describe("CoreLoop", () => {
 
     it("does not stop loop on low escalation level stall", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       mocks.stallDetector.checkDimensionStall.mockReturnValue(
         makeStallReport({ escalation_level: 1 })
@@ -958,10 +958,10 @@ describe("CoreLoop", () => {
 
   // ─── Task cycle results ───
 
-  describe("task cycle results", () => {
+  describe("task cycle results", async () => {
     it("records completed action", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
       mocks.taskLifecycle.runTaskCycle.mockResolvedValue(
         makeTaskCycleResult({ action: "completed" })
       );
@@ -974,7 +974,7 @@ describe("CoreLoop", () => {
 
     it("records keep action", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
       mocks.taskLifecycle.runTaskCycle.mockResolvedValue(
         makeTaskCycleResult({ action: "keep" })
       );
@@ -987,7 +987,7 @@ describe("CoreLoop", () => {
 
     it("records discard action", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
       mocks.taskLifecycle.runTaskCycle.mockResolvedValue(
         makeTaskCycleResult({ action: "discard" })
       );
@@ -1000,7 +1000,7 @@ describe("CoreLoop", () => {
 
     it("records escalate action", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
       mocks.taskLifecycle.runTaskCycle.mockResolvedValue(
         makeTaskCycleResult({ action: "escalate" })
       );
@@ -1013,7 +1013,7 @@ describe("CoreLoop", () => {
 
     it("records approval_denied action", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
       mocks.taskLifecycle.runTaskCycle.mockResolvedValue(
         makeTaskCycleResult({ action: "approval_denied" })
       );
@@ -1027,10 +1027,10 @@ describe("CoreLoop", () => {
 
   // ─── approval_denied and escalate loop stopping ───
 
-  describe("approval_denied loop stopping", () => {
+  describe("approval_denied loop stopping", async () => {
     it("stops loop after 3 consecutive approval_denied results", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
       mocks.taskLifecycle.runTaskCycle.mockResolvedValue(
         makeTaskCycleResult({ action: "approval_denied" })
       );
@@ -1047,7 +1047,7 @@ describe("CoreLoop", () => {
 
     it("does not stop loop after only 2 consecutive approval_denied results", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       let callCount = 0;
       mocks.taskLifecycle.runTaskCycle.mockImplementation(async () => {
@@ -1070,7 +1070,7 @@ describe("CoreLoop", () => {
 
     it("resets consecutiveDenied counter on non-denied result", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       // Pattern: denied, denied, completed, denied, denied, denied → should stop on 6th iteration
       const actions = [
@@ -1100,10 +1100,10 @@ describe("CoreLoop", () => {
     });
   });
 
-  describe("escalate loop stopping", () => {
+  describe("escalate loop stopping", async () => {
     it("stops loop after 3 consecutive escalate results", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
       mocks.taskLifecycle.runTaskCycle.mockResolvedValue(
         makeTaskCycleResult({ action: "escalate" })
       );
@@ -1120,7 +1120,7 @@ describe("CoreLoop", () => {
 
     it("does not stop loop after only 2 consecutive escalate results", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       let callCount = 0;
       mocks.taskLifecycle.runTaskCycle.mockImplementation(async () => {
@@ -1143,7 +1143,7 @@ describe("CoreLoop", () => {
 
     it("resets consecutiveEscalations counter on non-escalated result", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       // Pattern: escalate, escalate, completed, escalate, escalate, escalate → stops on 6th
       const actions = [
@@ -1174,10 +1174,10 @@ describe("CoreLoop", () => {
 
   // ─── LoopResult construction ───
 
-  describe("LoopResult construction", () => {
+  describe("LoopResult construction", async () => {
     it("populates all fields in LoopResult", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const loop = new CoreLoop(deps, {
         maxIterations: 2,
@@ -1195,7 +1195,7 @@ describe("CoreLoop", () => {
 
     it("startedAt is before completedAt", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const loop = new CoreLoop(deps, {
         maxIterations: 1,
@@ -1210,7 +1210,7 @@ describe("CoreLoop", () => {
 
     it("iterations array contains correct number of results", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const loop = new CoreLoop(deps, {
         maxIterations: 3,
@@ -1236,7 +1236,7 @@ describe("CoreLoop", () => {
 
     it("returns error status when goal has terminal status", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal({ status: "completed" }));
+      await mocks.stateManager.saveGoal(makeGoal({ status: "completed" }));
 
       const loop = new CoreLoop(deps, { delayBetweenLoopsMs: 0 });
       const result = await loop.run("goal-1");
@@ -1247,7 +1247,7 @@ describe("CoreLoop", () => {
 
     it("accepts waiting status goals", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal({ status: "waiting" }));
+      await mocks.stateManager.saveGoal(makeGoal({ status: "waiting" }));
 
       const loop = new CoreLoop(deps, {
         maxIterations: 1,
@@ -1261,10 +1261,10 @@ describe("CoreLoop", () => {
 
   // ─── Report generation ───
 
-  describe("report generation", () => {
+  describe("report generation", async () => {
     it("calls reportingEngine.generateExecutionSummary", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal({
+      await mocks.stateManager.saveGoal(makeGoal({
         dimensions: [
           makeDimension({ name: "dim1", label: "Dimension 1" }),
           makeDimension({ name: "dim2", label: "Dimension 2", current_value: 3, threshold: { type: "min", value: 8 }, confidence: 0.7, observation_method: { type: "mechanical", source: "test", schedule: null, endpoint: null, confidence_tier: "mechanical" } }),
@@ -1291,7 +1291,7 @@ describe("CoreLoop", () => {
 
     it("calls reportingEngine.saveReport with generated report", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
       const mockReport = { type: "test_report" };
       mocks.reportingEngine.generateExecutionSummary.mockReturnValue(mockReport);
 
@@ -1303,7 +1303,7 @@ describe("CoreLoop", () => {
 
     it("generates report on completion", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
       mocks.satisficingJudge.isGoalComplete.mockReturnValue(
         makeCompletionJudgment({ is_complete: true, blocking_dimensions: [] })
       );
@@ -1316,7 +1316,7 @@ describe("CoreLoop", () => {
 
     it("generates report on task cycle error", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
       mocks.taskLifecycle.runTaskCycle.mockRejectedValue(new Error("fail"));
 
       const loop = new CoreLoop(deps, { delayBetweenLoopsMs: 0 });
@@ -1328,10 +1328,10 @@ describe("CoreLoop", () => {
 
   // ─── Adapter resolution ───
 
-  describe("adapter resolution", () => {
+  describe("adapter resolution", async () => {
     it("gets adapter from registry using configured adapterType", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const loop = new CoreLoop(deps, {
         delayBetweenLoopsMs: 0,
@@ -1344,7 +1344,7 @@ describe("CoreLoop", () => {
 
     it("uses default adapter type (openai_codex_cli)", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const loop = new CoreLoop(deps, { delayBetweenLoopsMs: 0 });
       await loop.runOneIteration("goal-1", 0);
@@ -1354,7 +1354,7 @@ describe("CoreLoop", () => {
 
     it("passes adapter to taskLifecycle.runTaskCycle", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const loop = new CoreLoop(deps, { delayBetweenLoopsMs: 0 });
       await loop.runOneIteration("goal-1", 0);
@@ -1373,10 +1373,10 @@ describe("CoreLoop", () => {
 
   // ─── Full integration-like tests ───
 
-  describe("multi-iteration scenarios", () => {
+  describe("multi-iteration scenarios", async () => {
     it("runs multiple iterations before completion", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       let iterCount = 0;
       mocks.satisficingJudge.isGoalComplete.mockImplementation(() => {
@@ -1400,7 +1400,7 @@ describe("CoreLoop", () => {
 
     it("mixes errors and successes correctly", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       let callCount = 0;
       mocks.taskLifecycle.runTaskCycle.mockImplementation(async () => {
@@ -1424,7 +1424,7 @@ describe("CoreLoop", () => {
 
     it("handles stall then recovery", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       let callCount = 0;
       mocks.stallDetector.checkDimensionStall.mockImplementation(() => {
@@ -1449,10 +1449,10 @@ describe("CoreLoop", () => {
 
   // ─── Gap history persistence ───
 
-  describe("gap history", () => {
+  describe("gap history", async () => {
     it("appends gap history across iterations", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const loop = new CoreLoop(deps, {
         maxIterations: 3,
@@ -1460,7 +1460,7 @@ describe("CoreLoop", () => {
       });
       await loop.run("goal-1");
 
-      const history = mocks.stateManager.loadGapHistory("goal-1");
+      const history = await mocks.stateManager.loadGapHistory("goal-1");
       expect(history.length).toBe(3);
       expect(history[0]!.iteration).toBe(0);
       expect(history[1]!.iteration).toBe(1);
@@ -1469,7 +1469,7 @@ describe("CoreLoop", () => {
 
     it("gap history entries contain correct dimension data", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const loop = new CoreLoop(deps, {
         maxIterations: 1,
@@ -1477,7 +1477,7 @@ describe("CoreLoop", () => {
       });
       await loop.run("goal-1");
 
-      const history = mocks.stateManager.loadGapHistory("goal-1");
+      const history = await mocks.stateManager.loadGapHistory("goal-1");
       expect(history[0]!.gap_vector).toHaveLength(2);
       expect(history[0]!.gap_vector[0]!.dimension_name).toBe("dim1");
       expect(history[0]!.gap_vector[1]!.dimension_name).toBe("dim2");
@@ -1487,12 +1487,12 @@ describe("CoreLoop", () => {
 
   // ─── Edge cases ───
 
-  describe("edge cases", () => {
+  describe("edge cases", async () => {
     it("handles goal with single dimension", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
       const goal = makeGoal();
       goal.dimensions = [goal.dimensions[0]!];
-      mocks.stateManager.saveGoal(goal);
+      await mocks.stateManager.saveGoal(goal);
 
       mocks.gapCalculator.calculateGapVector.mockReturnValue({
         goal_id: "goal-1",
@@ -1518,7 +1518,7 @@ describe("CoreLoop", () => {
         name: `dim${i}`,
         label: `Dimension ${i}`,
       }));
-      mocks.stateManager.saveGoal(goal);
+      await mocks.stateManager.saveGoal(goal);
 
       const loop = new CoreLoop(deps, {
         maxIterations: 1,
@@ -1531,7 +1531,7 @@ describe("CoreLoop", () => {
 
     it("handles cancelled goal status", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal({ status: "cancelled" }));
+      await mocks.stateManager.saveGoal(makeGoal({ status: "cancelled" }));
 
       const loop = new CoreLoop(deps, { delayBetweenLoopsMs: 0 });
       const result = await loop.run("goal-1");
@@ -1542,7 +1542,7 @@ describe("CoreLoop", () => {
 
     it("handles archived goal status", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal({ status: "archived" }));
+      await mocks.stateManager.saveGoal(makeGoal({ status: "archived" }));
 
       const loop = new CoreLoop(deps, { delayBetweenLoopsMs: 0 });
       const result = await loop.run("goal-1");
@@ -1553,7 +1553,7 @@ describe("CoreLoop", () => {
 
     it("re-checks completion after task cycle", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const loop = new CoreLoop(deps, {
         maxIterations: 1,
@@ -1568,11 +1568,11 @@ describe("CoreLoop", () => {
 
   // ─── DriveContext passed to task cycle ───
 
-  describe("DriveContext usage", () => {
+  describe("DriveContext usage", async () => {
     it("passes correctly built DriveContext to task cycle", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
       const deadline = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
-      mocks.stateManager.saveGoal(makeGoal({
+      await mocks.stateManager.saveGoal(makeGoal({
         deadline,
         dimensions: [
           makeDimension({ name: "dim1", label: "Dimension 1" }),
@@ -1594,10 +1594,10 @@ describe("CoreLoop", () => {
 
   // ─── Concurrent stop() during run ───
 
-  describe("concurrent stop()", () => {
+  describe("concurrent stop()", async () => {
     it("stops between iterations", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const loop = new CoreLoop(deps, {
         maxIterations: 100,
@@ -1615,7 +1615,7 @@ describe("CoreLoop", () => {
 
   // ─── KnowledgeManager integration ───
 
-  describe("KnowledgeManager integration", () => {
+  describe("KnowledgeManager integration", async () => {
     function makeAcquisitionTask() {
       return {
         id: "acq-task-1",
@@ -1655,7 +1655,7 @@ describe("CoreLoop", () => {
 
     it("generates acquisition task when knowledge gap detected", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const gapSignal = {
         signal_type: "interpretation_difficulty" as const,
@@ -1690,7 +1690,7 @@ describe("CoreLoop", () => {
 
     it("proceeds with normal task cycle when no knowledge gap detected", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const knowledgeManager = {
         detectKnowledgeGap: vi.fn().mockResolvedValue(null),
@@ -1712,7 +1712,7 @@ describe("CoreLoop", () => {
 
     it("injects relevant knowledge into task generation context", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const knowledgeEntries = [
         {
@@ -1749,7 +1749,7 @@ describe("CoreLoop", () => {
 
     it("skips knowledge injection gracefully when getRelevantKnowledge returns empty", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const knowledgeManager = {
         detectKnowledgeGap: vi.fn().mockResolvedValue(null),
@@ -1771,7 +1771,7 @@ describe("CoreLoop", () => {
 
     it("continues normally when knowledgeManager is undefined", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       // No knowledgeManager in deps
       const loop = new CoreLoop(deps, { delayBetweenLoopsMs: 0 });
@@ -1783,7 +1783,7 @@ describe("CoreLoop", () => {
 
     it("non-fatal: continues when detectKnowledgeGap throws", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const knowledgeManager = {
         detectKnowledgeGap: vi.fn().mockRejectedValue(new Error("LLM failure")),
@@ -1806,7 +1806,7 @@ describe("CoreLoop", () => {
 
   // ─── CapabilityDetector integration ───
 
-  describe("CapabilityDetector integration", () => {
+  describe("CapabilityDetector integration", async () => {
     function makeCapabilityGap() {
       return {
         missing_capability: { name: "bash_execution", type: "tool" as const },
@@ -1821,7 +1821,7 @@ describe("CoreLoop", () => {
       // Capability detection is handled inside TaskLifecycle.runTaskCycle, not CoreLoop.
       // CoreLoop must still call runTaskCycle and return whatever result TaskLifecycle produces.
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const escalateResult = makeTaskCycleResult({ action: "escalate" });
       mocks.taskLifecycle.runTaskCycle.mockResolvedValue(escalateResult);
@@ -1848,7 +1848,7 @@ describe("CoreLoop", () => {
 
     it("proceeds with runTaskCycle when capabilityDetector provided and no deficiency", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const capabilityDetector = {
         detectDeficiency: vi.fn(),
@@ -1871,7 +1871,7 @@ describe("CoreLoop", () => {
 
     it("continues normally when capabilityDetector is undefined", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const loop = new CoreLoop(deps, { delayBetweenLoopsMs: 0 });
       const result = await loop.runOneIteration("goal-1", 0);
@@ -1884,7 +1884,7 @@ describe("CoreLoop", () => {
       // CoreLoop no longer calls detectDeficiency directly — TaskLifecycle owns that.
       // Verify CoreLoop always reaches runTaskCycle regardless of capabilityDetector presence.
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const capabilityDetector = {
         detectDeficiency: vi.fn(),
@@ -1906,7 +1906,7 @@ describe("CoreLoop", () => {
 
   // ─── PortfolioManager integration ───
 
-  describe("PortfolioManager integration", () => {
+  describe("PortfolioManager integration", async () => {
     function createMockPortfolioManager() {
       return {
         selectNextStrategyForTask: vi.fn().mockReturnValue(null),
@@ -1921,7 +1921,7 @@ describe("CoreLoop", () => {
 
     it("works without portfolioManager (backward compat)", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       // deps has no portfolioManager
       const loop = new CoreLoop(deps, { delayBetweenLoopsMs: 0 });
@@ -1933,7 +1933,7 @@ describe("CoreLoop", () => {
 
     it("calls selectNextStrategyForTask when portfolioManager provided", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const portfolioManager = createMockPortfolioManager();
       const depsWithPM = { ...deps, portfolioManager: portfolioManager as any };
@@ -1945,7 +1945,7 @@ describe("CoreLoop", () => {
 
     it("calls setOnTaskComplete when selectNextStrategyForTask returns a result", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const selectionResult = { strategy_id: "strategy-1", allocation: 0.6 };
       const portfolioManager = createMockPortfolioManager();
@@ -1963,7 +1963,7 @@ describe("CoreLoop", () => {
 
     it("calls recordTaskCompletion after task completion when strategy_id present", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       // Task result has a strategy_id
       const taskResultWithStrategy = makeTaskCycleResult({
@@ -1985,7 +1985,7 @@ describe("CoreLoop", () => {
 
     it("does not call recordTaskCompletion when task action is not completed", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const taskResultKeep = makeTaskCycleResult({
         action: "keep",
@@ -2006,7 +2006,7 @@ describe("CoreLoop", () => {
 
     it("checks shouldRebalance after stall detection", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
       mocks.stallDetector.checkDimensionStall.mockReturnValue(makeStallReport());
 
       const portfolioManager = createMockPortfolioManager();
@@ -2019,7 +2019,7 @@ describe("CoreLoop", () => {
 
     it("calls rebalance when shouldRebalance returns a trigger", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const trigger = { type: "periodic" as const, details: "interval elapsed" };
       const portfolioManager = createMockPortfolioManager();
@@ -2034,7 +2034,7 @@ describe("CoreLoop", () => {
 
     it("calls onStallDetected when rebalance requires new generation", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const trigger = { type: "periodic" as const, details: "interval elapsed" };
       const portfolioManager = createMockPortfolioManager();
@@ -2055,7 +2055,7 @@ describe("CoreLoop", () => {
 
     it("handles WaitStrategy expiry check — calls rebalance when handleWaitStrategyExpiry returns a trigger", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const waitStrategy = {
         id: "wait-strategy-1",
@@ -2085,7 +2085,7 @@ describe("CoreLoop", () => {
 
     it("portfolio rebalance errors are non-fatal", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       const portfolioManager = createMockPortfolioManager();
       portfolioManager.shouldRebalance.mockImplementation(() => {
@@ -2104,7 +2104,7 @@ describe("CoreLoop", () => {
 });
 
 // ─── Tree Mode Tests (14B) ───
-describe("CoreLoop tree mode (14B)", () => {
+describe("CoreLoop tree mode (14B)", async () => {
   let tmpDir: string;
 
   beforeEach(() => {
@@ -2166,7 +2166,7 @@ describe("CoreLoop tree mode (14B)", () => {
     const { deps, mocks } = createTreeDeps(tmpDir);
     const childId = "child-goal-1";
     const goal = makeGoal({ id: "goal-1", children_ids: [childId] });
-    mocks.stateManager.saveGoal(goal);
+    await mocks.stateManager.saveGoal(goal);
 
     const loop = new CoreLoop(deps, { delayBetweenLoopsMs: 0 });
     await loop.runOneIteration("goal-1", 0);
@@ -2178,7 +2178,7 @@ describe("CoreLoop tree mode (14B)", () => {
     const { deps, mocks } = createTreeDeps(tmpDir);
     const childId = "child-goal-1";
     const goal = makeGoal({ id: "goal-1", children_ids: [childId] });
-    mocks.stateManager.saveGoal(goal);
+    await mocks.stateManager.saveGoal(goal);
 
     // aggregateChildStates updates the goal in state (simulate via saveGoal side-effect)
     mockStateAggregator.aggregateChildStates.mockImplementation(() => {
@@ -2196,7 +2196,7 @@ describe("CoreLoop tree mode (14B)", () => {
   it("skips aggregation when goal has no children", async () => {
     const { deps, mocks } = createTreeDeps(tmpDir);
     const goal = makeGoal({ id: "goal-1", children_ids: [] });
-    mocks.stateManager.saveGoal(goal);
+    await mocks.stateManager.saveGoal(goal);
 
     const loop = new CoreLoop(deps, { delayBetweenLoopsMs: 0 });
     await loop.runOneIteration("goal-1", 0);
@@ -2208,7 +2208,7 @@ describe("CoreLoop tree mode (14B)", () => {
     const { deps, mocks } = createTreeDeps(tmpDir);
     const childId = "child-goal-1";
     const goal = makeGoal({ id: "goal-1", children_ids: [childId] });
-    mocks.stateManager.saveGoal(goal);
+    await mocks.stateManager.saveGoal(goal);
 
     const loop = new CoreLoop(deps, { delayBetweenLoopsMs: 0 });
     await loop.runOneIteration("goal-1", 0);
@@ -2222,7 +2222,7 @@ describe("CoreLoop tree mode (14B)", () => {
   it("uses isGoalComplete for leaf goals", async () => {
     const { deps, mocks } = createTreeDeps(tmpDir);
     const goal = makeGoal({ id: "goal-1", children_ids: [] });
-    mocks.stateManager.saveGoal(goal);
+    await mocks.stateManager.saveGoal(goal);
 
     const loop = new CoreLoop(deps, { delayBetweenLoopsMs: 0 });
     await loop.runOneIteration("goal-1", 0);
@@ -2237,7 +2237,7 @@ describe("CoreLoop tree mode (14B)", () => {
     const { deps, mocks } = createTreeDeps(tmpDir);
     const childId = "child-goal-1";
     const goal = makeGoal({ id: "goal-1", children_ids: [childId] });
-    mocks.stateManager.saveGoal(goal);
+    await mocks.stateManager.saveGoal(goal);
 
     mockStateAggregator.aggregateChildStates.mockImplementation(() => {
       throw new Error("aggregation failed");
@@ -2255,7 +2255,7 @@ describe("CoreLoop tree mode (14B)", () => {
     const { deps, mocks } = createMockDeps(tmpDir);
     // stateAggregator intentionally omitted
     const goal = makeGoal({ id: "goal-1", children_ids: [] });
-    mocks.stateManager.saveGoal(goal);
+    await mocks.stateManager.saveGoal(goal);
 
     const loop = new CoreLoop(deps, { delayBetweenLoopsMs: 0 });
     const result = await loop.runOneIteration("goal-1", 0);
@@ -2268,7 +2268,7 @@ describe("CoreLoop tree mode (14B)", () => {
     const { deps, mocks } = createMockDeps(tmpDir);
     // goalTreeManager intentionally omitted
     const goal = makeGoal({ id: "goal-1", children_ids: [] });
-    mocks.stateManager.saveGoal(goal);
+    await mocks.stateManager.saveGoal(goal);
 
     const loop = new CoreLoop(deps, { delayBetweenLoopsMs: 0 });
     const result = await loop.runOneIteration("goal-1", 0);
@@ -2281,7 +2281,7 @@ describe("CoreLoop tree mode (14B)", () => {
     const { deps, mocks } = createTreeDeps(tmpDir);
     const childId = "child-goal-1";
     const goal = makeGoal({ id: "goal-1", children_ids: [childId] });
-    mocks.stateManager.saveGoal(goal);
+    await mocks.stateManager.saveGoal(goal);
 
     const loop = new CoreLoop(deps, { delayBetweenLoopsMs: 0 });
     await loop.runOneIteration("goal-1", 0);
@@ -2295,7 +2295,7 @@ describe("CoreLoop tree mode (14B)", () => {
   it("post-task re-check uses isGoalComplete for non-tree goals", async () => {
     const { deps, mocks } = createTreeDeps(tmpDir);
     const goal = makeGoal({ id: "goal-1", children_ids: [] });
-    mocks.stateManager.saveGoal(goal);
+    await mocks.stateManager.saveGoal(goal);
 
     const loop = new CoreLoop(deps, { delayBetweenLoopsMs: 0 });
     await loop.runOneIteration("goal-1", 0);
@@ -2311,7 +2311,7 @@ describe("CoreLoop tree mode (14B)", () => {
 // ─── Tree Mode Tests (14C) ───
 import type { TreeLoopOrchestrator } from "../src/goal/tree-loop-orchestrator.js";
 
-describe("CoreLoop tree mode (14C)", () => {
+describe("CoreLoop tree mode (14C)", async () => {
   let tmpDir: string;
 
   beforeEach(() => {
@@ -2355,8 +2355,8 @@ describe("CoreLoop tree mode (14C)", () => {
     // Save both root and node goals
     const rootGoal = makeGoal({ id: "root-1", children_ids: ["node-id-1"] });
     const nodeGoal = makeGoal({ id: "node-id-1", parent_id: "root-1" });
-    mocks.stateManager.saveGoal(rootGoal);
-    mocks.stateManager.saveGoal(nodeGoal);
+    await mocks.stateManager.saveGoal(rootGoal);
+    await mocks.stateManager.saveGoal(nodeGoal);
 
     const loop = new CoreLoop(deps, { treeMode: true, maxIterations: 1, delayBetweenLoopsMs: 0 });
     const result = await loop.run("root-1");
@@ -2375,7 +2375,7 @@ describe("CoreLoop tree mode (14C)", () => {
     const { deps, mocks } = createTreeModeDeps(tmpDir, orchestratorMock);
 
     const rootGoal = makeGoal({ id: "root-1", children_ids: [] });
-    mocks.stateManager.saveGoal(rootGoal);
+    await mocks.stateManager.saveGoal(rootGoal);
 
     const loop = new CoreLoop(deps, { treeMode: true, maxIterations: 10, delayBetweenLoopsMs: 0 });
     const result = await loop.run("root-1");
@@ -2392,7 +2392,7 @@ describe("CoreLoop tree mode (14C)", () => {
     // No treeLoopOrchestrator in deps
 
     const goal = makeGoal({ id: "goal-1" });
-    mocks.stateManager.saveGoal(goal);
+    await mocks.stateManager.saveGoal(goal);
 
     const loop = new CoreLoop(deps, { treeMode: true, maxIterations: 1, delayBetweenLoopsMs: 0 });
     await loop.run("goal-1");
@@ -2415,8 +2415,8 @@ describe("CoreLoop tree mode (14C)", () => {
 
     const rootGoal = makeGoal({ id: "root-1", children_ids: ["node-id-1"] });
     const nodeGoal = makeGoal({ id: "node-id-1", parent_id: "root-1" });
-    mocks.stateManager.saveGoal(rootGoal);
-    mocks.stateManager.saveGoal(nodeGoal);
+    await mocks.stateManager.saveGoal(rootGoal);
+    await mocks.stateManager.saveGoal(nodeGoal);
 
     // Make the node goal appear completed after task cycle
     mocks.satisficingJudge.isGoalComplete.mockReturnValue(
@@ -2436,8 +2436,8 @@ describe("CoreLoop tree mode (14C)", () => {
 
     const rootGoal = makeGoal({ id: "root-1", children_ids: ["node-id-1"] });
     const nodeGoal = makeGoal({ id: "node-id-1", parent_id: "root-1" });
-    mocks.stateManager.saveGoal(rootGoal);
-    mocks.stateManager.saveGoal(nodeGoal);
+    await mocks.stateManager.saveGoal(rootGoal);
+    await mocks.stateManager.saveGoal(nodeGoal);
 
     // Goal is not completed
     mocks.satisficingJudge.isGoalComplete.mockReturnValue(
@@ -2464,9 +2464,9 @@ describe("CoreLoop tree mode (14C)", () => {
     const rootGoal = makeGoal({ id: "root-1", children_ids: ["node-id-1", "node-id-2"] });
     const nodeGoal1 = makeGoal({ id: "node-id-1", parent_id: "root-1" });
     const nodeGoal2 = makeGoal({ id: "node-id-2", parent_id: "root-1" });
-    mocks.stateManager.saveGoal(rootGoal);
-    mocks.stateManager.saveGoal(nodeGoal1);
-    mocks.stateManager.saveGoal(nodeGoal2);
+    await mocks.stateManager.saveGoal(rootGoal);
+    await mocks.stateManager.saveGoal(nodeGoal1);
+    await mocks.stateManager.saveGoal(nodeGoal2);
 
     const loop = new CoreLoop(deps, { treeMode: true, maxIterations: 5, delayBetweenLoopsMs: 0 });
     const result = await loop.run("root-1");
@@ -2484,8 +2484,8 @@ describe("CoreLoop tree mode (14C)", () => {
 
     const rootGoal = makeGoal({ id: "root-1", children_ids: ["node-id-1"] });
     const nodeGoal = makeGoal({ id: "node-id-1", parent_id: "root-1" });
-    mocks.stateManager.saveGoal(rootGoal);
-    mocks.stateManager.saveGoal(nodeGoal);
+    await mocks.stateManager.saveGoal(rootGoal);
+    await mocks.stateManager.saveGoal(nodeGoal);
 
     const loop = new CoreLoop(deps, { treeMode: true, delayBetweenLoopsMs: 0 });
     const iterResult = await loop.runTreeIteration("root-1", 0);
@@ -2500,7 +2500,7 @@ describe("CoreLoop tree mode (14C)", () => {
     const { deps, mocks } = createTreeModeDeps(tmpDir, orchestratorMock);
 
     const rootGoal = makeGoal({ id: "root-1", children_ids: [] });
-    mocks.stateManager.saveGoal(rootGoal);
+    await mocks.stateManager.saveGoal(rootGoal);
 
     const loop = new CoreLoop(deps, { treeMode: true, delayBetweenLoopsMs: 0 });
     const iterResult = await loop.runTreeIteration("root-1", 0);
@@ -2515,7 +2515,7 @@ describe("CoreLoop tree mode (14C)", () => {
     const { deps, mocks } = createTreeModeDeps(tmpDir, orchestratorMock);
 
     const goal = makeGoal({ id: "goal-1" });
-    mocks.stateManager.saveGoal(goal);
+    await mocks.stateManager.saveGoal(goal);
 
     const loop = new CoreLoop(deps, { treeMode: false, maxIterations: 1, delayBetweenLoopsMs: 0 });
     await loop.run("goal-1");
@@ -2528,10 +2528,10 @@ describe("CoreLoop tree mode (14C)", () => {
 
   // ─── Archive on completion ───
 
-  describe("archive on completion", () => {
+  describe("archive on completion", async () => {
     it("calls memoryLifecycleManager.onGoalClose on completion", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       mocks.satisficingJudge.isGoalComplete.mockReturnValue(
         makeCompletionJudgment({ is_complete: true, blocking_dimensions: [] })
@@ -2551,7 +2551,7 @@ describe("CoreLoop tree mode (14C)", () => {
 
     it("calls stateManager.archiveGoal on completion", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       mocks.satisficingJudge.isGoalComplete.mockReturnValue(
         makeCompletionJudgment({ is_complete: true, blocking_dimensions: [] })
@@ -2568,7 +2568,7 @@ describe("CoreLoop tree mode (14C)", () => {
 
     it("archive failure is non-fatal", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       mocks.satisficingJudge.isGoalComplete.mockReturnValue(
         makeCompletionJudgment({ is_complete: true, blocking_dimensions: [] })
@@ -2588,7 +2588,7 @@ describe("CoreLoop tree mode (14C)", () => {
 
     it("does not call archiveGoal when loop did not complete", async () => {
       const { deps, mocks } = createMockDeps(tmpDir);
-      mocks.stateManager.saveGoal(makeGoal());
+      await mocks.stateManager.saveGoal(makeGoal());
 
       // Goal never completes — max_iterations
       const archiveSpy = vi.spyOn(mocks.stateManager, "archiveGoal");

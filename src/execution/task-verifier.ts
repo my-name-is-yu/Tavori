@@ -204,7 +204,7 @@ export async function verifyTask(
   const progressDelta = progressByVerdict[verdict] ?? 0;
 
   // Read goal state to get actual current dimension values for previous_value / new_value.
-  const goalDataForUpdate = deps.stateManager.readRaw(`goals/${task.goal_id}/goal.json`);
+  const goalDataForUpdate = await deps.stateManager.readRaw(`goals/${task.goal_id}/goal.json`);
   const goalDimsForUpdate =
     goalDataForUpdate && typeof goalDataForUpdate === "object"
       ? ((goalDataForUpdate as Record<string, unknown>).dimensions as
@@ -243,7 +243,7 @@ export async function verifyTask(
   });
 
   // Persist verification result
-  deps.stateManager.writeRaw(
+  await deps.stateManager.writeRaw(
     `verification/${task.id}/verification-result.json`,
     verificationResult
   );
@@ -275,13 +275,13 @@ export async function handleVerdict(
         status: "completed" as const,
         completed_at: now,
       };
-      deps.stateManager.writeRaw(
+      await deps.stateManager.writeRaw(
         `tasks/${task.goal_id}/${task.id}.json`,
         completedTask
       );
 
       // Apply dimension_updates and update last_updated for the primary dimension.
-      const goalData = deps.stateManager.readRaw(`goals/${task.goal_id}/goal.json`);
+      const goalData = await deps.stateManager.readRaw(`goals/${task.goal_id}/goal.json`);
       if (goalData && typeof goalData === "object") {
         const goal = goalData as Record<string, unknown>;
         const dimensions = goal.dimensions as Array<Record<string, unknown>> | undefined;
@@ -299,12 +299,12 @@ export async function handleVerdict(
               dim.last_updated = now;
             }
           }
-          deps.stateManager.writeRaw(`goals/${task.goal_id}/goal.json`, goal);
+          await deps.stateManager.writeRaw(`goals/${task.goal_id}/goal.json`, goal);
         }
       }
 
       // Update task history
-      appendTaskHistory(deps, task.goal_id, completedTask);
+      await appendTaskHistory(deps, task.goal_id, completedTask);
 
       // Notify portfolio manager of task completion
       if (deps.onTaskComplete && completedTask.strategy_id) {
@@ -318,7 +318,7 @@ export async function handleVerdict(
       const directionCorrect = isDirectionCorrect(verificationResult);
       if (directionCorrect) {
         // Apply partial dimension_updates to goal state
-        const goalDataPartial = deps.stateManager.readRaw(`goals/${task.goal_id}/goal.json`);
+        const goalDataPartial = await deps.stateManager.readRaw(`goals/${task.goal_id}/goal.json`);
         if (goalDataPartial && typeof goalDataPartial === "object") {
           const goal = goalDataPartial as Record<string, unknown>;
           const dimensions = goal.dimensions as Array<Record<string, unknown>> | undefined;
@@ -331,10 +331,10 @@ export async function handleVerdict(
                 dim.current_value = update.new_value;
               }
             }
-            deps.stateManager.writeRaw(`goals/${task.goal_id}/goal.json`, goal);
+            await deps.stateManager.writeRaw(`goals/${task.goal_id}/goal.json`, goal);
           }
         }
-        appendTaskHistory(deps, task.goal_id, task);
+        await appendTaskHistory(deps, task.goal_id, task);
         return { action: "keep", task };
       }
       // Direction wrong — delegate to handleFailure
@@ -367,7 +367,7 @@ export async function handleFailure(
   deps.trustManager.recordFailure(task.task_category);
 
   // Persist updated task
-  deps.stateManager.writeRaw(
+  await deps.stateManager.writeRaw(
     `tasks/${task.goal_id}/${task.id}.json`,
     updatedTask
   );
@@ -379,7 +379,7 @@ export async function handleFailure(
       task.primary_dimension,
       updatedTask.consecutive_failure_count
     );
-    appendTaskHistory(deps, task.goal_id, updatedTask);
+    await appendTaskHistory(deps, task.goal_id, updatedTask);
     return { action: "escalate", task: updatedTask };
   }
 
@@ -387,7 +387,7 @@ export async function handleFailure(
   const directionCorrect = isDirectionCorrect(verificationResult);
 
   if (directionCorrect) {
-    appendTaskHistory(deps, task.goal_id, updatedTask);
+    await appendTaskHistory(deps, task.goal_id, updatedTask);
     return { action: "keep", task: updatedTask };
   }
 
@@ -396,17 +396,17 @@ export async function handleFailure(
     // Attempt revert
     const revertSuccess = await attemptRevert(deps, updatedTask);
     if (revertSuccess) {
-      appendTaskHistory(deps, task.goal_id, updatedTask);
+      await appendTaskHistory(deps, task.goal_id, updatedTask);
       return { action: "discard", task: updatedTask };
     }
     // Revert failed — set state_integrity to "uncertain" and escalate
-    setDimensionIntegrity(deps, task.goal_id, task.primary_dimension, "uncertain");
-    appendTaskHistory(deps, task.goal_id, updatedTask);
+    await setDimensionIntegrity(deps, task.goal_id, task.primary_dimension, "uncertain");
+    await appendTaskHistory(deps, task.goal_id, updatedTask);
     return { action: "escalate", task: updatedTask };
   }
 
   // irreversible or unknown → escalate
-  appendTaskHistory(deps, task.goal_id, updatedTask);
+  await appendTaskHistory(deps, task.goal_id, updatedTask);
   return { action: "escalate", task: updatedTask };
 }
 
@@ -509,7 +509,7 @@ async function runLLMReview(
   executionResult: AgentResult
 ): Promise<{ passed: boolean; partial: boolean; description: string; confidence: number }> {
   // Create review session
-  const reviewSession = deps.sessionManager.createSession(
+  const reviewSession = await deps.sessionManager.createSession(
     "task_review",
     task.goal_id,
     task.id
@@ -564,10 +564,10 @@ Return JSON:
       description: parsed.reasoning ?? "LLM review completed",
       confidence: verdictStr === "pass" ? 0.8 : verdictStr === "partial" ? 0.6 : 0.8,
     };
-    deps.sessionManager.endSession(reviewSession.id, `LLM review: ${verdictStr}`);
+    await deps.sessionManager.endSession(reviewSession.id, `LLM review: ${verdictStr}`);
     return result;
   } catch {
-    deps.sessionManager.endSession(reviewSession.id, "Failed to parse LLM review result");
+    await deps.sessionManager.endSession(reviewSession.id, "Failed to parse LLM review result");
     return {
       passed: false,
       partial: false,
@@ -598,7 +598,7 @@ async function attemptRevert(deps: VerifierDeps, task: Task): Promise<boolean> {
   // In MVP, we create a revert prompt and check if it succeeds
   // This is called only for reversible tasks
   try {
-    const revertSession = deps.sessionManager.createSession(
+    const revertSession = await deps.sessionManager.createSession(
       "task_execution",
       task.goal_id,
       task.id
@@ -613,7 +613,7 @@ Return JSON: {"success": true|false, "reason": "..."}`;
       { system: "Revert failed task changes. Respond with JSON only.", max_tokens: 512 }
     );
 
-    deps.sessionManager.endSession(revertSession.id, response.content);
+    await deps.sessionManager.endSession(revertSession.id, response.content);
 
     // Parse structured JSON response
     try {
@@ -631,15 +631,15 @@ Return JSON: {"success": true|false, "reason": "..."}`;
   }
 }
 
-function setDimensionIntegrity(
+async function setDimensionIntegrity(
   deps: VerifierDeps,
   goalId: string,
   dimensionName: string,
   integrity: "ok" | "uncertain"
-): void {
+): Promise<void> {
   // Attempt to update the dimension's state_integrity flag
   // Read the goal, find the dimension, update integrity
-  const goalData = deps.stateManager.readRaw(`goals/${goalId}/goal.json`);
+  const goalData = await deps.stateManager.readRaw(`goals/${goalId}/goal.json`);
   if (goalData && typeof goalData === "object") {
     const goal = goalData as Record<string, unknown>;
     const dimensions = goal.dimensions as Array<Record<string, unknown>> | undefined;
@@ -649,14 +649,14 @@ function setDimensionIntegrity(
           dim.state_integrity = integrity;
         }
       }
-      deps.stateManager.writeRaw(`goals/${goalId}/goal.json`, goal);
+      await deps.stateManager.writeRaw(`goals/${goalId}/goal.json`, goal);
     }
   }
 }
 
-function appendTaskHistory(deps: VerifierDeps, goalId: string, task: Task): void {
+async function appendTaskHistory(deps: VerifierDeps, goalId: string, task: Task): Promise<void> {
   const historyPath = `tasks/${goalId}/task-history.json`;
-  const existing = deps.stateManager.readRaw(historyPath);
+  const existing = await deps.stateManager.readRaw(historyPath);
   const history = Array.isArray(existing) ? existing : [];
 
   const actual_elapsed_ms =
@@ -677,5 +677,5 @@ function appendTaskHistory(deps: VerifierDeps, goalId: string, task: Task): void
     actual_elapsed_ms,
     estimated_duration_ms,
   });
-  deps.stateManager.writeRaw(historyPath, history);
+  await deps.stateManager.writeRaw(historyPath, history);
 }

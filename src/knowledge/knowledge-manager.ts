@@ -293,7 +293,7 @@ Respond with JSON:
     });
 
     // Persist
-    this.stateManager.writeRaw(`tasks/${goalId}/${taskId}.json`, task);
+    await this.stateManager.writeRaw(`tasks/${goalId}/${taskId}.json`, task);
 
     return task;
   }
@@ -311,7 +311,7 @@ Respond with JSON:
     domainKnowledge.last_updated = new Date().toISOString();
 
     const validated = DomainKnowledgeSchema.parse(domainKnowledge);
-    this.stateManager.writeRaw(
+    await this.stateManager.writeRaw(
       `goals/${goalId}/domain_knowledge.json`,
       validated
     );
@@ -494,7 +494,7 @@ Determine if there is a factual contradiction. Respond with JSON:
     });
 
     // Load existing entries and merge / append
-    const all = loadSharedEntries(this.stateManager);
+    const all = await loadSharedEntries(this.stateManager);
     const existingIdx = all.findIndex((e) => e.entry_id === entry.entry_id);
 
     let merged: SharedKnowledgeEntry;
@@ -531,7 +531,7 @@ Determine if there is a factual contradiction. Respond with JSON:
       all[targetIdx] = merged;
     }
 
-    this.stateManager.writeRaw(SHARED_KB_PATH, all);
+    await this.stateManager.writeRaw(SHARED_KB_PATH, all);
     return merged;
   }
 
@@ -539,10 +539,10 @@ Determine if there is a factual contradiction. Respond with JSON:
    * Query the shared knowledge base by tags (AND logic).
    * Optionally filter to entries contributed by a specific goal.
    */
-  querySharedKnowledge(
+  async querySharedKnowledge(
     tags: string[],
     goalId?: string
-  ): SharedKnowledgeEntry[] {
+  ): Promise<SharedKnowledgeEntry[]> {
     return querySharedKnowledge(this.stateManager, tags, goalId);
   }
 
@@ -583,7 +583,7 @@ Determine if there is a factual contradiction. Respond with JSON:
   /**
    * Return shared knowledge entries whose revalidation_due_at is in the past.
    */
-  getStaleEntries(): SharedKnowledgeEntry[] {
+  async getStaleEntries(): Promise<SharedKnowledgeEntry[]> {
     return getStaleEntries(this.stateManager);
   }
 

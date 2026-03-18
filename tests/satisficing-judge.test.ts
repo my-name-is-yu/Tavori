@@ -547,18 +547,18 @@ describe("selectDimensionsForIteration", () => {
 // ─── detectThresholdAdjustmentNeeded ───
 
 describe("detectThresholdAdjustmentNeeded", () => {
-  it("returns empty array when no dimensions have issues", () => {
+  it("returns empty array when no dimensions have issues", async () => {
     const goal = makeGoal({
       dimensions: [
         makeDimension({ name: "dim1", current_value: 80, threshold: { type: "min", value: 100 }, confidence: 0.9 }),
       ],
     });
     const failures = new Map<string, number>([["dim1", 1]]);
-    const result = judge.detectThresholdAdjustmentNeeded(goal, failures);
+    const result = await judge.detectThresholdAdjustmentNeeded(goal, failures);
     expect(result).toHaveLength(0);
   });
 
-  it("generates proposal when dimension has >= 3 failures with no progress", () => {
+  it("generates proposal when dimension has >= 3 failures with no progress", async () => {
     const goal = makeGoal({
       id: "goal-1",
       dimensions: [
@@ -566,7 +566,7 @@ describe("detectThresholdAdjustmentNeeded", () => {
       ],
     });
     const failures = new Map<string, number>([["dim1", 5]]);
-    const proposals = judge.detectThresholdAdjustmentNeeded(goal, failures);
+    const proposals = await judge.detectThresholdAdjustmentNeeded(goal, failures);
     expect(proposals.length).toBeGreaterThan(0);
     const p = proposals[0];
     expect(p.dimension_name).toBe("dim1");
@@ -576,18 +576,18 @@ describe("detectThresholdAdjustmentNeeded", () => {
     expect(p.reason).toBe("high_failure_no_progress");
   });
 
-  it("does NOT generate failure proposal when failures < 3", () => {
+  it("does NOT generate failure proposal when failures < 3", async () => {
     const goal = makeGoal({
       dimensions: [
         makeDimension({ name: "dim1", current_value: 5, threshold: { type: "min", value: 100 }, confidence: 0.9 }),
       ],
     });
     const failures = new Map<string, number>([["dim1", 2]]);
-    const proposals = judge.detectThresholdAdjustmentNeeded(goal, failures);
+    const proposals = await judge.detectThresholdAdjustmentNeeded(goal, failures);
     expect(proposals.filter((p) => p.reason === "high_failure_no_progress")).toHaveLength(0);
   });
 
-  it("generates bottleneck proposal when all others satisfied but one is far behind", () => {
+  it("generates bottleneck proposal when all others satisfied but one is far behind", async () => {
     const goal = makeGoal({
       id: "goal-2",
       dimensions: [
@@ -597,13 +597,13 @@ describe("detectThresholdAdjustmentNeeded", () => {
       ],
     });
     const failures = new Map<string, number>();
-    const proposals = judge.detectThresholdAdjustmentNeeded(goal, failures);
+    const proposals = await judge.detectThresholdAdjustmentNeeded(goal, failures);
     const bottleneckProposals = proposals.filter((p) => p.reason === "bottleneck_dimension");
     expect(bottleneckProposals.length).toBeGreaterThan(0);
     expect(bottleneckProposals[0].dimension_name).toBe("bottleneck");
   });
 
-  it("does not generate bottleneck proposal when other dimensions are not all satisfied", () => {
+  it("does not generate bottleneck proposal when other dimensions are not all satisfied", async () => {
     const goal = makeGoal({
       dimensions: [
         makeDimension({ name: "dim1", current_value: 50, threshold: { type: "min", value: 100 }, confidence: 0.9 }),
@@ -611,14 +611,14 @@ describe("detectThresholdAdjustmentNeeded", () => {
       ],
     });
     const failures = new Map<string, number>();
-    const proposals = judge.detectThresholdAdjustmentNeeded(goal, failures);
+    const proposals = await judge.detectThresholdAdjustmentNeeded(goal, failures);
     expect(proposals.filter((p) => p.reason === "bottleneck_dimension")).toHaveLength(0);
   });
 
-  it("returns empty array for goal with no dimensions", () => {
+  it("returns empty array for goal with no dimensions", async () => {
     const goal = makeGoal({ dimensions: [] });
     const failures = new Map<string, number>();
-    const result = judge.detectThresholdAdjustmentNeeded(goal, failures);
+    const result = await judge.detectThresholdAdjustmentNeeded(goal, failures);
     expect(result).toHaveLength(0);
   });
 });
@@ -626,7 +626,7 @@ describe("detectThresholdAdjustmentNeeded", () => {
 // ─── propagateSubgoalCompletion ───
 
 describe("propagateSubgoalCompletion", () => {
-  it("sets parent dimension current_value to satisfied value on name match", () => {
+  it("sets parent dimension current_value to satisfied value on name match", async () => {
     const parentGoal = makeGoal({
       id: "parent-goal",
       dimensions: [
@@ -638,11 +638,11 @@ describe("propagateSubgoalCompletion", () => {
         }),
       ],
     });
-    stateManager.saveGoal(parentGoal);
+    await stateManager.saveGoal(parentGoal);
 
-    judge.propagateSubgoalCompletion("subgoal-abc", "parent-goal");
+    await judge.propagateSubgoalCompletion("subgoal-abc", "parent-goal");
 
-    const updated = stateManager.loadGoal("parent-goal");
+    const updated = await stateManager.loadGoal("parent-goal");
     expect(updated).not.toBeNull();
     const dim = updated!.dimensions.find((d) => d.name === "subgoal-abc");
     expect(dim).toBeDefined();
@@ -650,7 +650,7 @@ describe("propagateSubgoalCompletion", () => {
     expect(dim!.current_value).toBe(1);
   });
 
-  it("sets dimension to threshold midpoint for range threshold", () => {
+  it("sets dimension to threshold midpoint for range threshold", async () => {
     const parentGoal = makeGoal({
       id: "parent-range",
       dimensions: [
@@ -662,16 +662,16 @@ describe("propagateSubgoalCompletion", () => {
         }),
       ],
     });
-    stateManager.saveGoal(parentGoal);
+    await stateManager.saveGoal(parentGoal);
 
-    judge.propagateSubgoalCompletion("subgoal-range", "parent-range");
+    await judge.propagateSubgoalCompletion("subgoal-range", "parent-range");
 
-    const updated = stateManager.loadGoal("parent-range");
+    const updated = await stateManager.loadGoal("parent-range");
     const dim = updated!.dimensions.find((d) => d.name === "subgoal-range");
     expect(dim!.current_value).toBeCloseTo(36.5); // (36+37)/2
   });
 
-  it("sets dimension to true for present threshold", () => {
+  it("sets dimension to true for present threshold", async () => {
     const parentGoal = makeGoal({
       id: "parent-present",
       dimensions: [
@@ -683,43 +683,41 @@ describe("propagateSubgoalCompletion", () => {
         }),
       ],
     });
-    stateManager.saveGoal(parentGoal);
+    await stateManager.saveGoal(parentGoal);
 
-    judge.propagateSubgoalCompletion("subgoal-present", "parent-present");
+    await judge.propagateSubgoalCompletion("subgoal-present", "parent-present");
 
-    const updated = stateManager.loadGoal("parent-present");
+    const updated = await stateManager.loadGoal("parent-present");
     const dim = updated!.dimensions.find((d) => d.name === "subgoal-present");
     expect(dim!.current_value).toBe(true);
   });
 
-  it("does nothing when no dimension matches subgoalId", () => {
+  it("does nothing when no dimension matches subgoalId", async () => {
     const parentGoal = makeGoal({
       id: "parent-no-match",
       dimensions: [
         makeDimension({ name: "other-dim", current_value: 50, threshold: { type: "min", value: 100 }, confidence: 0.9 }),
       ],
     });
-    stateManager.saveGoal(parentGoal);
+    await stateManager.saveGoal(parentGoal);
 
     // Should not throw, just no-op
-    expect(() =>
-      judge.propagateSubgoalCompletion("nonexistent-subgoal", "parent-no-match")
-    ).not.toThrow();
+    await expect(judge.propagateSubgoalCompletion("nonexistent-subgoal", "parent-no-match")
+    ).resolves.not.toThrow();
 
-    const updated = stateManager.loadGoal("parent-no-match");
+    const updated = await stateManager.loadGoal("parent-no-match");
     expect(updated!.dimensions[0].current_value).toBe(50); // unchanged
   });
 
-  it("throws when parent goal does not exist", () => {
-    expect(() =>
-      judge.propagateSubgoalCompletion("subgoal-x", "nonexistent-parent")
-    ).toThrow(/not found/);
+  it("throws when parent goal does not exist", async () => {
+    await expect(judge.propagateSubgoalCompletion("subgoal-x", "nonexistent-parent")
+    ).rejects.toThrow(/not found/);
   });
 });
 
 // ─── proposeDimensionMapping (Phase 2) ───
 
-describe("proposeDimensionMapping (Phase 2)", () => {
+describe("proposeDimensionMapping (Phase 2)", async () => {
   it("proposes mappings when embedding client is available", async () => {
     const mockEmbedding = new MockEmbeddingClient();
     const judge2 = new SatisficingJudge(stateManager, mockEmbedding);
@@ -902,8 +900,8 @@ describe("aggregateValues", () => {
 
 // ─── propagateSubgoalCompletion Phase 2 (dimension_mapping aggregation) ───
 
-describe("propagateSubgoalCompletion Phase 2 — aggregation mapping", () => {
-  it("backwards compatibility: no dimension_mapping → behaves like MVP name matching", () => {
+describe("propagateSubgoalCompletion Phase 2 — aggregation mapping", async () => {
+  it("backwards compatibility: no dimension_mapping → behaves like MVP name matching", async () => {
     const parentGoal = makeGoal({
       id: "parent-compat",
       dimensions: [
@@ -915,7 +913,7 @@ describe("propagateSubgoalCompletion Phase 2 — aggregation mapping", () => {
         }),
       ],
     });
-    stateManager.saveGoal(parentGoal);
+    await stateManager.saveGoal(parentGoal);
 
     const subgoalDims: Dimension[] = [
       makeDimension({
@@ -926,15 +924,15 @@ describe("propagateSubgoalCompletion Phase 2 — aggregation mapping", () => {
         dimension_mapping: null,
       }),
     ];
-    judge.propagateSubgoalCompletion("feature-a", "parent-compat", subgoalDims);
+    await judge.propagateSubgoalCompletion("feature-a", "parent-compat", subgoalDims);
 
-    const updated = stateManager.loadGoal("parent-compat");
+    const updated = await stateManager.loadGoal("parent-compat");
     const dim = updated!.dimensions.find((d) => d.name === "feature-a");
     // Unmapped → name matching → sets to satisfied value (threshold=min 1 → value=1)
     expect(dim!.current_value).toBe(1);
   });
 
-  it("min aggregation: 3 subgoal dims map to same parent dim, min value is used", () => {
+  it("min aggregation: 3 subgoal dims map to same parent dim, min value is used", async () => {
     const parentGoal = makeGoal({
       id: "parent-min",
       dimensions: [
@@ -946,7 +944,7 @@ describe("propagateSubgoalCompletion Phase 2 — aggregation mapping", () => {
         }),
       ],
     });
-    stateManager.saveGoal(parentGoal);
+    await stateManager.saveGoal(parentGoal);
 
     const subgoalDims: Dimension[] = [
       makeDimension({
@@ -971,14 +969,14 @@ describe("propagateSubgoalCompletion Phase 2 — aggregation mapping", () => {
         dimension_mapping: { parent_dimension: "product_readiness", aggregation: "min" },
       }),
     ];
-    judge.propagateSubgoalCompletion("subgoal-id", "parent-min", subgoalDims);
+    await judge.propagateSubgoalCompletion("subgoal-id", "parent-min", subgoalDims);
 
-    const updated = stateManager.loadGoal("parent-min");
+    const updated = await stateManager.loadGoal("parent-min");
     const dim = updated!.dimensions.find((d) => d.name === "product_readiness");
     expect(dim!.current_value).toBeCloseTo(0.5);
   });
 
-  it("avg aggregation: 3 subgoal dims map to same parent dim, average is used", () => {
+  it("avg aggregation: 3 subgoal dims map to same parent dim, average is used", async () => {
     const parentGoal = makeGoal({
       id: "parent-avg",
       dimensions: [
@@ -990,7 +988,7 @@ describe("propagateSubgoalCompletion Phase 2 — aggregation mapping", () => {
         }),
       ],
     });
-    stateManager.saveGoal(parentGoal);
+    await stateManager.saveGoal(parentGoal);
 
     const subgoalDims: Dimension[] = [
       makeDimension({
@@ -1015,15 +1013,15 @@ describe("propagateSubgoalCompletion Phase 2 — aggregation mapping", () => {
         dimension_mapping: { parent_dimension: "overall_score", aggregation: "avg" },
       }),
     ];
-    judge.propagateSubgoalCompletion("subgoal-id", "parent-avg", subgoalDims);
+    await judge.propagateSubgoalCompletion("subgoal-id", "parent-avg", subgoalDims);
 
-    const updated = stateManager.loadGoal("parent-avg");
+    const updated = await stateManager.loadGoal("parent-avg");
     const dim = updated!.dimensions.find((d) => d.name === "overall_score");
     // avg(0.6, 0.8, 1.0) = 0.8
     expect(dim!.current_value).toBeCloseTo(0.8);
   });
 
-  it("max aggregation: 3 subgoal dims map to same parent dim, max value is used", () => {
+  it("max aggregation: 3 subgoal dims map to same parent dim, max value is used", async () => {
     const parentGoal = makeGoal({
       id: "parent-max",
       dimensions: [
@@ -1035,7 +1033,7 @@ describe("propagateSubgoalCompletion Phase 2 — aggregation mapping", () => {
         }),
       ],
     });
-    stateManager.saveGoal(parentGoal);
+    await stateManager.saveGoal(parentGoal);
 
     const subgoalDims: Dimension[] = [
       makeDimension({
@@ -1060,14 +1058,14 @@ describe("propagateSubgoalCompletion Phase 2 — aggregation mapping", () => {
         dimension_mapping: { parent_dimension: "best_effort", aggregation: "max" },
       }),
     ];
-    judge.propagateSubgoalCompletion("subgoal-id", "parent-max", subgoalDims);
+    await judge.propagateSubgoalCompletion("subgoal-id", "parent-max", subgoalDims);
 
-    const updated = stateManager.loadGoal("parent-max");
+    const updated = await stateManager.loadGoal("parent-max");
     const dim = updated!.dimensions.find((d) => d.name === "best_effort");
     expect(dim!.current_value).toBeCloseTo(0.9);
   });
 
-  it("all_required: all subgoal dims meet threshold → parent gets min fulfillment ratio = 1.0", () => {
+  it("all_required: all subgoal dims meet threshold → parent gets min fulfillment ratio = 1.0", async () => {
     const parentGoal = makeGoal({
       id: "parent-allreq-complete",
       dimensions: [
@@ -1079,7 +1077,7 @@ describe("propagateSubgoalCompletion Phase 2 — aggregation mapping", () => {
         }),
       ],
     });
-    stateManager.saveGoal(parentGoal);
+    await stateManager.saveGoal(parentGoal);
 
     const subgoalDims: Dimension[] = [
       makeDimension({
@@ -1097,15 +1095,15 @@ describe("propagateSubgoalCompletion Phase 2 — aggregation mapping", () => {
         dimension_mapping: { parent_dimension: "release_gate", aggregation: "all_required" },
       }),
     ];
-    judge.propagateSubgoalCompletion("subgoal-id", "parent-allreq-complete", subgoalDims);
+    await judge.propagateSubgoalCompletion("subgoal-id", "parent-allreq-complete", subgoalDims);
 
-    const updated = stateManager.loadGoal("parent-allreq-complete");
+    const updated = await stateManager.loadGoal("parent-allreq-complete");
     const dim = updated!.dimensions.find((d) => d.name === "release_gate");
     // Both fully satisfied → fulfillment ratios = [1.0, 1.0] → min = 1.0
     expect(dim!.current_value).toBeCloseTo(1.0);
   });
 
-  it("all_required partial: not all dims meet threshold → parent current_value reflects min ratio", () => {
+  it("all_required partial: not all dims meet threshold → parent current_value reflects min ratio", async () => {
     const parentGoal = makeGoal({
       id: "parent-allreq-partial",
       dimensions: [
@@ -1117,7 +1115,7 @@ describe("propagateSubgoalCompletion Phase 2 — aggregation mapping", () => {
         }),
       ],
     });
-    stateManager.saveGoal(parentGoal);
+    await stateManager.saveGoal(parentGoal);
 
     const subgoalDims: Dimension[] = [
       makeDimension({
@@ -1135,9 +1133,9 @@ describe("propagateSubgoalCompletion Phase 2 — aggregation mapping", () => {
         dimension_mapping: { parent_dimension: "release_gate", aggregation: "all_required" },
       }),
     ];
-    judge.propagateSubgoalCompletion("subgoal-id", "parent-allreq-partial", subgoalDims);
+    await judge.propagateSubgoalCompletion("subgoal-id", "parent-allreq-partial", subgoalDims);
 
-    const updated = stateManager.loadGoal("parent-allreq-partial");
+    const updated = await stateManager.loadGoal("parent-allreq-partial");
     const dim = updated!.dimensions.find((d) => d.name === "release_gate");
     // docs_done progress = 0.5/1.0 = 0.5 → min(1.0, 0.5) = 0.5 → parent not complete
     expect(dim!.current_value).toBeCloseTo(0.5);
@@ -1145,7 +1143,7 @@ describe("propagateSubgoalCompletion Phase 2 — aggregation mapping", () => {
     expect(judge.isDimensionSatisfied(dim!).is_satisfied).toBe(false);
   });
 
-  it("mixed mapping: mapped dims use aggregation, unmapped dims use name matching", () => {
+  it("mixed mapping: mapped dims use aggregation, unmapped dims use name matching", async () => {
     const parentGoal = makeGoal({
       id: "parent-mixed",
       dimensions: [
@@ -1163,7 +1161,7 @@ describe("propagateSubgoalCompletion Phase 2 — aggregation mapping", () => {
         }),
       ],
     });
-    stateManager.saveGoal(parentGoal);
+    await stateManager.saveGoal(parentGoal);
 
     const subgoalDims: Dimension[] = [
       // mapped: goes to product_readiness via aggregation
@@ -1190,9 +1188,9 @@ describe("propagateSubgoalCompletion Phase 2 — aggregation mapping", () => {
         dimension_mapping: null,
       }),
     ];
-    judge.propagateSubgoalCompletion("subgoal-id", "parent-mixed", subgoalDims);
+    await judge.propagateSubgoalCompletion("subgoal-id", "parent-mixed", subgoalDims);
 
-    const updated = stateManager.loadGoal("parent-mixed");
+    const updated = await stateManager.loadGoal("parent-mixed");
     const readinessDim = updated!.dimensions.find((d) => d.name === "product_readiness");
     const featureXDim = updated!.dimensions.find((d) => d.name === "feature_x");
 
@@ -1202,7 +1200,7 @@ describe("propagateSubgoalCompletion Phase 2 — aggregation mapping", () => {
     expect(featureXDim!.current_value).toBe(1);
   });
 
-  it("empty subgoalDimensions array → no updates made", () => {
+  it("empty subgoalDimensions array → no updates made", async () => {
     const parentGoal = makeGoal({
       id: "parent-empty-dims",
       dimensions: [
@@ -1214,16 +1212,16 @@ describe("propagateSubgoalCompletion Phase 2 — aggregation mapping", () => {
         }),
       ],
     });
-    stateManager.saveGoal(parentGoal);
+    await stateManager.saveGoal(parentGoal);
 
-    judge.propagateSubgoalCompletion("subgoal-id", "parent-empty-dims", []);
+    await judge.propagateSubgoalCompletion("subgoal-id", "parent-empty-dims", []);
 
-    const updated = stateManager.loadGoal("parent-empty-dims");
+    const updated = await stateManager.loadGoal("parent-empty-dims");
     // With empty array it falls through to MVP name matching; no name match → no update
     expect(updated!.dimensions[0]!.current_value).toBe(42);
   });
 
-  it("non-numeric current_value in avg mode: skips that dimension gracefully", () => {
+  it("non-numeric current_value in avg mode: skips that dimension gracefully", async () => {
     const parentGoal = makeGoal({
       id: "parent-nonnumeric",
       dimensions: [
@@ -1235,7 +1233,7 @@ describe("propagateSubgoalCompletion Phase 2 — aggregation mapping", () => {
         }),
       ],
     });
-    stateManager.saveGoal(parentGoal);
+    await stateManager.saveGoal(parentGoal);
 
     const subgoalDims: Dimension[] = [
       makeDimension({
@@ -1261,17 +1259,16 @@ describe("propagateSubgoalCompletion Phase 2 — aggregation mapping", () => {
       }),
     ];
     // Should not throw; non-numeric string is skipped
-    expect(() =>
-      judge.propagateSubgoalCompletion("subgoal-id", "parent-nonnumeric", subgoalDims)
-    ).not.toThrow();
+    await expect(judge.propagateSubgoalCompletion("subgoal-id", "parent-nonnumeric", subgoalDims)
+    ).resolves.not.toThrow();
 
-    const updated = stateManager.loadGoal("parent-nonnumeric");
+    const updated = await stateManager.loadGoal("parent-nonnumeric");
     const dim = updated!.dimensions.find((d) => d.name === "overall");
     // avg of [0.6, 0.8] (skipping "not-a-number") = 0.7
     expect(dim!.current_value).toBeCloseTo(0.7);
   });
 
-  it("multiple parent dimensions: different subgoal dims map to different parent dims", () => {
+  it("multiple parent dimensions: different subgoal dims map to different parent dims", async () => {
     const parentGoal = makeGoal({
       id: "parent-multiparent",
       dimensions: [
@@ -1289,7 +1286,7 @@ describe("propagateSubgoalCompletion Phase 2 — aggregation mapping", () => {
         }),
       ],
     });
-    stateManager.saveGoal(parentGoal);
+    await stateManager.saveGoal(parentGoal);
 
     const subgoalDims: Dimension[] = [
       makeDimension({
@@ -1321,9 +1318,9 @@ describe("propagateSubgoalCompletion Phase 2 — aggregation mapping", () => {
         dimension_mapping: { parent_dimension: "dim_beta", aggregation: "min" },
       }),
     ];
-    judge.propagateSubgoalCompletion("subgoal-id", "parent-multiparent", subgoalDims);
+    await judge.propagateSubgoalCompletion("subgoal-id", "parent-multiparent", subgoalDims);
 
-    const updated = stateManager.loadGoal("parent-multiparent");
+    const updated = await stateManager.loadGoal("parent-multiparent");
     const alpha = updated!.dimensions.find((d) => d.name === "dim_alpha");
     const beta = updated!.dimensions.find((d) => d.name === "dim_beta");
 
@@ -1333,7 +1330,7 @@ describe("propagateSubgoalCompletion Phase 2 — aggregation mapping", () => {
     expect(beta!.current_value).toBeCloseTo(0.4);
   });
 
-  it("MVP path still works: propagation without subgoalDimensions argument uses name matching", () => {
+  it("MVP path still works: propagation without subgoalDimensions argument uses name matching", async () => {
     const parentGoal = makeGoal({
       id: "parent-mvp-path",
       dimensions: [
@@ -1345,12 +1342,12 @@ describe("propagateSubgoalCompletion Phase 2 — aggregation mapping", () => {
         }),
       ],
     });
-    stateManager.saveGoal(parentGoal);
+    await stateManager.saveGoal(parentGoal);
 
     // Called without subgoalDimensions — uses original MVP signature
-    judge.propagateSubgoalCompletion("subgoal-mvp", "parent-mvp-path");
+    await judge.propagateSubgoalCompletion("subgoal-mvp", "parent-mvp-path");
 
-    const updated = stateManager.loadGoal("parent-mvp-path");
+    const updated = await stateManager.loadGoal("parent-mvp-path");
     const dim = updated!.dimensions.find((d) => d.name === "subgoal-mvp");
     expect(dim!.current_value).toBe(1);
   });

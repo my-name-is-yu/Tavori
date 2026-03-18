@@ -324,7 +324,7 @@ describe("R1-1 E2E: task cycle executes for an unsatisfied goal", () => {
     );
 
     const goal = makeUnsatisfiedGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const loop = new CoreLoop(deps, { maxIterations: 1, delayBetweenLoopsMs: 0 });
     const result = await loop.run(goal.id);
@@ -346,7 +346,7 @@ describe("R1-1 E2E: task cycle executes for an unsatisfied goal", () => {
     );
 
     const goal = makeUnsatisfiedGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const loop = new CoreLoop(deps, { maxIterations: 3, delayBetweenLoopsMs: 0 });
     const result = await loop.run(goal.id);
@@ -368,7 +368,7 @@ describe("R1-1 E2E: task cycle executes for an unsatisfied goal", () => {
     );
 
     const goal = makeUnsatisfiedGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const loop = new CoreLoop(deps, { maxIterations: 1, delayBetweenLoopsMs: 0 });
     await loop.run(goal.id);
@@ -388,7 +388,7 @@ describe("R1-2 E2E: minIterations forces minimum iterations before completion ex
     );
 
     const goal = makeUnsatisfiedGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // Default minIterations=1
     const loop = new CoreLoop(deps, { maxIterations: 10, delayBetweenLoopsMs: 0 });
@@ -405,7 +405,7 @@ describe("R1-2 E2E: minIterations forces minimum iterations before completion ex
     );
 
     const goal = makeUnsatisfiedGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const loop = new CoreLoop(deps, { maxIterations: 10, delayBetweenLoopsMs: 0, minIterations: 2 });
     const result = await loop.run(goal.id);
@@ -426,7 +426,7 @@ describe("R1-2 E2E: minIterations forces minimum iterations before completion ex
     );
 
     const goal = makeUnsatisfiedGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const loop = new CoreLoop(deps, { maxIterations: 10, delayBetweenLoopsMs: 0, minIterations: 3 });
     const result = await loop.run(goal.id);
@@ -441,18 +441,18 @@ describe("R1-2 E2E: minIterations forces minimum iterations before completion ex
 // ─── R1-3 E2E: loadGoal() archive fallback ───
 
 describe("R1-3 E2E: loadGoal() returns archived goals via archive fallback path", () => {
-  it("loadGoal() returns the goal after archiving it", () => {
+  it("loadGoal() returns the goal after archiving it", async () => {
     const stateManager = new StateManager(tmpDir);
     const goal = makeUnsatisfiedGoal("goal-archive-test");
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // Verify it loads before archiving
-    const beforeArchive = stateManager.loadGoal("goal-archive-test");
+    const beforeArchive = await stateManager.loadGoal("goal-archive-test");
     expect(beforeArchive).not.toBeNull();
     expect(beforeArchive!.id).toBe("goal-archive-test");
 
     // Archive the goal (moves files from goals/ to archive/)
-    const archived = stateManager.archiveGoal("goal-archive-test");
+    const archived = await stateManager.archiveGoal("goal-archive-test");
     expect(archived).toBe(true);
 
     // After archiving, the primary path no longer exists
@@ -460,36 +460,36 @@ describe("R1-3 E2E: loadGoal() returns archived goals via archive fallback path"
     expect(fs.existsSync(primaryPath)).toBe(false);
 
     // But loadGoal() should still return the goal via the archive fallback path
-    const afterArchive = stateManager.loadGoal("goal-archive-test");
+    const afterArchive = await stateManager.loadGoal("goal-archive-test");
     expect(afterArchive).not.toBeNull();
     expect(afterArchive!.id).toBe("goal-archive-test");
     expect(afterArchive!.title).toBe("R1 E2E Unsatisfied Goal");
   });
 
-  it("loadGoal() returns null for a goal that was never saved", () => {
+  it("loadGoal() returns null for a goal that was never saved", async () => {
     const stateManager = new StateManager(tmpDir);
-    const result = stateManager.loadGoal("non-existent-goal");
+    const result = await stateManager.loadGoal("non-existent-goal");
     expect(result).toBeNull();
   });
 
-  it("loadGoal() returns null after deleting a non-archived goal", () => {
+  it("loadGoal() returns null after deleting a non-archived goal", async () => {
     const stateManager = new StateManager(tmpDir);
     const goal = makeUnsatisfiedGoal("goal-delete-test");
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
-    stateManager.deleteGoal("goal-delete-test");
+    await stateManager.deleteGoal("goal-delete-test");
 
-    const result = stateManager.loadGoal("goal-delete-test");
+    const result = await stateManager.loadGoal("goal-delete-test");
     expect(result).toBeNull();
   });
 
-  it("archived goal data is intact (title, dimensions, status preserved)", () => {
+  it("archived goal data is intact (title, dimensions, status preserved)", async () => {
     const stateManager = new StateManager(tmpDir);
     const goal = makeUnsatisfiedGoal("goal-data-integrity");
-    stateManager.saveGoal(goal);
-    stateManager.archiveGoal("goal-data-integrity");
+    await stateManager.saveGoal(goal);
+    await stateManager.archiveGoal("goal-data-integrity");
 
-    const loaded = stateManager.loadGoal("goal-data-integrity");
+    const loaded = await stateManager.loadGoal("goal-data-integrity");
     expect(loaded).not.toBeNull();
     expect(loaded!.dimensions).toHaveLength(1);
     expect(loaded!.dimensions[0]!.name).toBe("quality");

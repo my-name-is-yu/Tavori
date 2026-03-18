@@ -204,8 +204,8 @@ export class GoalNegotiator {
       updated_at: now,
     });
 
-    this.stateManager.saveGoal(goal);
-    this.saveNegotiationLog(goalId, log);
+    await this.stateManager.saveGoal(goal);
+    await this.saveNegotiationLog(goalId, log);
 
     return { goal, response: negotiationResponse, log };
   }
@@ -235,7 +235,7 @@ export class GoalNegotiator {
     trigger: "stall" | "new_info" | "user_request",
     context?: string
   ): Promise<{ goal: Goal; response: NegotiationResponse; log: NegotiationLog }> {
-    const existingGoal = this.stateManager.loadGoal(goalId);
+    const existingGoal = await this.stateManager.loadGoal(goalId);
     if (existingGoal === null) throw new Error(`renegotiate: goal "${goalId}" not found`);
 
     const now = new Date().toISOString();
@@ -373,8 +373,8 @@ export class GoalNegotiator {
       updated_at: now,
     });
 
-    this.stateManager.saveGoal(updatedGoal);
-    this.saveNegotiationLog(goalId, log);
+    await this.stateManager.saveGoal(updatedGoal);
+    await this.saveNegotiationLog(goalId, log);
 
     return { goal: updatedGoal, response: negotiationResponse, log };
   }
@@ -420,8 +420,8 @@ export class GoalNegotiator {
 
   // ─── getNegotiationLog() ───
 
-  getNegotiationLog(goalId: string): NegotiationLog | null {
-    const raw = this.stateManager.readRaw(`goals/${goalId}/negotiation-log.json`);
+  async getNegotiationLog(goalId: string): Promise<NegotiationLog | null> {
+    const raw = await this.stateManager.readRaw(`goals/${goalId}/negotiation-log.json`);
     if (raw === null) return null;
     return NegotiationLogSchema.parse(raw);
   }
@@ -459,9 +459,9 @@ export class GoalNegotiator {
     );
   }
 
-  private saveNegotiationLog(goalId: string, log: NegotiationLog): void {
+  private async saveNegotiationLog(goalId: string, log: NegotiationLog): Promise<void> {
     const parsed = NegotiationLogSchema.parse(log);
-    this.stateManager.writeRaw(`goals/${goalId}/negotiation-log.json`, parsed);
+    await this.stateManager.writeRaw(`goals/${goalId}/negotiation-log.json`, parsed);
   }
 
   /**

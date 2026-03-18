@@ -1,6 +1,6 @@
-import * as fs from "node:fs";
+import * as fsp from "node:fs/promises";
 import * as path from "node:path";
-import { readJsonFileSync, writeJsonFileSync } from "../utils/json-io.js";
+import { writeJsonFile } from "../utils/json-io.js";
 
 export class PIDManager {
   private pidPath: string;
@@ -10,21 +10,21 @@ export class PIDManager {
   }
 
   /** Write current process PID to file (atomic write) */
-  writePID(): void {
+  async writePID(): Promise<void> {
     const info = {
       pid: process.pid,
       started_at: new Date().toISOString(),
     };
     const tmpPath = this.pidPath + ".tmp";
-    writeJsonFileSync(tmpPath, info);
-    fs.renameSync(tmpPath, this.pidPath);
+    await writeJsonFile(tmpPath, info);
+    await fsp.rename(tmpPath, this.pidPath);
   }
 
   /** Read PID from file. Returns null if file doesn't exist or is invalid */
-  readPID(): { pid: number; started_at: string } | null {
+  async readPID(): Promise<{ pid: number; started_at: string } | null> {
     try {
-      if (!fs.existsSync(this.pidPath)) return null;
-      const data = readJsonFileSync<{ pid: number; started_at: string }>(this.pidPath);
+      const content = await fsp.readFile(this.pidPath, "utf-8");
+      const data = JSON.parse(content) as { pid: number; started_at: string };
       if (typeof data.pid !== "number") return null;
       return data;
     } catch {
@@ -33,8 +33,8 @@ export class PIDManager {
   }
 
   /** Check if a process with the stored PID is actually running */
-  isRunning(): boolean {
-    const info = this.readPID();
+  async isRunning(): Promise<boolean> {
+    const info = await this.readPID();
     if (!info) return false;
     try {
       // signal 0 doesn't kill, just checks if process exists
@@ -47,13 +47,11 @@ export class PIDManager {
   }
 
   /** Remove PID file */
-  cleanup(): void {
+  async cleanup(): Promise<void> {
     try {
-      if (fs.existsSync(this.pidPath)) {
-        fs.unlinkSync(this.pidPath);
-      }
+      await fsp.unlink(this.pidPath);
     } catch {
-      // Ignore cleanup errors
+      // Ignore cleanup errors (file may not exist)
     }
   }
 

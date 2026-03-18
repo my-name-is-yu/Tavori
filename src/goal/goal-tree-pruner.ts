@@ -10,16 +10,16 @@ export interface GoalTreePrunerDeps {
 
 // ─── Internal Helper ───
 
-export function cancelGoalAndDescendants(
+export async function cancelGoalAndDescendants(
   goal: Goal,
   now: string,
   stateManager: StateManager
-): void {
+): Promise<void> {
   // Recursively cancel all children first
   for (const childId of goal.children_ids) {
-    const child = stateManager.loadGoal(childId);
+    const child = await stateManager.loadGoal(childId);
     if (child) {
-      cancelGoalAndDescendants(child, now, stateManager);
+      await cancelGoalAndDescendants(child, now, stateManager);
     }
   }
 
@@ -29,7 +29,7 @@ export function cancelGoalAndDescendants(
     status: "cancelled",
     updated_at: now,
   };
-  stateManager.saveGoal(cancelled);
+  await stateManager.saveGoal(cancelled);
 }
 
 // ─── Pruning Functions ───
@@ -39,12 +39,12 @@ export function cancelGoalAndDescendants(
  * Removes the goal from its parent's children_ids.
  * Returns a PruneDecision.
  */
-export function pruneGoal(
+export async function pruneGoal(
   goalId: string,
   reason: PruneReason,
   deps: GoalTreePrunerDeps
-): PruneDecision {
-  const goal = deps.stateManager.loadGoal(goalId);
+): Promise<PruneDecision> {
+  const goal = await deps.stateManager.loadGoal(goalId);
   if (!goal) {
     throw new Error(`GoalTreeManager.pruneGoal: goal "${goalId}" not found`);
   }
@@ -52,18 +52,18 @@ export function pruneGoal(
   const now = new Date().toISOString();
 
   // Cancel the goal and all descendants
-  cancelGoalAndDescendants(goal, now, deps.stateManager);
+  await cancelGoalAndDescendants(goal, now, deps.stateManager);
 
   // Remove from parent's children_ids
   if (goal.parent_id) {
-    const parent = deps.stateManager.loadGoal(goal.parent_id);
+    const parent = await deps.stateManager.loadGoal(goal.parent_id);
     if (parent) {
       const updatedParent: Goal = {
         ...parent,
         children_ids: parent.children_ids.filter((id) => id !== goalId),
         updated_at: now,
       };
-      deps.stateManager.saveGoal(updatedParent);
+      await deps.stateManager.saveGoal(updatedParent);
     }
   }
 
@@ -79,14 +79,14 @@ export function pruneGoal(
  * Records a PruneRecord in the history for the parent goal tree.
  * The parentGoalId is the root goal whose history you want to track.
  */
-export function pruneSubgoal(
+export async function pruneSubgoal(
   subgoalId: string,
   reason: string,
   pruneHistory: Map<string, PruneRecord[]>,
   deps: GoalTreePrunerDeps,
   parentGoalId?: string
-): PruneDecision {
-  const goal = deps.stateManager.loadGoal(subgoalId);
+): Promise<PruneDecision> {
+  const goal = await deps.stateManager.loadGoal(subgoalId);
   if (!goal) {
     throw new Error(`GoalTreeManager.pruneSubgoal: goal "${subgoalId}" not found`);
   }
@@ -94,18 +94,18 @@ export function pruneSubgoal(
   const now = new Date().toISOString();
 
   // Cancel the goal and all descendants
-  cancelGoalAndDescendants(goal, now, deps.stateManager);
+  await cancelGoalAndDescendants(goal, now, deps.stateManager);
 
   // Remove from parent's children_ids
   if (goal.parent_id) {
-    const parent = deps.stateManager.loadGoal(goal.parent_id);
+    const parent = await deps.stateManager.loadGoal(goal.parent_id);
     if (parent) {
       const updatedParent: Goal = {
         ...parent,
         children_ids: parent.children_ids.filter((id) => id !== subgoalId),
         updated_at: now,
       };
-      deps.stateManager.saveGoal(updatedParent);
+      await deps.stateManager.saveGoal(updatedParent);
     }
   }
 

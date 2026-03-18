@@ -64,9 +64,9 @@ export class DriveSystem {
    * 2. Schedule is due (next_check_at <= now)
    * 3. Goal is not in a terminal status ("completed", "cancelled", "archived")
    */
-  shouldActivate(goalId: string): boolean {
+  async shouldActivate(goalId: string): Promise<boolean> {
     // Check goal status — terminal statuses suppress activation
-    const goal = this.stateManager.loadGoal(goalId);
+    const goal = await this.stateManager.loadGoal(goalId);
     if (goal !== null) {
       if (
         goal.status === "completed" ||

@@ -252,7 +252,7 @@ describe("decomposeGoal() with concreteness auto-stop", () => {
     const goal = makeGoal({
       description: "Achieve 80% test coverage within 2 weeks for the auth module",
     });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // CONCRETENESS_ALL_TRUE returns score=1.0 → >= 0.7 threshold → auto-stop
     const mockLLM = createMockLLMClient([CONCRETENESS_ALL_TRUE]);
@@ -267,20 +267,20 @@ describe("decomposeGoal() with concreteness auto-stop", () => {
 
   it("marks goal as leaf node when auto-stop triggers", async () => {
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const mockLLM = createMockLLMClient([CONCRETENESS_ALL_TRUE]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
 
     await manager.decomposeGoal(goal.id, DEFAULT_CONFIG);
 
-    const saved = stateManager.loadGoal(goal.id);
+    const saved = await stateManager.loadGoal(goal.id);
     expect(saved?.node_type).toBe("leaf");
   });
 
   it("continues decomposition when concreteness score < threshold", async () => {
     const goal = makeGoal({ description: "Improve the system" });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // CONCRETENESS_ALL_FALSE → score=0.0 < 0.7 → proceed with decomposition
     // Then: LOW_SPECIFICITY for internal specificity eval, SUBGOALS_ONE, COVERAGE_PASS,
@@ -301,7 +301,7 @@ describe("decomposeGoal() with concreteness auto-stop", () => {
 
   it("uses custom concretenesThreshold passed as option", async () => {
     const goal = makeGoal({ description: "Some partially concrete goal" });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // CONCRETENESS_TWO_TRUE → score=0.5; with threshold=0.4 → should auto-stop
     const mockLLM = createMockLLMClient([CONCRETENESS_TWO_TRUE]);
@@ -318,7 +318,7 @@ describe("decomposeGoal() with concreteness auto-stop", () => {
   it("does NOT auto-stop when concreteness score equals threshold exactly", async () => {
     // score = 0.5, threshold = 0.5 → 0.5 >= 0.5 → auto-stop should trigger
     const goal = makeGoal({ description: "Improve response time and add metrics" });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const mockLLM = createMockLLMClient([CONCRETENESS_TWO_TRUE]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
@@ -335,7 +335,7 @@ describe("decomposeGoal() with concreteness auto-stop", () => {
   it("does NOT auto-stop when concreteness score is just below threshold", async () => {
     // score = 0.5, threshold = 0.51 → 0.5 < 0.51 → no auto-stop, proceed
     const goal = makeGoal({ description: "Vague goal" });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // First call: concreteness check → CONCRETENESS_TWO_TRUE (score=0.5, won't auto-stop at 0.51)
     // Then internal decomposition: LOW_SPECIFICITY, SUBGOALS_ONE, COVERAGE_PASS
@@ -363,7 +363,7 @@ describe("decomposeGoal() respects maxDepth", () => {
   it("uses instance-level maxDepth to stop at depth 0 when maxDepth=0", async () => {
     // maxDepth=0 means goal.decomposition_depth(0) >= maxDepth(0) → forced leaf
     const goal = makeGoal({ description: "Vague goal", decomposition_depth: 0 });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // concreteness check (score=0.0 → no auto-stop at threshold 0.7)
     // then internal specificity: LOW_SPECIFICITY → not leaf by specificity (0.4 < 0.7)
@@ -382,7 +382,7 @@ describe("decomposeGoal() respects maxDepth", () => {
 
   it("uses option-level maxDepth to stop recursion", async () => {
     const goal = makeGoal({ description: "Vague goal", decomposition_depth: 1 });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // concreteness → no auto-stop (score=0.0 < 0.7)
     // specificity → LOW_SPECIFICITY (0.4 < min_specificity)
@@ -398,7 +398,7 @@ describe("decomposeGoal() respects maxDepth", () => {
 
   it("option-level maxDepth overrides instance-level maxDepth", async () => {
     const goal = makeGoal({ description: "Vague goal", decomposition_depth: 0 });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // Instance maxDepth = 0 would force leaf immediately, but option maxDepth = 5 allows decomposition
     // concreteness → no auto-stop (score=0.0 < 0.7)
@@ -429,7 +429,7 @@ describe("decomposeGoal() respects maxDepth", () => {
 describe("GoalTreeManager constructor options", () => {
   it("uses concretenesThreshold=0.7 from constructor options", async () => {
     const goal = makeGoal({ description: "Some goal" });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // score=0.75 >= 0.7 → auto-stop
     const mockLLM = createMockLLMClient([CONCRETENESS_THREE_TRUE]);
@@ -442,7 +442,7 @@ describe("GoalTreeManager constructor options", () => {
 
   it("custom concretenesThreshold in constructor is used when no option override", async () => {
     const goal = makeGoal({ description: "Some goal" });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // score=0.5 (TWO_TRUE); with instance threshold=0.6 → 0.5 < 0.6 → no auto-stop
     // then internal: LOW_SPECIFICITY → proceed, SUBGOALS_ONE, COVERAGE_PASS

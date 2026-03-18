@@ -166,10 +166,10 @@ afterEach(() => {
 
 // ─── 1. Specificity Evaluation ───
 
-describe("specificity evaluation", () => {
+describe("specificity evaluation", async () => {
   it("stops decomposition when specificity_score >= min_specificity", async () => {
     const goal = makeGoal({ title: "Specific leaf goal" });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const mockLLM = createMockLLMClient([HIGH_SPECIFICITY]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
@@ -182,7 +182,7 @@ describe("specificity evaluation", () => {
 
   it("triggers decomposition when specificity_score < min_specificity", async () => {
     const goal = makeGoal({ title: "Abstract goal" });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const mockLLM = createMockLLMClient([LOW_SPECIFICITY, SUBGOALS_ONE, COVERAGE_PASS, HIGH_SPECIFICITY]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
@@ -193,31 +193,31 @@ describe("specificity evaluation", () => {
 
   it("specificity_score is saved on the goal after evaluation", async () => {
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const mockLLM = createMockLLMClient([HIGH_SPECIFICITY]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
 
     await manager.decomposeGoal(goal.id, DEFAULT_CONFIG);
-    const saved = stateManager.loadGoal(goal.id);
+    const saved = await stateManager.loadGoal(goal.id);
     expect(saved?.specificity_score).toBeCloseTo(0.9);
   });
 
   it("marks goal as leaf when specificity >= threshold", async () => {
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const mockLLM = createMockLLMClient([HIGH_SPECIFICITY]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
 
     await manager.decomposeGoal(goal.id, DEFAULT_CONFIG);
-    const saved = stateManager.loadGoal(goal.id);
+    const saved = await stateManager.loadGoal(goal.id);
     expect(saved?.node_type).toBe("leaf");
   });
 
   it("boundary: specificity_score exactly 0.7 (== min_specificity) stops decomposition", async () => {
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const mockLLM = createMockLLMClient([BOUNDARY_SPECIFICITY]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
@@ -228,7 +228,7 @@ describe("specificity evaluation", () => {
 
   it("boundary: specificity_score 0.69 (just below) triggers decomposition", async () => {
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const mockLLM = createMockLLMClient([JUST_BELOW_SPECIFICITY, SUBGOALS_ONE, COVERAGE_PASS, HIGH_SPECIFICITY]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
@@ -239,7 +239,7 @@ describe("specificity evaluation", () => {
 
   it("falls back gracefully when LLM fails specificity evaluation", async () => {
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // Return invalid JSON to trigger fallback
     const mockLLM = createMockLLMClient(["not valid json", SUBGOALS_ONE, COVERAGE_PASS, HIGH_SPECIFICITY]);
@@ -251,7 +251,7 @@ describe("specificity evaluation", () => {
 
   it("uses 0.5 as fallback score when LLM returns invalid specificity", async () => {
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // fallback score 0.5 < 0.7 → decomposition triggered
     const mockLLM = createMockLLMClient(["bad json", SUBGOALS_ONE, COVERAGE_PASS, HIGH_SPECIFICITY]);
@@ -265,10 +265,10 @@ describe("specificity evaluation", () => {
 
 // ─── 2. 1-layer Decomposition ───
 
-describe("1-layer decomposition", () => {
+describe("1-layer decomposition", async () => {
   it("creates child goals from LLM response", async () => {
     const goal = makeGoal({ title: "Improve test coverage" });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const mockLLM = createMockLLMClient([
       LOW_SPECIFICITY,
@@ -285,7 +285,7 @@ describe("1-layer decomposition", () => {
 
   it("child goals have correct parent_id", async () => {
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const mockLLM = createMockLLMClient([LOW_SPECIFICITY, SUBGOALS_TWO, COVERAGE_PASS, HIGH_SPECIFICITY, HIGH_SPECIFICITY]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
@@ -299,7 +299,7 @@ describe("1-layer decomposition", () => {
 
   it("child goals have node_type=subgoal", async () => {
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const mockLLM = createMockLLMClient([LOW_SPECIFICITY, SUBGOALS_ONE, COVERAGE_PASS, HIGH_SPECIFICITY]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
@@ -313,7 +313,7 @@ describe("1-layer decomposition", () => {
 
   it("child goals have origin=decomposition", async () => {
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const mockLLM = createMockLLMClient([LOW_SPECIFICITY, SUBGOALS_ONE, COVERAGE_PASS, HIGH_SPECIFICITY]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
@@ -327,7 +327,7 @@ describe("1-layer decomposition", () => {
 
   it("child goals have decomposition_depth = parent_depth + 1", async () => {
     const goal = makeGoal({ decomposition_depth: 0 });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const mockLLM = createMockLLMClient([LOW_SPECIFICITY, SUBGOALS_ONE, COVERAGE_PASS, HIGH_SPECIFICITY]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
@@ -341,7 +341,7 @@ describe("1-layer decomposition", () => {
 
   it("child goals have status=active", async () => {
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const mockLLM = createMockLLMClient([LOW_SPECIFICITY, SUBGOALS_TWO, COVERAGE_PASS, HIGH_SPECIFICITY, HIGH_SPECIFICITY]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
@@ -355,19 +355,19 @@ describe("1-layer decomposition", () => {
 
   it("parent goal's children_ids is updated after decomposition", async () => {
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const mockLLM = createMockLLMClient([LOW_SPECIFICITY, SUBGOALS_TWO, COVERAGE_PASS, HIGH_SPECIFICITY, HIGH_SPECIFICITY]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
 
     await manager.decomposeGoal(goal.id, DEFAULT_CONFIG);
-    const saved = stateManager.loadGoal(goal.id);
+    const saved = await stateManager.loadGoal(goal.id);
     expect(saved?.children_ids).toHaveLength(2);
   });
 
   it("child goals are persisted to state manager", async () => {
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const mockLLM = createMockLLMClient([LOW_SPECIFICITY, SUBGOALS_TWO, COVERAGE_PASS, HIGH_SPECIFICITY, HIGH_SPECIFICITY]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
@@ -375,14 +375,14 @@ describe("1-layer decomposition", () => {
     const result = await manager.decomposeGoal(goal.id, DEFAULT_CONFIG);
     const children = result.children as Goal[];
     for (const child of children) {
-      const saved = stateManager.loadGoal(child.id);
+      const saved = await stateManager.loadGoal(child.id);
       expect(saved).not.toBeNull();
     }
   });
 
   it("result contains correct depth", async () => {
     const goal = makeGoal({ decomposition_depth: 0 });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const mockLLM = createMockLLMClient([LOW_SPECIFICITY, SUBGOALS_ONE, COVERAGE_PASS, HIGH_SPECIFICITY]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
@@ -393,7 +393,7 @@ describe("1-layer decomposition", () => {
 
   it("result contains specificity_scores for root goal", async () => {
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const mockLLM = createMockLLMClient([LOW_SPECIFICITY, SUBGOALS_ONE, COVERAGE_PASS, HIGH_SPECIFICITY]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
@@ -406,10 +406,10 @@ describe("1-layer decomposition", () => {
 
 // ─── 3. 2-layer Decomposition ───
 
-describe("2-layer decomposition", () => {
+describe("2-layer decomposition", async () => {
   it("recursively decomposes children with low specificity", async () => {
     const root = makeGoal({ title: "Very abstract root" });
-    stateManager.saveGoal(root);
+    await stateManager.saveGoal(root);
 
     // root: low spec → gen 1 child → coverage pass → child: low spec → gen 1 grandchild → coverage pass → grandchild: high spec
     const mockLLM = createMockLLMClient([
@@ -427,13 +427,13 @@ describe("2-layer decomposition", () => {
     expect(result.children).toHaveLength(1);
 
     const child = (result.children as Goal[])[0]!;
-    const savedChild = stateManager.loadGoal(child.id);
+    const savedChild = await stateManager.loadGoal(child.id);
     expect(savedChild?.children_ids.length).toBeGreaterThan(0);
   });
 
   it("grandchildren have decomposition_depth = 2", async () => {
     const root = makeGoal({ decomposition_depth: 0 });
-    stateManager.saveGoal(root);
+    await stateManager.saveGoal(root);
 
     const mockLLM = createMockLLMClient([
       LOW_SPECIFICITY,
@@ -448,16 +448,16 @@ describe("2-layer decomposition", () => {
 
     const result = await manager.decomposeGoal(root.id, DEFAULT_CONFIG);
     const child = (result.children as Goal[])[0]!;
-    const savedChild = stateManager.loadGoal(child.id);
+    const savedChild = await stateManager.loadGoal(child.id);
     const grandchildId = savedChild?.children_ids[0];
     expect(grandchildId).toBeDefined();
-    const grandchild = stateManager.loadGoal(grandchildId!);
+    const grandchild = await stateManager.loadGoal(grandchildId!);
     expect(grandchild?.decomposition_depth).toBe(2);
   });
 
   it("grandchildren are marked as leaves when specific enough", async () => {
     const root = makeGoal();
-    stateManager.saveGoal(root);
+    await stateManager.saveGoal(root);
 
     const mockLLM = createMockLLMClient([
       LOW_SPECIFICITY,
@@ -472,15 +472,15 @@ describe("2-layer decomposition", () => {
 
     const result = await manager.decomposeGoal(root.id, DEFAULT_CONFIG);
     const child = (result.children as Goal[])[0]!;
-    const savedChild = stateManager.loadGoal(child.id);
+    const savedChild = await stateManager.loadGoal(child.id);
     const grandchildId = savedChild?.children_ids[0];
-    const grandchild = stateManager.loadGoal(grandchildId!);
+    const grandchild = await stateManager.loadGoal(grandchildId!);
     expect(grandchild?.node_type).toBe("leaf");
   });
 
   it("specificity_scores includes scores for all levels", async () => {
     const root = makeGoal();
-    stateManager.saveGoal(root);
+    await stateManager.saveGoal(root);
 
     const mockLLM = createMockLLMClient([
       LOW_SPECIFICITY,
@@ -500,7 +500,7 @@ describe("2-layer decomposition", () => {
 
   it("stops recursion when child has high specificity", async () => {
     const root = makeGoal();
-    stateManager.saveGoal(root);
+    await stateManager.saveGoal(root);
 
     const mockLLM = createMockLLMClient([
       LOW_SPECIFICITY,  // root: decompose
@@ -515,14 +515,14 @@ describe("2-layer decomposition", () => {
     expect(result.children).toHaveLength(2);
     // Children should be leaves (no further decomposition)
     for (const child of result.children as Goal[]) {
-      const saved = stateManager.loadGoal(child.id);
+      const saved = await stateManager.loadGoal(child.id);
       expect(saved?.children_ids).toHaveLength(0);
     }
   });
 
   it("depth tracking is correct at each level", async () => {
     const root = makeGoal({ decomposition_depth: 0 });
-    stateManager.saveGoal(root);
+    await stateManager.saveGoal(root);
 
     const mockLLM = createMockLLMClient([
       LOW_SPECIFICITY, SUBGOALS_ONE, COVERAGE_PASS,
@@ -536,13 +536,13 @@ describe("2-layer decomposition", () => {
 
     const childId = (result.children as Goal[])[0]?.id;
     expect(childId).toBeDefined();
-    const child = stateManager.loadGoal(childId!);
+    const child = await stateManager.loadGoal(childId!);
     expect(child?.decomposition_depth).toBe(1);
   });
 
   it("parent maintains children_ids for all direct children only", async () => {
     const root = makeGoal();
-    stateManager.saveGoal(root);
+    await stateManager.saveGoal(root);
 
     const mockLLM = createMockLLMClient([
       LOW_SPECIFICITY, SUBGOALS_TWO, COVERAGE_PASS,
@@ -552,14 +552,14 @@ describe("2-layer decomposition", () => {
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
 
     await manager.decomposeGoal(root.id, DEFAULT_CONFIG);
-    const saved = stateManager.loadGoal(root.id);
+    const saved = await stateManager.loadGoal(root.id);
     // Root should have exactly 2 direct children
     expect(saved?.children_ids).toHaveLength(2);
   });
 
   it("two-layer tree has correct total nodes in getTreeState", async () => {
     const root = makeGoal();
-    stateManager.saveGoal(root);
+    await stateManager.saveGoal(root);
 
     const mockLLM = createMockLLMClient([
       LOW_SPECIFICITY, SUBGOALS_ONE, COVERAGE_PASS,
@@ -569,7 +569,7 @@ describe("2-layer decomposition", () => {
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
 
     await manager.decomposeGoal(root.id, DEFAULT_CONFIG);
-    const state = manager.getTreeState(root.id);
+    const state = await manager.getTreeState(root.id);
     // root + child + grandchild = 3
     expect(state.total_nodes).toBe(3);
   });
@@ -577,10 +577,10 @@ describe("2-layer decomposition", () => {
 
 // ─── 4. N-layer (3-5 depth) ───
 
-describe("N-layer decomposition (depth 3-5)", () => {
+describe("N-layer decomposition (depth 3-5)", async () => {
   it("enforces max_depth=1: forces leaf at depth 1 regardless of specificity", async () => {
     const root = makeGoal({ decomposition_depth: 0 });
-    stateManager.saveGoal(root);
+    await stateManager.saveGoal(root);
 
     const mockLLM = createMockLLMClient([
       LOW_SPECIFICITY,  // root: low spec → try to decompose
@@ -591,14 +591,14 @@ describe("N-layer decomposition (depth 3-5)", () => {
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
 
     await manager.decomposeGoal(root.id, SHALLOW_CONFIG);
-    const child = stateManager.loadGoal((stateManager.loadGoal(root.id)?.children_ids[0])!);
+    const child = (await stateManager.loadGoal((await stateManager.loadGoal(root.id))?.children_ids[0])!);
     // At max_depth, forced leaf
     expect(child?.node_type).toBe("leaf");
   });
 
   it("max_depth=2: does not recurse beyond depth 2", async () => {
     const root = makeGoal({ decomposition_depth: 0 });
-    stateManager.saveGoal(root);
+    await stateManager.saveGoal(root);
     const config2: GoalDecompositionConfig = { ...DEFAULT_CONFIG, max_depth: 2 };
 
     const mockLLM = createMockLLMClient([
@@ -611,16 +611,16 @@ describe("N-layer decomposition (depth 3-5)", () => {
     const result = await manager.decomposeGoal(root.id, config2);
     const child = (result.children as Goal[])[0];
     expect(child).toBeDefined();
-    const depth1ChildSaved = stateManager.loadGoal(child!.id);
+    const depth1ChildSaved = await stateManager.loadGoal(child!.id);
     const depth2ChildId = depth1ChildSaved?.children_ids[0];
-    const depth2Child = stateManager.loadGoal(depth2ChildId!);
+    const depth2Child = await stateManager.loadGoal(depth2ChildId!);
     expect(depth2Child?.node_type).toBe("leaf");
     expect(depth2Child?.children_ids).toHaveLength(0);
   });
 
   it("max_depth=3: allows 3 levels of nesting", async () => {
     const root = makeGoal({ decomposition_depth: 0 });
-    stateManager.saveGoal(root);
+    await stateManager.saveGoal(root);
     const config3: GoalDecompositionConfig = { ...DEFAULT_CONFIG, max_depth: 3 };
 
     const mockLLM = createMockLLMClient([
@@ -632,13 +632,13 @@ describe("N-layer decomposition (depth 3-5)", () => {
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
 
     const result = await manager.decomposeGoal(root.id, config3);
-    const state = manager.getTreeState(root.id);
+    const state = await manager.getTreeState(root.id);
     expect(state.max_depth_reached).toBeGreaterThanOrEqual(3);
   });
 
   it("forced-leaf goals at max_depth are still marked as leaf", async () => {
     const root = makeGoal({ decomposition_depth: 0 });
-    stateManager.saveGoal(root);
+    await stateManager.saveGoal(root);
 
     const mockLLM = createMockLLMClient([
       LOW_SPECIFICITY, SUBGOALS_ONE, COVERAGE_PASS,
@@ -647,15 +647,15 @@ describe("N-layer decomposition (depth 3-5)", () => {
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
 
     await manager.decomposeGoal(root.id, SHALLOW_CONFIG);
-    const rootSaved = stateManager.loadGoal(root.id);
+    const rootSaved = await stateManager.loadGoal(root.id);
     const childId = rootSaved?.children_ids[0];
-    const child = stateManager.loadGoal(childId!);
+    const child = await stateManager.loadGoal(childId!);
     expect(child?.node_type).toBe("leaf");
   });
 
   it("decomposition result max_depth_reached reflects actual depth", async () => {
     const root = makeGoal({ decomposition_depth: 0 });
-    stateManager.saveGoal(root);
+    await stateManager.saveGoal(root);
 
     const mockLLM = createMockLLMClient([
       LOW_SPECIFICITY, SUBGOALS_ONE, COVERAGE_PASS,
@@ -664,13 +664,13 @@ describe("N-layer decomposition (depth 3-5)", () => {
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
 
     await manager.decomposeGoal(root.id, DEFAULT_CONFIG);
-    const state = manager.getTreeState(root.id);
+    const state = await manager.getTreeState(root.id);
     expect(state.max_depth_reached).toBe(1);
   });
 
   it("children count never exceeds max_children_per_node (5)", async () => {
     const root = makeGoal();
-    stateManager.saveGoal(root);
+    await stateManager.saveGoal(root);
 
     // Return 6 subgoals — should be clamped to 5
     const sixSubgoals = JSON.stringify([
@@ -698,52 +698,52 @@ describe("N-layer decomposition (depth 3-5)", () => {
 
 // ─── 9. getTreeState ───
 
-describe("getTreeState", () => {
-  it("returns correct total_nodes for a single node", () => {
+describe("getTreeState", async () => {
+  it("returns correct total_nodes for a single node", async () => {
     const root = makeGoal();
-    stateManager.saveGoal(root);
+    await stateManager.saveGoal(root);
 
     const mockLLM = createMockLLMClient([]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
 
-    const state = manager.getTreeState(root.id);
+    const state = await manager.getTreeState(root.id);
     expect(state.total_nodes).toBe(1);
     expect(state.root_id).toBe(root.id);
   });
 
-  it("returns total_nodes=0 for nonexistent root", () => {
+  it("returns total_nodes=0 for nonexistent root", async () => {
     const mockLLM = createMockLLMClient([]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
 
-    const state = manager.getTreeState("nonexistent");
+    const state = await manager.getTreeState("nonexistent");
     expect(state.total_nodes).toBe(0);
   });
 
-  it("tracks active_loops (loop_status=running)", () => {
+  it("tracks active_loops (loop_status=running)", async () => {
     const root = makeGoal();
     const child = makeGoal({ parent_id: root.id, node_type: "leaf", origin: "decomposition", loop_status: "running" });
     const rootWithChild: Goal = { ...root, children_ids: [child.id] };
-    stateManager.saveGoal(rootWithChild);
-    stateManager.saveGoal(child);
+    await stateManager.saveGoal(rootWithChild);
+    await stateManager.saveGoal(child);
 
     const mockLLM = createMockLLMClient([]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
 
-    const state = manager.getTreeState(root.id);
+    const state = await manager.getTreeState(root.id);
     expect(state.active_loops).toContain(child.id);
   });
 
-  it("tracks pruned_nodes (status=cancelled)", () => {
+  it("tracks pruned_nodes (status=cancelled)", async () => {
     const root = makeGoal();
     const child = makeGoal({ parent_id: root.id, node_type: "subgoal", origin: "decomposition", status: "cancelled" });
     const rootWithChild: Goal = { ...root, children_ids: [child.id] };
-    stateManager.saveGoal(rootWithChild);
-    stateManager.saveGoal(child);
+    await stateManager.saveGoal(rootWithChild);
+    await stateManager.saveGoal(child);
 
     const mockLLM = createMockLLMClient([]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
 
-    const state = manager.getTreeState(root.id);
+    const state = await manager.getTreeState(root.id);
     expect(state.pruned_nodes).toContain(child.id);
   });
 
@@ -753,21 +753,21 @@ describe("getTreeState", () => {
     const grandchild = makeGoal({ parent_id: child.id, node_type: "leaf", origin: "decomposition", decomposition_depth: 2 });
     const childUpdated: Goal = { ...child, children_ids: [grandchild.id] };
     const rootUpdated: Goal = { ...root, children_ids: [child.id] };
-    stateManager.saveGoal(rootUpdated);
-    stateManager.saveGoal(childUpdated);
-    stateManager.saveGoal(grandchild);
+    await stateManager.saveGoal(rootUpdated);
+    await stateManager.saveGoal(childUpdated);
+    await stateManager.saveGoal(grandchild);
 
     const mockLLM = createMockLLMClient([]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
 
-    const state = manager.getTreeState(root.id);
+    const state = await manager.getTreeState(root.id);
     expect(state.max_depth_reached).toBe(2);
   });
 });
 
 // ─── 10. Edge Cases ───
 
-describe("edge cases", () => {
+describe("edge cases", async () => {
   it("throws when goal not found in decomposeGoal", async () => {
     const mockLLM = createMockLLMClient([]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
@@ -794,7 +794,7 @@ describe("edge cases", () => {
         },
       ],
     });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const mockLLM = createMockLLMClient([HIGH_SPECIFICITY]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
@@ -806,20 +806,20 @@ describe("edge cases", () => {
 
   it("empty subgoal response treats goal as leaf", async () => {
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const mockLLM = createMockLLMClient([LOW_SPECIFICITY, SUBGOALS_EMPTY]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
 
     const result = await manager.decomposeGoal(goal.id, DEFAULT_CONFIG);
     expect(result.children).toHaveLength(0);
-    const saved = stateManager.loadGoal(goal.id);
+    const saved = await stateManager.loadGoal(goal.id);
     expect(saved?.node_type).toBe("leaf");
   });
 
   it("decomposeGoal handles goal with no dimensions gracefully", async () => {
     const goal = makeGoal({ dimensions: [] });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const mockLLM = createMockLLMClient([HIGH_SPECIFICITY]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
@@ -829,7 +829,7 @@ describe("edge cases", () => {
 
   it("already-leaf goal stays leaf on re-decomposition", async () => {
     const goal = makeGoal({ node_type: "leaf", specificity_score: 0.95 });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // Even if leaf, decomposeGoal should still work (re-evaluate)
     const mockLLM = createMockLLMClient([HIGH_SPECIFICITY]);
@@ -842,7 +842,7 @@ describe("edge cases", () => {
   it("config with min_specificity=0 decomposes everything until max_depth", async () => {
     const config0: GoalDecompositionConfig = { ...DEFAULT_CONFIG, min_specificity: 0, max_depth: 1 };
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // With min_specificity=0, any score passes (even LOW_SPECIFICITY=0.4 >= 0)
     const mockLLM = createMockLLMClient([LOW_SPECIFICITY]);
@@ -856,25 +856,25 @@ describe("edge cases", () => {
   it("decomposeGoal with max_depth=0 forces immediate leaf", async () => {
     const config0: GoalDecompositionConfig = { ...DEFAULT_CONFIG, max_depth: 1 };
     const goal = makeGoal({ decomposition_depth: 1 }); // already at max_depth
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const mockLLM = createMockLLMClient([LOW_SPECIFICITY]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
 
     const result = await manager.decomposeGoal(goal.id, config0);
     expect(result.children).toHaveLength(0);
-    const saved = stateManager.loadGoal(goal.id);
+    const saved = await stateManager.loadGoal(goal.id);
     expect(saved?.node_type).toBe("leaf");
   });
 
-  it("getTreeState on empty tree (single root) returns correct values", () => {
+  it("getTreeState on empty tree (single root) returns correct values", async () => {
     const root = makeGoal();
-    stateManager.saveGoal(root);
+    await stateManager.saveGoal(root);
 
     const mockLLM = createMockLLMClient([]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
 
-    const state = manager.getTreeState(root.id);
+    const state = await manager.getTreeState(root.id);
     expect(state.root_id).toBe(root.id);
     expect(state.total_nodes).toBe(1);
     expect(state.max_depth_reached).toBe(0);
@@ -882,24 +882,24 @@ describe("edge cases", () => {
     expect(state.pruned_nodes).toHaveLength(0);
   });
 
-  it("cancelled goal is visible in pruned_nodes but still counted in total_nodes", () => {
+  it("cancelled goal is visible in pruned_nodes but still counted in total_nodes", async () => {
     const root = makeGoal();
     const cancelled = makeGoal({ parent_id: root.id, status: "cancelled", node_type: "subgoal", origin: "decomposition" });
     const rootUpdated: Goal = { ...root, children_ids: [cancelled.id] };
-    stateManager.saveGoal(rootUpdated);
-    stateManager.saveGoal(cancelled);
+    await stateManager.saveGoal(rootUpdated);
+    await stateManager.saveGoal(cancelled);
 
     const mockLLM = createMockLLMClient([]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
 
-    const state = manager.getTreeState(root.id);
+    const state = await manager.getTreeState(root.id);
     expect(state.total_nodes).toBe(2);
     expect(state.pruned_nodes).toContain(cancelled.id);
   });
 
   it("goal with constraints passes constraints to subgoal prompt", async () => {
     const goal = makeGoal({ constraints: ["Must be serverless", "Budget < $100"] });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     let capturedPrompt = "";
     const captureClient = {
@@ -923,10 +923,10 @@ describe("edge cases", () => {
 
 // ─── 11. GoalDependencyGraph Integration ───
 
-describe("GoalDependencyGraph integration", () => {
+describe("GoalDependencyGraph integration", async () => {
   it("decomposeGoal does not create prerequisite cycles", async () => {
     const root = makeGoal();
-    stateManager.saveGoal(root);
+    await stateManager.saveGoal(root);
 
     const mockLLM = createMockLLMClient([LOW_SPECIFICITY, SUBGOALS_TWO, COVERAGE_PASS, HIGH_SPECIFICITY, HIGH_SPECIFICITY]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
@@ -935,7 +935,7 @@ describe("GoalDependencyGraph integration", () => {
 
     // The graph should not have any cycles (parent_child type is separate from prerequisite)
     // For each child, detectCycle should return false
-    const savedRoot = stateManager.loadGoal(root.id);
+    const savedRoot = await stateManager.loadGoal(root.id);
     for (const childId of (savedRoot?.children_ids ?? [])) {
       const wouldCycle = dependencyGraph.detectCycle(childId, root.id);
       expect(wouldCycle).toBe(false);
@@ -951,7 +951,7 @@ describe("GoalDependencyGraph integration", () => {
         { name: "d3", label: "D3", current_value: 0, threshold: { type: "present", value: null }, confidence: 0.8, observation_method: { type: "manual" as const, source: "t", schedule: null, endpoint: null, confidence_tier: "self_report" as const }, last_updated: new Date().toISOString(), history: [], weight: 1, uncertainty_weight: null, state_integrity: "ok", dimension_mapping: null },
       ],
     });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const mockLLM = createMockLLMClient([HIGH_SPECIFICITY]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
@@ -962,13 +962,13 @@ describe("GoalDependencyGraph integration", () => {
 
   it("reconstructed tree via getTreeState matches what was decomposed", async () => {
     const root = makeGoal();
-    stateManager.saveGoal(root);
+    await stateManager.saveGoal(root);
 
     const mockLLM = createMockLLMClient([LOW_SPECIFICITY, SUBGOALS_THREE, COVERAGE_PASS, HIGH_SPECIFICITY, HIGH_SPECIFICITY, HIGH_SPECIFICITY]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
 
     await manager.decomposeGoal(root.id, DEFAULT_CONFIG);
-    const state = manager.getTreeState(root.id);
+    const state = await manager.getTreeState(root.id);
 
     // root + 3 children = 4
     expect(state.total_nodes).toBe(4);
@@ -978,7 +978,7 @@ describe("GoalDependencyGraph integration", () => {
 
   it("decomposeGoal result parent_id matches input goalId", async () => {
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const mockLLM = createMockLLMClient([HIGH_SPECIFICITY]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);
@@ -989,7 +989,7 @@ describe("GoalDependencyGraph integration", () => {
 
   it("goal with constraints: constraints are passed to child goals", async () => {
     const root = makeGoal({ constraints: ["Use TypeScript only"] });
-    stateManager.saveGoal(root);
+    await stateManager.saveGoal(root);
 
     const subgoalWithConstraint = JSON.stringify([
       {
@@ -1012,7 +1012,7 @@ describe("GoalDependencyGraph integration", () => {
 
   it("specificity_scores record includes child scores after 1-layer decomposition", async () => {
     const root = makeGoal();
-    stateManager.saveGoal(root);
+    await stateManager.saveGoal(root);
 
     const mockLLM = createMockLLMClient([LOW_SPECIFICITY, SUBGOALS_ONE, COVERAGE_PASS, HIGH_SPECIFICITY]);
     const manager = new GoalTreeManager(stateManager, mockLLM, ethicsGate, dependencyGraph);

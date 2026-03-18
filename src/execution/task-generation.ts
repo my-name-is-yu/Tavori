@@ -67,7 +67,7 @@ export async function generateTask(
   existingTasks?: string[],
   workspaceContext?: string
 ): Promise<Task> {
-  const prompt = buildTaskGenerationPrompt(
+  const prompt = await buildTaskGenerationPrompt(
     deps.stateManager,
     goalId,
     targetDimension,
@@ -98,7 +98,7 @@ export async function generateTask(
   }
 
   // Resolve strategy_id
-  const activeStrategy = deps.strategyManager.getActiveStrategy(goalId);
+  const activeStrategy = await deps.strategyManager.getActiveStrategy(goalId);
   const resolvedStrategyId = strategyId ?? activeStrategy?.id ?? null;
 
   const taskId = randomUUID();
@@ -123,7 +123,7 @@ export async function generateTask(
   });
 
   // Persist
-  deps.stateManager.writeRaw(`tasks/${goalId}/${taskId}.json`, task);
+  await deps.stateManager.writeRaw(`tasks/${goalId}/${taskId}.json`, task);
 
   return task;
 }

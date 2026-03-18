@@ -30,15 +30,15 @@ export interface PhaseCtx {
 
 /** Load goal from state, apply tree aggregation if applicable.
  * Returns the loaded Goal, or null if an error occurred (result is mutated). */
-export function loadGoalWithAggregation(
+export async function loadGoalWithAggregation(
   ctx: PhaseCtx,
   goalId: string,
   result: LoopIterationResult,
   startTime: number
-): Goal | null {
+): Promise<Goal | null> {
   let goal: Goal;
   try {
-    const loaded = ctx.deps.stateManager.loadGoal(goalId);
+    const loaded = await ctx.deps.stateManager.loadGoal(goalId);
     if (!loaded) {
       result.error = `Goal "${goalId}" not found`;
       result.elapsedMs = Date.now() - startTime;
@@ -55,8 +55,8 @@ export function loadGoalWithAggregation(
   // Tree aggregation
   if (ctx.deps.stateAggregator && goal.children_ids.length > 0) {
     try {
-      ctx.deps.stateAggregator.aggregateChildStates(goalId);
-      const reloaded = ctx.deps.stateManager.loadGoal(goalId);
+      await ctx.deps.stateAggregator.aggregateChildStates(goalId);
+      const reloaded = await ctx.deps.stateManager.loadGoal(goalId);
       if (reloaded) goal = reloaded;
     } catch {
       // Tree aggregation failure is non-fatal
@@ -97,7 +97,7 @@ export async function observeAndReload(
       await engine.observe(goalId, []);
     }
 
-    const reloaded = ctx.deps.stateManager.loadGoal(goalId);
+    const reloaded = await ctx.deps.stateManager.loadGoal(goalId);
     if (reloaded) return reloaded;
   } catch (err) {
     ctx.logger?.warn("CoreLoop: observation failed (non-fatal)", { error: err instanceof Error ? err.message : String(err) });
@@ -109,14 +109,14 @@ export async function observeAndReload(
 
 /** Calculate gap vector and aggregate. Returns null if gap is zero
  * (result is mutated with early completion) or on error. */
-export function calculateGapOrComplete(
+export async function calculateGapOrComplete(
   ctx: PhaseCtx,
   goalId: string,
   goal: Goal,
   loopIndex: number,
   result: LoopIterationResult,
   startTime: number
-): { gapVector: GapVector; gapAggregate: number } | null {
+): Promise<{ gapVector: GapVector; gapAggregate: number } | null> {
   let gapVector: GapVector;
   let gapAggregate: number;
   try {
@@ -132,7 +132,7 @@ export function calculateGapOrComplete(
     );
     result.gapAggregate = gapAggregate;
 
-    ctx.deps.stateManager.appendGapHistoryEntry(goalId, {
+    await ctx.deps.stateManager.appendGapHistoryEntry(goalId, {
       iteration: loopIndex,
       timestamp: new Date().toISOString(),
       gap_vector: gapVector.gaps.map((g) => ({
@@ -213,7 +213,7 @@ export async function scoreDrivesAndCheckKnowledge(
     try {
       let strategies: unknown[] | null = null;
       try {
-        const portfolio = ctx.deps.strategyManager.getPortfolio(goalId);
+        const portfolio = await ctx.deps.strategyManager.getPortfolio(goalId);
         strategies = portfolio !== null ? portfolio.strategies : null;
       } catch {
         // If strategy loading fails, leave as null

@@ -278,7 +278,7 @@ export class CLIRunner {
           logger.error("Error: goal ID is required. Usage: motiva goal remove <id>");
           return 1;
         }
-        const deleted = this.stateManager.deleteGoal(goalId);
+        const deleted = await this.stateManager.deleteGoal(goalId);
         if (deleted) {
           console.log(`Goal ${goalId} removed.`);
           return 0;
@@ -294,7 +294,7 @@ export class CLIRunner {
           logger.error("Error: goal ID is required. Usage: motiva goal show <id>");
           return 1;
         }
-        return cmdGoalShow(this.stateManager, goalId);
+        return await cmdGoalShow(this.stateManager, goalId);
       }
 
       if (goalSubcommand === "reset") {
@@ -303,7 +303,7 @@ export class CLIRunner {
           logger.error("Error: goal ID is required. Usage: motiva goal reset <id>");
           return 1;
         }
-        return cmdGoalReset(this.stateManager, goalId);
+        return await cmdGoalReset(this.stateManager, goalId);
       }
 
       logger.error(`Unknown goal subcommand: "${goalSubcommand}"`);
@@ -380,7 +380,7 @@ export class CLIRunner {
         return 1;
       }
 
-      return cmdLog(this.stateManager, goalId);
+      return await cmdLog(this.stateManager, goalId);
     }
 
     if (subcommand === "start") {

@@ -52,16 +52,16 @@ export class TreeLoopOrchestrator {
     this.config = config;
 
     // Reset all nodes in the tree to loop_status: "idle" to ensure clean state
-    const root = this.stateManager.loadGoal(rootId);
+    const root = await this.stateManager.loadGoal(rootId);
     if (!root) return;
 
     const now = new Date().toISOString();
-    const allIds = [rootId, ...this._collectAllDescendantIds(rootId)];
+    const allIds = [rootId, ...await this._collectAllDescendantIds(rootId)];
 
     for (const id of allIds) {
-      const goal = this.stateManager.loadGoal(id);
+      const goal = await this.stateManager.loadGoal(id);
       if (goal && goal.loop_status !== "idle") {
-        this.stateManager.saveGoal({
+        await this.stateManager.saveGoal({
           ...goal,
           loop_status: "idle",
           updated_at: now,
@@ -86,22 +86,22 @@ export class TreeLoopOrchestrator {
    *   - parallel_loop_limit is already reached
    *   - No eligible (active + idle) nodes remain
    */
-  selectNextNode(rootId: string): string | null {
+  async selectNextNode(rootId: string): Promise<string | null> {
     // Step 1: Check parallel limit
-    const treeState = this.goalTreeManager.getTreeState(rootId);
+    const treeState = await this.goalTreeManager.getTreeState(rootId);
     if (treeState.active_loops.length >= this.config.parallel_loop_limit) {
       return null;
     }
 
     // Step 2: Collect all IDs (root + all descendants)
-    const allIds = [rootId, ...this._collectAllDescendantIds(rootId)];
+    const allIds = [rootId, ...await this._collectAllDescendantIds(rootId)];
 
     // Step 3 & 4: Filter eligible nodes — active + idle, leaf first
     const eligibleLeaves: string[] = [];
     const eligibleNonLeaves: string[] = [];
 
     for (const id of allIds) {
-      const goal = this.stateManager.loadGoal(id);
+      const goal = await this.stateManager.loadGoal(id);
       if (!goal) continue;
       if (goal.status !== "active") continue;
       if (goal.loop_status === "running" || goal.loop_status === "paused") continue;
@@ -118,11 +118,16 @@ export class TreeLoopOrchestrator {
 
     if (eligibleLeaves.length > 0) {
       // Among leaves, prefer deeper ones (higher decomposition_depth)
+      // Note: sorting is done synchronously using already-loaded data from above pass
+      // We re-use the loaded goals by building a depth map first
+      const depthMap = new Map<string, number>();
+      for (const id of eligibleLeaves) {
+        const g = await this.stateManager.loadGoal(id);
+        depthMap.set(id, g?.decomposition_depth ?? 0);
+      }
       eligibleLeaves.sort((a, b) => {
-        const ga = this.stateManager.loadGoal(a);
-        const gb = this.stateManager.loadGoal(b);
-        const depthA = ga?.decomposition_depth ?? 0;
-        const depthB = gb?.decomposition_depth ?? 0;
+        const depthA = depthMap.get(a) ?? 0;
+        const depthB = depthMap.get(b) ?? 0;
         return depthB - depthA; // descending: deeper first
       });
       selectedId = eligibleLeaves[0] ?? null;
@@ -133,9 +138,9 @@ export class TreeLoopOrchestrator {
     if (selectedId === null) return null;
 
     // Mark selected node as running
-    const selected = this.stateManager.loadGoal(selectedId);
+    const selected = await this.stateManager.loadGoal(selectedId);
     if (selected) {
-      this.stateManager.saveGoal({
+      await this.stateManager.saveGoal({
         ...selected,
         loop_status: "running",
         updated_at: new Date().toISOString(),
@@ -152,11 +157,11 @@ export class TreeLoopOrchestrator {
    * Sets loop_status to "paused".
    * No-op if the goal is not found.
    */
-  pauseNodeLoop(goalId: string): void {
-    const goal = this.stateManager.loadGoal(goalId);
+  async pauseNodeLoop(goalId: string): Promise<void> {
+    const goal = await this.stateManager.loadGoal(goalId);
     if (!goal) return;
 
-    this.stateManager.saveGoal({
+    await this.stateManager.saveGoal({
       ...goal,
       loop_status: "paused",
       updated_at: new Date().toISOString(),
@@ -168,11 +173,11 @@ export class TreeLoopOrchestrator {
    * Sets loop_status to "running".
    * No-op if the goal is not found.
    */
-  resumeNodeLoop(goalId: string): void {
-    const goal = this.stateManager.loadGoal(goalId);
+  async resumeNodeLoop(goalId: string): Promise<void> {
+    const goal = await this.stateManager.loadGoal(goalId);
     if (!goal) return;
 
-    this.stateManager.saveGoal({
+    await this.stateManager.saveGoal({
       ...goal,
       loop_status: "running",
       updated_at: new Date().toISOString(),
@@ -190,13 +195,13 @@ export class TreeLoopOrchestrator {
    *   3. Run completion cascade to auto-complete ancestor nodes whose
    *      children are all done.
    */
-  onNodeCompleted(goalId: string): void {
+  async onNodeCompleted(goalId: string): Promise<void> {
     const now = new Date().toISOString();
 
     // Step 1: Reset loop_status to "idle"
-    const goal = this.stateManager.loadGoal(goalId);
+    const goal = await this.stateManager.loadGoal(goalId);
     if (goal) {
-      this.stateManager.saveGoal({
+      await this.stateManager.saveGoal({
         ...goal,
         loop_status: "idle",
         updated_at: now,
@@ -207,21 +212,21 @@ export class TreeLoopOrchestrator {
     let parentId = goal?.parent_id ?? null;
     while (parentId !== null) {
       try {
-        this.stateAggregator.aggregateChildStates(parentId);
+        await this.stateAggregator.aggregateChildStates(parentId);
       } catch {
         // Non-fatal: parent may be missing or have no children
         break;
       }
-      const parent = this.stateManager.loadGoal(parentId);
+      const parent = await this.stateManager.loadGoal(parentId);
       parentId = parent?.parent_id ?? null;
     }
 
     // Step 3: Completion cascade
-    const cascadeIds = this.stateAggregator.checkCompletionCascade(goalId);
+    const cascadeIds = await this.stateAggregator.checkCompletionCascade(goalId);
     for (const ancestorId of cascadeIds) {
-      const ancestor = this.stateManager.loadGoal(ancestorId);
+      const ancestor = await this.stateManager.loadGoal(ancestorId);
       if (ancestor && ancestor.status !== "completed") {
-        this.stateManager.saveGoal({
+        await this.stateManager.saveGoal({
           ...ancestor,
           status: "completed",
           updated_at: now,
@@ -235,13 +240,13 @@ export class TreeLoopOrchestrator {
   /**
    * Collect all descendant IDs (not including rootId itself).
    */
-  private _collectAllDescendantIds(goalId: string): string[] {
-    const goal = this.stateManager.loadGoal(goalId);
+  private async _collectAllDescendantIds(goalId: string): Promise<string[]> {
+    const goal = await this.stateManager.loadGoal(goalId);
     if (!goal) return [];
     const result: string[] = [];
     for (const childId of goal.children_ids) {
       result.push(childId);
-      result.push(...this._collectAllDescendantIds(childId));
+      result.push(...await this._collectAllDescendantIds(childId));
     }
     return result;
   }

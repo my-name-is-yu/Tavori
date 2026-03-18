@@ -181,7 +181,7 @@ export async function observeWithLLM(
   });
 
   if (!dryRun) {
-    applyObservation(goalId, entry);
+    await applyObservation(goalId, entry);
   }
 
   return entry;

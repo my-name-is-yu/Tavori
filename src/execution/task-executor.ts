@@ -45,7 +45,7 @@ export async function executeTask(
   const { stateManager, sessionManager, logger, execFileSyncFn } = deps;
 
   // Create execution session
-  const session = sessionManager.createSession(
+  const session = await sessionManager.createSession(
     "task_execution",
     task.goal_id,
     task.id
@@ -103,7 +103,7 @@ export async function executeTask(
 
   // Update task status to running
   const runningTask = { ...task, status: "running" as const, started_at: new Date().toISOString() };
-  stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, runningTask);
+  await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, runningTask);
 
   // Execute
   let result: AgentResult;
@@ -124,10 +124,10 @@ export async function executeTask(
           };
           // End session and update task status without calling adapter.execute
           const skipSummary = 'Task skipped: duplicate detected by adapter';
-          sessionManager.endSession(session.id, skipSummary);
+          await sessionManager.endSession(session.id, skipSummary);
           const skipNow = new Date().toISOString();
           const skippedTask = { ...runningTask, status: 'completed' as const, completed_at: skipNow };
-          stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, skippedTask);
+          await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, skippedTask);
           return result;
         }
       } catch { /* non-fatal: proceed with execution if dedup check fails */ }
@@ -205,7 +205,7 @@ export async function executeTask(
   const summary = result.success
     ? `Task completed successfully. Output length: ${result.output.length}`
     : `Task failed: ${result.stopped_reason}. Error: ${result.error ?? "unknown"}`;
-  sessionManager.endSession(session.id, summary);
+  await sessionManager.endSession(session.id, summary);
 
   // Update task status based on result
   const now = new Date().toISOString();
@@ -224,7 +224,7 @@ export async function executeTask(
     completed_at: now,
     ...(newStatus === "timed_out" ? { timeout_at: now } : {}),
   };
-  stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, updatedTask);
+  await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, updatedTask);
 
   return result;
 }
@@ -234,9 +234,9 @@ export async function executeTask(
 /**
  * Reload a task from disk (falls back to in-memory task if unavailable).
  */
-export function reloadTaskFromDisk(stateManager: StateManager, task: Task): Task {
+export async function reloadTaskFromDisk(stateManager: StateManager, task: Task): Promise<Task> {
   try {
-    const raw = stateManager.readRaw(`tasks/${task.goal_id}/${task.id}.json`);
+    const raw = await stateManager.readRaw(`tasks/${task.goal_id}/${task.id}.json`);
     if (raw) return TaskSchema.parse(raw);
   } catch { /* fall back to in-memory task */ }
   return task;

@@ -29,12 +29,12 @@ export class StrategyManager extends StrategyManagerBase {
    * Allocates resources equally, respecting min=0.1 and max=0.7 per strategy.
    * Single strategy receives allocation=1.0.
    */
-  activateMultiple(goalId: string, strategyIds: string[]): Strategy[] {
+  async activateMultiple(goalId: string, strategyIds: string[]): Promise<Strategy[]> {
     if (strategyIds.length === 0) {
       throw new Error(`activateMultiple: strategyIds must not be empty`);
     }
 
-    const portfolio = this.loadOrCreatePortfolio(goalId);
+    const portfolio = await this.loadOrCreatePortfolio(goalId);
     const now = new Date().toISOString();
     const count = strategyIds.length;
 
@@ -81,7 +81,7 @@ export class StrategyManager extends StrategyManagerBase {
       }
     }
 
-    this.savePortfolio(goalId, portfolio);
+    await this.savePortfolio(goalId, portfolio);
     return activated;
   }
 
@@ -89,8 +89,8 @@ export class StrategyManager extends StrategyManagerBase {
    * Terminate a strategy and redistribute its allocation to remaining active strategies
    * proportionally. If no remaining active strategies, allocation is not redistributed.
    */
-  terminateStrategy(goalId: string, strategyId: string, _reason: string): Strategy {
-    const portfolio = this.loadOrCreatePortfolio(goalId);
+  async terminateStrategy(goalId: string, strategyId: string, _reason: string): Promise<Strategy> {
+    const portfolio = await this.loadOrCreatePortfolio(goalId);
     const strategy = portfolio.strategies.find((s) => s.id === strategyId);
     if (!strategy) {
       throw new Error(
@@ -113,8 +113,8 @@ export class StrategyManager extends StrategyManagerBase {
       s.id === strategyId ? terminated : s
     );
     portfolio.strategies = redistributeAllocation(withTerminated, strategyId, freedAllocation);
-    this.savePortfolio(goalId, portfolio);
-    this.appendToHistory(goalId, terminated);
+    await this.savePortfolio(goalId, portfolio);
+    await this.appendToHistory(goalId, terminated);
 
     return terminated;
   }
@@ -123,7 +123,7 @@ export class StrategyManager extends StrategyManagerBase {
    * Create a WaitStrategy for a goal.
    * Sets state="candidate" initially; caller activates when ready.
    */
-  createWaitStrategy(
+  async createWaitStrategy(
     goalId: string,
     params: {
       hypothesis: string;
@@ -134,7 +134,7 @@ export class StrategyManager extends StrategyManagerBase {
       target_dimensions: string[];
       primary_dimension: string;
     }
-  ): Strategy {
+  ): Promise<Strategy> {
     const now = new Date().toISOString();
 
     const waitStrategy = WaitStrategySchema.parse({
@@ -164,10 +164,10 @@ export class StrategyManager extends StrategyManagerBase {
       fallback_strategy_id: params.fallback_strategy_id,
     });
 
-    const portfolio = this.loadOrCreatePortfolio(goalId);
+    const portfolio = await this.loadOrCreatePortfolio(goalId);
     // WaitStrategy is a superset of Strategy; store as Strategy (base fields) in portfolio
     portfolio.strategies.push(StrategySchema.parse(waitStrategy));
-    this.savePortfolio(goalId, portfolio);
+    await this.savePortfolio(goalId, portfolio);
 
     this.strategyIndex.set(waitStrategy.id, goalId);
     return StrategySchema.parse(waitStrategy);
@@ -176,8 +176,8 @@ export class StrategyManager extends StrategyManagerBase {
   /**
    * Suspend an active strategy, redistributing its allocation to remaining active strategies.
    */
-  suspendStrategy(goalId: string, strategyId: string): Strategy {
-    const portfolio = this.loadOrCreatePortfolio(goalId);
+  async suspendStrategy(goalId: string, strategyId: string): Promise<Strategy> {
+    const portfolio = await this.loadOrCreatePortfolio(goalId);
     const strategy = portfolio.strategies.find((s) => s.id === strategyId);
     if (!strategy) {
       throw new Error(
@@ -202,7 +202,7 @@ export class StrategyManager extends StrategyManagerBase {
       s.id === strategyId ? suspended : s
     );
     portfolio.strategies = redistributeAllocation(withSuspended, strategyId, freedAllocation);
-    this.savePortfolio(goalId, portfolio);
+    await this.savePortfolio(goalId, portfolio);
 
     return suspended;
   }
@@ -211,12 +211,12 @@ export class StrategyManager extends StrategyManagerBase {
    * Resume a suspended strategy at the given allocation.
    * Adjusts other active strategies proportionally to maintain sum=1.0.
    */
-  resumeStrategy(goalId: string, strategyId: string, allocation: number): Strategy {
+  async resumeStrategy(goalId: string, strategyId: string, allocation: number): Promise<Strategy> {
     if (allocation < 0 || allocation > 1) {
       throw new Error(`resumeStrategy: allocation must be in [0, 1], got ${allocation}`);
     }
 
-    const portfolio = this.loadOrCreatePortfolio(goalId);
+    const portfolio = await this.loadOrCreatePortfolio(goalId);
     const strategy = portfolio.strategies.find((s) => s.id === strategyId);
     if (!strategy) {
       throw new Error(
@@ -253,7 +253,7 @@ export class StrategyManager extends StrategyManagerBase {
       return StrategySchema.parse({ ...s, allocation: newAlloc });
     });
 
-    this.savePortfolio(goalId, portfolio);
+    await this.savePortfolio(goalId, portfolio);
     return resumed;
   }
 
@@ -261,8 +261,8 @@ export class StrategyManager extends StrategyManagerBase {
    * Return all strategies with state "active" or "evaluating" for a goal.
    * Unlike getActiveStrategy, returns all concurrent active strategies.
    */
-  getAllActiveStrategies(goalId: string): Strategy[] {
-    const portfolio = this.loadOrCreatePortfolio(goalId);
+  async getAllActiveStrategies(goalId: string): Promise<Strategy[]> {
+    const portfolio = await this.loadOrCreatePortfolio(goalId);
     return portfolio.strategies.filter(
       (s) => s.state === "active" || s.state === "evaluating"
     );
@@ -273,14 +273,14 @@ export class StrategyManager extends StrategyManagerBase {
    * Does NOT validate that the sum of all allocations equals 1.0;
    * the caller (e.g., PortfolioManager) is responsible for maintaining that invariant.
    */
-  updateAllocation(goalId: string, strategyId: string, newAllocation: number): void {
+  async updateAllocation(goalId: string, strategyId: string, newAllocation: number): Promise<void> {
     if (newAllocation < 0 || newAllocation > 1) {
       throw new Error(
         `updateAllocation: allocation must be in [0, 1], got ${newAllocation}`
       );
     }
 
-    const portfolio = this.loadOrCreatePortfolio(goalId);
+    const portfolio = await this.loadOrCreatePortfolio(goalId);
     const strategy = portfolio.strategies.find((s) => s.id === strategyId);
     if (!strategy) {
       throw new Error(
@@ -291,6 +291,6 @@ export class StrategyManager extends StrategyManagerBase {
     portfolio.strategies = portfolio.strategies.map((s) =>
       s.id === strategyId ? StrategySchema.parse({ ...s, allocation: newAllocation }) : s
     );
-    this.savePortfolio(goalId, portfolio);
+    await this.savePortfolio(goalId, portfolio);
   }
 }

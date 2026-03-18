@@ -317,7 +317,7 @@ describe("generateAcquisitionTask", () => {
       createMockLLMClient([makeLLMFieldsResponse()])
     );
     const task = await manager.generateAcquisitionTask(makeSignal(), "goal-1");
-    const persisted = stateManager.readRaw(`tasks/goal-1/${task.id}.json`);
+    const persisted = await stateManager.readRaw(`tasks/goal-1/${task.id}.json`);
     expect(persisted).not.toBeNull();
   });
 

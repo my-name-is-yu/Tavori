@@ -93,10 +93,10 @@ const DEFAULT_CONFIG = {
 
 function createMockDeps(overrides: Partial<CuriosityEngineDeps> = {}): CuriosityEngineDeps {
   const stateManager = {
-    readRaw: vi.fn().mockReturnValue(null),
-    writeRaw: vi.fn(),
-    loadGoal: vi.fn(),
-    saveGoal: vi.fn(),
+    readRaw: vi.fn().mockResolvedValue(null),
+    writeRaw: vi.fn().mockResolvedValue(undefined),
+    loadGoal: vi.fn().mockResolvedValue(null),
+    saveGoal: vi.fn().mockResolvedValue(undefined),
   } as any;
 
   const llmClient = {
@@ -113,7 +113,7 @@ function createMockDeps(overrides: Partial<CuriosityEngineDeps> = {}): Curiosity
   } as any;
 
   const stallDetector = {
-    getStallState: vi.fn().mockReturnValue(makeStallState()),
+    getStallState: vi.fn().mockResolvedValue(makeStallState()),
   } as any;
 
   const observationEngine = {
@@ -151,13 +151,13 @@ function createMockDeps(overrides: Partial<CuriosityEngineDeps> = {}): Curiosity
 // ─── Tests ───
 
 describe("CuriosityEngine — constructor", () => {
-  it("creates with default config", () => {
+  it("creates with default config", async () => {
     const deps = createMockDeps();
     const engine = new CuriosityEngine(deps);
     expect(engine).toBeInstanceOf(CuriosityEngine);
   });
 
-  it("creates with custom config", () => {
+  it("creates with custom config", async () => {
     const deps = createMockDeps({
       config: {
         enabled: true,
@@ -170,14 +170,14 @@ describe("CuriosityEngine — constructor", () => {
     expect(engine).toBeInstanceOf(CuriosityEngine);
   });
 
-  it("creates with curiosity disabled", () => {
+  it("creates with curiosity disabled", async () => {
     const deps = createMockDeps({ config: { enabled: false } });
     const engine = new CuriosityEngine(deps);
-    const triggers = engine.evaluateTriggers([makeGoal({ status: "completed" })]);
+    const triggers = await engine.evaluateTriggers([makeGoal({ status: "completed" })]);
     expect(triggers).toHaveLength(0);
   });
 
-  it("loads existing state from StateManager when present", () => {
+  it("loads existing state from StateManager when present", async () => {
     const existingState = {
       proposals: [],
       learning_records: [],
@@ -185,18 +185,20 @@ describe("CuriosityEngine — constructor", () => {
       rejected_proposal_hashes: ["abc123"],
     };
     const deps = createMockDeps();
-    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue(existingState);
+    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue(existingState);
 
     const engine = new CuriosityEngine(deps);
+    // Trigger state load by calling an async method
+    await engine.evaluateTriggers([]);
     // Engine loaded state — periodic exploration should NOT trigger since last_exploration_at is recent
     // (or far past depending on config). Just verify it doesn't crash.
     expect(engine).toBeInstanceOf(CuriosityEngine);
     expect(deps.stateManager.readRaw).toHaveBeenCalledWith("curiosity/state.json");
   });
 
-  it("starts fresh when StateManager returns null", () => {
+  it("starts fresh when StateManager returns null", async () => {
     const deps = createMockDeps();
-    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue(null);
+    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue(null);
     const engine = new CuriosityEngine(deps);
     expect(engine.getActiveProposals()).toHaveLength(0);
   });
@@ -206,45 +208,45 @@ describe("CuriosityEngine — constructor", () => {
 
 describe("CuriosityEngine — evaluateTriggers", () => {
   describe("task_queue_empty trigger", () => {
-    it("triggers when all user goals are completed", () => {
+    it("triggers when all user goals are completed", async () => {
       const deps = createMockDeps();
       const engine = new CuriosityEngine(deps);
       const goals = [
         makeGoal({ id: "g1", status: "completed", origin: null }),
         makeGoal({ id: "g2", status: "completed", origin: null }),
       ];
-      const triggers = engine.evaluateTriggers(goals);
+      const triggers = await engine.evaluateTriggers(goals);
       const types = triggers.map((t) => t.type);
       expect(types).toContain("task_queue_empty");
     });
 
-    it("triggers when all user goals are waiting", () => {
+    it("triggers when all user goals are waiting", async () => {
       const deps = createMockDeps();
       const engine = new CuriosityEngine(deps);
       const goals = [
         makeGoal({ id: "g1", status: "waiting", origin: null }),
       ];
-      const triggers = engine.evaluateTriggers(goals);
+      const triggers = await engine.evaluateTriggers(goals);
       const types = triggers.map((t) => t.type);
       expect(types).toContain("task_queue_empty");
     });
 
-    it("triggers when mix of completed and waiting user goals", () => {
+    it("triggers when mix of completed and waiting user goals", async () => {
       const deps = createMockDeps();
       const engine = new CuriosityEngine(deps);
       const goals = [
         makeGoal({ id: "g1", status: "completed", origin: null }),
         makeGoal({ id: "g2", status: "waiting", origin: null }),
       ];
-      const triggers = engine.evaluateTriggers(goals);
+      const triggers = await engine.evaluateTriggers(goals);
       const types = triggers.map((t) => t.type);
       expect(types).toContain("task_queue_empty");
     });
 
-    it("does NOT trigger when any user goal is active", () => {
+    it("does NOT trigger when any user goal is active", async () => {
       const deps = createMockDeps();
       // Set last_exploration_at to now to suppress periodic_exploration
-      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
         proposals: [],
         learning_records: [],
         last_exploration_at: new Date().toISOString(),
@@ -255,28 +257,28 @@ describe("CuriosityEngine — evaluateTriggers", () => {
         makeGoal({ id: "g1", status: "active", origin: null }),
         makeGoal({ id: "g2", status: "completed", origin: null }),
       ];
-      const triggers = engine.evaluateTriggers(goals);
+      const triggers = await engine.evaluateTriggers(goals);
       const types = triggers.map((t) => t.type);
       expect(types).not.toContain("task_queue_empty");
     });
 
-    it("does NOT trigger when goals array is empty", () => {
+    it("does NOT trigger when goals array is empty", async () => {
       const deps = createMockDeps();
-      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
         proposals: [],
         learning_records: [],
         last_exploration_at: new Date().toISOString(),
         rejected_proposal_hashes: [],
       });
       const engine = new CuriosityEngine(deps);
-      const triggers = engine.evaluateTriggers([]);
+      const triggers = await engine.evaluateTriggers([]);
       const types = triggers.map((t) => t.type);
       expect(types).not.toContain("task_queue_empty");
     });
 
-    it("ignores curiosity-origin goals when checking task queue", () => {
+    it("ignores curiosity-origin goals when checking task queue", async () => {
       const deps = createMockDeps();
-      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
         proposals: [],
         learning_records: [],
         last_exploration_at: new Date().toISOString(),
@@ -288,7 +290,7 @@ describe("CuriosityEngine — evaluateTriggers", () => {
         makeGoal({ id: "g1", status: "active", origin: "curiosity" }),
         makeGoal({ id: "g2", status: "completed", origin: null }),
       ];
-      const triggers = engine.evaluateTriggers(goals);
+      const triggers = await engine.evaluateTriggers(goals);
       const types = triggers.map((t) => t.type);
       // The user goal (g2) is completed, curiosity goal should be ignored for this check
       expect(types).toContain("task_queue_empty");
@@ -296,9 +298,9 @@ describe("CuriosityEngine — evaluateTriggers", () => {
   });
 
   describe("unexpected_observation trigger", () => {
-    it("triggers when observation deviation > threshold * stddev", () => {
+    it("triggers when observation deviation > threshold * stddev", async () => {
       const deps = createMockDeps();
-      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
         proposals: [],
         learning_records: [],
         last_exploration_at: new Date().toISOString(),
@@ -328,14 +330,14 @@ describe("CuriosityEngine — evaluateTriggers", () => {
         }),
       ];
 
-      const triggers = engine.evaluateTriggers(goals);
+      const triggers = await engine.evaluateTriggers(goals);
       const types = triggers.map((t) => t.type);
       expect(types).toContain("unexpected_observation");
     });
 
-    it("does NOT trigger when deviation is within normal range", () => {
+    it("does NOT trigger when deviation is within normal range", async () => {
       const deps = createMockDeps();
-      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
         proposals: [],
         learning_records: [],
         last_exploration_at: new Date().toISOString(),
@@ -361,14 +363,14 @@ describe("CuriosityEngine — evaluateTriggers", () => {
         }),
       ];
 
-      const triggers = engine.evaluateTriggers(goals);
+      const triggers = await engine.evaluateTriggers(goals);
       const types = triggers.map((t) => t.type);
       expect(types).not.toContain("unexpected_observation");
     });
 
-    it("handles missing observation history gracefully (fewer than 4 entries)", () => {
+    it("handles missing observation history gracefully (fewer than 4 entries)", async () => {
       const deps = createMockDeps();
-      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
         proposals: [],
         learning_records: [],
         last_exploration_at: new Date().toISOString(),
@@ -388,14 +390,14 @@ describe("CuriosityEngine — evaluateTriggers", () => {
       ];
 
       // Should not throw and should NOT fire unexpected_observation (not enough data)
-      const triggers = engine.evaluateTriggers(goals);
+      const triggers = await engine.evaluateTriggers(goals);
       const types = triggers.map((t) => t.type);
       expect(types).not.toContain("unexpected_observation");
     });
 
-    it("does NOT trigger for non-active goals", () => {
+    it("does NOT trigger for non-active goals", async () => {
       const deps = createMockDeps();
-      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
         proposals: [],
         learning_records: [],
         last_exploration_at: new Date().toISOString(),
@@ -420,118 +422,118 @@ describe("CuriosityEngine — evaluateTriggers", () => {
         }),
       ];
 
-      const triggers = engine.evaluateTriggers(goals);
+      const triggers = await engine.evaluateTriggers(goals);
       const types = triggers.map((t) => t.type);
       expect(types).not.toContain("unexpected_observation");
     });
   });
 
   describe("repeated_failure trigger", () => {
-    it("triggers when dimension escalation level > 0", () => {
+    it("triggers when dimension escalation level > 0", async () => {
       const deps = createMockDeps();
-      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
         proposals: [],
         learning_records: [],
         last_exploration_at: new Date().toISOString(),
         rejected_proposal_hashes: [],
       });
-      (deps.stallDetector.getStallState as ReturnType<typeof vi.fn>).mockReturnValue(
+      (deps.stallDetector.getStallState as ReturnType<typeof vi.fn>).mockResolvedValue(
         makeStallState({ dimension_escalation: { dim1: 1 } })
       );
 
       const engine = new CuriosityEngine(deps);
       const goals = [makeGoal({ id: "goal-1", status: "active", origin: null })];
 
-      const triggers = engine.evaluateTriggers(goals);
+      const triggers = await engine.evaluateTriggers(goals);
       const types = triggers.map((t) => t.type);
       expect(types).toContain("repeated_failure");
     });
 
-    it("includes goal_id in the trigger", () => {
+    it("includes goal_id in the trigger", async () => {
       const deps = createMockDeps();
-      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
         proposals: [],
         learning_records: [],
         last_exploration_at: new Date().toISOString(),
         rejected_proposal_hashes: [],
       });
-      (deps.stallDetector.getStallState as ReturnType<typeof vi.fn>).mockReturnValue(
+      (deps.stallDetector.getStallState as ReturnType<typeof vi.fn>).mockResolvedValue(
         makeStallState({ goal_id: "goal-abc", dimension_escalation: { dim1: 2 } })
       );
 
       const engine = new CuriosityEngine(deps);
       const goals = [makeGoal({ id: "goal-abc", status: "active", origin: null })];
 
-      const triggers = engine.evaluateTriggers(goals);
+      const triggers = await engine.evaluateTriggers(goals);
       const failureTrigger = triggers.find((t) => t.type === "repeated_failure");
       expect(failureTrigger?.source_goal_id).toBe("goal-abc");
     });
 
-    it("does NOT trigger when all dimension escalation levels are 0", () => {
+    it("does NOT trigger when all dimension escalation levels are 0", async () => {
       const deps = createMockDeps();
-      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
         proposals: [],
         learning_records: [],
         last_exploration_at: new Date().toISOString(),
         rejected_proposal_hashes: [],
       });
-      (deps.stallDetector.getStallState as ReturnType<typeof vi.fn>).mockReturnValue(
+      (deps.stallDetector.getStallState as ReturnType<typeof vi.fn>).mockResolvedValue(
         makeStallState({ dimension_escalation: { dim1: 0 } })
       );
 
       const engine = new CuriosityEngine(deps);
       const goals = [makeGoal({ id: "goal-1", status: "active", origin: null })];
 
-      const triggers = engine.evaluateTriggers(goals);
+      const triggers = await engine.evaluateTriggers(goals);
       const types = triggers.map((t) => t.type);
       expect(types).not.toContain("repeated_failure");
     });
 
-    it("does NOT trigger for curiosity-origin goals", () => {
+    it("does NOT trigger for curiosity-origin goals", async () => {
       const deps = createMockDeps();
-      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
         proposals: [],
         learning_records: [],
         last_exploration_at: new Date().toISOString(),
         rejected_proposal_hashes: [],
       });
-      (deps.stallDetector.getStallState as ReturnType<typeof vi.fn>).mockReturnValue(
+      (deps.stallDetector.getStallState as ReturnType<typeof vi.fn>).mockResolvedValue(
         makeStallState({ dimension_escalation: { dim1: 3 } })
       );
 
       const engine = new CuriosityEngine(deps);
       const goals = [makeGoal({ id: "goal-1", status: "active", origin: "curiosity" })];
 
-      const triggers = engine.evaluateTriggers(goals);
+      const triggers = await engine.evaluateTriggers(goals);
       const types = triggers.map((t) => t.type);
       expect(types).not.toContain("repeated_failure");
     });
 
-    it("does NOT trigger for non-active user goals", () => {
+    it("does NOT trigger for non-active user goals", async () => {
       const deps = createMockDeps();
-      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
         proposals: [],
         learning_records: [],
         last_exploration_at: new Date().toISOString(),
         rejected_proposal_hashes: [],
       });
-      (deps.stallDetector.getStallState as ReturnType<typeof vi.fn>).mockReturnValue(
+      (deps.stallDetector.getStallState as ReturnType<typeof vi.fn>).mockResolvedValue(
         makeStallState({ dimension_escalation: { dim1: 2 } })
       );
 
       const engine = new CuriosityEngine(deps);
       const goals = [makeGoal({ id: "goal-1", status: "waiting", origin: null })];
 
-      const triggers = engine.evaluateTriggers(goals);
+      const triggers = await engine.evaluateTriggers(goals);
       const types = triggers.map((t) => t.type);
       expect(types).not.toContain("repeated_failure");
     });
   });
 
   describe("undefined_problem trigger", () => {
-    it("triggers when > 50% of dimensions have very low confidence (< 0.3)", () => {
+    it("triggers when > 50% of dimensions have very low confidence (< 0.3)", async () => {
       const deps = createMockDeps();
-      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
         proposals: [],
         learning_records: [],
         last_exploration_at: new Date().toISOString(),
@@ -552,14 +554,14 @@ describe("CuriosityEngine — evaluateTriggers", () => {
         }),
       ];
 
-      const triggers = engine.evaluateTriggers(goals);
+      const triggers = await engine.evaluateTriggers(goals);
       const types = triggers.map((t) => t.type);
       expect(types).toContain("undefined_problem");
     });
 
-    it("does NOT trigger when all dimensions have adequate confidence", () => {
+    it("does NOT trigger when all dimensions have adequate confidence", async () => {
       const deps = createMockDeps();
-      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
         proposals: [],
         learning_records: [],
         last_exploration_at: new Date().toISOString(),
@@ -579,14 +581,14 @@ describe("CuriosityEngine — evaluateTriggers", () => {
         }),
       ];
 
-      const triggers = engine.evaluateTriggers(goals);
+      const triggers = await engine.evaluateTriggers(goals);
       const types = triggers.map((t) => t.type);
       expect(types).not.toContain("undefined_problem");
     });
 
-    it("does NOT trigger when exactly 50% have low confidence (threshold is strictly > 50%)", () => {
+    it("does NOT trigger when exactly 50% have low confidence (threshold is strictly > 50%)", async () => {
       const deps = createMockDeps();
-      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
         proposals: [],
         learning_records: [],
         last_exploration_at: new Date().toISOString(),
@@ -607,15 +609,15 @@ describe("CuriosityEngine — evaluateTriggers", () => {
         }),
       ];
 
-      const triggers = engine.evaluateTriggers(goals);
+      const triggers = await engine.evaluateTriggers(goals);
       const types = triggers.map((t) => t.type);
       // ratio = 0.5 which is >= 0.5, so it SHOULD trigger
       expect(types).toContain("undefined_problem");
     });
 
-    it("does NOT trigger for non-active goals", () => {
+    it("does NOT trigger for non-active goals", async () => {
       const deps = createMockDeps();
-      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
         proposals: [],
         learning_records: [],
         last_exploration_at: new Date().toISOString(),
@@ -634,30 +636,30 @@ describe("CuriosityEngine — evaluateTriggers", () => {
         }),
       ];
 
-      const triggers = engine.evaluateTriggers(goals);
+      const triggers = await engine.evaluateTriggers(goals);
       const types = triggers.map((t) => t.type);
       expect(types).not.toContain("undefined_problem");
     });
   });
 
   describe("periodic_exploration trigger", () => {
-    it("triggers when no exploration has ever occurred (last_exploration_at is null)", () => {
+    it("triggers when no exploration has ever occurred (last_exploration_at is null)", async () => {
       const deps = createMockDeps();
       // readRaw returns null => state initializes with last_exploration_at: null
       const engine = new CuriosityEngine(deps);
 
-      const triggers = engine.evaluateTriggers([]);
+      const triggers = await engine.evaluateTriggers([]);
       const types = triggers.map((t) => t.type);
       expect(types).toContain("periodic_exploration");
     });
 
-    it("triggers when last exploration was more than periodic_exploration_hours ago", () => {
+    it("triggers when last exploration was more than periodic_exploration_hours ago", async () => {
       const deps = createMockDeps({
         config: { periodic_exploration_hours: 1 }, // 1 hour threshold
       });
       // last explored 2 hours ago
       const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
         proposals: [],
         learning_records: [],
         last_exploration_at: twoHoursAgo,
@@ -665,18 +667,18 @@ describe("CuriosityEngine — evaluateTriggers", () => {
       });
 
       const engine = new CuriosityEngine(deps);
-      const triggers = engine.evaluateTriggers([]);
+      const triggers = await engine.evaluateTriggers([]);
       const types = triggers.map((t) => t.type);
       expect(types).toContain("periodic_exploration");
     });
 
-    it("does NOT trigger when recent exploration exists", () => {
+    it("does NOT trigger when recent exploration exists", async () => {
       const deps = createMockDeps({
         config: { periodic_exploration_hours: 72 },
       });
       // last explored 1 hour ago
       const oneHourAgo = new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString();
-      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+      (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
         proposals: [],
         learning_records: [],
         last_exploration_at: oneHourAgo,
@@ -686,42 +688,42 @@ describe("CuriosityEngine — evaluateTriggers", () => {
       const engine = new CuriosityEngine(deps);
       // Use a goal that is active to suppress task_queue_empty
       const goals = [makeGoal({ status: "active", origin: null })];
-      const triggers = engine.evaluateTriggers(goals);
+      const triggers = await engine.evaluateTriggers(goals);
       const types = triggers.map((t) => t.type);
       expect(types).not.toContain("periodic_exploration");
     });
 
-    it("sets severity to 0.3 for periodic trigger", () => {
+    it("sets severity to 0.3 for periodic trigger", async () => {
       const deps = createMockDeps();
       const engine = new CuriosityEngine(deps);
 
-      const triggers = engine.evaluateTriggers([]);
+      const triggers = await engine.evaluateTriggers([]);
       const periodicTrigger = triggers.find((t) => t.type === "periodic_exploration");
       expect(periodicTrigger?.severity).toBe(0.3);
     });
   });
 
-  it("returns empty array when curiosity is disabled", () => {
+  it("returns empty array when curiosity is disabled", async () => {
     const deps = createMockDeps({ config: { enabled: false } });
     const engine = new CuriosityEngine(deps);
     const goals = [makeGoal({ status: "completed" })];
-    const triggers = engine.evaluateTriggers(goals);
+    const triggers = await engine.evaluateTriggers(goals);
     expect(triggers).toHaveLength(0);
   });
 
-  it("can return multiple triggers at once", () => {
+  it("can return multiple triggers at once", async () => {
     // Completed goals → task_queue_empty + periodic_exploration (null state)
     const deps = createMockDeps();
     const engine = new CuriosityEngine(deps); // last_exploration_at = null
     const goals = [makeGoal({ status: "completed", origin: null })];
-    const triggers = engine.evaluateTriggers(goals);
+    const triggers = await engine.evaluateTriggers(goals);
     expect(triggers.length).toBeGreaterThan(1);
   });
 });
 
 // ─── generateProposals ───
 
-describe("CuriosityEngine — generateProposals", () => {
+describe("CuriosityEngine — generateProposals", async () => {
   function makeTrigger(type: CuriosityTrigger["type"] = "periodic_exploration"): CuriosityTrigger {
     return {
       type,
@@ -1000,7 +1002,7 @@ describe("CuriosityEngine — generateProposals", () => {
 
 // ─── Approval Flow ───
 
-describe("CuriosityEngine — approval flow", () => {
+describe("CuriosityEngine — approval flow", async () => {
   async function engineWithPendingProposal() {
     const deps = createMockDeps();
     (deps.llmClient.parseJSON as ReturnType<typeof vi.fn>).mockReturnValue([
@@ -1151,14 +1153,14 @@ describe("CuriosityEngine — approval flow", () => {
 // ─── Auto-Expiration ───
 
 describe("CuriosityEngine — auto-expiration", () => {
-  it("expires pending proposals past expires_at", () => {
+  it("expires pending proposals past expires_at", async () => {
     const deps = createMockDeps();
     const pastDate = new Date(Date.now() - 1000).toISOString(); // 1 second ago
     const expiredProposal = createProposal({
       status: "pending",
       expires_at: pastDate,
     });
-    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
       proposals: [expiredProposal],
       learning_records: [],
       last_exploration_at: null,
@@ -1166,12 +1168,13 @@ describe("CuriosityEngine — auto-expiration", () => {
     });
 
     const engine = new CuriosityEngine(deps);
+    await engine.evaluateTriggers([]);
     const changed = engine.checkAutoExpiration();
     expect(changed).toHaveLength(1);
     expect(changed[0]!.status).toBe("expired");
   });
 
-  it("auto-closes approved proposals at or past unproductive_loop_limit", () => {
+  it("auto-closes approved proposals at or past unproductive_loop_limit", async () => {
     const deps = createMockDeps({
       config: { unproductive_loop_limit: 3 },
     });
@@ -1181,7 +1184,7 @@ describe("CuriosityEngine — auto-expiration", () => {
       expires_at: futureDate,
       loop_count: 3, // equals limit
     });
-    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
       proposals: [approvedProposal],
       learning_records: [],
       last_exploration_at: null,
@@ -1189,19 +1192,20 @@ describe("CuriosityEngine — auto-expiration", () => {
     });
 
     const engine = new CuriosityEngine(deps);
+    await engine.evaluateTriggers([]);
     const changed = engine.checkAutoExpiration();
     expect(changed).toHaveLength(1);
     expect(changed[0]!.status).toBe("auto_closed");
   });
 
-  it("does NOT expire recently created proposals", () => {
+  it("does NOT expire recently created proposals", async () => {
     const deps = createMockDeps();
     const futureDate = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
     const freshProposal = createProposal({
       status: "pending",
       expires_at: futureDate,
     });
-    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
       proposals: [freshProposal],
       learning_records: [],
       last_exploration_at: null,
@@ -1213,7 +1217,7 @@ describe("CuriosityEngine — auto-expiration", () => {
     expect(changed).toHaveLength(0);
   });
 
-  it("does NOT close productive approved proposals below the loop limit", () => {
+  it("does NOT close productive approved proposals below the loop limit", async () => {
     const deps = createMockDeps({
       config: { unproductive_loop_limit: 5 },
     });
@@ -1223,7 +1227,7 @@ describe("CuriosityEngine — auto-expiration", () => {
       expires_at: futureDate,
       loop_count: 2, // below limit of 5
     });
-    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
       proposals: [productiveProposal],
       learning_records: [],
       last_exploration_at: null,
@@ -1235,11 +1239,11 @@ describe("CuriosityEngine — auto-expiration", () => {
     expect(changed).toHaveLength(0);
   });
 
-  it("saves state when proposals were changed", () => {
+  it("saves state when proposals were changed", async () => {
     const deps = createMockDeps();
     const pastDate = new Date(Date.now() - 1000).toISOString();
     const expiredProposal = createProposal({ status: "pending", expires_at: pastDate });
-    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
       proposals: [expiredProposal],
       learning_records: [],
       last_exploration_at: null,
@@ -1247,13 +1251,14 @@ describe("CuriosityEngine — auto-expiration", () => {
     });
 
     const engine = new CuriosityEngine(deps);
+    await engine.evaluateTriggers([]);
     const writeCountBefore = (deps.stateManager.writeRaw as ReturnType<typeof vi.fn>).mock.calls.length;
     engine.checkAutoExpiration();
     const writeCountAfter = (deps.stateManager.writeRaw as ReturnType<typeof vi.fn>).mock.calls.length;
     expect(writeCountAfter).toBeGreaterThan(writeCountBefore);
   });
 
-  it("does NOT save state when no proposals were changed", () => {
+  it("does NOT save state when no proposals were changed", async () => {
     const deps = createMockDeps();
     // No proposals at all
     const engine = new CuriosityEngine(deps);
@@ -1263,11 +1268,11 @@ describe("CuriosityEngine — auto-expiration", () => {
     expect(writeCountAfter).toBe(writeCountBefore);
   });
 
-  it("returns list of all changed proposals", () => {
+  it("returns list of all changed proposals", async () => {
     const deps = createMockDeps({ config: { unproductive_loop_limit: 2 } });
     const pastDate = new Date(Date.now() - 1000).toISOString();
     const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
       proposals: [
         createProposal({ id: "p1", status: "pending", expires_at: pastDate }),
         createProposal({ id: "p2", status: "approved", expires_at: futureDate, loop_count: 2 }),
@@ -1279,6 +1284,7 @@ describe("CuriosityEngine — auto-expiration", () => {
     });
 
     const engine = new CuriosityEngine(deps);
+    await engine.evaluateTriggers([]);
     const changed = engine.checkAutoExpiration();
     expect(changed).toHaveLength(2);
     const changedIds = changed.map((p) => p.id);
@@ -1290,7 +1296,7 @@ describe("CuriosityEngine — auto-expiration", () => {
 // ─── incrementLoopCount ───
 
 describe("CuriosityEngine — incrementLoopCount", () => {
-  it("increments loop count for matching approved proposal by goal_id", () => {
+  it("increments loop count for matching approved proposal by goal_id", async () => {
     const deps = createMockDeps();
     const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     const approvedProposal = createProposal({
@@ -1300,7 +1306,7 @@ describe("CuriosityEngine — incrementLoopCount", () => {
       loop_count: 0,
       goal_id: "g-curiosity-1",
     });
-    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
       proposals: [approvedProposal],
       learning_records: [],
       last_exploration_at: null,
@@ -1308,6 +1314,7 @@ describe("CuriosityEngine — incrementLoopCount", () => {
     });
 
     const engine = new CuriosityEngine(deps);
+    await engine.evaluateTriggers([]);
     engine.incrementLoopCount("g-curiosity-1");
 
     const active = engine.getActiveProposals();
@@ -1315,7 +1322,7 @@ describe("CuriosityEngine — incrementLoopCount", () => {
     expect(updated?.loop_count).toBe(1);
   });
 
-  it("does nothing for non-matching goal_id", () => {
+  it("does nothing for non-matching goal_id", async () => {
     const deps = createMockDeps();
     const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     const approvedProposal = createProposal({
@@ -1325,7 +1332,7 @@ describe("CuriosityEngine — incrementLoopCount", () => {
       loop_count: 0,
       goal_id: "g-curiosity-1",
     });
-    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
       proposals: [approvedProposal],
       learning_records: [],
       last_exploration_at: null,
@@ -1333,6 +1340,7 @@ describe("CuriosityEngine — incrementLoopCount", () => {
     });
 
     const engine = new CuriosityEngine(deps);
+    await engine.evaluateTriggers([]);
     engine.incrementLoopCount("g-other");
 
     const active = engine.getActiveProposals();
@@ -1340,7 +1348,7 @@ describe("CuriosityEngine — incrementLoopCount", () => {
     expect(updated?.loop_count).toBe(0);
   });
 
-  it("does not save state when no proposal was changed", () => {
+  it("does not save state when no proposal was changed", async () => {
     const deps = createMockDeps();
     const engine = new CuriosityEngine(deps); // no proposals loaded
     const writeCountBefore = (deps.stateManager.writeRaw as ReturnType<typeof vi.fn>).mock.calls.length;
@@ -1349,10 +1357,10 @@ describe("CuriosityEngine — incrementLoopCount", () => {
     expect(writeCountAfter).toBe(writeCountBefore);
   });
 
-  it("saves state after incrementing", () => {
+  it("saves state after incrementing", async () => {
     const deps = createMockDeps();
     const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
       proposals: [
         createProposal({
           id: "p1",
@@ -1368,16 +1376,17 @@ describe("CuriosityEngine — incrementLoopCount", () => {
     });
 
     const engine = new CuriosityEngine(deps);
+    await engine.evaluateTriggers([]);
     const writeCountBefore = (deps.stateManager.writeRaw as ReturnType<typeof vi.fn>).mock.calls.length;
     engine.incrementLoopCount("g-target");
     const writeCountAfter = (deps.stateManager.writeRaw as ReturnType<typeof vi.fn>).mock.calls.length;
     expect(writeCountAfter).toBeGreaterThan(writeCountBefore);
   });
 
-  it("only increments proposals with status approved (not pending)", () => {
+  it("only increments proposals with status approved (not pending)", async () => {
     const deps = createMockDeps();
     const futureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
       proposals: [
         createProposal({
           id: "p1",
@@ -1393,6 +1402,7 @@ describe("CuriosityEngine — incrementLoopCount", () => {
     });
 
     const engine = new CuriosityEngine(deps);
+    await engine.evaluateTriggers([]);
     engine.incrementLoopCount("g-target");
 
     // Pending proposals should not have loop count modified
@@ -1405,7 +1415,7 @@ describe("CuriosityEngine — incrementLoopCount", () => {
 // ─── recordLearning ───
 
 describe("CuriosityEngine — recordLearning", () => {
-  it("adds a learning record with timestamp", () => {
+  it("adds a learning record with timestamp", async () => {
     const deps = createMockDeps();
     const engine = new CuriosityEngine(deps);
 
@@ -1434,7 +1444,7 @@ describe("CuriosityEngine — recordLearning", () => {
     expect(recordedTime).toBeLessThanOrEqual(after);
   });
 
-  it("saves state after recording", () => {
+  it("saves state after recording", async () => {
     const deps = createMockDeps();
     const engine = new CuriosityEngine(deps);
     const writeCountBefore = (deps.stateManager.writeRaw as ReturnType<typeof vi.fn>).mock.calls.length;
@@ -1449,7 +1459,7 @@ describe("CuriosityEngine — recordLearning", () => {
     expect(writeCountAfter).toBeGreaterThan(writeCountBefore);
   });
 
-  it("accumulates multiple learning records", () => {
+  it("accumulates multiple learning records", async () => {
     const deps = createMockDeps();
     const engine = new CuriosityEngine(deps);
 
@@ -1460,7 +1470,7 @@ describe("CuriosityEngine — recordLearning", () => {
     expect(writtenState.learning_records).toHaveLength(2);
   });
 
-  it("accepts all valid outcome values", () => {
+  it("accepts all valid outcome values", async () => {
     const deps = createMockDeps();
     const engine = new CuriosityEngine(deps);
 
@@ -1469,7 +1479,7 @@ describe("CuriosityEngine — recordLearning", () => {
     ).not.toThrow();
   });
 
-  it("automatically sets recorded_at (does not use caller-supplied value)", () => {
+  it("automatically sets recorded_at (does not use caller-supplied value)", async () => {
     const deps = createMockDeps();
     const engine = new CuriosityEngine(deps);
     const before = Date.now();
@@ -1487,7 +1497,7 @@ describe("CuriosityEngine — recordLearning", () => {
 // ─── getResourceBudget ───
 
 describe("CuriosityEngine — getResourceBudget", () => {
-  it("returns active_user_goals_max_percent (default 20) when any user goal is active", () => {
+  it("returns active_user_goals_max_percent (default 20) when any user goal is active", async () => {
     const deps = createMockDeps({
       config: { resource_budget: { active_user_goals_max_percent: 20, waiting_user_goals_max_percent: 50 } },
     });
@@ -1499,7 +1509,7 @@ describe("CuriosityEngine — getResourceBudget", () => {
     expect(engine.getResourceBudget(goals)).toBe(20);
   });
 
-  it("returns waiting_user_goals_max_percent (default 50) when all user goals are waiting or completed", () => {
+  it("returns waiting_user_goals_max_percent (default 50) when all user goals are waiting or completed", async () => {
     const deps = createMockDeps({
       config: { resource_budget: { active_user_goals_max_percent: 20, waiting_user_goals_max_percent: 50 } },
     });
@@ -1511,7 +1521,7 @@ describe("CuriosityEngine — getResourceBudget", () => {
     expect(engine.getResourceBudget(goals)).toBe(50);
   });
 
-  it("returns 100 when all user goals are completed", () => {
+  it("returns 100 when all user goals are completed", async () => {
     const deps = createMockDeps();
     const engine = new CuriosityEngine(deps);
     const goals = [
@@ -1521,20 +1531,20 @@ describe("CuriosityEngine — getResourceBudget", () => {
     expect(engine.getResourceBudget(goals)).toBe(100);
   });
 
-  it("returns 100 when there are no user goals", () => {
+  it("returns 100 when there are no user goals", async () => {
     const deps = createMockDeps();
     const engine = new CuriosityEngine(deps);
     expect(engine.getResourceBudget([])).toBe(100);
   });
 
-  it("returns 0 when curiosity is disabled", () => {
+  it("returns 0 when curiosity is disabled", async () => {
     const deps = createMockDeps({ config: { enabled: false } });
     const engine = new CuriosityEngine(deps);
     const goals = [makeGoal({ status: "active", origin: null })];
     expect(engine.getResourceBudget(goals)).toBe(0);
   });
 
-  it("only counts user-origin goals (not curiosity goals) for budget calculation", () => {
+  it("only counts user-origin goals (not curiosity goals) for budget calculation", async () => {
     const deps = createMockDeps({
       config: { resource_budget: { active_user_goals_max_percent: 20, waiting_user_goals_max_percent: 50 } },
     });
@@ -1548,7 +1558,7 @@ describe("CuriosityEngine — getResourceBudget", () => {
     expect(engine.getResourceBudget(goals)).toBe(100);
   });
 
-  it("returns custom active_user_goals_max_percent when configured", () => {
+  it("returns custom active_user_goals_max_percent when configured", async () => {
     const deps = createMockDeps({
       config: { resource_budget: { active_user_goals_max_percent: 10, waiting_user_goals_max_percent: 50 } },
     });
@@ -1557,7 +1567,7 @@ describe("CuriosityEngine — getResourceBudget", () => {
     expect(engine.getResourceBudget(goals)).toBe(10);
   });
 
-  it("returns custom waiting_user_goals_max_percent when configured", () => {
+  it("returns custom waiting_user_goals_max_percent when configured", async () => {
     const deps = createMockDeps({
       config: { resource_budget: { active_user_goals_max_percent: 20, waiting_user_goals_max_percent: 30 } },
     });
@@ -1566,7 +1576,7 @@ describe("CuriosityEngine — getResourceBudget", () => {
     expect(engine.getResourceBudget(goals)).toBe(30);
   });
 
-  it("treats goals with origin=null as user goals", () => {
+  it("treats goals with origin=null as user goals", async () => {
     const deps = createMockDeps({
       config: { resource_budget: { active_user_goals_max_percent: 20, waiting_user_goals_max_percent: 50 } },
     });
@@ -1575,7 +1585,7 @@ describe("CuriosityEngine — getResourceBudget", () => {
     expect(engine.getResourceBudget(goals)).toBe(20);
   });
 
-  it("treats goals with origin=negotiation as user goals", () => {
+  it("treats goals with origin=negotiation as user goals", async () => {
     const deps = createMockDeps({
       config: { resource_budget: { active_user_goals_max_percent: 20, waiting_user_goals_max_percent: 50 } },
     });
@@ -1588,9 +1598,9 @@ describe("CuriosityEngine — getResourceBudget", () => {
 // ─── shouldExplore ───
 
 describe("CuriosityEngine — shouldExplore", () => {
-  it("returns true when task queue is empty (all user goals completed)", () => {
+  it("returns true when task queue is empty (all user goals completed)", async () => {
     const deps = createMockDeps();
-    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
       proposals: [],
       learning_records: [],
       last_exploration_at: new Date().toISOString(), // suppress periodic
@@ -1598,95 +1608,96 @@ describe("CuriosityEngine — shouldExplore", () => {
     });
     const engine = new CuriosityEngine(deps);
     const goals = [makeGoal({ status: "completed", origin: null })];
-    expect(engine.shouldExplore(goals)).toBe(true);
+    expect(await engine.shouldExplore(goals)).toBe(true);
   });
 
-  it("returns true when no exploration has ever occurred", () => {
+  it("returns true when no exploration has ever occurred", async () => {
     const deps = createMockDeps(); // readRaw returns null → last_exploration_at = null
     const engine = new CuriosityEngine(deps);
-    expect(engine.shouldExplore([])).toBe(true);
+    expect(await engine.shouldExplore([])).toBe(true);
   });
 
-  it("returns true when periodic exploration is overdue", () => {
+  it("returns true when periodic exploration is overdue", async () => {
     const deps = createMockDeps({ config: { periodic_exploration_hours: 1 } });
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
       proposals: [],
       learning_records: [],
       last_exploration_at: twoHoursAgo,
       rejected_proposal_hashes: [],
     });
     const engine = new CuriosityEngine(deps);
-    expect(engine.shouldExplore([])).toBe(true);
+    expect(await engine.shouldExplore([])).toBe(true);
   });
 
-  it("returns true when any active goal has escalated stall dimensions", () => {
+  it("returns true when any active goal has escalated stall dimensions", async () => {
     const deps = createMockDeps({ config: { periodic_exploration_hours: 72 } });
     const recentExploration = new Date(Date.now() - 1000).toISOString();
-    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
       proposals: [],
       learning_records: [],
       last_exploration_at: recentExploration,
       rejected_proposal_hashes: [],
     });
-    (deps.stallDetector.getStallState as ReturnType<typeof vi.fn>).mockReturnValue(
+    (deps.stallDetector.getStallState as ReturnType<typeof vi.fn>).mockResolvedValue(
       makeStallState({ dimension_escalation: { dim1: 1 } })
     );
 
     const engine = new CuriosityEngine(deps);
     const goals = [makeGoal({ status: "active", origin: null })];
-    expect(engine.shouldExplore(goals)).toBe(true);
+    expect(await engine.shouldExplore(goals)).toBe(true);
   });
 
-  it("returns false when no triggers apply", () => {
+  it("returns false when no triggers apply", async () => {
     const deps = createMockDeps({ config: { periodic_exploration_hours: 72 } });
     const recentExploration = new Date(Date.now() - 1000).toISOString();
-    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
       proposals: [],
       learning_records: [],
       last_exploration_at: recentExploration,
       rejected_proposal_hashes: [],
     });
-    (deps.stallDetector.getStallState as ReturnType<typeof vi.fn>).mockReturnValue(
+    (deps.stallDetector.getStallState as ReturnType<typeof vi.fn>).mockResolvedValue(
       makeStallState({ dimension_escalation: {} })
     );
 
     const engine = new CuriosityEngine(deps);
+    await engine.evaluateTriggers([]);
     // Active user goal → not queue empty, no stall → false
     const goals = [makeGoal({ status: "active", origin: null })];
-    expect(engine.shouldExplore(goals)).toBe(false);
+    expect(await engine.shouldExplore(goals)).toBe(false);
   });
 
-  it("returns false when curiosity is disabled", () => {
+  it("returns false when curiosity is disabled", async () => {
     const deps = createMockDeps({ config: { enabled: false } });
     const engine = new CuriosityEngine(deps);
-    expect(engine.shouldExplore([])).toBe(false);
+    expect(await engine.shouldExplore([])).toBe(false);
   });
 
-  it("does not call LLM (quick check only)", () => {
+  it("does not call LLM (quick check only)", async () => {
     const deps = createMockDeps();
     const engine = new CuriosityEngine(deps);
-    engine.shouldExplore([]);
+    await engine.shouldExplore([]);
     expect(deps.llmClient.sendMessage).not.toHaveBeenCalled();
   });
 
-  it("does not call ethics gate (quick check only)", () => {
+  it("does not call ethics gate (quick check only)", async () => {
     const deps = createMockDeps();
     const engine = new CuriosityEngine(deps);
-    engine.shouldExplore([]);
+    await engine.shouldExplore([]);
     expect(deps.ethicsGate.check).not.toHaveBeenCalled();
   });
 
-  it("returns false when all user goals are active but no stall", () => {
+  it("returns false when all user goals are active but no stall", async () => {
     const deps = createMockDeps({ config: { periodic_exploration_hours: 72 } });
     const recentExploration = new Date(Date.now() - 1000).toISOString();
-    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
       proposals: [],
       learning_records: [],
       last_exploration_at: recentExploration,
       rejected_proposal_hashes: [],
     });
-    (deps.stallDetector.getStallState as ReturnType<typeof vi.fn>).mockReturnValue(
+    (deps.stallDetector.getStallState as ReturnType<typeof vi.fn>).mockResolvedValue(
       makeStallState({ dimension_escalation: { dim1: 0 } })
     );
 
@@ -1695,19 +1706,19 @@ describe("CuriosityEngine — shouldExplore", () => {
       makeGoal({ id: "g1", status: "active", origin: null }),
       makeGoal({ id: "g2", status: "active", origin: "manual" }),
     ];
-    expect(engine.shouldExplore(goals)).toBe(false);
+    expect(await engine.shouldExplore(goals)).toBe(false);
   });
 
-  it("ignores curiosity-origin goals when checking task queue in shouldExplore", () => {
+  it("ignores curiosity-origin goals when checking task queue in shouldExplore", async () => {
     const deps = createMockDeps({ config: { periodic_exploration_hours: 72 } });
     const recentExploration = new Date(Date.now() - 1000).toISOString();
-    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
       proposals: [],
       learning_records: [],
       last_exploration_at: recentExploration,
       rejected_proposal_hashes: [],
     });
-    (deps.stallDetector.getStallState as ReturnType<typeof vi.fn>).mockReturnValue(
+    (deps.stallDetector.getStallState as ReturnType<typeof vi.fn>).mockResolvedValue(
       makeStallState({ dimension_escalation: {} })
     );
 
@@ -1718,19 +1729,19 @@ describe("CuriosityEngine — shouldExplore", () => {
       makeGoal({ id: "g1", status: "active", origin: "curiosity" }),
       makeGoal({ id: "g2", status: "completed", origin: null }),
     ];
-    expect(engine.shouldExplore(goals)).toBe(true);
+    expect(await engine.shouldExplore(goals)).toBe(true);
   });
 });
 
 // ─── Learning Feedback ───
 
-describe("CuriosityEngine — learning feedback", () => {
+describe("CuriosityEngine — learning feedback", async () => {
   it("includes learning records in LLM prompt when generating proposals", async () => {
     const deps = createMockDeps();
     (deps.llmClient.parseJSON as ReturnType<typeof vi.fn>).mockReturnValue([]);
 
     // Pre-seed a learning record
-    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+    (deps.stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
       proposals: [],
       learning_records: [
         {
@@ -1928,7 +1939,7 @@ describe("CuriosityEngine — learning feedback", () => {
 
 // ─── Phase 2: Embedding-based Detection ───
 
-describe("CuriosityEngine — indexDimensionToVector", () => {
+describe("CuriosityEngine — indexDimensionToVector", async () => {
   it("adds dimension to vectorIndex when available", async () => {
     const mockVectorIndex = {
       add: vi.fn().mockResolvedValue({}),
@@ -1956,7 +1967,7 @@ describe("CuriosityEngine — indexDimensionToVector", () => {
   });
 });
 
-describe("CuriosityEngine — findSimilarDimensions", () => {
+describe("CuriosityEngine — findSimilarDimensions", async () => {
   it("returns similar dimensions from other goals via embedding search", async () => {
     const mockVectorIndex = {
       add: vi.fn().mockResolvedValue({}),

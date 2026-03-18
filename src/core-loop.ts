@@ -94,7 +94,7 @@ export class CoreLoop {
     this.stopped = false;
 
     // Load and validate goal
-    const goal = this.deps.stateManager.loadGoal(goalId);
+    const goal = await this.deps.stateManager.loadGoal(goalId);
     if (!goal) {
       return {
         goalId,
@@ -120,9 +120,9 @@ export class CoreLoop {
     // Reset stall state AND gap history at the beginning of each run so prior
     // run's escalation and stale gap entries do not immediately poison a fresh start.
     for (const dim of goal.dimensions) {
-      this.deps.stallDetector.resetEscalation(goalId, dim.name);
+      await this.deps.stallDetector.resetEscalation(goalId, dim.name);
     }
-    this.deps.stateManager.saveGapHistory(goalId, []);
+    await this.deps.stateManager.saveGapHistory(goalId, []);
 
     const iterations: LoopIterationResult[] = [];
     let consecutiveErrors = 0;
@@ -201,7 +201,7 @@ export class CoreLoop {
       // Periodic learning review
       if (this.deps.learningPipeline) {
         const now = Date.now();
-        const intervalMs = this.getPeriodicReviewInterval(goalId);
+        const intervalMs = await this.getPeriodicReviewInterval(goalId);
         if (now - this.lastLearningReviewAt >= intervalMs) {
           try {
             await this.deps.learningPipeline.onPeriodicReview(goalId);
@@ -223,11 +223,11 @@ export class CoreLoop {
       try {
         this.deps.curiosityEngine.checkAutoExpiration();
 
-        const currentGoal = this.deps.stateManager.loadGoal(goalId);
+        const currentGoal = await this.deps.stateManager.loadGoal(goalId);
         if (currentGoal) {
           const allGoals = [currentGoal];
-          if (this.deps.curiosityEngine.shouldExplore(allGoals)) {
-            const triggers = this.deps.curiosityEngine.evaluateTriggers(allGoals);
+          if (await this.deps.curiosityEngine.shouldExplore(allGoals)) {
+            const triggers = await this.deps.curiosityEngine.evaluateTriggers(allGoals);
             if (triggers.length > 0) {
               await this.deps.curiosityEngine.generateProposals(triggers, allGoals);
             }
@@ -259,7 +259,7 @@ export class CoreLoop {
     // Archive goal state on completion (only when autoArchive is explicitly enabled)
     if (finalStatus === "completed" && this.config.autoArchive) {
       try {
-        this.deps.stateManager.archiveGoal(goalId);
+        await this.deps.stateManager.archiveGoal(goalId);
       } catch {
         // non-fatal
       }
@@ -307,7 +307,7 @@ export class CoreLoop {
     };
 
     // 1. Load goal + tree aggregation
-    const loadedGoal = loadGoalWithAggregation(ctx, goalId, result, startTime);
+    const loadedGoal = await loadGoalWithAggregation(ctx, goalId, result, startTime);
     if (!loadedGoal) return result;
     let goal = loadedGoal;
 
@@ -315,7 +315,7 @@ export class CoreLoop {
     goal = await observeAndReload(ctx, goalId, goal, loopIndex);
 
     // 3. Gap calculate + zero check
-    const gapResult = calculateGapOrComplete(ctx, goalId, goal, loopIndex, result, startTime);
+    const gapResult = await calculateGapOrComplete(ctx, goalId, goal, loopIndex, result, startTime);
     if (!gapResult) return result;
     const { gapVector, gapAggregate } = gapResult;
 
@@ -353,7 +353,7 @@ export class CoreLoop {
     if (!taskCycleOk) return result;
 
     // 8. Report
-    this.tryGenerateReport(goalId, loopIndex, result, goal);
+    await this.tryGenerateReport(goalId, loopIndex, result, goal);
 
     result.elapsedMs = Date.now() - startTime;
     return result;
@@ -402,8 +402,8 @@ export class CoreLoop {
 
   // ─── Private Helpers ───
 
-  private getPeriodicReviewInterval(goalId: string): number {
-    const goal = this.deps.stateManager.loadGoal(goalId);
+  private async getPeriodicReviewInterval(goalId: string): Promise<number> {
+    const goal = await this.deps.stateManager.loadGoal(goalId);
     if (!goal?.target_date) {
       return 72 * 3600 * 1000; // default: 72 hours
     }
@@ -413,12 +413,12 @@ export class CoreLoop {
     return 336 * 3600 * 1000;                              // 長期: 2weeks
   }
 
-  private tryGenerateReport(
+  private async tryGenerateReport(
     goalId: string,
     loopIndex: number,
     iterationResult: LoopIterationResult,
     goal: Goal
-  ): void {
+  ): Promise<void> {
     try {
       const observation = goal.dimensions.map((d) => ({
         dimensionName: d.name,
@@ -445,7 +445,7 @@ export class CoreLoop {
         pivotOccurred: iterationResult.pivotOccurred,
         elapsedMs: iterationResult.elapsedMs,
       });
-      this.deps.reportingEngine.saveReport(report);
+      await this.deps.reportingEngine.saveReport(report);
     } catch {
       // Report generation failure is non-fatal
     }

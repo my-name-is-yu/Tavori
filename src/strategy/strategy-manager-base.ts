@@ -86,9 +86,9 @@ export class StrategyManagerBase {
     );
 
     // Store candidates in portfolio
-    const portfolio = this.loadOrCreatePortfolio(goalId);
+    const portfolio = await this.loadOrCreatePortfolio(goalId);
     portfolio.strategies.push(...candidates);
-    this.savePortfolio(goalId, portfolio);
+    await this.savePortfolio(goalId, portfolio);
 
     // Update in-memory index
     for (const c of candidates) {
@@ -103,7 +103,7 @@ export class StrategyManagerBase {
    * Sets state="active" and started_at=now.
    */
   async activateBestCandidate(goalId: string): Promise<Strategy> {
-    const portfolio = this.loadOrCreatePortfolio(goalId);
+    const portfolio = await this.loadOrCreatePortfolio(goalId);
     const candidates = portfolio.strategies.filter(
       (s) => s.state === "candidate"
     );
@@ -128,7 +128,7 @@ export class StrategyManagerBase {
     portfolio.strategies = portfolio.strategies.map((s) =>
       s.id === activated.id ? activated : s
     );
-    this.savePortfolio(goalId, portfolio);
+    await this.savePortfolio(goalId, portfolio);
 
     // Ensure index entry
     this.strategyIndex.set(activated.id, goalId);
@@ -140,19 +140,19 @@ export class StrategyManagerBase {
    * Transition a strategy to a new state.
    * Throws if the transition is not valid or strategy is not found.
    */
-  updateState(
+  async updateState(
     strategyId: string,
     newState: StrategyState,
     metadata?: { effectiveness_score?: number }
-  ): void {
-    const goalId = this.resolveGoalId(strategyId);
+  ): Promise<void> {
+    const goalId = await this.resolveGoalId(strategyId);
     if (!goalId) {
       throw new Error(
         `updateState: strategy "${strategyId}" not found in any portfolio`
       );
     }
 
-    const portfolio = this.loadOrCreatePortfolio(goalId);
+    const portfolio = await this.loadOrCreatePortfolio(goalId);
     const strategy = portfolio.strategies.find((s) => s.id === strategyId);
     if (!strategy) {
       throw new Error(`updateState: strategy "${strategyId}" not found in portfolio for goal "${goalId}"`);
@@ -182,11 +182,11 @@ export class StrategyManagerBase {
     portfolio.strategies = portfolio.strategies.map((s) =>
       s.id === strategyId ? updated : s
     );
-    this.savePortfolio(goalId, portfolio);
+    await this.savePortfolio(goalId, portfolio);
 
     // Archive terminated/completed strategies to history
     if (newState === "terminated" || newState === "completed") {
-      this.appendToHistory(goalId, updated);
+      await this.appendToHistory(goalId, updated);
     }
   }
 
@@ -205,10 +205,10 @@ export class StrategyManagerBase {
     }
 
     // Capture active strategy details before terminating
-    const active = this.getActiveStrategy(goalId);
+    const active = await this.getActiveStrategy(goalId);
     if (active) {
       // Increment consecutive_stall_count before terminating
-      const portfolio = this.loadOrCreatePortfolio(goalId);
+      const portfolio = await this.loadOrCreatePortfolio(goalId);
       const updated = StrategySchema.parse({
         ...active,
         consecutive_stall_count: active.consecutive_stall_count + 1,
@@ -216,13 +216,13 @@ export class StrategyManagerBase {
       portfolio.strategies = portfolio.strategies.map((s) =>
         s.id === active.id ? updated : s
       );
-      this.savePortfolio(goalId, portfolio);
+      await this.savePortfolio(goalId, portfolio);
 
-      this.updateState(active.id, "terminated");
+      await this.updateState(active.id, "terminated");
     }
 
     // Gather past strategies for context
-    const pastStrategies = this.getStrategyHistory(goalId);
+    const pastStrategies = await this.getStrategyHistory(goalId);
     const primaryDimension =
       active?.primary_dimension ?? pastStrategies[0]?.primary_dimension ?? "";
     const targetDimensions =
@@ -257,16 +257,16 @@ export class StrategyManagerBase {
   /**
    * Returns the currently active strategy for a goal, or null.
    */
-  getActiveStrategy(goalId: string): Strategy | null {
-    const portfolio = this.loadOrCreatePortfolio(goalId);
+  async getActiveStrategy(goalId: string): Promise<Strategy | null> {
+    const portfolio = await this.loadOrCreatePortfolio(goalId);
     return portfolio.strategies.find((s) => s.state === "active") ?? null;
   }
 
   /**
    * Returns the full portfolio for a goal, or null if none has been persisted.
    */
-  getPortfolio(goalId: string): Portfolio | null {
-    const raw = this.stateManager.readRaw(
+  async getPortfolio(goalId: string): Promise<Portfolio | null> {
+    const raw = await this.stateManager.readRaw(
       `strategies/${goalId}/portfolio.json`
     );
     if (raw === null) return null;
@@ -281,8 +281,8 @@ export class StrategyManagerBase {
   /**
    * Returns all strategies in history (terminated/completed) for a goal.
    */
-  getStrategyHistory(goalId: string): Strategy[] {
-    const raw = this.stateManager.readRaw(
+  async getStrategyHistory(goalId: string): Promise<Strategy[]> {
+    const raw = await this.stateManager.readRaw(
       `strategies/${goalId}/strategy-history.json`
     );
     if (raw === null) return [];
@@ -299,8 +299,8 @@ export class StrategyManagerBase {
 
   // ─── Protected Helpers ───
 
-  protected loadOrCreatePortfolio(goalId: string): Portfolio {
-    const existing = this.getPortfolio(goalId);
+  protected async loadOrCreatePortfolio(goalId: string): Promise<Portfolio> {
+    const existing = await this.getPortfolio(goalId);
     if (existing) return existing;
 
     const now = new Date().toISOString();
@@ -312,9 +312,9 @@ export class StrategyManagerBase {
     });
   }
 
-  protected savePortfolio(goalId: string, portfolio: Portfolio): void {
+  protected async savePortfolio(goalId: string, portfolio: Portfolio): Promise<void> {
     const parsed = PortfolioSchema.parse(portfolio);
-    this.stateManager.writeRaw(
+    await this.stateManager.writeRaw(
       `strategies/${goalId}/portfolio.json`,
       parsed
     );
@@ -324,15 +324,15 @@ export class StrategyManagerBase {
     }
   }
 
-  protected appendToHistory(goalId: string, strategy: Strategy): void {
-    const history = this.getStrategyHistory(goalId);
+  protected async appendToHistory(goalId: string, strategy: Strategy): Promise<void> {
+    const history = await this.getStrategyHistory(goalId);
     const idx = history.findIndex((s) => s.id === strategy.id);
     if (idx >= 0) {
       history[idx] = strategy;
     } else {
       history.push(strategy);
     }
-    this.stateManager.writeRaw(
+    await this.stateManager.writeRaw(
       `strategies/${goalId}/strategy-history.json`,
       history
     );
@@ -342,15 +342,15 @@ export class StrategyManagerBase {
    * Resolve a goalId from a strategyId using the in-memory index.
    * Falls back to scanning goal directories if not in index.
    */
-  protected resolveGoalId(strategyId: string): string | null {
+  protected async resolveGoalId(strategyId: string): Promise<string | null> {
     // Check in-memory index first
     const cached = this.strategyIndex.get(strategyId);
     if (cached) return cached;
 
     // Fall back to scanning known goal directories
-    const goalIds = this.stateManager.listGoalIds();
+    const goalIds = await this.stateManager.listGoalIds();
     for (const goalId of goalIds) {
-      const portfolio = this.getPortfolio(goalId);
+      const portfolio = await this.getPortfolio(goalId);
       if (portfolio?.strategies.some((s) => s.id === strategyId)) {
         return goalId;
       }

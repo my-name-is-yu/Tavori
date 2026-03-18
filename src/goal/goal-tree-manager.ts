@@ -268,7 +268,7 @@ export class GoalTreeManager {
     config: GoalDecompositionConfig,
     options?: { concretenesThreshold?: number; maxDepth?: number }
   ): Promise<DecompositionResult> {
-    const goal = this.stateManager.loadGoal(goalId);
+    const goal = await this.stateManager.loadGoal(goalId);
     if (!goal) {
       throw new Error(`GoalTreeManager.decomposeGoal: goal "${goalId}" not found`);
     }
@@ -288,7 +288,7 @@ export class GoalTreeManager {
           specificity_score: concretenessResult.score,
           updated_at: now,
         };
-        this.stateManager.saveGoal(leafGoal);
+        await this.stateManager.saveGoal(leafGoal);
         return {
           parent_id: goal.id,
           children: [],
@@ -333,7 +333,7 @@ export class GoalTreeManager {
         node_type: "leaf",
         updated_at: now,
       };
-      this.stateManager.saveGoal(leafGoal);
+      await this.stateManager.saveGoal(leafGoal);
 
       return {
         parent_id: goal.id,
@@ -440,7 +440,7 @@ export class GoalTreeManager {
         node_type: "leaf",
         updated_at: now,
       };
-      this.stateManager.saveGoal(leafGoal);
+      await this.stateManager.saveGoal(leafGoal);
       return {
         parent_id: goal.id,
         children: [],
@@ -457,7 +457,7 @@ export class GoalTreeManager {
         node_type: "leaf",
         updated_at: now,
       };
-      this.stateManager.saveGoal(leafGoal);
+      await this.stateManager.saveGoal(leafGoal);
       return {
         parent_id: goal.id,
         children: [],
@@ -489,17 +489,17 @@ export class GoalTreeManager {
     }
 
     // Step 7: Save parent goal (updated specificity_score, node_type stays as-is for non-leaf)
-    this.stateManager.saveGoal(updatedGoal);
+    await this.stateManager.saveGoal(updatedGoal);
 
     // Step 8: Save each child goal and update parent's children_ids
     const childIds: string[] = [];
     for (const child of childGoals) {
-      this.stateManager.saveGoal(child);
+      await this.stateManager.saveGoal(child);
       childIds.push(child.id);
 
       // Register parent->child dependency in GoalDependencyGraph
       try {
-        this.goalDependencyGraph.addEdge({
+        await this.goalDependencyGraph.addEdge({
           from_goal_id: goal.id,
           to_goal_id: child.id,
           type: "parent_child" as unknown as "prerequisite", // type extended in 14A
@@ -521,7 +521,7 @@ export class GoalTreeManager {
       children_ids: [...updatedGoal.children_ids, ...childIds],
       updated_at: now,
     };
-    this.stateManager.saveGoal(parentWithChildren);
+    await this.stateManager.saveGoal(parentWithChildren);
 
     // Step 9: Collect specificity scores for result
     const specificityScores: Record<string, number> = {
@@ -535,7 +535,7 @@ export class GoalTreeManager {
       Object.assign(specificityScores, childResult.specificity_scores);
       // Merge children into child's record
       if (childResult.children.length > 0) {
-        const reloadedChild = this.stateManager.loadGoal(child.id);
+        const reloadedChild = await this.stateManager.loadGoal(child.id);
         if (reloadedChild) {
           // child was saved with updated children_ids from recursive call
           void reloadedChild; // already persisted by recursive call
@@ -562,7 +562,7 @@ export class GoalTreeManager {
    * Returns true only if both checks pass.
    */
   private async validateDecomposition(result: DecompositionResult): Promise<boolean> {
-    const parent = this.stateManager.loadGoal(result.parent_id);
+    const parent = await this.stateManager.loadGoal(result.parent_id);
     if (!parent) return false;
 
     const children = result.children as Goal[];
@@ -604,8 +604,8 @@ export class GoalTreeManager {
    * Computes the current GoalTreeState for the tree rooted at rootId.
    * Traverses all descendants recursively.
    */
-  getTreeState(rootId: string): GoalTreeState {
-    const root = this.stateManager.loadGoal(rootId);
+  async getTreeState(rootId: string): Promise<GoalTreeState> {
+    const root = await this.stateManager.loadGoal(rootId);
     if (!root) {
       return {
         root_id: rootId,
@@ -621,7 +621,7 @@ export class GoalTreeManager {
     const activeLoops: string[] = [];
     const prunedNodes: string[] = [];
 
-    const visit = (goal: Goal): void => {
+    const visit = async (goal: Goal): Promise<void> => {
       totalNodes++;
 
       if (goal.decomposition_depth > maxDepthReached) {
@@ -637,14 +637,14 @@ export class GoalTreeManager {
       }
 
       for (const childId of goal.children_ids) {
-        const child = this.stateManager.loadGoal(childId);
+        const child = await this.stateManager.loadGoal(childId);
         if (child) {
-          visit(child);
+          await visit(child);
         }
       }
     };
 
-    visit(root);
+    await visit(root);
 
     return {
       root_id: rootId,
@@ -657,13 +657,13 @@ export class GoalTreeManager {
 
   // ─── Private Helpers ───
 
-  private _collectAllDescendantIds(goalId: string): string[] {
-    const goal = this.stateManager.loadGoal(goalId);
+  private async _collectAllDescendantIds(goalId: string): Promise<string[]> {
+    const goal = await this.stateManager.loadGoal(goalId);
     if (!goal) return [];
     const result: string[] = [];
     for (const childId of goal.children_ids) {
       result.push(childId);
-      result.push(...this._collectAllDescendantIds(childId));
+      result.push(...await this._collectAllDescendantIds(childId));
     }
     return result;
   }

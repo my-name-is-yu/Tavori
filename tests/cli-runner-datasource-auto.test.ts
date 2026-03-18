@@ -174,7 +174,7 @@ describe("CLIRunner — auto FileExistenceDataSource registration", () => {
     });
 
     const sm = new StateManager(tmpDir);
-    sm.saveGoal(goal);
+    await sm.saveGoal(goal);
 
     vi.mocked(GoalNegotiator).mockImplementation(() => ({
       negotiate: vi.fn().mockResolvedValue(makeNegotiationResult(goal)),
@@ -225,7 +225,7 @@ describe("CLIRunner — auto FileExistenceDataSource registration", () => {
     });
 
     const sm = new StateManager(tmpDir);
-    sm.saveGoal(goal);
+    await sm.saveGoal(goal);
 
     vi.mocked(GoalNegotiator).mockImplementation(() => ({
       negotiate: vi.fn().mockResolvedValue(makeNegotiationResult(goal)),
@@ -271,7 +271,7 @@ describe("CLIRunner — auto FileExistenceDataSource registration", () => {
     });
 
     const sm = new StateManager(tmpDir);
-    sm.saveGoal(goal);
+    await sm.saveGoal(goal);
 
     vi.mocked(GoalNegotiator).mockImplementation(() => ({
       negotiate: vi.fn().mockResolvedValue(makeNegotiationResult(goal)),
@@ -315,7 +315,7 @@ describe("CLIRunner — auto FileExistenceDataSource registration", () => {
     });
 
     const sm = new StateManager(tmpDir);
-    sm.saveGoal(goal);
+    await sm.saveGoal(goal);
 
     vi.mocked(GoalNegotiator).mockImplementation(() => ({
       negotiate: vi.fn().mockResolvedValue(makeNegotiationResult(goal)),
@@ -361,7 +361,7 @@ describe("CLIRunner — auto FileExistenceDataSource registration", () => {
     });
 
     const sm = new StateManager(tmpDir);
-    sm.saveGoal(goal);
+    await sm.saveGoal(goal);
 
     vi.mocked(GoalNegotiator).mockImplementation(() => ({
       negotiate: vi.fn().mockResolvedValue(makeNegotiationResult(goal)),

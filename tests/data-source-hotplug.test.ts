@@ -130,7 +130,7 @@ describe("ObservationEngine addDataSource / removeDataSource", () => {
 
   it("addDataSource allows observe() to use the new source for a matching dimension", async () => {
     const goal = makeGoal({ dimensions: [makeDimension({ name: "test_dim", observation_method: defaultMethod })] });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const adapter = makeAdapter("dynamic-ds", ["test_dim"]);
     (adapter.query as ReturnType<typeof vi.fn>).mockResolvedValue({
@@ -163,7 +163,7 @@ describe("ObservationEngine addDataSource / removeDataSource", () => {
 
   it("observe() does not use removed datasource", async () => {
     const goal = makeGoal({ dimensions: [makeDimension({ name: "test_dim", observation_method: defaultMethod })] });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const adapter = makeAdapter("temp-ds", ["test_dim"]);
     engine.addDataSource(adapter);

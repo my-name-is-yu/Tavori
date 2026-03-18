@@ -56,10 +56,10 @@ function buildSuggestedAction(
  * A pattern is identified when the same feedbackType appears with similar delta values
  * (within ±0.2) across 2 or more goals.
  */
-export function extractCrossGoalPatterns(
+export async function extractCrossGoalPatterns(
   deps: CrossGoalDeps,
   goalIds: string[]
-): CrossGoalPattern[] {
+): Promise<CrossGoalPattern[]> {
   if (goalIds.length < 2) {
     return [];
   }
@@ -71,7 +71,7 @@ export function extractCrossGoalPatterns(
   >();
 
   for (const goalId of goalIds) {
-    const feedbacks = getStructuralFeedback(deps, goalId);
+    const feedbacks = await getStructuralFeedback(deps, goalId);
     for (const fb of feedbacks) {
       const existing = byType.get(fb.feedbackType) ?? [];
       existing.push({ goalId, feedback: fb });
@@ -169,18 +169,18 @@ export function extractCrossGoalPatterns(
  * For each target goal, patterns whose applicableConditions match the goal's
  * feedback context keys are applied.
  */
-export function sharePatternsAcrossGoals(
+export async function sharePatternsAcrossGoals(
   deps: CrossGoalDeps,
   patterns: CrossGoalPattern[],
   targetGoalIds: string[]
-): PatternSharingResult {
+): Promise<PatternSharingResult> {
   let patternsShared = 0;
   const newPatterns: CrossGoalPattern[] = [];
   const affectedGoals = new Set<string>();
 
   for (const targetGoalId of targetGoalIds) {
     // Gather context keys from existing structural feedback
-    const existingFeedback = getStructuralFeedback(deps, targetGoalId);
+    const existingFeedback = await getStructuralFeedback(deps, targetGoalId);
     const existingContextKeys = new Set<string>();
     for (const fb of existingFeedback) {
       for (const key of Object.keys(fb.context)) {

@@ -213,7 +213,7 @@ afterEach(() => {
 describe("R3: runTaskCycle generates task, executes via adapter, and verifies", () => {
   it("generates a task, calls adapter.execute, and returns pass verdict with dimension_updates", async () => {
     const goal = makeUnsatisfiedGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // LLM: task generation + LLM review (2 calls total; L1 mechanical check skips on "grep" prefix so L2 runs)
     // Actually with "grep -c" verification_method, L1 is applicable (passes mechanically),
@@ -279,7 +279,7 @@ describe("R3: runTaskCycle generates task, executes via adapter, and verifies", 
 describe("R3: runTaskCycle handles adapter execution failure", () => {
   it("returns fail verdict and no dimension_updates when adapter fails", async () => {
     const goal = makeUnsatisfiedGoal("goal-r3-fail");
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const mockLLM = createMockLLMClient([
       makeTaskGenerationResponse(),   // call 0: generateTask
@@ -333,7 +333,7 @@ describe("R3: runTaskCycle handles adapter execution failure", () => {
 describe("R3: runTaskCycle passes existingTasks for dedup", () => {
   it("includes existingTasks in LLM prompt when provided", async () => {
     const goal = makeUnsatisfiedGoal("goal-r3-dedup");
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     let capturedPromptContent = "";
     const mockLLM = {
@@ -421,9 +421,9 @@ describe("R3: runTaskCycle passes existingTasks for dedup", () => {
 describe("R3: full pipeline with CoreLoop — task results update goal state", () => {
   it("goal dimension current_value is updated after runTaskCycle completes with pass", async () => {
     const goal = makeUnsatisfiedGoal("goal-r3-state-update");
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
-    const initialGoal = stateManager.loadGoal(goal.id);
+    const initialGoal = await stateManager.loadGoal(goal.id);
     expect(initialGoal).not.toBeNull();
     const initialValue = initialGoal!.dimensions[0]!.current_value as number;
     expect(initialValue).toBe(0.2);
@@ -464,7 +464,7 @@ describe("R3: full pipeline with CoreLoop — task results update goal state", (
     expect(result.verificationResult.verdict).toBe("pass");
 
     // Verify goal state was updated on disk: handleVerdict(pass) writes dimension_updates back
-    const updatedGoal = stateManager.loadGoal(goal.id);
+    const updatedGoal = await stateManager.loadGoal(goal.id);
     expect(updatedGoal).not.toBeNull();
     const updatedDim = updatedGoal!.dimensions.find((d) => d.name === "quality");
     expect(updatedDim).toBeDefined();
@@ -475,7 +475,7 @@ describe("R3: full pipeline with CoreLoop — task results update goal state", (
 
   it("CoreLoop with real TaskLifecycle runs one iteration and task cycle executes", async () => {
     const goal = makeUnsatisfiedGoal("goal-r3-coreloop");
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const mockLLM = createMockLLMClient([
       makeTaskGenerationResponse(),   // generateTask
@@ -599,7 +599,7 @@ describe("R3: full pipeline with CoreLoop — task results update goal state", (
     expect(adapter.executeCalls).toHaveLength(1);
 
     // Goal dimension was updated after the pass verdict
-    const updatedGoal = stateManager.loadGoal(goalId);
+    const updatedGoal = await stateManager.loadGoal(goalId);
     expect(updatedGoal).not.toBeNull();
     const dim = updatedGoal!.dimensions.find((d) => d.name === "quality");
     expect(dim).toBeDefined();

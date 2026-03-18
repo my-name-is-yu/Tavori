@@ -104,7 +104,7 @@ export async function cmdGoalAdd(
       }
 
       if (!accepted) {
-        stateManager.deleteGoal(goal.id);
+        await stateManager.deleteGoal(goal.id);
         console.log("Goal not registered.");
         return 0;
       }
@@ -170,7 +170,7 @@ export async function cmdGoalList(
     } else {
       console.log(`Found ${goalDirs.length} goal(s):\n`);
       for (const goalId of goalDirs) {
-        const goal = stateManager.loadGoal(goalId);
+        const goal = await stateManager.loadGoal(goalId);
         if (!goal) {
           console.log(`[${goalId}] (could not load)`);
           continue;
@@ -182,7 +182,7 @@ export async function cmdGoalList(
     }
   }
 
-  const archivedIds = stateManager.listArchivedGoals();
+  const archivedIds = await stateManager.listArchivedGoals();
   if (opts.archived && archivedIds.length > 0) {
     console.log(`\nArchived goals (${archivedIds.length}):\n`);
     for (const goalId of archivedIds) {
@@ -220,7 +220,7 @@ export async function cmdGoalList(
 export async function cmdStatus(stateManager: StateManager, goalId: string): Promise<number> {
   const reportingEngine = new ReportingEngine(stateManager);
 
-  const goal = stateManager.loadGoal(goalId);
+  const goal = await stateManager.loadGoal(goalId);
   if (!goal) {
     getCliLogger().error(`Error: Goal "${goalId}" not found.`);
     return 1;
@@ -262,8 +262,8 @@ export async function cmdStatus(stateManager: StateManager, goalId: string): Pro
   return 0;
 }
 
-export function cmdGoalShow(stateManager: StateManager, goalId: string): number {
-  const goal = stateManager.loadGoal(goalId);
+export async function cmdGoalShow(stateManager: StateManager, goalId: string): Promise<number> {
+  const goal = await stateManager.loadGoal(goalId);
   if (!goal) {
     getCliLogger().error(`Error: Goal "${goalId}" not found.`);
     return 1;
@@ -299,8 +299,8 @@ export function cmdGoalShow(stateManager: StateManager, goalId: string): number 
   return 0;
 }
 
-export function cmdGoalReset(stateManager: StateManager, goalId: string): number {
-  const goal = stateManager.loadGoal(goalId);
+export async function cmdGoalReset(stateManager: StateManager, goalId: string): Promise<number> {
+  const goal = await stateManager.loadGoal(goalId);
   if (!goal) {
     getCliLogger().error(`Error: Goal "${goalId}" not found.`);
     return 1;
@@ -323,7 +323,7 @@ export function cmdGoalReset(stateManager: StateManager, goalId: string): number
     updated_at: now,
   };
 
-  stateManager.saveGoal(resetGoal);
+  await stateManager.saveGoal(resetGoal);
 
   console.log(`Goal "${goalId}" reset to active.`);
   console.log(`  Status:      active`);
@@ -333,9 +333,9 @@ export function cmdGoalReset(stateManager: StateManager, goalId: string): number
   return 0;
 }
 
-export function cmdLog(stateManager: StateManager, goalId: string): number {
-  const observationLog = stateManager.loadObservationLog(goalId);
-  const gapHistory = stateManager.loadGapHistory(goalId);
+export async function cmdLog(stateManager: StateManager, goalId: string): Promise<number> {
+  const observationLog = await stateManager.loadObservationLog(goalId);
+  const gapHistory = await stateManager.loadGapHistory(goalId);
 
   if ((!observationLog || observationLog.entries.length === 0) && gapHistory.length === 0) {
     console.log(`No logs found for goal ${goalId}`);
@@ -383,7 +383,7 @@ export async function cmdGoalArchive(
   goalId: string,
   opts: { yes?: boolean; force?: boolean }
 ): Promise<number> {
-  const goal = stateManager.loadGoal(goalId);
+  const goal = await stateManager.loadGoal(goalId);
   if (!goal) {
     getCliLogger().error(`Error: Goal "${goalId}" not found.`);
     return 1;
@@ -395,7 +395,7 @@ export async function cmdGoalArchive(
     return 1;
   }
 
-  const archived = stateManager.archiveGoal(goalId);
+  const archived = await stateManager.archiveGoal(goalId);
   if (!archived) {
     getCliLogger().error(`Error: Failed to archive goal "${goalId}".`);
     return 1;
@@ -408,11 +408,11 @@ export async function cmdGoalArchive(
 }
 
 export async function cmdCleanup(stateManager: StateManager): Promise<number> {
-  const goalIds = stateManager.listGoalIds();
+  const goalIds = await stateManager.listGoalIds();
 
   const completed: string[] = [];
   for (const goalId of goalIds) {
-    const goal = stateManager.loadGoal(goalId);
+    const goal = await stateManager.loadGoal(goalId);
     if (goal && goal.status === "completed") {
       completed.push(goalId);
     }
@@ -422,12 +422,12 @@ export async function cmdCleanup(stateManager: StateManager): Promise<number> {
     console.log("No completed goals to archive.");
   } else {
     for (const goalId of completed) {
-      stateManager.archiveGoal(goalId);
+      await stateManager.archiveGoal(goalId);
     }
     console.log(`Archived ${completed.length} completed goal(s).`);
   }
 
-  const activeGoalIds = new Set(stateManager.listGoalIds());
+  const activeGoalIds = new Set(await stateManager.listGoalIds());
   const baseDir = stateManager.getBaseDir();
   const staleReports: string[] = [];
 

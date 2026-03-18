@@ -337,7 +337,7 @@ describe("Milestone 5 — Group 1: Cross-Goal Knowledge Sharing", () => {
     await km.saveToSharedKnowledgeBase(entry, "goal-stale-test");
 
     // Read the raw shared KB and set a past due date
-    const rawEntries = stateManager.readRaw("memory/shared-knowledge/entries.json") as unknown[];
+    const rawEntries = await stateManager.readRaw("memory/shared-knowledge/entries.json") as unknown[];
     const mutated = rawEntries.map((e: unknown) => {
       const obj = e as Record<string, unknown>;
       if (obj["entry_id"] === "stale-entry-1") {
@@ -345,7 +345,7 @@ describe("Milestone 5 — Group 1: Cross-Goal Knowledge Sharing", () => {
       }
       return obj;
     });
-    stateManager.writeRaw("memory/shared-knowledge/entries.json", mutated);
+    await stateManager.writeRaw("memory/shared-knowledge/entries.json", mutated);
 
     const stale = km.getStaleEntries();
     expect(stale.length).toBeGreaterThanOrEqual(1);
@@ -695,11 +695,11 @@ describe("Milestone 5 — Group 4: Full Integration — Multi-Goal Loop with Kno
 
     // Goal A: improve README quality
     const goalA = makeGoal("goal-readme-m5", "Improve README quality");
-    stateManager.saveGoal(goalA);
+    await stateManager.saveGoal(goalA);
 
     // Goal B: improve test coverage
     const goalB = makeGoal("goal-tests-m5", "Improve test coverage");
-    stateManager.saveGoal(goalB);
+    await stateManager.saveGoal(goalB);
 
     // Create KnowledgeManager for sharing knowledge between goals
     const km = new KnowledgeManager(stateManager, createSequentialMockLLMClient([]));
@@ -744,7 +744,7 @@ describe("Milestone 5 — Group 4: Full Integration — Multi-Goal Loop with Kno
     const coreLoop = buildCoreLoop(stateManager, llmClient, 1);
 
     const goalId = "goal-memory-m5";
-    stateManager.saveGoal(makeGoal(goalId, "Test memory recording"));
+    await stateManager.saveGoal(makeGoal(goalId, "Test memory recording"));
 
     const result = await coreLoop.run(goalId);
 
@@ -790,8 +790,8 @@ describe("Milestone 5 — Group 4: Full Integration — Multi-Goal Loop with Kno
     // Set up two goals
     const goalA = makeGoal("goal-seq-a", "Sequential Goal A");
     const goalB = makeGoal("goal-seq-b", "Sequential Goal B");
-    stateManager.saveGoal(goalA);
-    stateManager.saveGoal(goalB);
+    await stateManager.saveGoal(goalA);
+    await stateManager.saveGoal(goalB);
 
     // --- Run goal A iteration ---
     const llmA = createSequentialMockLLMClient([
@@ -823,7 +823,7 @@ describe("Milestone 5 — Group 4: Full Integration — Multi-Goal Loop with Kno
     expect(resultB.totalIterations).toBeGreaterThanOrEqual(1);
 
     // Goal B can now access Goal A's shared knowledge
-    const accessFromB = km.querySharedKnowledge(["readme"]);
+    const accessFromB = await km.querySharedKnowledge(["readme"]);
     expect(accessFromB.length).toBeGreaterThanOrEqual(1);
     expect(accessFromB.some((e) => e.entry_id === "seq-knowledge-from-a")).toBe(true);
 

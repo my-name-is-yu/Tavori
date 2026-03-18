@@ -224,7 +224,7 @@ describe("CoreLoop integration — single iteration with real deps", () => {
 
     // ─── Persist the goal before running ───
     const goal = makeGoal(goalId);
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // ─── Run the loop ───
     const result = await coreLoop.run(goalId);
@@ -252,7 +252,7 @@ describe("CoreLoop integration — single iteration with real deps", () => {
     expect(typeof iteration!.completionJudgment.is_complete).toBe("boolean");
 
     // ─── Assertions: gap history written to StateManager ───
-    const gapHistory = stateManager.loadGapHistory(goalId);
+    const gapHistory = await stateManager.loadGapHistory(goalId);
     expect(gapHistory.length).toBeGreaterThanOrEqual(1);
     expect(gapHistory[0]!.iteration).toBe(0);
     expect(Array.isArray(gapHistory[0]!.gap_vector)).toBe(true);
@@ -349,7 +349,7 @@ describe("CoreLoop integration — single iteration with real deps", () => {
     );
 
     const goal = makeGoal(goalId);
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const result = await coreLoop.run(goalId);
 
@@ -366,7 +366,7 @@ describe("CoreLoop integration — single iteration with real deps", () => {
 
       // Verify task was persisted to disk
       const taskId = taskResult.task.id;
-      const taskOnDisk = stateManager.readRaw(`tasks/${goalId}/${taskId}.json`);
+      const taskOnDisk = await stateManager.readRaw(`tasks/${goalId}/${taskId}.json`);
       expect(taskOnDisk).toBeDefined();
     }
   });

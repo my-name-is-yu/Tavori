@@ -165,8 +165,8 @@ export class ObservationEngine {
 
   // ─── Apply Observation to Goal ───
 
-  applyObservation(goalId: string, entry: ObservationLogEntry): void {
-    applyObservationFn(goalId, entry, this.stateManager, this.options);
+  applyObservation(goalId: string, entry: ObservationLogEntry): Promise<void> {
+    return applyObservationFn(goalId, entry, this.stateManager, this.options);
   }
 
   // ─── Observation Log Persistence ───
@@ -175,17 +175,17 @@ export class ObservationEngine {
    * Load the observation log for a goal.
    * Returns an empty log if none exists.
    */
-  getObservationLog(goalId: string): ObservationLog {
+  async getObservationLog(goalId: string): Promise<ObservationLog> {
     return loadOrEmptyObservationLog(this.stateManager, goalId);
   }
 
   /**
    * Persist the observation log for a goal.
    */
-  saveObservationLog(goalId: string, log: ObservationLog): void {
+  async saveObservationLog(goalId: string, log: ObservationLog): Promise<void> {
     if (goalId !== log.goal_id) throw new Error("goalId mismatch");
     const parsed = ObservationLogSchema.parse(log);
-    this.stateManager.saveObservationLog(parsed);
+    await this.stateManager.saveObservationLog(parsed);
   }
 
   // ─── Observe ───
@@ -207,7 +207,7 @@ export class ObservationEngine {
    *                 observation_method.
    */
   async observe(goalId: string, methods: ObservationMethod[]): Promise<void> {
-    const goal = this.stateManager.loadGoal(goalId);
+    const goal = await this.stateManager.loadGoal(goalId);
     if (goal === null) {
       throw new Error(`observe: goal "${goalId}" not found`);
     }
@@ -259,7 +259,7 @@ export class ObservationEngine {
           // Cross-validation: also run LLM and compare (for logging/diagnostics only)
           if (this.options.crossValidationEnabled && this.llmClient) {
             try {
-              const updatedGoal = this.stateManager.loadGoal(goalId);
+              const updatedGoal = await this.stateManager.loadGoal(goalId);
               const dimState = updatedGoal?.dimensions.find((d) => d.name === dim.name);
               const mechanicalValue = typeof dimState?.current_value === "number" ? dimState.current_value : 0;
 
@@ -333,7 +333,7 @@ export class ObservationEngine {
         confidence: dim.confidence,
       });
 
-      this.applyObservation(goalId, entry);
+      await this.applyObservation(goalId, entry);
     }
   }
 

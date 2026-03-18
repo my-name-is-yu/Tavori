@@ -118,7 +118,7 @@ describe("saveToSharedKnowledgeBase", () => {
 
     // Create a new manager using the same stateManager
     const manager2 = new KnowledgeManager(stateManager, createMockLLMClient([]));
-    const results = manager2.querySharedKnowledge([]);
+    const results = await manager2.querySharedKnowledge([]);
     expect(results.some((e) => e.entry_id === "persisted")).toBe(true);
   });
 });
@@ -132,7 +132,7 @@ describe("querySharedKnowledge", () => {
     const manager = new KnowledgeManager(stateManager, createMockLLMClient([]));
     await manager.saveToSharedKnowledgeBase(makeKnowledgeEntry({ entry_id: "e1", tags: ["a"] }), "g1");
     await manager.saveToSharedKnowledgeBase(makeKnowledgeEntry({ entry_id: "e2", tags: ["b"] }), "g2");
-    const results = manager.querySharedKnowledge([]);
+    const results = await manager.querySharedKnowledge([]);
     expect(results).toHaveLength(2);
   });
 
@@ -146,7 +146,7 @@ describe("querySharedKnowledge", () => {
       makeKnowledgeEntry({ entry_id: "e2", tags: ["saas", "nps"] }),
       "g1"
     );
-    const results = manager.querySharedKnowledge(["saas", "churn"]);
+    const results = await manager.querySharedKnowledge(["saas", "churn"]);
     expect(results).toHaveLength(1);
     expect(results[0]!.entry_id).toBe("e1");
   });
@@ -155,7 +155,7 @@ describe("querySharedKnowledge", () => {
     const manager = new KnowledgeManager(stateManager, createMockLLMClient([]));
     await manager.saveToSharedKnowledgeBase(makeKnowledgeEntry({ entry_id: "e1" }), "goal-A");
     await manager.saveToSharedKnowledgeBase(makeKnowledgeEntry({ entry_id: "e2" }), "goal-B");
-    const results = manager.querySharedKnowledge([], "goal-A");
+    const results = await manager.querySharedKnowledge([], "goal-A");
     expect(results).toHaveLength(1);
     expect(results[0]!.entry_id).toBe("e1");
   });
@@ -166,8 +166,8 @@ describe("querySharedKnowledge", () => {
     await manager.saveToSharedKnowledgeBase(entry, "goal-A");
     await manager.saveToSharedKnowledgeBase(entry, "goal-B");
 
-    expect(manager.querySharedKnowledge([], "goal-A")).toHaveLength(1);
-    expect(manager.querySharedKnowledge([], "goal-B")).toHaveLength(1);
+    expect(await manager.querySharedKnowledge([], "goal-A")).toHaveLength(1);
+    expect(await manager.querySharedKnowledge([], "goal-B")).toHaveLength(1);
   });
 });
 
@@ -220,7 +220,7 @@ describe("searchByEmbedding", () => {
     await manager.saveToSharedKnowledgeBase(entry, "goal-nps");
 
     // embedding_id should be set
-    const stored = manager.querySharedKnowledge(["nps"]);
+    const stored = await manager.querySharedKnowledge(["nps"]);
     expect(stored[0]!.embedding_id).toBe("integration-e1");
 
     // search should find it
@@ -283,11 +283,11 @@ describe("getStaleEntries", () => {
     const shared = await manager.saveToSharedKnowledgeBase(entry, "g1");
 
     // Overwrite with a past due date by writing directly
-    const all = manager.querySharedKnowledge([]);
+    const all = await manager.querySharedKnowledge([]);
     const updated = { ...shared, revalidation_due_at: daysAgo(1) };
-    stateManager.writeRaw("memory/shared-knowledge/entries.json", [updated]);
+    await stateManager.writeRaw("memory/shared-knowledge/entries.json", [updated]);
 
-    const stale = manager.getStaleEntries();
+    const stale = await manager.getStaleEntries();
     expect(stale.some((e) => e.entry_id === "stale-e1")).toBe(true);
   });
 
@@ -297,13 +297,13 @@ describe("getStaleEntries", () => {
     const shared = await manager.saveToSharedKnowledgeBase(entry, "g1");
 
     const updated = { ...shared, revalidation_due_at: daysFromNow(30) };
-    stateManager.writeRaw("memory/shared-knowledge/entries.json", [updated]);
+    await stateManager.writeRaw("memory/shared-knowledge/entries.json", [updated]);
 
-    const stale = manager.getStaleEntries();
+    const stale = await manager.getStaleEntries();
     expect(stale.some((e) => e.entry_id === "fresh-e1")).toBe(false);
   });
 
-  it("uses stability interval from acquired_at when revalidation_due_at is null — stable (365 days)", () => {
+  it("uses stability interval from acquired_at when revalidation_due_at is null — stable (365 days)", async () => {
     const manager = new KnowledgeManager(stateManager, createMockLLMClient([]));
     // acquired_at 400 days ago, stability=stable → due at 365 days → overdue
     const acquiredAt = daysAgo(400);
@@ -313,13 +313,13 @@ describe("getStaleEntries", () => {
       domain_stability: "stable",
       revalidation_due_at: null,
     };
-    stateManager.writeRaw("memory/shared-knowledge/entries.json", [entry]);
+    await stateManager.writeRaw("memory/shared-knowledge/entries.json", [entry]);
 
-    const stale = manager.getStaleEntries();
+    const stale = await manager.getStaleEntries();
     expect(stale.some((e) => e.entry_id === "old-stable")).toBe(true);
   });
 
-  it("uses stability interval from acquired_at when revalidation_due_at is null — volatile (90 days)", () => {
+  it("uses stability interval from acquired_at when revalidation_due_at is null — volatile (90 days)", async () => {
     const manager = new KnowledgeManager(stateManager, createMockLLMClient([]));
     // acquired_at 100 days ago, stability=volatile → due at 90 days → overdue
     const acquiredAt = daysAgo(100);
@@ -329,9 +329,9 @@ describe("getStaleEntries", () => {
       domain_stability: "volatile",
       revalidation_due_at: null,
     };
-    stateManager.writeRaw("memory/shared-knowledge/entries.json", [entry]);
+    await stateManager.writeRaw("memory/shared-knowledge/entries.json", [entry]);
 
-    const stale = manager.getStaleEntries();
+    const stale = await manager.getStaleEntries();
     expect(stale.some((e) => e.entry_id === "old-volatile")).toBe(true);
   });
 
@@ -340,7 +340,7 @@ describe("getStaleEntries", () => {
     const entry = makeKnowledgeEntry({ entry_id: "fresh" });
     await manager.saveToSharedKnowledgeBase(entry, "g1");
     // Default revalidation_due_at is 180 days from now — not stale
-    const stale = manager.getStaleEntries();
+    const stale = await manager.getStaleEntries();
     expect(stale).toHaveLength(0);
   });
 });

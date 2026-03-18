@@ -27,7 +27,15 @@ export class GoalDependencyGraph {
   constructor(stateManager: StateManager, llmClient?: ILLMClient) {
     this.stateManager = stateManager;
     this.llmClient = llmClient;
-    this.graph = this.load();
+    this.graph = { nodes: [], edges: [], updated_at: new Date().toISOString() };
+  }
+
+  /**
+   * Initializes the graph from disk. Must be called after construction when
+   * StateManager async methods are available.
+   */
+  async init(): Promise<void> {
+    this.graph = await this.load();
   }
 
   // ─── CRUD ───
@@ -36,7 +44,7 @@ export class GoalDependencyGraph {
    * Adds an edge to the graph.
    * For prerequisite edges, validates that the addition would not create a cycle.
    */
-  addEdge(edge: Omit<DependencyEdge, "created_at">): DependencyEdge {
+  async addEdge(edge: Omit<DependencyEdge, "created_at">): Promise<DependencyEdge> {
     if (edge.type === "prerequisite" && this.detectCycle(edge.from_goal_id, edge.to_goal_id)) {
       throw new Error(
         `Adding prerequisite ${edge.from_goal_id} → ${edge.to_goal_id} would create a cycle`
@@ -58,14 +66,14 @@ export class GoalDependencyGraph {
 
     this.graph.edges.push(fullEdge);
     this.graph.updated_at = new Date().toISOString();
-    this.save(this.graph);
+    await this.save(this.graph);
     return fullEdge;
   }
 
   /**
    * Removes an edge matching from/to/type from the graph.
    */
-  removeEdge(fromGoalId: string, toGoalId: string, type: DependencyType): void {
+  async removeEdge(fromGoalId: string, toGoalId: string, type: DependencyType): Promise<void> {
     this.graph.edges = this.graph.edges.filter(
       (e) =>
         !(
@@ -75,22 +83,22 @@ export class GoalDependencyGraph {
         )
     );
     this.graph.updated_at = new Date().toISOString();
-    this.save(this.graph);
+    await this.save(this.graph);
   }
 
   /**
    * Updates the status of an edge identified by from/to.
    */
-  updateEdgeStatus(
+  async updateEdgeStatus(
     fromGoalId: string,
     toGoalId: string,
     status: DependencyEdgeStatus
-  ): void {
+  ): Promise<void> {
     const edge = this.getEdge(fromGoalId, toGoalId);
     if (edge) {
       edge.status = status;
       this.graph.updated_at = new Date().toISOString();
-      this.save(this.graph);
+      await this.save(this.graph);
     }
   }
 
@@ -251,7 +259,7 @@ Return empty array [] if no dependencies found.`;
       const edges: DependencyEdge[] = [];
       for (const item of parsed as Record<string, unknown>[]) {
         try {
-          const edge = this.addEdge({
+          const edge = await this.addEdge({
             from_goal_id: String(item["from_goal_id"] ?? ""),
             to_goal_id: String(item["to_goal_id"] ?? ""),
             type: (item["type"] as DependencyType) ?? "conflict",
@@ -285,13 +293,13 @@ Return empty array [] if no dependencies found.`;
    * Uses DependencyType "strategy_dependency" for the underlying edge.
    * The sourceStrategyId is stored in from_goal_id and targetStrategyId in to_goal_id.
    */
-  addStrategyDependency(
+  async addStrategyDependency(
     sourceStrategyId: string,
     targetStrategyId: string,
     dependencyType: "prerequisite" | "enhances",
     goalId: string
-  ): void {
-    this.addEdge({
+  ): Promise<void> {
+    await this.addEdge({
       from_goal_id: sourceStrategyId,
       to_goal_id: targetStrategyId,
       type: "strategy_dependency",
@@ -355,9 +363,9 @@ Return empty array [] if no dependencies found.`;
    * Loads the dependency graph from disk.
    * Returns an empty graph if no file exists or parsing fails.
    */
-  load(): DependencyGraph {
+  async load(): Promise<DependencyGraph> {
     try {
-      const raw = this.stateManager.readRaw("dependency-graph.json");
+      const raw = await this.stateManager.readRaw("dependency-graph.json");
       if (raw !== null) {
         return DependencyGraphSchema.parse(raw);
       }
@@ -370,8 +378,8 @@ Return empty array [] if no dependencies found.`;
   /**
    * Persists the dependency graph to disk.
    */
-  save(graph: DependencyGraph): void {
-    this.stateManager.writeRaw("dependency-graph.json", graph);
+  async save(graph: DependencyGraph): Promise<void> {
+    await this.stateManager.writeRaw("dependency-graph.json", graph);
   }
 
   /**

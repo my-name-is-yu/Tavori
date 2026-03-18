@@ -67,8 +67,8 @@ function createMockStrategyManager(): StrategyManager {
 
 function createMockStateManager(): StateManager {
   return {
-    readRaw: vi.fn().mockReturnValue(null),
-    writeRaw: vi.fn(),
+    readRaw: vi.fn().mockResolvedValue(null),
+    writeRaw: vi.fn().mockResolvedValue(undefined),
     loadGoalState: vi.fn().mockReturnValue(null),
   } as unknown as StateManager;
 }
@@ -93,30 +93,30 @@ describe("PortfolioManager", () => {
   // ─── Task Selection ───
 
   describe("selectNextStrategyForTask", () => {
-    it("returns null when no portfolio exists", () => {
+    it("returns null when no portfolio exists", async () => {
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(null);
-      expect(pm.selectNextStrategyForTask("goal-1")).toBeNull();
+      expect(await pm.selectNextStrategyForTask("goal-1")).toBeNull();
     });
 
-    it("returns null when no active strategies exist", () => {
+    it("returns null when no active strategies exist", async () => {
       const portfolio = makePortfolio([
         makeStrategy({ id: "s1", state: "terminated" }),
       ]);
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(portfolio);
-      expect(pm.selectNextStrategyForTask("goal-1")).toBeNull();
+      expect(await pm.selectNextStrategyForTask("goal-1")).toBeNull();
     });
 
-    it("selects single active strategy", () => {
+    it("selects single active strategy", async () => {
       const s1 = makeStrategy({ id: "s1", state: "active", allocation: 0.5 });
       const portfolio = makePortfolio([s1]);
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(portfolio);
 
-      const result = pm.selectNextStrategyForTask("goal-1");
+      const result = await pm.selectNextStrategyForTask("goal-1");
       expect(result).not.toBeNull();
       expect(result!.strategy_id).toBe("s1");
     });
 
-    it("selects strategy with highest wait ratio (time / allocation)", () => {
+    it("selects strategy with highest wait ratio (time / allocation)", async () => {
       // s1 started long ago with low allocation -> high ratio
       // s2 started recently with high allocation -> low ratio
       const s1 = makeStrategy({
@@ -134,31 +134,31 @@ describe("PortfolioManager", () => {
       const portfolio = makePortfolio([s1, s2]);
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(portfolio);
 
-      const result = pm.selectNextStrategyForTask("goal-1");
+      const result = await pm.selectNextStrategyForTask("goal-1");
       expect(result).not.toBeNull();
       expect(result!.strategy_id).toBe("s1");
     });
 
-    it("skips WaitStrategy instances", () => {
+    it("skips WaitStrategy instances", async () => {
       const wait = makeWaitStrategy({ id: "wait-1", state: "active", allocation: 0.5 });
       const normal = makeStrategy({ id: "s1", state: "active", allocation: 0.5 });
       const portfolio = makePortfolio([wait, normal]);
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(portfolio);
 
-      const result = pm.selectNextStrategyForTask("goal-1");
+      const result = await pm.selectNextStrategyForTask("goal-1");
       expect(result).not.toBeNull();
       expect(result!.strategy_id).toBe("s1");
     });
 
-    it("returns null when only WaitStrategies are active", () => {
+    it("returns null when only WaitStrategies are active", async () => {
       const wait = makeWaitStrategy({ id: "wait-1", state: "active", allocation: 1.0 });
       const portfolio = makePortfolio([wait]);
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(portfolio);
 
-      expect(pm.selectNextStrategyForTask("goal-1")).toBeNull();
+      expect(await pm.selectNextStrategyForTask("goal-1")).toBeNull();
     });
 
-    it("active strategy allocations sum ≤ 1.0 after rebalancing", () => {
+    it("active strategy allocations sum ≤ 1.0 after rebalancing", async () => {
       // Invariant: the sum of allocations for all active strategies must never
       // exceed 1.0. Verify this after a rebalance that adjusts allocations.
       const s1 = makeStrategy({
@@ -180,13 +180,13 @@ describe("PortfolioManager", () => {
       const portfolio = makePortfolio([s1, s2]);
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(portfolio);
       // Scores differ enough to trigger rebalancing (ratio ≥ 2.0)
-      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
         quality: 0.2,
         speed: 0.2,
       });
 
       const trigger = { type: "periodic" as const, strategy_id: null, details: "test" };
-      const result = pm.rebalance("goal-1", trigger);
+      const result = await pm.rebalance("goal-1", trigger);
 
       // Build final allocations: start with original, apply adjustments
       const finalAllocations = new Map<string, number>([
@@ -202,7 +202,7 @@ describe("PortfolioManager", () => {
       expect(sum).toBeLessThanOrEqual(1.0 + 1e-9);
     });
 
-    it("returns null when all strategies are completed", () => {
+    it("returns null when all strategies are completed", async () => {
       // When every strategy in the portfolio is in a terminal state (completed),
       // there are no eligible strategies to assign a task to.
       const portfolio = makePortfolio([
@@ -211,10 +211,10 @@ describe("PortfolioManager", () => {
       ]);
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(portfolio);
 
-      expect(pm.selectNextStrategyForTask("goal-1")).toBeNull();
+      expect(await pm.selectNextStrategyForTask("goal-1")).toBeNull();
     });
 
-    it("uses creation time when no task completions exist", () => {
+    it("uses creation time when no task completions exist", async () => {
       // Strategy with null started_at should fallback to portfolio last_rebalanced_at
       const s1 = makeStrategy({
         id: "s1",
@@ -225,13 +225,13 @@ describe("PortfolioManager", () => {
       const portfolio = makePortfolio([s1]);
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(portfolio);
 
-      const result = pm.selectNextStrategyForTask("goal-1");
+      const result = await pm.selectNextStrategyForTask("goal-1");
       expect(result).not.toBeNull();
       expect(result!.strategy_id).toBe("s1");
       expect(result!.wait_ratio).toBeGreaterThan(0);
     });
 
-    it("allocation 0.5 vs 0.2: correct frequency distribution", () => {
+    it("allocation 0.5 vs 0.2: correct frequency distribution", async () => {
       // Both started at the same time, so elapsed is the same.
       // ratio = elapsed / allocation, so lower allocation -> higher ratio -> selected first
       const s1 = makeStrategy({
@@ -249,7 +249,7 @@ describe("PortfolioManager", () => {
       const portfolio = makePortfolio([s1, s2]);
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(portfolio);
 
-      const result = pm.selectNextStrategyForTask("goal-1");
+      const result = await pm.selectNextStrategyForTask("goal-1");
       expect(result).not.toBeNull();
       // s2 has allocation 0.2, so ratio is higher -> selected
       expect(result!.strategy_id).toBe("s2");
@@ -259,12 +259,12 @@ describe("PortfolioManager", () => {
   // ─── Effectiveness Measurement ───
 
   describe("calculateEffectiveness", () => {
-    it("returns empty array when no portfolio", () => {
+    it("returns empty array when no portfolio", async () => {
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(null);
-      expect(pm.calculateEffectiveness("goal-1")).toEqual([]);
+      expect(await pm.calculateEffectiveness("goal-1")).toEqual([]);
     });
 
-    it("returns null score when fewer than 3 task completions", () => {
+    it("returns null score when fewer than 3 task completions", async () => {
       const s1 = makeStrategy({
         id: "s1",
         state: "active",
@@ -274,15 +274,15 @@ describe("PortfolioManager", () => {
       });
       const portfolio = makePortfolio([s1]);
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(portfolio);
-      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({ quality: 0.5 });
+      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({ quality: 0.5 });
 
-      const records = pm.calculateEffectiveness("goal-1");
+      const records = await pm.calculateEffectiveness("goal-1");
       expect(records).toHaveLength(1);
       expect(records[0].effectiveness_score).toBeNull();
       expect(records[0].sessions_consumed).toBe(2);
     });
 
-    it("calculates correct score: gap_delta / sessions", () => {
+    it("calculates correct score: gap_delta / sessions", async () => {
       const s1 = makeStrategy({
         id: "s1",
         state: "active",
@@ -293,16 +293,16 @@ describe("PortfolioManager", () => {
       const portfolio = makePortfolio([s1]);
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(portfolio);
       // Current gap = 0.5, baseline = 0.8, delta = 0.8 - 0.5 = 0.3 (improvement)
-      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({ quality: 0.5 });
+      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({ quality: 0.5 });
 
-      const records = pm.calculateEffectiveness("goal-1");
+      const records = await pm.calculateEffectiveness("goal-1");
       expect(records).toHaveLength(1);
       expect(records[0].effectiveness_score).toBeCloseTo(0.3 / 4, 5);
       expect(records[0].gap_delta_attributed).toBeCloseTo(0.3, 5);
       expect(records[0].sessions_consumed).toBe(4);
     });
 
-    it("handles multiple strategies with different scores", () => {
+    it("handles multiple strategies with different scores", async () => {
       const s1 = makeStrategy({
         id: "s1",
         state: "active",
@@ -320,12 +320,12 @@ describe("PortfolioManager", () => {
       const portfolio = makePortfolio([s1, s2]);
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(portfolio);
       // quality gap reduced to 0.5, speed gap reduced to 0.4
-      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
         quality: 0.5,
         speed: 0.4,
       });
 
-      const records = pm.calculateEffectiveness("goal-1");
+      const records = await pm.calculateEffectiveness("goal-1");
       expect(records).toHaveLength(2);
 
       const r1 = records.find((r) => r.strategy_id === "s1")!;
@@ -335,7 +335,7 @@ describe("PortfolioManager", () => {
       expect(r2.effectiveness_score).toBeCloseTo(0.6 / 3, 5);
     });
 
-    it("returns 0 delta when strategy has no target dimension matches", () => {
+    it("returns 0 delta when strategy has no target dimension matches", async () => {
       const s1 = makeStrategy({
         id: "s1",
         state: "active",
@@ -345,9 +345,9 @@ describe("PortfolioManager", () => {
       });
       const portfolio = makePortfolio([s1]);
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(portfolio);
-      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({ quality: 0.5 });
+      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({ quality: 0.5 });
 
-      const records = pm.calculateEffectiveness("goal-1");
+      const records = await pm.calculateEffectiveness("goal-1");
       expect(records).toHaveLength(1);
       expect(records[0].gap_delta_attributed).toBe(0);
       expect(records[0].effectiveness_score).toBe(0);
@@ -357,7 +357,7 @@ describe("PortfolioManager", () => {
   // ─── Rebalance Trigger ───
 
   describe("shouldRebalance", () => {
-    it("returns periodic trigger when interval elapsed", () => {
+    it("returns periodic trigger when interval elapsed", async () => {
       const s1 = makeStrategy({ id: "s1", state: "active", tasks_generated: [] });
       const portfolio = makePortfolio([s1]);
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(portfolio);
@@ -375,7 +375,7 @@ describe("PortfolioManager", () => {
         strategy_id: null,
         details: "test",
       };
-      pmShort.rebalance("goal-1", trigger);
+      await pmShort.rebalance("goal-1", trigger);
 
       // Wait a tiny bit so interval elapses (we set a very small interval)
       // Force time forward by manipulating internal state through rebalance
@@ -403,17 +403,17 @@ describe("PortfolioManager", () => {
       const fakeNow = Date.now();
       const fakePast = fakeNow - 100_000;
       const dateSpy = vi.spyOn(Date, "now").mockReturnValue(fakePast);
-      pm2.rebalance("goal-1", trigger);
+      await pm2.rebalance("goal-1", trigger);
       // Now lastRebalanceTime = fakePast
 
       // Now check shouldRebalance at current time (interval should have elapsed)
       dateSpy.mockReturnValue(fakeNow);
-      const result = pm2.shouldRebalance("goal-1");
+      const result = await pm2.shouldRebalance("goal-1");
       expect(result).not.toBeNull();
       expect(result!.type).toBe("periodic");
     });
 
-    it("returns null when interval not elapsed", () => {
+    it("returns null when interval not elapsed", async () => {
       const s1 = makeStrategy({ id: "s1", state: "active", tasks_generated: [] });
       const portfolio = makePortfolio([s1]);
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(portfolio);
@@ -424,14 +424,14 @@ describe("PortfolioManager", () => {
         strategy_id: null,
         details: "test",
       };
-      pm.rebalance("goal-1", trigger);
+      await pm.rebalance("goal-1", trigger);
 
       // Default rebalance_interval_hours is 168 (1 week), which hasn't elapsed
-      const result = pm.shouldRebalance("goal-1");
+      const result = await pm.shouldRebalance("goal-1");
       expect(result).toBeNull();
     });
 
-    it("returns score_change trigger when 50%+ change detected", () => {
+    it("returns score_change trigger when 50%+ change detected", async () => {
       // Strategy with a known previous effectiveness_score
       const s1 = makeStrategy({
         id: "s1",
@@ -446,7 +446,7 @@ describe("PortfolioManager", () => {
 
       // Current gap = 0.2, delta = 0.8 - 0.2 = 0.6, score = 0.6/3 = 0.2
       // Previous score = 0.1, change = |0.2 - 0.1| / 0.1 = 1.0 (100%) >= 0.5
-      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({ quality: 0.2 });
+      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({ quality: 0.2 });
 
       // Need rebalance history so shouldRebalance checks score changes
       const trigger: RebalanceTrigger = {
@@ -454,16 +454,16 @@ describe("PortfolioManager", () => {
         strategy_id: null,
         details: "initial",
       };
-      pm.rebalance("goal-1", trigger);
+      await pm.rebalance("goal-1", trigger);
 
-      const result = pm.shouldRebalance("goal-1");
+      const result = await pm.shouldRebalance("goal-1");
       expect(result).not.toBeNull();
       expect(result!.type).toBe("score_change");
     });
 
-    it("returns null when no trigger conditions met", () => {
+    it("returns null when no trigger conditions met", async () => {
       // No lastRebalanceTime set (or 0) and no history
-      const result = pm.shouldRebalance("goal-1");
+      const result = await pm.shouldRebalance("goal-1");
       expect(result).toBeNull();
     });
   });
@@ -477,7 +477,7 @@ describe("PortfolioManager", () => {
       details: "Interval elapsed",
     };
 
-    it("returns no changes when all scores are null", () => {
+    it("returns no changes when all scores are null", async () => {
       const s1 = makeStrategy({
         id: "s1",
         state: "active",
@@ -492,15 +492,15 @@ describe("PortfolioManager", () => {
       });
       const portfolio = makePortfolio([s1, s2]);
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(portfolio);
-      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({ quality: 0.5 });
+      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({ quality: 0.5 });
 
-      const result = pm.rebalance("goal-1", periodicTrigger);
+      const result = await pm.rebalance("goal-1", periodicTrigger);
       expect(result.adjustments).toHaveLength(0);
       expect(result.terminated_strategies).toHaveLength(0);
       expect(result.new_generation_needed).toBe(false);
     });
 
-    it("makes no allocation changes when score ratio < 2.0", () => {
+    it("makes no allocation changes when score ratio < 2.0", async () => {
       // Two strategies with scores that have ratio < 2.0
       const s1 = makeStrategy({
         id: "s1",
@@ -523,16 +523,16 @@ describe("PortfolioManager", () => {
       // quality: 0.6 - 0.4 = 0.2, score = 0.2/3 ≈ 0.067
       // speed: 0.5 - 0.3 = 0.2, score = 0.2/3 ≈ 0.067
       // ratio = 1.0 < 2.0
-      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
         quality: 0.4,
         speed: 0.3,
       });
 
-      const result = pm.rebalance("goal-1", periodicTrigger);
+      const result = await pm.rebalance("goal-1", periodicTrigger);
       expect(result.adjustments).toHaveLength(0);
     });
 
-    it("adjusts allocations when score ratio >= 2.0", () => {
+    it("adjusts allocations when score ratio >= 2.0", async () => {
       const s1 = makeStrategy({
         id: "s1",
         state: "active",
@@ -554,17 +554,17 @@ describe("PortfolioManager", () => {
       // quality: delta = 0.8 - 0.2 = 0.6, score = 0.6/3 = 0.2
       // speed: delta = 0.3 - 0.2 = 0.1, score = 0.1/3 ≈ 0.033
       // ratio = 0.2 / 0.033 ≈ 6.0 >= 2.0 -> rebalance
-      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
         quality: 0.2,
         speed: 0.2,
       });
 
-      const result = pm.rebalance("goal-1", periodicTrigger);
+      const result = await pm.rebalance("goal-1", periodicTrigger);
       expect(result.adjustments.length).toBeGreaterThan(0);
       expect(result.triggered_by).toBe("periodic");
     });
 
-    it("redistributes terminated strategy allocation proportionally", () => {
+    it("redistributes terminated strategy allocation proportionally", async () => {
       // s1 will be terminated (stall count >= 3)
       const s1 = makeStrategy({
         id: "s1",
@@ -583,9 +583,9 @@ describe("PortfolioManager", () => {
       });
       const portfolio = makePortfolio([s1, s2]);
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(portfolio);
-      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({});
+      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
-      const result = pm.rebalance("goal-1", periodicTrigger);
+      const result = await pm.rebalance("goal-1", periodicTrigger);
       expect(result.terminated_strategies).toContain("s1");
       // s2 should get redistribution
       expect(result.adjustments.length).toBeGreaterThanOrEqual(1);
@@ -596,7 +596,7 @@ describe("PortfolioManager", () => {
       }
     });
 
-    it("sets new_generation_needed when all strategies terminated", () => {
+    it("sets new_generation_needed when all strategies terminated", async () => {
       const s1 = makeStrategy({
         id: "s1",
         state: "active",
@@ -611,15 +611,15 @@ describe("PortfolioManager", () => {
       });
       const portfolio = makePortfolio([s1, s2]);
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(portfolio);
-      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({});
+      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
-      const result = pm.rebalance("goal-1", periodicTrigger);
+      const result = await pm.rebalance("goal-1", periodicTrigger);
       expect(result.terminated_strategies).toContain("s1");
       expect(result.terminated_strategies).toContain("s2");
       expect(result.new_generation_needed).toBe(true);
     });
 
-    it("enforces min allocation 0.1", () => {
+    it("enforces min allocation 0.1", async () => {
       // High ratio between strategies to force rebalancing
       const s1 = makeStrategy({
         id: "s1",
@@ -642,12 +642,12 @@ describe("PortfolioManager", () => {
       // quality delta = 0.9 - 0.1 = 0.8, score = 0.8/3 ≈ 0.267
       // speed delta = 0.9 - 0.85 = 0.05, score = 0.05/3 ≈ 0.017
       // ratio ≈ 15.7 -> rebalance happens
-      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({
+      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({
         quality: 0.1,
         speed: 0.85,
       });
 
-      const result = pm.rebalance("goal-1", periodicTrigger);
+      const result = await pm.rebalance("goal-1", periodicTrigger);
       // If there are adjustments, check min allocation
       for (const adj of result.adjustments) {
         expect(adj.new_allocation).toBeGreaterThanOrEqual(0.1);
@@ -658,13 +658,13 @@ describe("PortfolioManager", () => {
   // ─── Termination ───
 
   describe("checkTermination", () => {
-    it("returns true when consecutive_stall_count >= 3", () => {
+    it("returns true when consecutive_stall_count >= 3", async () => {
       const strategy = makeStrategy({ consecutive_stall_count: 3 });
       const result = pm.checkTermination(strategy, []);
       expect(result).toBe(true);
     });
 
-    it("returns true when resource consumption > 2x estimate", () => {
+    it("returns true when resource consumption > 2x estimate", async () => {
       const strategy = makeStrategy({
         tasks_generated: Array.from({ length: 21 }, (_, i) => `t${i}`),
         resource_estimate: { sessions: 10, duration: { value: 7, unit: "days" }, llm_calls: null },
@@ -673,7 +673,7 @@ describe("PortfolioManager", () => {
       expect(result).toBe(true);
     });
 
-    it("returns false for normal strategy", () => {
+    it("returns false for normal strategy", async () => {
       const strategy = makeStrategy({
         consecutive_stall_count: 0,
         tasks_generated: ["t1", "t2"],
@@ -687,18 +687,19 @@ describe("PortfolioManager", () => {
   // ─── Strategy Activation ───
 
   describe("activateStrategies", () => {
-    it("single strategy gets allocation 1.0", () => {
+    it("single strategy gets allocation 1.0", async () => {
       const s1 = makeStrategy({ id: "s1", state: "candidate", allocation: 0 });
       const portfolio = makePortfolio([s1]);
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(portfolio);
 
       pm.activateStrategies("goal-1", ["s1"]);
+      await Promise.resolve(); // flush microtasks so async updateStrategyAllocation completes
 
       expect(mockStrategyManager.updateState).toHaveBeenCalledWith("s1", "active");
       expect(mockStateManager.writeRaw).toHaveBeenCalled();
     });
 
-    it("multiple strategies get equal split", () => {
+    it("multiple strategies get equal split", async () => {
       const s1 = makeStrategy({ id: "s1", state: "candidate", allocation: 0 });
       const s2 = makeStrategy({ id: "s2", state: "candidate", allocation: 0 });
       const s3 = makeStrategy({ id: "s3", state: "candidate", allocation: 0 });
@@ -706,13 +707,14 @@ describe("PortfolioManager", () => {
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(portfolio);
 
       pm.activateStrategies("goal-1", ["s1", "s2", "s3"]);
+      await Promise.resolve(); // flush microtasks so async updateStrategyAllocation completes
 
       expect(mockStrategyManager.updateState).toHaveBeenCalledTimes(3);
       // writeRaw called once per strategy for allocation update
       expect(mockStateManager.writeRaw).toHaveBeenCalledTimes(3);
     });
 
-    it("does nothing when no strategy IDs provided", () => {
+    it("does nothing when no strategy IDs provided", async () => {
       pm.activateStrategies("goal-1", []);
       expect(mockStrategyManager.updateState).not.toHaveBeenCalled();
     });
@@ -721,19 +723,19 @@ describe("PortfolioManager", () => {
   // ─── WaitStrategy Handling ───
 
   describe("isWaitStrategy", () => {
-    it("returns true for WaitStrategy", () => {
+    it("returns true for WaitStrategy", async () => {
       const wait = makeWaitStrategy({ id: "ws1" });
       expect(pm.isWaitStrategy(wait)).toBe(true);
     });
 
-    it("returns false for normal Strategy", () => {
+    it("returns false for normal Strategy", async () => {
       const normal = makeStrategy({ id: "s1" });
       expect(pm.isWaitStrategy(normal)).toBe(false);
     });
   });
 
   describe("handleWaitStrategyExpiry", () => {
-    it("returns null when not expired", () => {
+    it("returns null when not expired", async () => {
       const wait = makeWaitStrategy({
         id: "ws1",
         state: "active",
@@ -744,11 +746,11 @@ describe("PortfolioManager", () => {
       const portfolio = makePortfolio([wait]);
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(portfolio);
 
-      const result = pm.handleWaitStrategyExpiry("goal-1", "ws1");
+      const result = await pm.handleWaitStrategyExpiry("goal-1", "ws1");
       expect(result).toBeNull();
     });
 
-    it("returns null when expired and gap improved", () => {
+    it("returns null when expired and gap improved", async () => {
       const wait = makeWaitStrategy({
         id: "ws1",
         state: "active",
@@ -759,13 +761,13 @@ describe("PortfolioManager", () => {
       const portfolio = makePortfolio([wait]);
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(portfolio);
       // Gap improved: 0.5 < 0.8
-      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({ quality: 0.5 });
+      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({ quality: 0.5 });
 
-      const result = pm.handleWaitStrategyExpiry("goal-1", "ws1");
+      const result = await pm.handleWaitStrategyExpiry("goal-1", "ws1");
       expect(result).toBeNull();
     });
 
-    it("returns rebalance trigger when expired and gap worsened", () => {
+    it("returns rebalance trigger when expired and gap worsened", async () => {
       const wait = makeWaitStrategy({
         id: "ws1",
         state: "active",
@@ -776,19 +778,19 @@ describe("PortfolioManager", () => {
       const portfolio = makePortfolio([wait]);
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(portfolio);
       // Gap worsened: 0.8 > 0.5
-      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({ quality: 0.8 });
+      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({ quality: 0.8 });
 
-      const result = pm.handleWaitStrategyExpiry("goal-1", "ws1");
+      const result = await pm.handleWaitStrategyExpiry("goal-1", "ws1");
       expect(result).not.toBeNull();
       expect(result!.type).toBe("stall_detected");
       expect(result!.strategy_id).toBe("ws1");
     });
 
-    it("returns null for non-existent strategy", () => {
+    it("returns null for non-existent strategy", async () => {
       const portfolio = makePortfolio([]);
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(portfolio);
 
-      const result = pm.handleWaitStrategyExpiry("goal-1", "nonexistent");
+      const result = await pm.handleWaitStrategyExpiry("goal-1", "nonexistent");
       expect(result).toBeNull();
     });
   });
@@ -796,7 +798,7 @@ describe("PortfolioManager", () => {
   // ─── Task Completion Recording ───
 
   describe("recordTaskCompletion", () => {
-    it("records completion timestamp for strategy", () => {
+    it("records completion timestamp for strategy", async () => {
       const s1 = makeStrategy({ id: "s1", state: "active", allocation: 0.5 });
       const s2 = makeStrategy({
         id: "s2",
@@ -811,7 +813,7 @@ describe("PortfolioManager", () => {
       pm.recordTaskCompletion("s2");
 
       // Now s1 should be selected because s2 was just completed (lower wait ratio)
-      const result = pm.selectNextStrategyForTask("goal-1");
+      const result = await pm.selectNextStrategyForTask("goal-1");
       expect(result).not.toBeNull();
       expect(result!.strategy_id).toBe("s1");
     });
@@ -820,22 +822,22 @@ describe("PortfolioManager", () => {
   // ─── getRebalanceHistory ───
 
   describe("getRebalanceHistory", () => {
-    it("returns empty array for unknown goal", () => {
+    it("returns empty array for unknown goal", async () => {
       expect(pm.getRebalanceHistory("unknown")).toEqual([]);
     });
 
-    it("returns history after rebalance", () => {
+    it("returns history after rebalance", async () => {
       const s1 = makeStrategy({ id: "s1", state: "active" });
       const portfolio = makePortfolio([s1]);
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(portfolio);
-      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockReturnValue({});
+      (mockStateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue({});
 
       const trigger: RebalanceTrigger = {
         type: "periodic",
         strategy_id: null,
         details: "test",
       };
-      pm.rebalance("goal-1", trigger);
+      await pm.rebalance("goal-1", trigger);
 
       const history = pm.getRebalanceHistory("goal-1");
       expect(history).toHaveLength(1);

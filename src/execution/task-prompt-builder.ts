@@ -8,7 +8,7 @@ import type { StateManager } from "../state-manager.js";
  * Extracted from TaskLifecycle to keep prompt construction logic separate from
  * orchestration logic.
  */
-export function buildTaskGenerationPrompt(
+export async function buildTaskGenerationPrompt(
   stateManager: StateManager,
   goalId: string,
   targetDimension: string,
@@ -16,9 +16,9 @@ export function buildTaskGenerationPrompt(
   adapterType?: string,
   existingTasks?: string[],
   workspaceContext?: string
-): string {
+): Promise<string> {
   // Load goal context to enrich the prompt
-  const goal = stateManager.loadGoal(goalId);
+  const goal = await stateManager.loadGoal(goalId);
   const dim = goal?.dimensions.find((d) => d.name === targetDimension);
 
   // Build goal context section

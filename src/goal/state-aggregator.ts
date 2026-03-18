@@ -67,8 +67,8 @@ export class StateAggregator {
    *
    * @throws if the parent goal cannot be found.
    */
-  aggregateChildStates(parentId: string): AggregatedState {
-    const parent = this.stateManager.loadGoal(parentId);
+  async aggregateChildStates(parentId: string): Promise<AggregatedState> {
+    const parent = await this.stateManager.loadGoal(parentId);
     if (parent === null) {
       throw new Error(
         `StateAggregator.aggregateChildStates: parent goal "${parentId}" not found`
@@ -81,7 +81,7 @@ export class StateAggregator {
     const childConfidences: number[] = [];
 
     for (const childId of childIds) {
-      const child = this.stateManager.loadGoal(childId);
+      const child = await this.stateManager.loadGoal(childId);
       if (child === null) {
         // Missing child: treat as fully incomplete with low confidence
         childGaps[childId] = 1.0;
@@ -151,8 +151,8 @@ export class StateAggregator {
    *
    * @throws if the parent goal cannot be found.
    */
-  propagateStateDown(parentId: string): void {
-    const parent = this.stateManager.loadGoal(parentId);
+  async propagateStateDown(parentId: string): Promise<void> {
+    const parent = await this.stateManager.loadGoal(parentId);
     if (parent === null) {
       throw new Error(
         `StateAggregator.propagateStateDown: parent goal "${parentId}" not found`
@@ -163,7 +163,7 @@ export class StateAggregator {
     const now = Date.now();
 
     for (const childId of parent.children_ids) {
-      const child = this.stateManager.loadGoal(childId);
+      const child = await this.stateManager.loadGoal(childId);
       if (child === null) continue;
 
       let updated = { ...child };
@@ -221,7 +221,7 @@ export class StateAggregator {
         updated.constraints !== child.constraints ||
         updated.deadline !== child.deadline
       ) {
-        this.stateManager.saveGoal({
+        await this.stateManager.saveGoal({
           ...updated,
           updated_at: new Date().toISOString(),
         });
@@ -246,7 +246,7 @@ export class StateAggregator {
    * @param goalId Starting point (usually the goal that just completed).
    * @returns Ordered array of newly-completable ancestor IDs (bottom-up order).
    */
-  checkCompletionCascade(goalId: string): string[] {
+  async checkCompletionCascade(goalId: string): Promise<string[]> {
     const completable: string[] = [];
 
     // Track which goals are effectively complete for the purpose of this walk.
@@ -257,25 +257,25 @@ export class StateAggregator {
 
     // Walk up the parent chain
     while (currentId !== null) {
-      const current = this.stateManager.loadGoal(currentId);
+      const current = await this.stateManager.loadGoal(currentId);
       if (current === null) break;
 
       const parentId = current.parent_id;
       if (parentId === null) break; // reached root — stop (root itself has no parent to cascade to)
 
-      const parent = this.stateManager.loadGoal(parentId);
+      const parent = await this.stateManager.loadGoal(parentId);
       if (parent === null) break;
 
       // Check whether ALL children of the parent are done
-      const allChildrenDone = parent.children_ids.every((childId) => {
-        if (effectivelyComplete.has(childId)) return true; // treated as complete
-        const child = this.stateManager.loadGoal(childId);
-        if (child === null) return false; // unknown child → not done
-        if (child.status === "completed") return true;
-        // cancelled counts as done (covers "merged" / pruned nodes)
-        if (child.status === "cancelled") return true;
-        return false;
-      });
+      let allChildrenDone = true;
+      for (const childId of parent.children_ids) {
+        if (effectivelyComplete.has(childId)) continue; // treated as complete
+        const child = await this.stateManager.loadGoal(childId);
+        if (child === null) { allChildrenDone = false; break; }
+        if (child.status === "completed" || child.status === "cancelled") continue;
+        allChildrenDone = false;
+        break;
+      }
 
       if (!allChildrenDone) break; // stop cascade — parent still blocked
 

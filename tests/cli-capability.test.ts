@@ -114,13 +114,13 @@ function makeCapability(overrides: Partial<Capability> = {}): Capability {
   };
 }
 
-function writeRegistry(baseDir: string, capabilities: Capability[]): void {
+async function writeRegistry(baseDir: string, capabilities: Capability[]): Promise<void> {
   const registry = {
     capabilities,
     last_checked: new Date().toISOString(),
   };
   const sm = new StateManager(baseDir);
-  sm.writeRaw("capability_registry.json", registry);
+  await sm.writeRaw("capability_registry.json", registry);
 }
 
 // ─── Setup / Teardown ────────────────────────────────────────────────────────
@@ -167,7 +167,7 @@ describe("CLIRunner — motiva capability list", () => {
       type: "tool",
       status: "available",
     });
-    writeRegistry(tmpDir, [cap]);
+    await writeRegistry(tmpDir, [cap]);
 
     const runner = new CLIRunner(tmpDir);
     const exitCode = await runner.run(["capability", "list"]);
@@ -180,7 +180,7 @@ describe("CLIRunner — motiva capability list", () => {
   });
 
   it("shows an appropriate message when no capabilities are registered", async () => {
-    writeRegistry(tmpDir, []);
+    await writeRegistry(tmpDir, []);
 
     const runner = new CLIRunner(tmpDir);
     const exitCode = await runner.run(["capability", "list"]);
@@ -195,7 +195,7 @@ describe("CLIRunner — motiva capability list", () => {
       makeCapability({ id: "cap_a", name: "cap_a", type: "tool", status: "available" }),
       makeCapability({ id: "cap_b", name: "cap_b", type: "service", status: "missing" }),
     ];
-    writeRegistry(tmpDir, caps);
+    await writeRegistry(tmpDir, caps);
 
     const runner = new CLIRunner(tmpDir);
     const exitCode = await runner.run(["capability", "list"]);
@@ -216,7 +216,7 @@ describe("CLIRunner — motiva capability remove", () => {
       type: "tool",
       status: "available",
     });
-    writeRegistry(tmpDir, [cap]);
+    await writeRegistry(tmpDir, [cap]);
 
     const runner = new CLIRunner(tmpDir);
     const exitCode = await runner.run(["capability", "remove", "removable_cap"]);
@@ -228,7 +228,7 @@ describe("CLIRunner — motiva capability remove", () => {
 
     // Verify the capability is actually gone from the registry
     const sm = new StateManager(tmpDir);
-    const raw = sm.readRaw("capability_registry.json") as { capabilities: Capability[] } | null;
+    const raw = await sm.readRaw("capability_registry.json") as { capabilities: Capability[] } | null;
     expect(raw).not.toBeNull();
     const remaining = raw!.capabilities.filter((c) => c.id === "removable_cap");
     expect(remaining).toHaveLength(0);

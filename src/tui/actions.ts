@@ -61,9 +61,9 @@ export class ActionHandler {
     let goalId = intent.params?.["goalId"] ?? null;
 
     if (!goalId) {
-      const ids = this.deps.stateManager.listGoalIds();
+      const ids = await this.deps.stateManager.listGoalIds();
       for (const id of ids) {
-        const goal = this.deps.stateManager.loadGoal(id);
+        const goal = await this.deps.stateManager.loadGoal(id);
         if (goal && (goal.status === "active" || goal.status === "waiting")) {
           goalId = id;
           break;
@@ -80,7 +80,7 @@ export class ActionHandler {
       };
     }
 
-    const goal = this.deps.stateManager.loadGoal(goalId);
+    const goal = await this.deps.stateManager.loadGoal(goalId);
     const label = goal?.title ?? goalId;
 
     return {
@@ -96,8 +96,8 @@ export class ActionHandler {
     };
   }
 
-  private handleStatus(): ActionResult {
-    const ids = this.deps.stateManager.listGoalIds();
+  private async handleStatus(): Promise<ActionResult> {
+    const ids = await this.deps.stateManager.listGoalIds();
 
     if (ids.length === 0) {
       return { messages: ["No active goals."] };
@@ -106,7 +106,7 @@ export class ActionHandler {
     const messages: string[] = [];
 
     for (const id of ids) {
-      const goal = this.deps.stateManager.loadGoal(id);
+      const goal = await this.deps.stateManager.loadGoal(id);
       if (!goal) continue;
 
       messages.push(`\n--- Goal: ${goal.title ?? id} ---`);
@@ -136,7 +136,7 @@ export class ActionHandler {
   }
 
   private async handleReport(): Promise<ActionResult> {
-    const ids = this.deps.stateManager.listGoalIds();
+    const ids = await this.deps.stateManager.listGoalIds();
 
     if (ids.length === 0) {
       return { messages: ["No goals to generate a report for."] };
@@ -147,7 +147,7 @@ export class ActionHandler {
     for (const id of ids) {
       try {
         const report = await this.deps.reportingEngine.generateDailySummary(id);
-        this.deps.reportingEngine.saveReport(report);
+        await this.deps.reportingEngine.saveReport(report);
         const sections = report.content.split(/\n(?=## )/).filter(s => s.trim());
         for (const section of sections) {
           messages.push(section.trim());
@@ -162,8 +162,8 @@ export class ActionHandler {
     return { messages };
   }
 
-  private handleGoalList(): ActionResult {
-    const ids = this.deps.stateManager.listGoalIds();
+  private async handleGoalList(): Promise<ActionResult> {
+    const ids = await this.deps.stateManager.listGoalIds();
 
     if (ids.length === 0) {
       return {
@@ -177,7 +177,7 @@ export class ActionHandler {
     const messages: string[] = ["Registered goals:"];
 
     for (const id of ids) {
-      const goal = this.deps.stateManager.loadGoal(id);
+      const goal = await this.deps.stateManager.loadGoal(id);
       if (!goal) continue;
       const deadline = goal.deadline ? ` (deadline: ${goal.deadline})` : "";
       messages.push(`  [${goal.status}] ${goal.title ?? id}${deadline}`);

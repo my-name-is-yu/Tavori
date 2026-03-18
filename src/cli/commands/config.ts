@@ -87,11 +87,11 @@ export async function cmdProvider(argv: string[]): Promise<number> {
   return 1;
 }
 
-export function cmdConfigCharacter(
+export async function cmdConfigCharacter(
   _stateManager: StateManager,
   characterConfigManager: CharacterConfigManager,
   argv: string[]
-): number {
+): Promise<number> {
   let values: {
     show?: boolean;
     reset?: boolean;
@@ -150,15 +150,15 @@ Options:
   }
 
   if (values.reset) {
-    characterConfigManager.reset();
-    const config = characterConfigManager.load();
+    await characterConfigManager.reset();
+    const config = await characterConfigManager.load();
     console.log("Character config reset to defaults:");
     printCharacterConfig(config);
     return 0;
   }
 
   if (values.show) {
-    const config = characterConfigManager.load();
+    const config = await characterConfigManager.load();
     console.log("Current character config:");
     printCharacterConfig(config);
     return 0;
@@ -186,7 +186,7 @@ Options:
   }
 
   try {
-    const updated = characterConfigManager.update(partial);
+    const updated = await characterConfigManager.update(partial);
     console.log("Character config updated:");
     printCharacterConfig(updated);
     return 0;

@@ -131,12 +131,12 @@ async function readFileSection(filePath: string, maxChars: number): Promise<stri
 
 export function createWorkspaceContextProvider(
   options: WorkspaceContextOptions,
-  getGoalDescription: (goalId: string) => string | undefined
+  getGoalDescription: (goalId: string) => string | undefined | Promise<string | undefined>
 ): (goalId: string, dimensionName: string) => Promise<string> {
   const { workDir, maxFiles = 5, maxCharsPerFile = 4000, externalFileMaxBytes = 10240 } = options;
 
   return async (goalId: string, dimensionName: string): Promise<string> => {
-    const goalDescription = getGoalDescription(goalId) ?? "";
+    const goalDescription = (await getGoalDescription(goalId)) ?? "";
     const keywords = extractKeywords(goalDescription + " " + dimensionName);
 
     const parts: string[] = [`# Workspace: ${workDir}`];

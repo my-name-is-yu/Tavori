@@ -101,7 +101,7 @@ describe("ObservationEngine LLM observation", () => {
       const engine = new ObservationEngine(stateManager, [], mockLLMClient);
 
       const goal = makeGoal({ id: "goal-llm-1" });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       const entry = await engine.observeWithLLM(
         "goal-llm-1",
@@ -124,7 +124,7 @@ describe("ObservationEngine LLM observation", () => {
       const engineHigh = new ObservationEngine(stateManager, [], mockLLMClientHigh);
 
       const goal = makeGoal({ id: "goal-clamp-high" });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       const entryHigh = await engineHigh.observeWithLLM(
         "goal-clamp-high",
@@ -141,7 +141,7 @@ describe("ObservationEngine LLM observation", () => {
       const engine = new ObservationEngine(stateManager, [], mockLLMClient);
 
       const goal = makeGoal({ id: "goal-tier" });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       const entry = await engine.observeWithLLM(
         "goal-tier",
@@ -163,15 +163,15 @@ describe("ObservationEngine LLM observation", () => {
       const engine = new ObservationEngine(stateManager, [], mockLLMClient);
 
       const goal = makeGoal({ id: "goal-llm-fallback" });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       await engine.observe("goal-llm-fallback", [defaultMethod]);
 
-      const updatedGoal = stateManager.loadGoal("goal-llm-fallback");
+      const updatedGoal = await stateManager.loadGoal("goal-llm-fallback");
       expect(updatedGoal).not.toBeNull();
 
       // Check the observation log for the layer used
-      const log = engine.getObservationLog("goal-llm-fallback");
+      const log = await engine.getObservationLog("goal-llm-fallback");
       expect(log.entries.length).toBeGreaterThan(0);
 
       const lastEntry = log.entries[log.entries.length - 1]!;
@@ -184,7 +184,7 @@ describe("ObservationEngine LLM observation", () => {
       const engine = new ObservationEngine(stateManager, [], mockLLMClient);
 
       const goal = makeGoal({ id: "goal-llm-called" });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       await engine.observe("goal-llm-called", [defaultMethod]);
 
@@ -201,7 +201,7 @@ describe("ObservationEngine LLM observation", () => {
       const engine = new ObservationEngine(stateManager, [mockDs], mockLLMClient);
 
       const goal = makeGoal({ id: "goal-ds-priority" });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       await engine.observe("goal-ds-priority", [defaultMethod]);
 
@@ -215,7 +215,7 @@ describe("ObservationEngine LLM observation", () => {
       const engine = new ObservationEngine(stateManager, [mockDs], mockLLMClient);
 
       const goal = makeGoal({ id: "goal-ds-no-llm" });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       await engine.observe("goal-ds-no-llm", [defaultMethod]);
 
@@ -229,11 +229,11 @@ describe("ObservationEngine LLM observation", () => {
       const engine = new ObservationEngine(stateManager, [mockDs], mockLLMClient);
 
       const goal = makeGoal({ id: "goal-mechanical-layer" });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       await engine.observe("goal-mechanical-layer", [defaultMethod]);
 
-      const log = engine.getObservationLog("goal-mechanical-layer");
+      const log = await engine.getObservationLog("goal-mechanical-layer");
       expect(log.entries.length).toBeGreaterThan(0);
 
       const lastEntry = log.entries[log.entries.length - 1]!;
@@ -248,12 +248,12 @@ describe("ObservationEngine LLM observation", () => {
       const engine = new ObservationEngine(stateManager); // no dataSources, no llmClient
 
       const goal = makeGoal({ id: "goal-self-report" });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       // observe() is currently synchronous but may become async — use await for compatibility
       await Promise.resolve(engine.observe("goal-self-report", [selfReportMethod]));
 
-      const log = engine.getObservationLog("goal-self-report");
+      const log = await engine.getObservationLog("goal-self-report");
       expect(log.entries.length).toBeGreaterThan(0);
 
       const lastEntry = log.entries[log.entries.length - 1]!;
@@ -281,11 +281,11 @@ describe("ObservationEngine LLM observation", () => {
           },
         ],
       });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       await Promise.resolve(engine.observe("goal-self-report-value", [selfReportMethod]));
 
-      const updatedGoal = stateManager.loadGoal("goal-self-report-value");
+      const updatedGoal = await stateManager.loadGoal("goal-self-report-value");
       expect(updatedGoal).not.toBeNull();
       const dim = updatedGoal!.dimensions.find((d) => d.name === "code_quality");
       expect(dim).not.toBeNull();
@@ -319,7 +319,7 @@ describe("ObservationEngine LLM observation", () => {
           },
         ],
       });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       // Perform LLM observation
       await engine.observeWithLLM(
@@ -331,7 +331,7 @@ describe("ObservationEngine LLM observation", () => {
       );
 
       // Load updated goal
-      const updatedGoal = stateManager.loadGoal("goal-gap-integration");
+      const updatedGoal = await stateManager.loadGoal("goal-gap-integration");
       expect(updatedGoal).not.toBeNull();
 
       const dim = updatedGoal!.dimensions.find((d) => d.name === "code_quality");
@@ -371,7 +371,7 @@ describe("ObservationEngine LLM observation", () => {
           },
         ],
       });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       await engine.observeWithLLM(
         "goal-gap-zero",
@@ -381,7 +381,7 @@ describe("ObservationEngine LLM observation", () => {
         "min 0.8"
       );
 
-      const updatedGoal = stateManager.loadGoal("goal-gap-zero");
+      const updatedGoal = await stateManager.loadGoal("goal-gap-zero");
       const dim = updatedGoal!.dimensions.find((d) => d.name === "code_quality");
       expect(dim).not.toBeNull();
 
@@ -403,7 +403,7 @@ describe("ObservationEngine LLM observation", () => {
       const engine = new ObservationEngine(stateManager, [], mockLLMClient, contextProvider);
 
       const goal = makeGoal({ id: "goal-ctx-provider" });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       // Call observeWithLLM with the context already provided (simulates observe() flow)
       await engine.observeWithLLM(
@@ -440,7 +440,7 @@ describe("ObservationEngine LLM observation", () => {
       );
 
       const goal = makeGoal({ id: "goal-git-fallback" });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       // Call with no workspaceContext — should trigger git diff fallback
       await engine.observeWithLLM(
@@ -470,7 +470,7 @@ describe("ObservationEngine LLM observation", () => {
       const engine = new ObservationEngine(stateManager, [], mockLLMClient);
 
       const goal = makeGoal({ id: "goal-truncate" });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       await engine.observeWithLLM(
         "goal-truncate",
@@ -505,7 +505,7 @@ describe("ObservationEngine LLM observation", () => {
       );
 
       const goal = makeGoal({ id: "goal-no-context" });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       // Should NOT throw — falls back gracefully and calls LLM with warning in prompt
       const entry = await engine.observeWithLLM(

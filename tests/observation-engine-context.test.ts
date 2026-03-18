@@ -174,7 +174,7 @@ describe("ObservationEngine contextProvider integration", () => {
     const engine = new ObservationEngine(stateManager, [], mockLLMClient, contextProvider);
 
     const goal = makeGoal({ id: "goal-ctx-args", dimensions: [codeQualityDimension] });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     await engine.observe("goal-ctx-args", [defaultMethod]);
 
@@ -204,7 +204,7 @@ describe("ObservationEngine contextProvider integration", () => {
     const engine = new ObservationEngine(stateManager, [], mockLLMClient, contextProvider);
 
     const goal = makeGoal({ id: "goal-prompt-ctx", dimensions: [codeQualityDimension] });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     await engine.observe("goal-prompt-ctx", [defaultMethod]);
 
@@ -247,7 +247,7 @@ describe("ObservationEngine contextProvider integration", () => {
         },
       ],
     });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const engine = new ObservationEngine(stateManager, [], mockLLMClient, contextProvider);
     await engine.observe("goal-prev-score", [defaultMethod]);
@@ -312,7 +312,7 @@ describe("ObservationEngine contextProvider integration", () => {
       updated_at: now,
     };
 
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const contextProvider = vi.fn().mockResolvedValue("cached context");
     const mockLLMClient = createMockLLMClient(0.7, "ok");

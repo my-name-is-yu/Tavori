@@ -145,7 +145,7 @@ export async function decompose(
     });
 
     subgoals.push(subgoal);
-    stateManager.saveGoal(subgoal);
+    await stateManager.saveGoal(subgoal);
   }
 
   // Phase 2: Auto-propose dimension mappings
@@ -201,7 +201,7 @@ export async function decomposeIntoSubgoals(
     return null;
   }
 
-  const goal = stateManager.loadGoal(goalId);
+  const goal = await stateManager.loadGoal(goalId);
   if (!goal) {
     return null;
   }

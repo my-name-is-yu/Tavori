@@ -21,12 +21,12 @@ import type { Strategy, WaitStrategy } from "./types/strategy.js";
  * Get the current gap value for a specific dimension of a goal.
  * Reads from gap data provided by the caller (StateManager.readRaw).
  */
-export function getCurrentGapForDimension(
+export async function getCurrentGapForDimension(
   goalId: string,
   dimension: string,
-  readRaw: (path: string) => unknown
-): number | null {
-  const raw = readRaw(`gaps/${goalId}/current.json`);
+  readRaw: (path: string) => unknown | Promise<unknown>
+): Promise<number | null> {
+  const raw = await readRaw(`gaps/${goalId}/current.json`);
   if (!raw || typeof raw !== "object") return null;
 
   const gaps = raw as Record<string, unknown>;
@@ -49,15 +49,15 @@ export function getCurrentGapForDimension(
  * Calculate gap delta attributed to a strategy using dimension-target matching.
  * Sums gap improvements across the strategy's target_dimensions.
  */
-export function calculateGapDeltaForStrategy(
+export async function calculateGapDeltaForStrategy(
   strategy: Strategy,
   goalId: string,
-  readRaw: (path: string) => unknown
-): number {
+  readRaw: (path: string) => unknown | Promise<unknown>
+): Promise<number> {
   let totalDelta = 0;
 
   for (const dimension of strategy.target_dimensions) {
-    const currentGap = getCurrentGapForDimension(goalId, dimension, readRaw);
+    const currentGap = await getCurrentGapForDimension(goalId, dimension, readRaw);
     if (currentGap === null) continue;
 
     const baseline = strategy.gap_snapshot_at_start ?? 1.0;
@@ -283,15 +283,15 @@ export function adjustAllocations(
  * @param updateState - transition a strategy to a new state
  * @param getPortfolioStrategies - get all strategies for a goal
  */
-export function handleWaitStrategyExpiry(
+export async function handleWaitStrategyExpiry(
   goalId: string,
   strategyId: string,
   strategy: Strategy,
   isWaitStrategy: (s: Strategy) => boolean,
-  getGap: (goalId: string, dimension: string) => number | null,
-  updateState: (strategyId: string, state: string) => void,
-  getPortfolioStrategies: (goalId: string) => Strategy[]
-): RebalanceTrigger | null {
+  getGap: (goalId: string, dimension: string) => number | null | Promise<number | null>,
+  updateState: (strategyId: string, state: string) => void | Promise<void>,
+  getPortfolioStrategies: (goalId: string) => Strategy[] | Promise<Strategy[]>
+): Promise<RebalanceTrigger | null> {
   if (!isWaitStrategy(strategy)) return null;
 
   const waitStrategy = strategy as unknown as WaitStrategy;
@@ -303,7 +303,7 @@ export function handleWaitStrategyExpiry(
   const startGap = strategy.gap_snapshot_at_start;
   if (startGap === null) return null;
 
-  const currentGap = getGap(goalId, strategy.primary_dimension);
+  const currentGap = await getGap(goalId, strategy.primary_dimension);
   if (currentGap === null) return null;
 
   const gapDelta = currentGap - startGap;
@@ -314,12 +314,12 @@ export function handleWaitStrategyExpiry(
 
   if (gapDelta === 0) {
     if (waitStrategy.fallback_strategy_id) {
-      const strategies = getPortfolioStrategies(goalId);
+      const strategies = await getPortfolioStrategies(goalId);
       const fallback = strategies.find(
         (s) => s.id === waitStrategy.fallback_strategy_id
       );
       if (fallback && fallback.state === "candidate") {
-        updateState(fallback.id, "active");
+        await updateState(fallback.id, "active");
       }
     }
     return null;
@@ -346,7 +346,7 @@ export async function selectNextStrategyAcrossGoals(
   goalIds: string[],
   goalAllocations: Map<string, number>,
   goalTaskCounts: Map<string, number>,
-  selectStrategyForTask: (goalId: string) => TaskSelectionResult | null
+  selectStrategyForTask: (goalId: string) => TaskSelectionResult | null | Promise<TaskSelectionResult | null>
 ): Promise<{
   goal_id: string;
   strategy_id: string | null;
@@ -367,7 +367,7 @@ export async function selectNextStrategyAcrossGoals(
     const allocation = goalAllocations.get(goalId) ?? 0;
     if (allocation <= 0) continue;
 
-    const selectionResult = selectStrategyForTask(goalId);
+    const selectionResult = await selectStrategyForTask(goalId);
     if (selectionResult !== null) {
       return {
         goal_id: goalId,

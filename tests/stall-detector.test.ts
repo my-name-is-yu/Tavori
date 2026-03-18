@@ -460,8 +460,8 @@ describe("isSuppressed", () => {
 // ─── getStallState / saveStallState ───
 
 describe("getStallState / saveStallState", () => {
-  it("returns default state when no state persisted", () => {
-    const state = detector.getStallState("goal-1");
+  it("returns default state when no state persisted", async () => {
+    const state = await detector.getStallState("goal-1");
     expect(state.goal_id).toBe("goal-1");
     expect(state.dimension_escalation).toEqual({});
     expect(state.global_escalation).toBe(0);
@@ -469,7 +469,7 @@ describe("getStallState / saveStallState", () => {
     expect(state.recovery_loops).toEqual({});
   });
 
-  it("round-trips: save and load StallState", () => {
+  it("round-trips: save and load StallState", async () => {
     const stateToSave: StallState = {
       goal_id: "goal-2",
       dimension_escalation: { "dim-a": 2, "dim-b": 1 },
@@ -478,8 +478,8 @@ describe("getStallState / saveStallState", () => {
       recovery_loops: { "dim-b": 3 },
     };
 
-    detector.saveStallState("goal-2", stateToSave);
-    const loaded = detector.getStallState("goal-2");
+    await detector.saveStallState("goal-2", stateToSave);
+    const loaded = await detector.getStallState("goal-2");
 
     expect(loaded.goal_id).toBe("goal-2");
     expect(loaded.dimension_escalation["dim-a"]).toBe(2);
@@ -493,67 +493,67 @@ describe("getStallState / saveStallState", () => {
 // ─── getEscalationLevel / incrementEscalation / resetEscalation ───
 
 describe("escalation lifecycle", () => {
-  it("returns 0 for a fresh goal/dimension", () => {
-    expect(detector.getEscalationLevel("goal-1", "dim-a")).toBe(0);
+  it("returns 0 for a fresh goal/dimension", async () => {
+    expect(await detector.getEscalationLevel("goal-1", "dim-a")).toBe(0);
   });
 
-  it("increments escalation level from 0 to 1", () => {
-    const newLevel = detector.incrementEscalation("goal-1", "dim-a");
+  it("increments escalation level from 0 to 1", async () => {
+    const newLevel = await detector.incrementEscalation("goal-1", "dim-a");
     expect(newLevel).toBe(1);
-    expect(detector.getEscalationLevel("goal-1", "dim-a")).toBe(1);
+    expect(await detector.getEscalationLevel("goal-1", "dim-a")).toBe(1);
   });
 
-  it("increments escalation level through full lifecycle", () => {
-    expect(detector.incrementEscalation("goal-1", "dim-a")).toBe(1);
-    expect(detector.incrementEscalation("goal-1", "dim-a")).toBe(2);
-    expect(detector.incrementEscalation("goal-1", "dim-a")).toBe(3);
+  it("increments escalation level through full lifecycle", async () => {
+    expect(await detector.incrementEscalation("goal-1", "dim-a")).toBe(1);
+    expect(await detector.incrementEscalation("goal-1", "dim-a")).toBe(2);
+    expect(await detector.incrementEscalation("goal-1", "dim-a")).toBe(3);
   });
 
-  it("caps escalation at 3", () => {
-    detector.incrementEscalation("goal-1", "dim-a");
-    detector.incrementEscalation("goal-1", "dim-a");
-    detector.incrementEscalation("goal-1", "dim-a");
-    const capped = detector.incrementEscalation("goal-1", "dim-a"); // attempt 4th
+  it("caps escalation at 3", async () => {
+    await detector.incrementEscalation("goal-1", "dim-a");
+    await detector.incrementEscalation("goal-1", "dim-a");
+    await detector.incrementEscalation("goal-1", "dim-a");
+    const capped = await detector.incrementEscalation("goal-1", "dim-a"); // attempt 4th
     expect(capped).toBe(3);
-    expect(detector.getEscalationLevel("goal-1", "dim-a")).toBe(3);
+    expect(await detector.getEscalationLevel("goal-1", "dim-a")).toBe(3);
   });
 
-  it("resets escalation to 0", () => {
-    detector.incrementEscalation("goal-1", "dim-a");
-    detector.incrementEscalation("goal-1", "dim-a");
-    detector.resetEscalation("goal-1", "dim-a");
-    expect(detector.getEscalationLevel("goal-1", "dim-a")).toBe(0);
+  it("resets escalation to 0", async () => {
+    await detector.incrementEscalation("goal-1", "dim-a");
+    await detector.incrementEscalation("goal-1", "dim-a");
+    await detector.resetEscalation("goal-1", "dim-a");
+    expect(await detector.getEscalationLevel("goal-1", "dim-a")).toBe(0);
   });
 
-  it("does not affect other dimensions when resetting", () => {
-    detector.incrementEscalation("goal-1", "dim-a");
-    detector.incrementEscalation("goal-1", "dim-b");
-    detector.resetEscalation("goal-1", "dim-a");
-    expect(detector.getEscalationLevel("goal-1", "dim-a")).toBe(0);
-    expect(detector.getEscalationLevel("goal-1", "dim-b")).toBe(1);
+  it("does not affect other dimensions when resetting", async () => {
+    await detector.incrementEscalation("goal-1", "dim-a");
+    await detector.incrementEscalation("goal-1", "dim-b");
+    await detector.resetEscalation("goal-1", "dim-a");
+    expect(await detector.getEscalationLevel("goal-1", "dim-a")).toBe(0);
+    expect(await detector.getEscalationLevel("goal-1", "dim-b")).toBe(1);
   });
 
-  it("persists escalation across detector instances", () => {
-    detector.incrementEscalation("goal-1", "dim-a");
-    detector.incrementEscalation("goal-1", "dim-a");
+  it("persists escalation across detector instances", async () => {
+    await detector.incrementEscalation("goal-1", "dim-a");
+    await detector.incrementEscalation("goal-1", "dim-a");
 
     // Create a new detector using the same stateManager
     const detector2 = new StallDetector(stateManager);
-    expect(detector2.getEscalationLevel("goal-1", "dim-a")).toBe(2);
+    expect(await detector2.getEscalationLevel("goal-1", "dim-a")).toBe(2);
   });
 
-  it("escalation is independent per goal", () => {
-    detector.incrementEscalation("goal-1", "dim-a");
-    detector.incrementEscalation("goal-1", "dim-a");
-    expect(detector.getEscalationLevel("goal-2", "dim-a")).toBe(0);
+  it("escalation is independent per goal", async () => {
+    await detector.incrementEscalation("goal-1", "dim-a");
+    await detector.incrementEscalation("goal-1", "dim-a");
+    expect(await detector.getEscalationLevel("goal-2", "dim-a")).toBe(0);
   });
 
-  it("can increment multiple dimensions independently", () => {
-    detector.incrementEscalation("goal-1", "dim-a");
-    detector.incrementEscalation("goal-1", "dim-a");
-    detector.incrementEscalation("goal-1", "dim-b");
-    expect(detector.getEscalationLevel("goal-1", "dim-a")).toBe(2);
-    expect(detector.getEscalationLevel("goal-1", "dim-b")).toBe(1);
+  it("can increment multiple dimensions independently", async () => {
+    await detector.incrementEscalation("goal-1", "dim-a");
+    await detector.incrementEscalation("goal-1", "dim-a");
+    await detector.incrementEscalation("goal-1", "dim-b");
+    expect(await detector.getEscalationLevel("goal-1", "dim-a")).toBe(2);
+    expect(await detector.getEscalationLevel("goal-1", "dim-b")).toBe(1);
   });
 });
 
@@ -700,17 +700,17 @@ describe("StallDetector CharacterConfig integration", () => {
     expect(detectorFlex5.checkConsecutiveFailures("g", "d", 3)).not.toBeNull();
   });
 
-  it("ESCALATION_CAP is unchanged at any stall_flexibility (caps at 3)", () => {
+  it("ESCALATION_CAP is unchanged at any stall_flexibility (caps at 3)", async () => {
     const detectorFlex5 = new StallDetector(stateManager2, {
       caution_level: 2,
       stall_flexibility: 5,
       communication_directness: 3,
       proactivity_level: 2,
     });
-    detectorFlex5.incrementEscalation("g", "d");
-    detectorFlex5.incrementEscalation("g", "d");
-    detectorFlex5.incrementEscalation("g", "d");
-    const capped = detectorFlex5.incrementEscalation("g", "d");
+    await detectorFlex5.incrementEscalation("g", "d");
+    await detectorFlex5.incrementEscalation("g", "d");
+    await detectorFlex5.incrementEscalation("g", "d");
+    const capped = await detectorFlex5.incrementEscalation("g", "d");
     expect(capped).toBe(3);
   });
 

@@ -268,7 +268,7 @@ export class LearningPipeline {
   async analyzeLogs(trigger: LearningTrigger): Promise<LearnedPattern[]> {
     // 1. Load experience logs
     const logsKey = `learning/${trigger.goal_id}_logs.json`;
-    const rawLogs = this.stateManager.readRaw(logsKey);
+    const rawLogs = await this.stateManager.readRaw(logsKey);
     if (!rawLogs) {
       return [];
     }
@@ -348,7 +348,7 @@ export class LearningPipeline {
     }
 
     // 5. Merge with existing patterns (respecting max_patterns_per_goal)
-    const existing = this.getPatterns(trigger.goal_id);
+    const existing = await this.getPatterns(trigger.goal_id);
     const merged = [...existing, ...newPatterns];
 
     // If over limit, remove lowest-confidence patterns
@@ -357,7 +357,7 @@ export class LearningPipeline {
       merged.splice(this.config.max_patterns_per_goal);
     }
 
-    this.savePatterns(trigger.goal_id, merged);
+    await this.savePatterns(trigger.goal_id, merged);
 
     // 6. Register embeddings in VectorIndex if available
     if (this.vectorIndex !== null) {
@@ -375,12 +375,12 @@ export class LearningPipeline {
           );
 
           // Update pattern with embedding_id
-          const updatedPatterns = this.getPatterns(trigger.goal_id).map((p) =>
+          const updatedPatterns = (await this.getPatterns(trigger.goal_id)).map((p) =>
             p.pattern_id === pattern.pattern_id
               ? { ...p, embedding_id: entry.id }
               : p
           );
-          this.savePatterns(trigger.goal_id, updatedPatterns);
+          await this.savePatterns(trigger.goal_id, updatedPatterns);
         } catch {
           // non-fatal: embedding failure should not block pattern registration
         }
@@ -394,7 +394,7 @@ export class LearningPipeline {
    * Generate FeedbackEntry objects from learned patterns.
    * Maps each pattern type to a target step and persists the feedback.
    */
-  generateFeedback(patterns: LearnedPattern[]): FeedbackEntry[] {
+  async generateFeedback(patterns: LearnedPattern[]): Promise<FeedbackEntry[]> {
     const targetStepMap: Record<
       z.infer<typeof LearnedPatternTypeEnum>,
       FeedbackTargetStep
@@ -431,8 +431,8 @@ export class LearningPipeline {
     }
 
     for (const [goalId, newEntries] of byGoal) {
-      const existing = this.getFeedbackEntries(goalId);
-      this.saveFeedbackEntries(goalId, [...existing, ...newEntries]);
+      const existing = await this.getFeedbackEntries(goalId);
+      await this.saveFeedbackEntries(goalId, [...existing, ...newEntries]);
     }
 
     return entries;
@@ -442,12 +442,12 @@ export class LearningPipeline {
    * Return adjustment strings for a given goal and target step.
    * Returns at most 3 entries sorted by confidence descending.
    */
-  applyFeedback(goalId: string, step: FeedbackTargetStep): string[] {
-    const allEntries = this.getFeedbackEntries(goalId);
+  async applyFeedback(goalId: string, step: FeedbackTargetStep): Promise<string[]> {
+    const allEntries = await this.getFeedbackEntries(goalId);
     const stepEntries = allEntries.filter((e) => e.target_step === step);
 
     // Enrich with pattern confidence for sorting
-    const patterns = this.getPatterns(goalId);
+    const patterns = await this.getPatterns(goalId);
     const patternConfidenceMap = new Map<string, number>(
       patterns.map((p) => [p.pattern_id, p.confidence])
     );
@@ -474,12 +474,12 @@ export class LearningPipeline {
     }
 
     // Find the pattern across all goals
-    const allGoalIds = this.stateManager.listGoalIds();
+    const allGoalIds = await this.stateManager.listGoalIds();
     let sourcePattern: LearnedPattern | null = null;
     let sourceGoalId: string | null = null;
 
     for (const goalId of allGoalIds) {
-      const patterns = this.getPatterns(goalId);
+      const patterns = await this.getPatterns(goalId);
       const found = patterns.find((p) => p.pattern_id === patternId);
       if (found) {
         sourcePattern = found;
@@ -518,7 +518,7 @@ export class LearningPipeline {
 
     // Share to each target goal with confidence discount
     for (const targetGoalId of targetGoalIds) {
-      const targetPatterns = this.getPatterns(targetGoalId);
+      const targetPatterns = await this.getPatterns(targetGoalId);
 
       // Duplicate check: skip if same pattern_id already in target
       const alreadyShared = targetPatterns.some(
@@ -552,7 +552,7 @@ export class LearningPipeline {
         updatedTargetPatterns.splice(this.config.max_patterns_per_goal);
       }
 
-      this.savePatterns(targetGoalId, updatedTargetPatterns);
+      await this.savePatterns(targetGoalId, updatedTargetPatterns);
     }
   }
 
@@ -561,8 +561,8 @@ export class LearningPipeline {
   /**
    * Load learned patterns for a goal. Returns empty array if not found.
    */
-  getPatterns(goalId: string): LearnedPattern[] {
-    const raw = this.stateManager.readRaw(`learning/${goalId}_patterns.json`);
+  async getPatterns(goalId: string): Promise<LearnedPattern[]> {
+    const raw = await this.stateManager.readRaw(`learning/${goalId}_patterns.json`);
     if (!raw || !Array.isArray(raw)) return [];
     try {
       return (raw as unknown[]).map((item) => LearnedPatternSchema.parse(item));
@@ -574,15 +574,15 @@ export class LearningPipeline {
   /**
    * Persist learned patterns for a goal.
    */
-  savePatterns(goalId: string, patterns: LearnedPattern[]): void {
-    this.stateManager.writeRaw(`learning/${goalId}_patterns.json`, patterns);
+  async savePatterns(goalId: string, patterns: LearnedPattern[]): Promise<void> {
+    await this.stateManager.writeRaw(`learning/${goalId}_patterns.json`, patterns);
   }
 
   /**
    * Load feedback entries for a goal. Returns empty array if not found.
    */
-  getFeedbackEntries(goalId: string): FeedbackEntry[] {
-    const raw = this.stateManager.readRaw(`learning/${goalId}_feedback.json`);
+  async getFeedbackEntries(goalId: string): Promise<FeedbackEntry[]> {
+    const raw = await this.stateManager.readRaw(`learning/${goalId}_feedback.json`);
     if (!raw || !Array.isArray(raw)) return [];
     try {
       return (raw as unknown[]).map((item) => FeedbackEntrySchema.parse(item));
@@ -594,8 +594,8 @@ export class LearningPipeline {
   /**
    * Persist feedback entries for a goal.
    */
-  saveFeedbackEntries(goalId: string, entries: FeedbackEntry[]): void {
-    this.stateManager.writeRaw(`learning/${goalId}_feedback.json`, entries);
+  async saveFeedbackEntries(goalId: string, entries: FeedbackEntry[]): Promise<void> {
+    await this.stateManager.writeRaw(`learning/${goalId}_feedback.json`, entries);
   }
 
   // ─── Structural Feedback (thin wrappers over learning-feedback.ts) ───
@@ -603,8 +603,8 @@ export class LearningPipeline {
   /**
    * Record a structural feedback entry for a goal/iteration.
    */
-  recordStructuralFeedback(feedback: StructuralFeedback): void {
-    recordStructuralFeedback(
+  async recordStructuralFeedback(feedback: StructuralFeedback): Promise<void> {
+    await recordStructuralFeedback(
       { stateManager: this.stateManager, config: this.config },
       feedback
     );
@@ -613,7 +613,7 @@ export class LearningPipeline {
   /**
    * Load structural feedback for a goal.
    */
-  getStructuralFeedback(goalId: string): StructuralFeedback[] {
+  async getStructuralFeedback(goalId: string): Promise<StructuralFeedback[]> {
     return getStructuralFeedback(
       { stateManager: this.stateManager, config: this.config },
       goalId
@@ -623,10 +623,10 @@ export class LearningPipeline {
   /**
    * Aggregate structural feedback for a goal, optionally filtered by type.
    */
-  aggregateFeedback(
+  async aggregateFeedback(
     goalId: string,
     feedbackType?: StructuralFeedbackType
-  ): FeedbackAggregation[] {
+  ): Promise<FeedbackAggregation[]> {
     return aggregateFeedback(
       { stateManager: this.stateManager, config: this.config },
       goalId,
@@ -637,8 +637,8 @@ export class LearningPipeline {
   /**
    * Analyze feedback history and suggest parameter adjustments.
    */
-  autoTuneParameters(goalId: string): ParameterTuning[] {
-    return autoTuneParameters(
+  async autoTuneParameters(goalId: string): Promise<ParameterTuning[]> {
+    return await autoTuneParameters(
       { stateManager: this.stateManager, config: this.config },
       goalId
     );
@@ -649,8 +649,8 @@ export class LearningPipeline {
   /**
    * Extract cross-goal patterns by analyzing structural feedback across multiple goals.
    */
-  extractCrossGoalPatterns(goalIds: string[]): CrossGoalPattern[] {
-    return extractCrossGoalPatterns(
+  async extractCrossGoalPatterns(goalIds: string[]): Promise<CrossGoalPattern[]> {
+    return await extractCrossGoalPatterns(
       { stateManager: this.stateManager, config: this.config },
       goalIds
     );
@@ -659,11 +659,11 @@ export class LearningPipeline {
   /**
    * Apply cross-goal patterns to target goals as feedback insights.
    */
-  sharePatternsAcrossGoals(
+  async sharePatternsAcrossGoals(
     patterns: CrossGoalPattern[],
     targetGoalIds: string[]
-  ): PatternSharingResult {
-    return sharePatternsAcrossGoals(
+  ): Promise<PatternSharingResult> {
+    return await sharePatternsAcrossGoals(
       { stateManager: this.stateManager, config: this.config },
       patterns,
       targetGoalIds

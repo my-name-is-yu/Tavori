@@ -126,14 +126,14 @@ export class KnowledgeTransfer {
   async detectTransferOpportunities(
     goalId: string
   ): Promise<TransferCandidate[]> {
-    const allGoalIds = this.deps.stateManager.listGoalIds();
+    const allGoalIds = await this.deps.stateManager.listGoalIds();
     const sourceGoalIds = allGoalIds.filter((id) => id !== goalId);
 
     // Collect all learned patterns from other goals
     const allPatterns: Array<{ pattern: LearnedPattern; sourceGoalId: string }> =
       [];
     for (const sourceGoalId of sourceGoalIds) {
-      const patterns = this.deps.learningPipeline.getPatterns(sourceGoalId);
+      const patterns = await this.deps.learningPipeline.getPatterns(sourceGoalId);
       for (const pattern of patterns) {
         // Only include patterns that haven't already been sourced from the target
         if (!pattern.source_goal_ids.includes(goalId)) {
@@ -313,13 +313,13 @@ export class KnowledgeTransfer {
     // Find the source pattern
     const sourceGoalId = candidate.source_goal_id;
     const allSourcePatterns =
-      this.deps.learningPipeline.getPatterns(sourceGoalId);
+      await this.deps.learningPipeline.getPatterns(sourceGoalId);
     const sourcePattern =
       allSourcePatterns.find((p) => p.pattern_id === candidate.source_item_id) ??
       null;
 
     // Capture gap at apply time for later effectiveness evaluation
-    const gapAtApply = this._estimateCurrentGap(targetGoalId);
+    const gapAtApply = await this._estimateCurrentGap(targetGoalId);
 
     // LLM adaptation
     let adaptationDescription = candidate.estimated_benefit;
@@ -377,7 +377,7 @@ export class KnowledgeTransfer {
    * If 3 consecutive neutral/negative for the same source pattern,
    * marks that pattern as ineffective for transfer.
    */
-  evaluateTransferEffect(transferId: string): TransferEffectivenessRecord {
+  async evaluateTransferEffect(transferId: string): Promise<TransferEffectivenessRecord> {
     const result = this.results.get(transferId);
     const context = this.applyContexts.get(transferId);
 
@@ -392,7 +392,7 @@ export class KnowledgeTransfer {
       });
     }
 
-    const gapNow = this._estimateCurrentGap(context.candidate.target_goal_id);
+    const gapNow = await this._estimateCurrentGap(context.candidate.target_goal_id);
     const gapDeltaBefore = context.gap_at_apply;
     const gapDeltaAfter = gapNow;
 
@@ -452,12 +452,12 @@ export class KnowledgeTransfer {
    * Stores meta-patterns internally.
    */
   async buildCrossGoalKnowledgeBase(): Promise<void> {
-    const allGoalIds = this.deps.stateManager.listGoalIds();
+    const allGoalIds = await this.deps.stateManager.listGoalIds();
 
     // Collect all high-confidence patterns
     const highConfidencePatterns: LearnedPattern[] = [];
     for (const goalId of allGoalIds) {
-      const patterns = this.deps.learningPipeline.getPatterns(goalId);
+      const patterns = await this.deps.learningPipeline.getPatterns(goalId);
       for (const pattern of patterns) {
         if (pattern.confidence >= 0.6) {
           highConfidencePatterns.push(pattern);
@@ -563,9 +563,9 @@ export class KnowledgeTransfer {
    * Estimate the current gap for a goal.
    * Returns 0.5 as a neutral default if goal state is unavailable.
    */
-  private _estimateCurrentGap(goalId: string): number {
+  private async _estimateCurrentGap(goalId: string): Promise<number> {
     try {
-      const raw = this.deps.stateManager.readRaw(
+      const raw = await this.deps.stateManager.readRaw(
         `goals/${goalId}/state.json`
       );
       if (raw && typeof raw === "object" && raw !== null) {

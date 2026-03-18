@@ -49,32 +49,32 @@ afterEach(() => {
 
 // ─── judgeTreeCompletion ───
 
-describe("judgeTreeCompletion", () => {
-  it("leaf goal with no children_ids delegates to isGoalComplete (satisfied)", () => {
+describe("judgeTreeCompletion", async () => {
+  it("leaf goal with no children_ids delegates to isGoalComplete (satisfied)", async () => {
     const goal = makeGoal({
       id: "leaf-1",
       dimensions: [makeDimension({ current_value: 100, threshold: { type: "min", value: 100 }, confidence: 0.9 })],
     });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
-    const result = judge.judgeTreeCompletion("leaf-1");
+    const result = await judge.judgeTreeCompletion("leaf-1");
     expect(result.is_complete).toBe(true);
     expect(result.blocking_dimensions).toHaveLength(0);
   });
 
-  it("leaf goal with no children_ids delegates to isGoalComplete (not satisfied)", () => {
+  it("leaf goal with no children_ids delegates to isGoalComplete (not satisfied)", async () => {
     const goal = makeGoal({
       id: "leaf-incomplete",
       dimensions: [makeDimension({ current_value: 50, threshold: { type: "min", value: 100 }, confidence: 0.9 })],
     });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
-    const result = judge.judgeTreeCompletion("leaf-incomplete");
+    const result = await judge.judgeTreeCompletion("leaf-incomplete");
     expect(result.is_complete).toBe(false);
     expect(result.blocking_dimensions).toContain("test_dim");
   });
 
-  it("all children complete → parent complete", () => {
+  it("all children complete → parent complete", async () => {
     const child1 = makeGoal({
       id: "child-1",
       dimensions: [makeDimension({ current_value: 100, threshold: { type: "min", value: 100 }, confidence: 0.9 })],
@@ -89,15 +89,15 @@ describe("judgeTreeCompletion", () => {
       dimensions: [],
     });
 
-    stateManager.saveGoal(child1);
-    stateManager.saveGoal(child2);
-    stateManager.saveGoal(parent);
+    await stateManager.saveGoal(child1);
+    await stateManager.saveGoal(child2);
+    await stateManager.saveGoal(parent);
 
-    const result = judge.judgeTreeCompletion("parent-complete");
+    const result = await judge.judgeTreeCompletion("parent-complete");
     expect(result.is_complete).toBe(true);
   });
 
-  it("one child incomplete → parent incomplete", () => {
+  it("one child incomplete → parent incomplete", async () => {
     const child1 = makeGoal({
       id: "child-done",
       dimensions: [makeDimension({ current_value: 100, threshold: { type: "min", value: 100 }, confidence: 0.9 })],
@@ -112,16 +112,16 @@ describe("judgeTreeCompletion", () => {
       dimensions: [],
     });
 
-    stateManager.saveGoal(child1);
-    stateManager.saveGoal(child2);
-    stateManager.saveGoal(parent);
+    await stateManager.saveGoal(child1);
+    await stateManager.saveGoal(child2);
+    await stateManager.saveGoal(parent);
 
-    const result = judge.judgeTreeCompletion("parent-blocked");
+    const result = await judge.judgeTreeCompletion("parent-blocked");
     expect(result.is_complete).toBe(false);
     expect(result.blocking_dimensions).toContain("test_dim");
   });
 
-  it("cancelled child counts as complete", () => {
+  it("cancelled child counts as complete", async () => {
     const child1 = makeGoal({
       id: "child-cancelled",
       status: "cancelled",
@@ -137,15 +137,15 @@ describe("judgeTreeCompletion", () => {
       dimensions: [],
     });
 
-    stateManager.saveGoal(child1);
-    stateManager.saveGoal(child2);
-    stateManager.saveGoal(parent);
+    await stateManager.saveGoal(child1);
+    await stateManager.saveGoal(child2);
+    await stateManager.saveGoal(parent);
 
-    const result = judge.judgeTreeCompletion("parent-with-cancelled");
+    const result = await judge.judgeTreeCompletion("parent-with-cancelled");
     expect(result.is_complete).toBe(true);
   });
 
-  it("deep tree (3 levels) completion — all complete", () => {
+  it("deep tree (3 levels) completion — all complete", async () => {
     const leaf = makeGoal({
       id: "deep-leaf",
       dimensions: [makeDimension({ current_value: 100, threshold: { type: "min", value: 100 }, confidence: 0.9 })],
@@ -161,15 +161,15 @@ describe("judgeTreeCompletion", () => {
       dimensions: [],
     });
 
-    stateManager.saveGoal(leaf);
-    stateManager.saveGoal(mid);
-    stateManager.saveGoal(root);
+    await stateManager.saveGoal(leaf);
+    await stateManager.saveGoal(mid);
+    await stateManager.saveGoal(root);
 
-    const result = judge.judgeTreeCompletion("deep-root");
+    const result = await judge.judgeTreeCompletion("deep-root");
     expect(result.is_complete).toBe(true);
   });
 
-  it("mixed completed and cancelled children → parent complete", () => {
+  it("mixed completed and cancelled children → parent complete", async () => {
     const childCompleted = makeGoal({
       id: "mixed-complete",
       status: "completed",
@@ -186,15 +186,15 @@ describe("judgeTreeCompletion", () => {
       dimensions: [],
     });
 
-    stateManager.saveGoal(childCompleted);
-    stateManager.saveGoal(childCancelled);
-    stateManager.saveGoal(parent);
+    await stateManager.saveGoal(childCompleted);
+    await stateManager.saveGoal(childCancelled);
+    await stateManager.saveGoal(parent);
 
-    const result = judge.judgeTreeCompletion("mixed-parent");
+    const result = await judge.judgeTreeCompletion("mixed-parent");
     expect(result.is_complete).toBe(true);
   });
 
-  it("blocking dimensions aggregated from children", () => {
+  it("blocking dimensions aggregated from children", async () => {
     const dim1 = makeDimension({ name: "dim_a", current_value: 10, threshold: { type: "min", value: 100 }, confidence: 0.9 });
     const dim2 = makeDimension({ name: "dim_b", current_value: 20, threshold: { type: "min", value: 100 }, confidence: 0.9 });
 
@@ -206,17 +206,17 @@ describe("judgeTreeCompletion", () => {
       dimensions: [],
     });
 
-    stateManager.saveGoal(child1);
-    stateManager.saveGoal(child2);
-    stateManager.saveGoal(parent);
+    await stateManager.saveGoal(child1);
+    await stateManager.saveGoal(child2);
+    await stateManager.saveGoal(parent);
 
-    const result = judge.judgeTreeCompletion("agg-parent");
+    const result = await judge.judgeTreeCompletion("agg-parent");
     expect(result.is_complete).toBe(false);
     expect(result.blocking_dimensions).toContain("dim_a");
     expect(result.blocking_dimensions).toContain("dim_b");
   });
 
-  it("low_confidence_dimensions aggregated from children", () => {
+  it("low_confidence_dimensions aggregated from children", async () => {
     // Low confidence (< 0.50) dimension that is met threshold-wise but is low confidence
     const lowConfDim = makeDimension({
       name: "low_conf_dim",
@@ -232,10 +232,10 @@ describe("judgeTreeCompletion", () => {
       dimensions: [],
     });
 
-    stateManager.saveGoal(child);
-    stateManager.saveGoal(parent);
+    await stateManager.saveGoal(child);
+    await stateManager.saveGoal(parent);
 
-    const result = judge.judgeTreeCompletion("low-conf-parent");
+    const result = await judge.judgeTreeCompletion("low-conf-parent");
     expect(result.is_complete).toBe(false);
     expect(result.low_confidence_dimensions).toContain("low_conf_dim");
   });
@@ -243,17 +243,17 @@ describe("judgeTreeCompletion", () => {
 
 // ─── getGoalTree ───
 
-describe("getGoalTree", () => {
-  it("returns all goals in tree (BFS order, root first)", () => {
+describe("getGoalTree", async () => {
+  it("returns all goals in tree (BFS order, root first)", async () => {
     const child1 = makeGoal({ id: "gt-child-1" });
     const child2 = makeGoal({ id: "gt-child-2" });
     const root = makeGoal({ id: "gt-root", children_ids: ["gt-child-1", "gt-child-2"] });
 
-    stateManager.saveGoal(child1);
-    stateManager.saveGoal(child2);
-    stateManager.saveGoal(root);
+    await stateManager.saveGoal(child1);
+    await stateManager.saveGoal(child2);
+    await stateManager.saveGoal(root);
 
-    const result = stateManager.getGoalTree("gt-root");
+    const result = await stateManager.getGoalTree("gt-root");
     expect(result).not.toBeNull();
     const ids = result!.map(g => g.id);
     expect(ids).toContain("gt-root");
@@ -262,34 +262,34 @@ describe("getGoalTree", () => {
     expect(ids[0]).toBe("gt-root");
   });
 
-  it("returns null for non-existent root", () => {
-    const result = stateManager.getGoalTree("non-existent-root");
+  it("returns null for non-existent root", async () => {
+    const result = await stateManager.getGoalTree("non-existent-root");
     expect(result).toBeNull();
   });
 });
 
 // ─── getSubtree ───
 
-describe("getSubtree", () => {
-  it("returns single node for leaf goal", () => {
+describe("getSubtree", async () => {
+  it("returns single node for leaf goal", async () => {
     const leaf = makeGoal({ id: "sub-leaf" });
-    stateManager.saveGoal(leaf);
+    await stateManager.saveGoal(leaf);
 
-    const result = stateManager.getSubtree("sub-leaf");
+    const result = await stateManager.getSubtree("sub-leaf");
     expect(result).toHaveLength(1);
     expect(result[0]!.id).toBe("sub-leaf");
   });
 
-  it("returns full subtree for parent with children", () => {
+  it("returns full subtree for parent with children", async () => {
     const child1 = makeGoal({ id: "sub-child-1" });
     const child2 = makeGoal({ id: "sub-child-2" });
     const parent = makeGoal({ id: "sub-parent", children_ids: ["sub-child-1", "sub-child-2"] });
 
-    stateManager.saveGoal(child1);
-    stateManager.saveGoal(child2);
-    stateManager.saveGoal(parent);
+    await stateManager.saveGoal(child1);
+    await stateManager.saveGoal(child2);
+    await stateManager.saveGoal(parent);
 
-    const result = stateManager.getSubtree("sub-parent");
+    const result = await stateManager.getSubtree("sub-parent");
     expect(result).toHaveLength(3);
     const ids = result.map(g => g.id);
     expect(ids).toContain("sub-parent");
@@ -297,21 +297,21 @@ describe("getSubtree", () => {
     expect(ids).toContain("sub-child-2");
   });
 
-  it("returns empty array for non-existent goal", () => {
-    const result = stateManager.getSubtree("does-not-exist");
+  it("returns empty array for non-existent goal", async () => {
+    const result = await stateManager.getSubtree("does-not-exist");
     expect(result).toHaveLength(0);
   });
 
-  it("handles deep subtree (3 levels)", () => {
+  it("handles deep subtree (3 levels)", async () => {
     const deepLeaf = makeGoal({ id: "deep-sub-leaf" });
     const deepMid = makeGoal({ id: "deep-sub-mid", children_ids: ["deep-sub-leaf"] });
     const deepRoot = makeGoal({ id: "deep-sub-root", children_ids: ["deep-sub-mid"] });
 
-    stateManager.saveGoal(deepLeaf);
-    stateManager.saveGoal(deepMid);
-    stateManager.saveGoal(deepRoot);
+    await stateManager.saveGoal(deepLeaf);
+    await stateManager.saveGoal(deepMid);
+    await stateManager.saveGoal(deepRoot);
 
-    const result = stateManager.getSubtree("deep-sub-root");
+    const result = await stateManager.getSubtree("deep-sub-root");
     expect(result).toHaveLength(3);
     const ids = result.map(g => g.id);
     expect(ids).toContain("deep-sub-root");
@@ -319,12 +319,12 @@ describe("getSubtree", () => {
     expect(ids).toContain("deep-sub-leaf");
   });
 
-  it("handles missing child gracefully (skips missing)", () => {
+  it("handles missing child gracefully (skips missing)", async () => {
     // Parent references a child that doesn't exist
     const parent = makeGoal({ id: "partial-parent", children_ids: ["missing-child"] });
-    stateManager.saveGoal(parent);
+    await stateManager.saveGoal(parent);
 
-    const result = stateManager.getSubtree("partial-parent");
+    const result = await stateManager.getSubtree("partial-parent");
     // Should still return parent, just not the missing child
     expect(result).toHaveLength(1);
     expect(result[0]!.id).toBe("partial-parent");
@@ -333,58 +333,58 @@ describe("getSubtree", () => {
 
 // ─── updateGoalInTree ───
 
-describe("updateGoalInTree", () => {
-  it("basic field update persists correctly", () => {
+describe("updateGoalInTree", async () => {
+  it("basic field update persists correctly", async () => {
     const goal = makeGoal({ id: "upd-basic", title: "Original Title" });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
-    stateManager.updateGoalInTree("upd-basic", { title: "Updated Title" });
+    await stateManager.updateGoalInTree("upd-basic", { title: "Updated Title" });
 
-    const loaded = stateManager.loadGoal("upd-basic");
+    const loaded = await stateManager.loadGoal("upd-basic");
     expect(loaded!.title).toBe("Updated Title");
   });
 
-  it("status update persists correctly", () => {
+  it("status update persists correctly", async () => {
     const goal = makeGoal({ id: "upd-status", status: "active" });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
-    stateManager.updateGoalInTree("upd-status", { status: "completed" });
+    await stateManager.updateGoalInTree("upd-status", { status: "completed" });
 
-    const loaded = stateManager.loadGoal("upd-status");
+    const loaded = await stateManager.loadGoal("upd-status");
     expect(loaded!.status).toBe("completed");
   });
 
-  it("preserves existing fields not included in update", () => {
+  it("preserves existing fields not included in update", async () => {
     const goal = makeGoal({
       id: "upd-preserve",
       title: "Original",
       description: "Keep this",
     });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
-    stateManager.updateGoalInTree("upd-preserve", { title: "New Title" });
+    await stateManager.updateGoalInTree("upd-preserve", { title: "New Title" });
 
-    const loaded = stateManager.loadGoal("upd-preserve");
+    const loaded = await stateManager.loadGoal("upd-preserve");
     expect(loaded!.title).toBe("New Title");
     expect(loaded!.description).toBe("Keep this");
     expect(loaded!.id).toBe("upd-preserve");  // id must not change
   });
 
-  it("multiple updates work correctly", () => {
+  it("multiple updates work correctly", async () => {
     const goal = makeGoal({ id: "upd-multi", title: "Start", status: "active" });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
-    stateManager.updateGoalInTree("upd-multi", { title: "Middle", status: "waiting" });
-    stateManager.updateGoalInTree("upd-multi", { title: "Final", status: "completed" });
+    await stateManager.updateGoalInTree("upd-multi", { title: "Middle", status: "waiting" });
+    await stateManager.updateGoalInTree("upd-multi", { title: "Final", status: "completed" });
 
-    const loaded = stateManager.loadGoal("upd-multi");
+    const loaded = await stateManager.loadGoal("upd-multi");
     expect(loaded!.title).toBe("Final");
     expect(loaded!.status).toBe("completed");
   });
 
-  it("throws when goal not found", () => {
-    expect(() => {
-      stateManager.updateGoalInTree("does-not-exist", { title: "X" });
-    }).toThrow();
+  it("throws when goal not found", async () => {
+    await expect(async () => {
+      await stateManager.updateGoalInTree("does-not-exist", { title: "X" });
+    }).rejects.toThrow();
   });
 });

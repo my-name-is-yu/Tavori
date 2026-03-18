@@ -168,7 +168,7 @@ describe("Milestone 7 — Group 1: GoalTreeManager", () => {
 
     // Save the root goal
     const root = makeGoal("root-decompose-1", "Improve Motiva documentation quality");
-    stateManager.saveGoal(root);
+    await stateManager.saveGoal(root);
 
     const config = {
       max_depth: 3,
@@ -184,13 +184,13 @@ describe("Milestone 7 — Group 1: GoalTreeManager", () => {
     expect(result.parent_id).toBe("root-decompose-1");
 
     // Assert: parent's children_ids updated in StateManager
-    const savedParent = stateManager.loadGoal("root-decompose-1");
+    const savedParent = await stateManager.loadGoal("root-decompose-1");
     expect(savedParent).not.toBeNull();
     expect(savedParent!.children_ids.length).toBe(2);
 
     // Assert: children saved to StateManager
     for (const child of result.children) {
-      const savedChild = stateManager.loadGoal(child.id);
+      const savedChild = await stateManager.loadGoal(child.id);
       expect(savedChild).not.toBeNull();
       expect(savedChild!.parent_id).toBe("root-decompose-1");
       expect(savedChild!.decomposition_depth).toBe(1);
@@ -297,7 +297,7 @@ describe("Group 2: CrossGoalPortfolio — Priorities + Allocation + Momentum", (
 
   // ── Test 2.1: calculateGoalPriorities ranks deadline-urgent goal higher ──
 
-  it("calculateGoalPriorities ranks deadline-urgent goal higher than goal with no deadline", () => {
+  it("calculateGoalPriorities ranks deadline-urgent goal higher than goal with no deadline", async () => {
     // goalA: near deadline (1 day away) with a gap
     const deadlineSoon = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
     const goalA = makeGoal("cgp-goal-a", "Urgent deadline goal", {
@@ -353,10 +353,10 @@ describe("Group 2: CrossGoalPortfolio — Priorities + Allocation + Momentum", (
       ],
     });
 
-    stateManager.saveGoal(goalA);
-    stateManager.saveGoal(goalB);
+    await stateManager.saveGoal(goalA);
+    await stateManager.saveGoal(goalB);
 
-    const priorities = portfolio.calculateGoalPriorities([goalA.id, goalB.id]);
+    const priorities = await portfolio.calculateGoalPriorities([goalA.id, goalB.id]);
 
     expect(priorities.length).toBe(2);
     // Sorted descending — goalA (deadline urgent) must be first
@@ -372,14 +372,14 @@ describe("Group 2: CrossGoalPortfolio — Priorities + Allocation + Momentum", (
 
   // ── Test 2.2: allocateResources — single goal gets 100%, two goals split proportionally ──
 
-  it("allocateResources gives sole goal 100% share; two goals split proportionally summing to 1.0", () => {
+  it("allocateResources gives sole goal 100% share; two goals split proportionally summing to 1.0", async () => {
     const goalA = makeGoal("alloc-goal-a", "Allocation Goal A");
     const goalB = makeGoal("alloc-goal-b", "Allocation Goal B");
-    stateManager.saveGoal(goalA);
-    stateManager.saveGoal(goalB);
+    await stateManager.saveGoal(goalA);
+    await stateManager.saveGoal(goalB);
 
     // Single-goal case
-    const singlePriorities = portfolio.calculateGoalPriorities([goalA.id]);
+    const singlePriorities = await portfolio.calculateGoalPriorities([goalA.id]);
     const singleAllocations = portfolio.allocateResources(singlePriorities, {
       type: "priority",
     });
@@ -387,7 +387,7 @@ describe("Group 2: CrossGoalPortfolio — Priorities + Allocation + Momentum", (
     expect(singleAllocations[0]!.resource_share).toBe(1.0);
 
     // Two-goal case
-    const twoPriorities = portfolio.calculateGoalPriorities([goalA.id, goalB.id]);
+    const twoPriorities = await portfolio.calculateGoalPriorities([goalA.id, goalB.id]);
     const twoAllocations = portfolio.allocateResources(twoPriorities, {
       type: "priority",
     });
@@ -515,17 +515,17 @@ describe("Group 3: LearningPipeline — Structural Feedback + Cross-Goal Pattern
 
   // ── Test 3.1: recordStructuralFeedback + aggregateFeedback ──
 
-  it("recordStructuralFeedback persists entries; aggregateFeedback computes averageDelta and totalCount", () => {
+  it("recordStructuralFeedback persists entries; aggregateFeedback computes averageDelta and totalCount", async () => {
     const goalId = "lp-goal-feedback";
     const deltas = [-0.2, -0.1, -0.3];
 
     for (let i = 0; i < deltas.length; i++) {
-      pipeline.recordStructuralFeedback(
+      await pipeline.recordStructuralFeedback(
         makeStructuralFeedback(goalId, "scope_sizing", deltas[i]!, `scope-${i}`)
       );
     }
 
-    const aggregations = pipeline.aggregateFeedback(goalId, "scope_sizing");
+    const aggregations = await pipeline.aggregateFeedback(goalId, "scope_sizing");
 
     expect(aggregations.length).toBe(1);
     const agg = aggregations[0]!;
@@ -537,17 +537,17 @@ describe("Group 3: LearningPipeline — Structural Feedback + Cross-Goal Pattern
 
   // ── Test 3.2: autoTuneParameters suggests adjustment with >= 5 consistent entries ──
 
-  it("autoTuneParameters returns suggestions when >= 5 consistent negative-delta entries exist", () => {
+  it("autoTuneParameters returns suggestions when >= 5 consistent negative-delta entries exist", async () => {
     const goalId = "lp-goal-autotune";
 
     // Record 5 "strategy_selection" entries all with negative delta
     for (let i = 0; i < 5; i++) {
-      pipeline.recordStructuralFeedback(
+      await pipeline.recordStructuralFeedback(
         makeStructuralFeedback(goalId, "strategy_selection", -0.2, `strat-${i}`)
       );
     }
 
-    const suggestions = pipeline.autoTuneParameters(goalId);
+    const suggestions = await pipeline.autoTuneParameters(goalId);
 
     expect(suggestions.length).toBeGreaterThanOrEqual(1);
 
@@ -563,25 +563,25 @@ describe("Group 3: LearningPipeline — Structural Feedback + Cross-Goal Pattern
 
   // ── Test 3.3: extractCrossGoalPatterns clusters across goals ──
 
-  it("extractCrossGoalPatterns identifies a cross-goal cluster when 2 goals share similar feedbackType+delta", () => {
+  it("extractCrossGoalPatterns identifies a cross-goal cluster when 2 goals share similar feedbackType+delta", async () => {
     const goalAId = "lp-extract-goal-a";
     const goalBId = "lp-extract-goal-b";
 
     // Goal A: 2 "scope_sizing" entries with delta=-0.2
     for (let i = 0; i < 2; i++) {
-      pipeline.recordStructuralFeedback(
+      await pipeline.recordStructuralFeedback(
         makeStructuralFeedback(goalAId, "scope_sizing", -0.2, `a-scope-${i}`)
       );
     }
 
     // Goal B: 2 "scope_sizing" entries with delta=-0.25 (within ±0.2 of -0.2)
     for (let i = 0; i < 2; i++) {
-      pipeline.recordStructuralFeedback(
+      await pipeline.recordStructuralFeedback(
         makeStructuralFeedback(goalBId, "scope_sizing", -0.25, `b-scope-${i}`)
       );
     }
 
-    const patterns = pipeline.extractCrossGoalPatterns([goalAId, goalBId]);
+    const patterns = await pipeline.extractCrossGoalPatterns([goalAId, goalBId]);
 
     expect(patterns.length).toBeGreaterThanOrEqual(1);
 
@@ -595,35 +595,35 @@ describe("Group 3: LearningPipeline — Structural Feedback + Cross-Goal Pattern
 
   // ── Test 3.4: sharePatternsAcrossGoals injects into target goals ──
 
-  it("sharePatternsAcrossGoals injects synthetic structural feedback into target goals", () => {
+  it("sharePatternsAcrossGoals injects synthetic structural feedback into target goals", async () => {
     const goalAId = "lp-share-goal-a";
     const goalBId = "lp-share-goal-b";
     const goalCId = "lp-share-goal-c";
 
     // Set up patterns the same way as Test 3.3
     for (let i = 0; i < 2; i++) {
-      pipeline.recordStructuralFeedback(
+      await pipeline.recordStructuralFeedback(
         makeStructuralFeedback(goalAId, "scope_sizing", -0.2, `share-a-${i}`)
       );
     }
     for (let i = 0; i < 2; i++) {
-      pipeline.recordStructuralFeedback(
+      await pipeline.recordStructuralFeedback(
         makeStructuralFeedback(goalBId, "scope_sizing", -0.25, `share-b-${i}`)
       );
     }
 
-    const patterns = pipeline.extractCrossGoalPatterns([goalAId, goalBId]);
+    const patterns = await pipeline.extractCrossGoalPatterns([goalAId, goalBId]);
     expect(patterns.length).toBeGreaterThanOrEqual(1);
 
     // goalC starts with no feedback
-    expect(pipeline.getStructuralFeedback(goalCId).length).toBe(0);
+    expect((await pipeline.getStructuralFeedback(goalCId)).length).toBe(0);
 
     // Share patterns to goalC
     // Patterns have empty applicableConditions (context was {}) → conditionsMatch = true
-    const result = pipeline.sharePatternsAcrossGoals(patterns, [goalCId]);
+    const result = await pipeline.sharePatternsAcrossGoals(patterns, [goalCId]);
 
     // goalC should now have structural feedback injected
-    const goalCFeedback = pipeline.getStructuralFeedback(goalCId);
+    const goalCFeedback = await pipeline.getStructuralFeedback(goalCId);
     expect(goalCFeedback.length).toBeGreaterThanOrEqual(1);
 
     // Verify the sharing result metadata
@@ -682,9 +682,9 @@ describe("Milestone 7 — Group 4: Integration — TreeLoopOrchestrator", () => 
       loop_status: "idle",
     });
 
-    stateManager.saveGoal(root);
-    stateManager.saveGoal(child);
-    stateManager.saveGoal(grandchild);
+    await stateManager.saveGoal(root);
+    await stateManager.saveGoal(child);
+    await stateManager.saveGoal(grandchild);
 
     const config = {
       max_depth: 5,
@@ -697,20 +697,20 @@ describe("Milestone 7 — Group 4: Integration — TreeLoopOrchestrator", () => 
     await orchestrator.startTreeExecution("root-orch-1", config);
 
     // selectNextNode should pick the deepest leaf first
-    const selectedId = orchestrator.selectNextNode("root-orch-1");
+    const selectedId = await orchestrator.selectNextNode("root-orch-1");
 
     // Assert: returns grandchild.id (depth=2 preferred over depth=1)
     expect(selectedId).toBe("grandchild-orch-1");
 
     // Assert: selected node's loop_status is now "running"
-    const selectedGoal = stateManager.loadGoal("grandchild-orch-1");
+    const selectedGoal = await stateManager.loadGoal("grandchild-orch-1");
     expect(selectedGoal).not.toBeNull();
     expect(selectedGoal!.loop_status).toBe("running");
   });
 
   // ── Test 4.2: onNodeCompleted triggers cascade completion of parent ──
 
-  it("onNodeCompleted: triggers cascade completion when all sibling leaves are done", () => {
+  it("onNodeCompleted: triggers cascade completion when all sibling leaves are done", async () => {
     const stateManager = new StateManager(tempDir);
     const mockLLM = createSequentialMockLLMClient([]);
     const ethicsLLM = createSequentialMockLLMClient([]);
@@ -750,24 +750,24 @@ describe("Milestone 7 — Group 4: Integration — TreeLoopOrchestrator", () => 
       status: "active",
     });
 
-    stateManager.saveGoal(parent);
-    stateManager.saveGoal(leafA);
-    stateManager.saveGoal(leafB);
+    await stateManager.saveGoal(parent);
+    await stateManager.saveGoal(leafA);
+    await stateManager.saveGoal(leafB);
 
     // Mark leaf B as completed in state before calling onNodeCompleted
     // (simulating SatisficingJudge completing the goal)
-    stateManager.saveGoal({ ...leafB, status: "completed", loop_status: "idle" });
+    await stateManager.saveGoal({ ...leafB, status: "completed", loop_status: "idle" });
 
     // Call onNodeCompleted on leaf B
-    orchestrator.onNodeCompleted("leaf-cascade-b");
+    await orchestrator.onNodeCompleted("leaf-cascade-b");
 
     // Assert: parent's status has been updated to "completed" via cascade
-    const updatedParent = stateManager.loadGoal("parent-cascade-1");
+    const updatedParent = await stateManager.loadGoal("parent-cascade-1");
     expect(updatedParent).not.toBeNull();
     expect(updatedParent!.status).toBe("completed");
 
     // Assert: leaf B's loop_status reset to "idle" by onNodeCompleted
-    const updatedLeafB = stateManager.loadGoal("leaf-cascade-b");
+    const updatedLeafB = await stateManager.loadGoal("leaf-cascade-b");
     expect(updatedLeafB).not.toBeNull();
     // onNodeCompleted resets to idle first, but then the status was already persisted as completed
     // The loop_status should be idle after onNodeCompleted's Step 1

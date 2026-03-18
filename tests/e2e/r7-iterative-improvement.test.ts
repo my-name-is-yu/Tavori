@@ -389,7 +389,7 @@ describe("R7-1: 3-iteration progressive improvement", () => {
     const coreLoop = buildCoreLoop(stateManager, llmClient, 5);
 
     const goal = makeTwoDimGoal(goalId);
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const result = await coreLoop.run(goalId);
 
@@ -620,7 +620,7 @@ describe("R7-2: StallDetector triggers strategy pivot", () => {
 
     // Save the goal for StateManager to load
     const goal = makeOneDimGoal(goalId, "code_quality", 0.8);
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const loop = new CoreLoop(deps, { maxIterations: 5, delayBetweenLoopsMs: 0 });
     const result = await loop.run(goalId);
@@ -700,7 +700,7 @@ describe("R7-3: LLM observation min-type scaling accuracy", () => {
     const coreLoop = buildCoreLoop(stateManager, llmClient, 3);
 
     const goal = makeOneDimGoal(goalId, "code_quality", 0.8);
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const result = await coreLoop.run(goalId);
 
@@ -717,7 +717,7 @@ describe("R7-3: LLM observation min-type scaling accuracy", () => {
     expect(iter2.completionJudgment.is_complete).toBe(true);
 
     // Final goal state should have code_quality updated to 0.90 (approx)
-    const finalGoal = stateManager.loadGoal(goalId);
+    const finalGoal = await stateManager.loadGoal(goalId);
     if (finalGoal !== null) {
       const dim = finalGoal.dimensions.find((d) => d.name === "code_quality");
       if (dim !== undefined) {
@@ -745,12 +745,12 @@ describe("R7-3: LLM observation min-type scaling accuracy", () => {
     const coreLoop = buildCoreLoop(stateManager, llmClient, 3, obsEngine);
 
     const goal = makeOneDimGoal(goalId, "code_quality", 0.8);
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     await coreLoop.run(goalId);
 
     // Verify confidence tier from observation log
-    const log = obsEngine.getObservationLog(goalId);
+    const log = await obsEngine.getObservationLog(goalId);
     const llmEntries = log.entries.filter((e) => e.layer === "independent_review");
 
     expect(llmEntries.length).toBeGreaterThanOrEqual(1);

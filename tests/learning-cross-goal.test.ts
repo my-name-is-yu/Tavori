@@ -80,16 +80,16 @@ describe("LearningPipeline — extractCrossGoalPatterns", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("should identify patterns across 2+ goals with similar delta values", () => {
+  it("should identify patterns across 2+ goals with similar delta values", async () => {
     // Two goals both show scope_sizing negative delta (improvement)
-    pipeline.recordStructuralFeedback(
+    await pipeline.recordStructuralFeedback(
       makeFeedback("goal-A", "scope_sizing", -0.3, ["ci"])
     );
-    pipeline.recordStructuralFeedback(
+    await pipeline.recordStructuralFeedback(
       makeFeedback("goal-B", "scope_sizing", -0.25, ["ci"])
     );
 
-    const patterns = pipeline.extractCrossGoalPatterns(["goal-A", "goal-B"]);
+    const patterns = await pipeline.extractCrossGoalPatterns(["goal-A", "goal-B"]);
 
     expect(patterns.length).toBeGreaterThan(0);
     const pattern = patterns[0]!;
@@ -99,20 +99,20 @@ describe("LearningPipeline — extractCrossGoalPatterns", () => {
     expect(pattern.occurrenceCount).toBe(2);
   });
 
-  it("should correctly calculate confidence as confirming goals / total goals", () => {
+  it("should correctly calculate confidence as confirming goals / total goals", async () => {
     // 2 goals confirm the pattern out of 3 total
-    pipeline.recordStructuralFeedback(
+    await pipeline.recordStructuralFeedback(
       makeFeedback("goal-A", "strategy_selection", -0.2)
     );
-    pipeline.recordStructuralFeedback(
+    await pipeline.recordStructuralFeedback(
       makeFeedback("goal-B", "strategy_selection", -0.15)
     );
     // goal-C has a different delta (positive) — different cluster
-    pipeline.recordStructuralFeedback(
+    await pipeline.recordStructuralFeedback(
       makeFeedback("goal-C", "strategy_selection", 0.5)
     );
 
-    const patterns = pipeline.extractCrossGoalPatterns([
+    const patterns = await pipeline.extractCrossGoalPatterns([
       "goal-A",
       "goal-B",
       "goal-C",
@@ -126,23 +126,23 @@ describe("LearningPipeline — extractCrossGoalPatterns", () => {
     expect(negativePattern!.confidence).toBeCloseTo(2 / 3, 5);
   });
 
-  it("should return no patterns for single-goal input", () => {
-    pipeline.recordStructuralFeedback(
+  it("should return no patterns for single-goal input", async () => {
+    await pipeline.recordStructuralFeedback(
       makeFeedback("goal-A", "scope_sizing", -0.3)
     );
 
-    const patterns = pipeline.extractCrossGoalPatterns(["goal-A"]);
+    const patterns = await pipeline.extractCrossGoalPatterns(["goal-A"]);
 
     expect(patterns).toHaveLength(0);
   });
 
-  it("should return no patterns when only one goal has data for a feedbackType", () => {
+  it("should return no patterns when only one goal has data for a feedbackType", async () => {
     // Only goal-A has scope_sizing feedback; goal-B has none
-    pipeline.recordStructuralFeedback(
+    await pipeline.recordStructuralFeedback(
       makeFeedback("goal-A", "scope_sizing", -0.3)
     );
 
-    const patterns = pipeline.extractCrossGoalPatterns(["goal-A", "goal-B"]);
+    const patterns = await pipeline.extractCrossGoalPatterns(["goal-A", "goal-B"]);
 
     // scope_sizing only in goal-A → no cross-goal pattern
     const scopePatterns = patterns.filter(
@@ -151,93 +151,93 @@ describe("LearningPipeline — extractCrossGoalPatterns", () => {
     expect(scopePatterns).toHaveLength(0);
   });
 
-  it("should classify patternType as 'success' when avgDelta < -0.05", () => {
-    pipeline.recordStructuralFeedback(
+  it("should classify patternType as 'success' when avgDelta < -0.05", async () => {
+    await pipeline.recordStructuralFeedback(
       makeFeedback("goal-A", "task_generation", -0.4)
     );
-    pipeline.recordStructuralFeedback(
+    await pipeline.recordStructuralFeedback(
       makeFeedback("goal-B", "task_generation", -0.35)
     );
 
-    const patterns = pipeline.extractCrossGoalPatterns(["goal-A", "goal-B"]);
+    const patterns = await pipeline.extractCrossGoalPatterns(["goal-A", "goal-B"]);
 
     expect(patterns[0]!.patternType).toBe("success");
   });
 
-  it("should classify patternType as 'failure' when avgDelta > 0.05", () => {
-    pipeline.recordStructuralFeedback(
+  it("should classify patternType as 'failure' when avgDelta > 0.05", async () => {
+    await pipeline.recordStructuralFeedback(
       makeFeedback("goal-A", "observation_accuracy", 0.3)
     );
-    pipeline.recordStructuralFeedback(
+    await pipeline.recordStructuralFeedback(
       makeFeedback("goal-B", "observation_accuracy", 0.25)
     );
 
-    const patterns = pipeline.extractCrossGoalPatterns(["goal-A", "goal-B"]);
+    const patterns = await pipeline.extractCrossGoalPatterns(["goal-A", "goal-B"]);
 
     expect(patterns[0]!.patternType).toBe("failure");
   });
 
-  it("should classify patternType as 'optimization' when avgDelta is near 0", () => {
-    pipeline.recordStructuralFeedback(
+  it("should classify patternType as 'optimization' when avgDelta is near 0", async () => {
+    await pipeline.recordStructuralFeedback(
       makeFeedback("goal-A", "scope_sizing", 0.02)
     );
-    pipeline.recordStructuralFeedback(
+    await pipeline.recordStructuralFeedback(
       makeFeedback("goal-B", "scope_sizing", -0.02)
     );
 
-    const patterns = pipeline.extractCrossGoalPatterns(["goal-A", "goal-B"]);
+    const patterns = await pipeline.extractCrossGoalPatterns(["goal-A", "goal-B"]);
 
     expect(patterns[0]!.patternType).toBe("optimization");
   });
 
-  it("should not produce a pattern when all deltas differ by more than ±0.2", () => {
+  it("should not produce a pattern when all deltas differ by more than ±0.2", async () => {
     // goal-A: -0.8, goal-B: +0.8 — very different clusters, each only 1 goal
-    pipeline.recordStructuralFeedback(
+    await pipeline.recordStructuralFeedback(
       makeFeedback("goal-A", "scope_sizing", -0.8)
     );
-    pipeline.recordStructuralFeedback(
+    await pipeline.recordStructuralFeedback(
       makeFeedback("goal-B", "scope_sizing", 0.8)
     );
 
-    const patterns = pipeline.extractCrossGoalPatterns(["goal-A", "goal-B"]);
+    const patterns = await pipeline.extractCrossGoalPatterns(["goal-A", "goal-B"]);
 
     expect(patterns).toHaveLength(0);
   });
 
-  it("should handle no feedback data gracefully (empty result)", () => {
-    const patterns = pipeline.extractCrossGoalPatterns(["goal-A", "goal-B"]);
+  it("should handle no feedback data gracefully (empty result)", async () => {
+    const patterns = await pipeline.extractCrossGoalPatterns(["goal-A", "goal-B"]);
     expect(patterns).toHaveLength(0);
   });
 
-  it("should include applicableConditions derived from context keys", () => {
-    pipeline.recordStructuralFeedback(
+  it("should include applicableConditions derived from context keys", async () => {
+    await pipeline.recordStructuralFeedback(
       makeFeedback("goal-A", "scope_sizing", -0.3, ["ci", "environment"])
     );
-    pipeline.recordStructuralFeedback(
+    await pipeline.recordStructuralFeedback(
       makeFeedback("goal-B", "scope_sizing", -0.25, ["ci"])
     );
 
-    const patterns = pipeline.extractCrossGoalPatterns(["goal-A", "goal-B"]);
+    const patterns = await pipeline.extractCrossGoalPatterns(["goal-A", "goal-B"]);
 
     expect(patterns.length).toBeGreaterThan(0);
     expect(patterns[0]!.applicableConditions).toContain("ci");
   });
 
-  it("should detect multiple patterns for different feedbackTypes", () => {
-    pipeline.recordStructuralFeedback(
+  it("should detect multiple patterns for different feedbackTypes", async () => {
+    await pipeline.recordStructuralFeedback(
       makeFeedback("goal-A", "scope_sizing", -0.3)
     );
-    pipeline.recordStructuralFeedback(
+    await pipeline.recordStructuralFeedback(
       makeFeedback("goal-B", "scope_sizing", -0.25)
     );
-    pipeline.recordStructuralFeedback(
+    await pipeline.recordStructuralFeedback(
       makeFeedback("goal-A", "task_generation", 0.4)
     );
-    pipeline.recordStructuralFeedback(
+    await pipeline.recordStructuralFeedback(
       makeFeedback("goal-B", "task_generation", 0.35)
     );
 
-    const patterns = pipeline.extractCrossGoalPatterns(["goal-A", "goal-B"]);
+    const patterns = await pipeline.extractCrossGoalPatterns(["goal-A", "goal-B"]);
 
     const types = new Set(patterns.map((p) => p.feedbackType));
     expect(types.has("scope_sizing")).toBe(true);
@@ -263,9 +263,9 @@ describe("LearningPipeline — sharePatternsAcrossGoals", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("should apply matching patterns to target goals", () => {
+  it("should apply matching patterns to target goals", async () => {
     // Target goal has context key "ci"
-    pipeline.recordStructuralFeedback(
+    await pipeline.recordStructuralFeedback(
       makeFeedback("goal-target", "scope_sizing", 0, ["ci"])
     );
 
@@ -277,7 +277,7 @@ describe("LearningPipeline — sharePatternsAcrossGoals", () => {
       }),
     ];
 
-    const result = pipeline.sharePatternsAcrossGoals(patterns, ["goal-target"]);
+    const result = await pipeline.sharePatternsAcrossGoals(patterns, ["goal-target"]);
 
     expect(result.patternsExtracted).toBe(1);
     expect(result.patternsShared).toBe(1);
@@ -285,9 +285,9 @@ describe("LearningPipeline — sharePatternsAcrossGoals", () => {
     expect(result.newPatterns).toHaveLength(1);
   });
 
-  it("should skip patterns whose applicableConditions do not match", () => {
+  it("should skip patterns whose applicableConditions do not match", async () => {
     // Target goal has no "database" context key
-    pipeline.recordStructuralFeedback(
+    await pipeline.recordStructuralFeedback(
       makeFeedback("goal-target", "scope_sizing", 0, ["ci"])
     );
 
@@ -298,13 +298,13 @@ describe("LearningPipeline — sharePatternsAcrossGoals", () => {
       }),
     ];
 
-    const result = pipeline.sharePatternsAcrossGoals(patterns, ["goal-target"]);
+    const result = await pipeline.sharePatternsAcrossGoals(patterns, ["goal-target"]);
 
     expect(result.patternsShared).toBe(0);
     expect(result.targetGoalIds).toHaveLength(0);
   });
 
-  it("should apply patterns with no applicableConditions to all target goals (universal)", () => {
+  it("should apply patterns with no applicableConditions to all target goals (universal)", async () => {
     const patterns = [
       makeCrossGoalPattern({
         applicableConditions: [],
@@ -312,7 +312,7 @@ describe("LearningPipeline — sharePatternsAcrossGoals", () => {
       }),
     ];
 
-    const result = pipeline.sharePatternsAcrossGoals(patterns, [
+    const result = await pipeline.sharePatternsAcrossGoals(patterns, [
       "goal-target-1",
       "goal-target-2",
     ]);
@@ -322,7 +322,7 @@ describe("LearningPipeline — sharePatternsAcrossGoals", () => {
     expect(result.targetGoalIds).toContain("goal-target-2");
   });
 
-  it("should skip pattern if target goal is already a source goal", () => {
+  it("should skip pattern if target goal is already a source goal", async () => {
     const patterns = [
       makeCrossGoalPattern({
         applicableConditions: [],
@@ -330,12 +330,12 @@ describe("LearningPipeline — sharePatternsAcrossGoals", () => {
       }),
     ];
 
-    const result = pipeline.sharePatternsAcrossGoals(patterns, ["goal-target"]);
+    const result = await pipeline.sharePatternsAcrossGoals(patterns, ["goal-target"]);
 
     expect(result.patternsShared).toBe(0);
   });
 
-  it("should record synthetic structural feedback for shared patterns", () => {
+  it("should record synthetic structural feedback for shared patterns", async () => {
     const patterns = [
       makeCrossGoalPattern({
         feedbackType: "task_generation",
@@ -344,9 +344,9 @@ describe("LearningPipeline — sharePatternsAcrossGoals", () => {
       }),
     ];
 
-    pipeline.sharePatternsAcrossGoals(patterns, ["goal-target"]);
+    await pipeline.sharePatternsAcrossGoals(patterns, ["goal-target"]);
 
-    const recorded = pipeline.getStructuralFeedback("goal-target");
+    const recorded = await pipeline.getStructuralFeedback("goal-target");
     expect(recorded.length).toBeGreaterThan(0);
     const shared = recorded.find((f) =>
       f.iterationId.startsWith("shared_from_cross_goal_pattern_")
@@ -355,17 +355,17 @@ describe("LearningPipeline — sharePatternsAcrossGoals", () => {
     expect(shared!.feedbackType).toBe("task_generation");
   });
 
-  it("should handle empty patterns array gracefully", () => {
-    const result = pipeline.sharePatternsAcrossGoals([], ["goal-target"]);
+  it("should handle empty patterns array gracefully", async () => {
+    const result = await pipeline.sharePatternsAcrossGoals([], ["goal-target"]);
 
     expect(result.patternsExtracted).toBe(0);
     expect(result.patternsShared).toBe(0);
     expect(result.newPatterns).toHaveLength(0);
   });
 
-  it("should handle empty targetGoalIds gracefully", () => {
+  it("should handle empty targetGoalIds gracefully", async () => {
     const patterns = [makeCrossGoalPattern()];
-    const result = pipeline.sharePatternsAcrossGoals(patterns, []);
+    const result = await pipeline.sharePatternsAcrossGoals(patterns, []);
 
     expect(result.patternsShared).toBe(0);
     expect(result.targetGoalIds).toHaveLength(0);

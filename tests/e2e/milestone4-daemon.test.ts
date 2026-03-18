@@ -122,7 +122,7 @@ describe("Milestone 4 — Group 1: Daemon Mode Integration", () => {
 
     // Save an active goal so DriveSystem.shouldActivate returns true
     const now = new Date().toISOString();
-    stateManager.saveGoal({
+    await stateManager.saveGoal({
       id: "goal-start-stop",
       parent_id: null,
       node_type: "goal",
@@ -193,7 +193,7 @@ describe("Milestone 4 — Group 1: Daemon Mode Integration", () => {
     });
 
     const now = new Date().toISOString();
-    stateManager.saveGoal({
+    await stateManager.saveGoal({
       id: "goal-graceful",
       parent_id: null,
       node_type: "goal",
@@ -258,7 +258,7 @@ describe("Milestone 4 — Group 1: Daemon Mode Integration", () => {
     // Create goals so shouldActivate returns true for them
     const now = new Date().toISOString();
     for (const id of ["goal-new", "goal-interrupted-A", "goal-interrupted-B"]) {
-      stateManager.saveGoal({
+      await stateManager.saveGoal({
         id,
         parent_id: null,
         node_type: "goal",
@@ -480,12 +480,12 @@ describe("Milestone 4 — Group 2: Event-Driven Integration", () => {
 
   // ── Test 8: File-based event queue is read by shouldActivate ──
 
-  it("shouldActivate returns true when a goal-targeted event is in the queue", () => {
+  it("shouldActivate returns true when a goal-targeted event is in the queue", async () => {
     const stateManager = new StateManager(tempDir);
     const driveSystem = new DriveSystem(stateManager, { baseDir: tempDir });
 
     const now = new Date().toISOString();
-    stateManager.saveGoal({
+    await stateManager.saveGoal({
       id: "event-goal",
       parent_id: null,
       node_type: "goal",
@@ -520,7 +520,7 @@ describe("Milestone 4 — Group 2: Event-Driven Integration", () => {
     });
 
     // Without any event, shouldActivate should return false (schedule not due)
-    const beforeEvent = driveSystem.shouldActivate("event-goal");
+    const beforeEvent = await driveSystem.shouldActivate("event-goal");
     // Note: schedule might already be due since we just created the default schedule,
     // but we forced next_check_at to be far future. Should be false.
     expect(beforeEvent).toBe(false);
@@ -534,7 +534,7 @@ describe("Milestone 4 — Group 2: Event-Driven Integration", () => {
     });
 
     // Now shouldActivate should return true due to the queued event
-    const afterEvent = driveSystem.shouldActivate("event-goal");
+    const afterEvent = await driveSystem.shouldActivate("event-goal");
     expect(afterEvent).toBe(true);
   });
 

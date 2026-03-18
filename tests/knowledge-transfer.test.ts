@@ -83,7 +83,7 @@ const EMPTY_META_PATTERNS_RESPONSE = JSON.stringify({
   meta_patterns: [],
 });
 
-describe("KnowledgeTransfer", () => {
+describe("KnowledgeTransfer", async () => {
   let tmpDir: string;
   let stateManager: StateManager;
   let vectorIndex: VectorIndex;
@@ -98,7 +98,7 @@ describe("KnowledgeTransfer", () => {
     );
   });
 
-  function createKT(opts: {
+  async function createKT(opts: {
     llmResponses?: string[];
     patternsPerGoal?: Record<string, LearnedPattern[]>;
     ethicsVerdict?: "pass" | "flag" | "reject";
@@ -109,7 +109,7 @@ describe("KnowledgeTransfer", () => {
     const ethicsGate = makeMockEthicsGate(opts.ethicsVerdict ?? "pass");
 
     for (const goalId of opts.goalIds ?? []) {
-      stateManager.writeRaw(`goals/${goalId}/state.json`, { gap: 0.5 });
+      await stateManager.writeRaw(`goals/${goalId}/state.json`, { gap: 0.5 });
     }
 
     return new KnowledgeTransfer({
@@ -122,22 +122,22 @@ describe("KnowledgeTransfer", () => {
     });
   }
 
-  describe("detectTransferOpportunities", () => {
+  describe("detectTransferOpportunities", async () => {
     it("returns empty array when there are no other goals", async () => {
-      const kt = createKT({ goalIds: ["goal_a"] });
+      const kt = await createKT({ goalIds: ["goal_a"] });
       const result = await kt.detectTransferOpportunities("goal_a");
       expect(result).toEqual([]);
     });
 
     it("returns empty array when other goals have no patterns", async () => {
-      const kt = createKT({ goalIds: ["goal_a", "goal_b"], patternsPerGoal: {} });
+      const kt = await createKT({ goalIds: ["goal_a", "goal_b"], patternsPerGoal: {} });
       const result = await kt.detectTransferOpportunities("goal_a");
       expect(result).toEqual([]);
     });
 
     it("returns empty array when patterns already include target goal in source_goal_ids", async () => {
       const pattern = makePattern({ source_goal_ids: ["goal_a", "goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
       });
@@ -147,7 +147,7 @@ describe("KnowledgeTransfer", () => {
 
     it("filters patterns below confidence threshold (0.6)", async () => {
       const lowConfPattern = makePattern({ confidence: 0.5, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [lowConfPattern] },
       });
@@ -157,7 +157,7 @@ describe("KnowledgeTransfer", () => {
 
     it("returns candidates for patterns with confidence >= 0.6", async () => {
       const pattern = makePattern({ confidence: 0.7, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
       });
@@ -170,7 +170,7 @@ describe("KnowledgeTransfer", () => {
 
     it("candidate has correct source_item_id from pattern", async () => {
       const pattern = makePattern({ pattern_id: "pat_custom", confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
       });
@@ -180,7 +180,7 @@ describe("KnowledgeTransfer", () => {
 
     it("candidate has similarity_score of 0.7 (default) when no vector data", async () => {
       const pattern = makePattern({ confidence: 0.9, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
       });
@@ -190,7 +190,7 @@ describe("KnowledgeTransfer", () => {
 
     it("stores candidates internally and returns them via getTransferCandidates", async () => {
       const pattern = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
       });
@@ -201,7 +201,7 @@ describe("KnowledgeTransfer", () => {
     it("collects patterns from multiple source goals", async () => {
       const patB = makePattern({ pattern_id: "pat_b", confidence: 0.8, source_goal_ids: ["goal_b"] });
       const patC = makePattern({ pattern_id: "pat_c", confidence: 0.9, source_goal_ids: ["goal_c"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b", "goal_c"],
         patternsPerGoal: { goal_b: [patB], goal_c: [patC] },
       });
@@ -212,7 +212,7 @@ describe("KnowledgeTransfer", () => {
     it("sorts candidates by rank score descending", async () => {
       const patLow = makePattern({ pattern_id: "pat_low", confidence: 0.6, source_goal_ids: ["goal_b"] });
       const patHigh = makePattern({ pattern_id: "pat_high", confidence: 0.95, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [patLow, patHigh] },
       });
@@ -224,7 +224,7 @@ describe("KnowledgeTransfer", () => {
 
     it("skips invalidated patterns", async () => {
       const pattern = makePattern({ pattern_id: "pat_bad", confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
         llmResponses: [ADAPTATION_RESPONSE, ADAPTATION_RESPONSE, ADAPTATION_RESPONSE],
@@ -236,7 +236,7 @@ describe("KnowledgeTransfer", () => {
 
       for (let i = 0; i < 3; i++) {
         const applyResult = await kt.applyTransfer(candidates[0]!.candidate_id, "goal_a");
-        kt.evaluateTransferEffect(applyResult.transfer_id);
+        await kt.evaluateTransferEffect(applyResult.transfer_id);
       }
 
       const kt2Candidates = await kt.detectTransferOpportunities("goal_a");
@@ -249,7 +249,7 @@ describe("KnowledgeTransfer", () => {
       });
       await vectorIndex.add("emb_1", "scope reduction pattern", { type: "pattern" });
 
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
       });
@@ -263,7 +263,7 @@ describe("KnowledgeTransfer", () => {
       });
       await vectorIndex.add("emb_other", "something else", {});
 
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
       });
@@ -273,7 +273,7 @@ describe("KnowledgeTransfer", () => {
 
     it("candidate_id has tc_ prefix", async () => {
       const pattern = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
       });
@@ -285,7 +285,7 @@ describe("KnowledgeTransfer", () => {
       const pattern = makePattern({
         description: "Reduce scope when stalled", confidence: 0.85, source_goal_ids: ["goal_b"],
       });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
       });
@@ -297,7 +297,7 @@ describe("KnowledgeTransfer", () => {
     it("includes multiple patterns from the same source goal", async () => {
       const pat1 = makePattern({ pattern_id: "pat_1", confidence: 0.7, source_goal_ids: ["goal_b"] });
       const pat2 = makePattern({ pattern_id: "pat_2", confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pat1, pat2] },
       });
@@ -307,7 +307,7 @@ describe("KnowledgeTransfer", () => {
 
     it("filters patterns at exact confidence boundary 0.6", async () => {
       const patExact = makePattern({ pattern_id: "pat_exact", confidence: 0.6, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [patExact] },
       });
@@ -317,7 +317,7 @@ describe("KnowledgeTransfer", () => {
 
     it("filters pattern at confidence just below 0.6", async () => {
       const pat = makePattern({ pattern_id: "pat_just_below", confidence: 0.59, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pat] },
       });
@@ -327,7 +327,7 @@ describe("KnowledgeTransfer", () => {
 
     it("does not include the target goal as a source", async () => {
       const ownPattern = makePattern({ pattern_id: "pat_own", confidence: 0.9, source_goal_ids: ["goal_a"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a"],
         patternsPerGoal: { goal_a: [ownPattern] },
       });
@@ -338,7 +338,7 @@ describe("KnowledgeTransfer", () => {
     it("accumulates candidates across multiple calls", async () => {
       const patB = makePattern({ pattern_id: "pat_b", confidence: 0.8, source_goal_ids: ["goal_b"] });
       const patC = makePattern({ pattern_id: "pat_c", confidence: 0.8, source_goal_ids: ["goal_c"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b", "goal_c"],
         patternsPerGoal: { goal_b: [patB], goal_c: [patC] },
       });
@@ -354,7 +354,7 @@ describe("KnowledgeTransfer", () => {
       const pattern = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"], embedding_id: null });
       await vectorIndex.add("emb_unrelated", "unrelated text", {});
 
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
       });
@@ -365,7 +365,7 @@ describe("KnowledgeTransfer", () => {
 
     it("rank score is product of similarity, confidence, and effectiveness", async () => {
       const pat = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pat] },
       });
@@ -374,13 +374,13 @@ describe("KnowledgeTransfer", () => {
     });
 
     it("returns empty when only goal in system is the target", async () => {
-      const kt = createKT({ goalIds: ["only_goal"], patternsPerGoal: {} });
+      const kt = await createKT({ goalIds: ["only_goal"], patternsPerGoal: {} });
       const result = await kt.detectTransferOpportunities("only_goal");
       expect(result).toEqual([]);
     });
 
     it("handles goal not in stateManager gracefully", async () => {
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_b"],
         patternsPerGoal: {
           goal_b: [makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] })],
@@ -391,16 +391,16 @@ describe("KnowledgeTransfer", () => {
     });
   });
 
-  describe("applyTransfer", () => {
+  describe("applyTransfer", async () => {
     it("returns failure when candidate is not found", async () => {
-      const kt = createKT({ goalIds: ["goal_a"] });
+      const kt = await createKT({ goalIds: ["goal_a"] });
       const result = await kt.applyTransfer("nonexistent_id", "goal_a");
       expect(result.success).toBe(false);
       expect(result.adaptation_description).toBe("Candidate not found");
     });
 
     it("stores failed result even for unknown candidate", async () => {
-      const kt = createKT({ goalIds: ["goal_a"] });
+      const kt = await createKT({ goalIds: ["goal_a"] });
       await kt.applyTransfer("nonexistent_id", "goal_a");
       const results = kt.getTransferResults();
       expect(results.length).toBe(1);
@@ -408,14 +408,14 @@ describe("KnowledgeTransfer", () => {
     });
 
     it("transfer_id has tr_ prefix", async () => {
-      const kt = createKT({ goalIds: ["goal_a"] });
+      const kt = await createKT({ goalIds: ["goal_a"] });
       const result = await kt.applyTransfer("nonexistent_id", "goal_a");
       expect(result.transfer_id).toMatch(/^tr_/);
     });
 
     it("returns failure when ethics gate rejects", async () => {
       const pattern = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
         ethicsVerdict: "reject",
@@ -428,7 +428,7 @@ describe("KnowledgeTransfer", () => {
 
     it("succeeds when ethics gate passes", async () => {
       const pattern = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
         llmResponses: [ADAPTATION_RESPONSE],
@@ -441,7 +441,7 @@ describe("KnowledgeTransfer", () => {
 
     it("uses LLM adaptation when source pattern exists", async () => {
       const pattern = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
         llmResponses: [ADAPTATION_RESPONSE],
@@ -454,7 +454,7 @@ describe("KnowledgeTransfer", () => {
 
     it("returns success=false when LLM adaptation returns success=false", async () => {
       const pattern = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
         llmResponses: [ADAPTATION_FAILURE_RESPONSE],
@@ -467,7 +467,7 @@ describe("KnowledgeTransfer", () => {
 
     it("falls back to estimated_benefit when LLM throws", async () => {
       const pattern = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
         llmResponses: ["NOT VALID JSON AT ALL"],
@@ -481,7 +481,7 @@ describe("KnowledgeTransfer", () => {
 
     it("stores result in internal results map", async () => {
       const pattern = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
         llmResponses: [ADAPTATION_RESPONSE],
@@ -494,7 +494,7 @@ describe("KnowledgeTransfer", () => {
 
     it("has applied_at as valid ISO datetime", async () => {
       const pattern = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
         llmResponses: [ADAPTATION_RESPONSE],
@@ -508,7 +508,7 @@ describe("KnowledgeTransfer", () => {
 
     it("result candidate_id matches the input candidate_id", async () => {
       const pattern = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
         llmResponses: [ADAPTATION_RESPONSE],
@@ -522,7 +522,7 @@ describe("KnowledgeTransfer", () => {
 
     it("proceeds when ethics gate returns flag (not reject)", async () => {
       const pattern = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
         llmResponses: [ADAPTATION_RESPONSE],
@@ -542,8 +542,8 @@ describe("KnowledgeTransfer", () => {
       const llmClient = createMockLLMClient([]);
       const learningPipeline = makeMockLearningPipeline({ goal_b: [pattern] });
 
-      stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.5 });
-      stateManager.writeRaw("goals/goal_b/state.json", { gap: 0.3 });
+      await stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.5 });
+      await stateManager.writeRaw("goals/goal_b/state.json", { gap: 0.3 });
 
       const kt = new KnowledgeTransfer({
         llmClient,
@@ -563,7 +563,7 @@ describe("KnowledgeTransfer", () => {
     it("applies multiple transfers and stores all results", async () => {
       const pat1 = makePattern({ pattern_id: "pat_1", confidence: 0.8, source_goal_ids: ["goal_b"] });
       const pat2 = makePattern({ pattern_id: "pat_2", confidence: 0.9, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pat1, pat2] },
         llmResponses: [ADAPTATION_RESPONSE, ADAPTATION_RESPONSE],
@@ -585,8 +585,8 @@ describe("KnowledgeTransfer", () => {
       const llmClient = createMockLLMClient([]);
       const ethicsGate = makeMockEthicsGate("pass");
 
-      stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.5 });
-      stateManager.writeRaw("goals/goal_b/state.json", { gap: 0.3 });
+      await stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.5 });
+      await stateManager.writeRaw("goals/goal_b/state.json", { gap: 0.3 });
 
       const kt = new KnowledgeTransfer({
         llmClient, knowledgeManager: makeMockKnowledgeManager(),
@@ -600,7 +600,7 @@ describe("KnowledgeTransfer", () => {
 
     it("ethics rejection result includes reasoning from gate", async () => {
       const pattern = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
         ethicsVerdict: "reject",
@@ -612,7 +612,7 @@ describe("KnowledgeTransfer", () => {
 
     it("each apply generates a unique transfer_id", async () => {
       const pat = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pat] },
         llmResponses: [ADAPTATION_RESPONSE, ADAPTATION_RESPONSE],
@@ -625,10 +625,10 @@ describe("KnowledgeTransfer", () => {
     });
   });
 
-  describe("evaluateTransferEffect", () => {
-    it("returns neutral record for unknown transfer_id", () => {
-      const kt = createKT({ goalIds: ["goal_a"] });
-      const record = kt.evaluateTransferEffect("unknown_id");
+  describe("evaluateTransferEffect", async () => {
+    it("returns neutral record for unknown transfer_id", async () => {
+      const kt = await createKT({ goalIds: ["goal_a"] });
+      const record = await kt.evaluateTransferEffect("unknown_id");
       expect(record.effectiveness).toBe("neutral");
       expect(record.gap_delta_before).toBe(0);
       expect(record.gap_delta_after).toBe(0);
@@ -636,19 +636,19 @@ describe("KnowledgeTransfer", () => {
 
     it("returns positive when gap decreased after transfer", async () => {
       const pattern = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
         llmResponses: [ADAPTATION_RESPONSE],
         ethicsVerdict: "pass",
       });
 
-      stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.8 });
+      await stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.8 });
       const candidates = await kt.detectTransferOpportunities("goal_a");
       const applyResult = await kt.applyTransfer(candidates[0]!.candidate_id, "goal_a");
 
-      stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.3 });
-      const record = kt.evaluateTransferEffect(applyResult.transfer_id);
+      await stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.3 });
+      const record = await kt.evaluateTransferEffect(applyResult.transfer_id);
       expect(record.effectiveness).toBe("positive");
       expect(record.gap_delta_before).toBe(0.8);
       expect(record.gap_delta_after).toBe(0.3);
@@ -656,62 +656,62 @@ describe("KnowledgeTransfer", () => {
 
     it("returns negative when gap increased after transfer", async () => {
       const pattern = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
         llmResponses: [ADAPTATION_RESPONSE],
         ethicsVerdict: "pass",
       });
 
-      stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.3 });
+      await stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.3 });
       const candidates = await kt.detectTransferOpportunities("goal_a");
       const applyResult = await kt.applyTransfer(candidates[0]!.candidate_id, "goal_a");
 
-      stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.8 });
-      const record = kt.evaluateTransferEffect(applyResult.transfer_id);
+      await stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.8 });
+      const record = await kt.evaluateTransferEffect(applyResult.transfer_id);
       expect(record.effectiveness).toBe("negative");
     });
 
     it("returns neutral when gap change is within 0.05 threshold", async () => {
       const pattern = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
         llmResponses: [ADAPTATION_RESPONSE],
         ethicsVerdict: "pass",
       });
 
-      stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.5 });
+      await stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.5 });
       const candidates = await kt.detectTransferOpportunities("goal_a");
       const applyResult = await kt.applyTransfer(candidates[0]!.candidate_id, "goal_a");
 
-      stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.48 });
-      const record = kt.evaluateTransferEffect(applyResult.transfer_id);
+      await stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.48 });
+      const record = await kt.evaluateTransferEffect(applyResult.transfer_id);
       expect(record.effectiveness).toBe("neutral");
     });
 
-    it("has valid evaluated_at datetime", () => {
-      const kt = createKT({ goalIds: ["goal_a"] });
-      const record = kt.evaluateTransferEffect("unknown");
+    it("has valid evaluated_at datetime", async () => {
+      const kt = await createKT({ goalIds: ["goal_a"] });
+      const record = await kt.evaluateTransferEffect("unknown");
       expect(() => new Date(record.evaluated_at)).not.toThrow();
     });
 
     it("tracks consecutive non-positive for pattern invalidation", async () => {
       const pattern = makePattern({ pattern_id: "pat_track", confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
         llmResponses: [ADAPTATION_RESPONSE, ADAPTATION_RESPONSE, ADAPTATION_RESPONSE],
         ethicsVerdict: "pass",
       });
 
-      stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.5 });
+      await stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.5 });
 
       for (let i = 0; i < 3; i++) {
         const candidates = await kt.detectTransferOpportunities("goal_a");
         if (candidates.length === 0) break;
         const applyResult = await kt.applyTransfer(candidates[0]!.candidate_id, "goal_a");
-        kt.evaluateTransferEffect(applyResult.transfer_id);
+        await kt.evaluateTransferEffect(applyResult.transfer_id);
       }
 
       const finalCandidates = await kt.detectTransferOpportunities("goal_a");
@@ -720,26 +720,26 @@ describe("KnowledgeTransfer", () => {
 
     it("resets consecutive counter on positive outcome", async () => {
       const pattern = makePattern({ pattern_id: "pat_reset", confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
         llmResponses: Array(6).fill(ADAPTATION_RESPONSE),
         ethicsVerdict: "pass",
       });
 
-      stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.5 });
+      await stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.5 });
       for (let i = 0; i < 2; i++) {
         const candidates = await kt.detectTransferOpportunities("goal_a");
         const applyResult = await kt.applyTransfer(candidates[0]!.candidate_id, "goal_a");
-        kt.evaluateTransferEffect(applyResult.transfer_id);
+        await kt.evaluateTransferEffect(applyResult.transfer_id);
       }
 
-      stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.8 });
+      await stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.8 });
       const candidates = await kt.detectTransferOpportunities("goal_a");
       expect(candidates.length).toBe(1);
       const applyResult = await kt.applyTransfer(candidates[0]!.candidate_id, "goal_a");
-      stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.2 });
-      const record = kt.evaluateTransferEffect(applyResult.transfer_id);
+      await stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.2 });
+      const record = await kt.evaluateTransferEffect(applyResult.transfer_id);
       expect(record.effectiveness).toBe("positive");
 
       const moreCandidates = await kt.detectTransferOpportunities("goal_a");
@@ -748,19 +748,19 @@ describe("KnowledgeTransfer", () => {
 
     it("uses gap_score when gap field is absent", async () => {
       const pattern = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
         llmResponses: [ADAPTATION_RESPONSE],
         ethicsVerdict: "pass",
       });
 
-      stateManager.writeRaw("goals/goal_a/state.json", { gap_score: 0.7 });
+      await stateManager.writeRaw("goals/goal_a/state.json", { gap_score: 0.7 });
       const candidates = await kt.detectTransferOpportunities("goal_a");
       const applyResult = await kt.applyTransfer(candidates[0]!.candidate_id, "goal_a");
 
-      stateManager.writeRaw("goals/goal_a/state.json", { gap_score: 0.2 });
-      const record = kt.evaluateTransferEffect(applyResult.transfer_id);
+      await stateManager.writeRaw("goals/goal_a/state.json", { gap_score: 0.2 });
+      const record = await kt.evaluateTransferEffect(applyResult.transfer_id);
       expect(record.effectiveness).toBe("positive");
       expect(record.gap_delta_before).toBe(0.7);
       expect(record.gap_delta_after).toBe(0.2);
@@ -772,8 +772,8 @@ describe("KnowledgeTransfer", () => {
       const llmClient = createMockLLMClient([ADAPTATION_RESPONSE]);
       const ethicsGate = makeMockEthicsGate("pass");
 
-      stateManager.writeRaw("goals/goal_a/state.json", { something: "else" });
-      stateManager.writeRaw("goals/goal_b/state.json", { gap: 0.3 });
+      await stateManager.writeRaw("goals/goal_a/state.json", { something: "else" });
+      await stateManager.writeRaw("goals/goal_b/state.json", { gap: 0.3 });
 
       const kt = new KnowledgeTransfer({
         llmClient, knowledgeManager: makeMockKnowledgeManager(),
@@ -783,7 +783,7 @@ describe("KnowledgeTransfer", () => {
       const candidates = await kt.detectTransferOpportunities("goal_a");
       if (candidates.length > 0) {
         const applyResult = await kt.applyTransfer(candidates[0]!.candidate_id, "goal_a");
-        const record = kt.evaluateTransferEffect(applyResult.transfer_id);
+        const record = await kt.evaluateTransferEffect(applyResult.transfer_id);
         expect(record.gap_delta_before).toBe(0.5);
       }
     });
@@ -805,8 +805,8 @@ describe("KnowledgeTransfer", () => {
       const llmClient = createMockLLMClient([]);
       const ethicsGate = makeMockEthicsGate("pass");
 
-      stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.5 });
-      stateManager.writeRaw("goals/goal_b/state.json", { gap: 0.3 });
+      await stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.5 });
+      await stateManager.writeRaw("goals/goal_b/state.json", { gap: 0.3 });
 
       const kt = new KnowledgeTransfer({
         llmClient, knowledgeManager: makeMockKnowledgeManager(),
@@ -817,13 +817,13 @@ describe("KnowledgeTransfer", () => {
       expect(candidates.length).toBe(1);
 
       const applyResult = await kt.applyTransfer(candidates[0]!.candidate_id, "goal_a");
-      const record = kt.evaluateTransferEffect(applyResult.transfer_id);
+      const record = await kt.evaluateTransferEffect(applyResult.transfer_id);
       expect(record.effectiveness).toBe("neutral");
     });
 
     it("exact boundary: delta = 0.05 may round to positive due to float precision", async () => {
       const pattern = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
         llmResponses: [ADAPTATION_RESPONSE],
@@ -831,36 +831,36 @@ describe("KnowledgeTransfer", () => {
       });
 
       // Use values that produce exactly 0.04 delta (clearly neutral)
-      stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.54 });
+      await stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.54 });
       const candidates = await kt.detectTransferOpportunities("goal_a");
       const applyResult = await kt.applyTransfer(candidates[0]!.candidate_id, "goal_a");
 
-      stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.5 });
-      const record = kt.evaluateTransferEffect(applyResult.transfer_id);
+      await stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.5 });
+      const record = await kt.evaluateTransferEffect(applyResult.transfer_id);
       expect(record.effectiveness).toBe("neutral");
     });
 
     it("delta just over 0.05 is positive", async () => {
       const pattern = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
         llmResponses: [ADAPTATION_RESPONSE],
         ethicsVerdict: "pass",
       });
 
-      stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.56 });
+      await stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.56 });
       const candidates = await kt.detectTransferOpportunities("goal_a");
       const applyResult = await kt.applyTransfer(candidates[0]!.candidate_id, "goal_a");
 
-      stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.5 });
-      const record = kt.evaluateTransferEffect(applyResult.transfer_id);
+      await stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.5 });
+      const record = await kt.evaluateTransferEffect(applyResult.transfer_id);
       expect(record.effectiveness).toBe("positive");
     });
 
     it("small negative delta within threshold is neutral", async () => {
       const pattern = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
         llmResponses: [ADAPTATION_RESPONSE],
@@ -868,24 +868,24 @@ describe("KnowledgeTransfer", () => {
       });
 
       // Use values that produce exactly -0.04 delta (clearly neutral)
-      stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.5 });
+      await stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.5 });
       const candidates = await kt.detectTransferOpportunities("goal_a");
       const applyResult = await kt.applyTransfer(candidates[0]!.candidate_id, "goal_a");
 
-      stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.54 });
-      const record = kt.evaluateTransferEffect(applyResult.transfer_id);
+      await stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.54 });
+      const record = await kt.evaluateTransferEffect(applyResult.transfer_id);
       expect(record.effectiveness).toBe("neutral");
     });
 
-    it("transfer_id in record matches input", () => {
-      const kt = createKT({ goalIds: ["goal_a"] });
-      const record = kt.evaluateTransferEffect("my_transfer_id");
+    it("transfer_id in record matches input", async () => {
+      const kt = await createKT({ goalIds: ["goal_a"] });
+      const record = await kt.evaluateTransferEffect("my_transfer_id");
       expect(record.transfer_id).toBe("my_transfer_id");
     });
 
     it("negative effectiveness increments consecutive counter", async () => {
       const pattern = makePattern({ pattern_id: "pat_neg", confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pattern] },
         llmResponses: Array(4).fill(ADAPTATION_RESPONSE),
@@ -893,12 +893,12 @@ describe("KnowledgeTransfer", () => {
       });
 
       for (let i = 0; i < 3; i++) {
-        stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.3 });
+        await stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.3 });
         const candidates = await kt.detectTransferOpportunities("goal_a");
         if (candidates.length === 0) break;
         const applyResult = await kt.applyTransfer(candidates[0]!.candidate_id, "goal_a");
-        stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.8 });
-        const record = kt.evaluateTransferEffect(applyResult.transfer_id);
+        await stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.8 });
+        const record = await kt.evaluateTransferEffect(applyResult.transfer_id);
         expect(record.effectiveness).toBe("negative");
       }
 
@@ -907,15 +907,15 @@ describe("KnowledgeTransfer", () => {
     });
   });
 
-  describe("buildCrossGoalKnowledgeBase", () => {
+  describe("buildCrossGoalKnowledgeBase", async () => {
     it("does nothing when there are no goals", async () => {
-      const kt = createKT({ goalIds: [], llmResponses: [] });
+      const kt = await createKT({ goalIds: [], llmResponses: [] });
       await expect(kt.buildCrossGoalKnowledgeBase()).resolves.toBeUndefined();
     });
 
     it("does nothing when there are no high-confidence patterns", async () => {
       const lowPat = makePattern({ confidence: 0.5, source_goal_ids: ["goal_a"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a"],
         patternsPerGoal: { goal_a: [lowPat] },
         llmResponses: [],
@@ -925,7 +925,7 @@ describe("KnowledgeTransfer", () => {
 
     it("calls LLM and adds meta-patterns to vector index", async () => {
       const pattern = makePattern({ confidence: 0.8, source_goal_ids: ["goal_a"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a"],
         patternsPerGoal: { goal_a: [pattern] },
         llmResponses: [META_PATTERNS_RESPONSE],
@@ -938,7 +938,7 @@ describe("KnowledgeTransfer", () => {
 
     it("handles LLM failure gracefully", async () => {
       const pattern = makePattern({ confidence: 0.8, source_goal_ids: ["goal_a"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a"],
         patternsPerGoal: { goal_a: [pattern] },
         llmResponses: ["INVALID JSON"],
@@ -949,7 +949,7 @@ describe("KnowledgeTransfer", () => {
     it("collects patterns from multiple goals", async () => {
       const patA = makePattern({ pattern_id: "pat_a", confidence: 0.7, source_goal_ids: ["goal_a"] });
       const patB = makePattern({ pattern_id: "pat_b", confidence: 0.9, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_a: [patA], goal_b: [patB] },
         llmResponses: [META_PATTERNS_RESPONSE],
@@ -961,7 +961,7 @@ describe("KnowledgeTransfer", () => {
     it("filters patterns below 0.6 confidence", async () => {
       const lowPat = makePattern({ pattern_id: "pat_low", confidence: 0.59, source_goal_ids: ["goal_a"] });
       const highPat = makePattern({ pattern_id: "pat_high", confidence: 0.6, source_goal_ids: ["goal_a"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a"],
         patternsPerGoal: { goal_a: [lowPat, highPat] },
         llmResponses: [META_PATTERNS_RESPONSE],
@@ -972,7 +972,7 @@ describe("KnowledgeTransfer", () => {
 
     it("handles empty meta_patterns response", async () => {
       const pattern = makePattern({ confidence: 0.8, source_goal_ids: ["goal_a"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a"],
         patternsPerGoal: { goal_a: [pattern] },
         llmResponses: [EMPTY_META_PATTERNS_RESPONSE],
@@ -983,7 +983,7 @@ describe("KnowledgeTransfer", () => {
 
     it("meta-pattern entries are searchable in vector index", async () => {
       const pattern = makePattern({ confidence: 0.8, source_goal_ids: ["goal_a"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a"],
         patternsPerGoal: { goal_a: [pattern] },
         llmResponses: [META_PATTERNS_RESPONSE],
@@ -1002,7 +1002,7 @@ describe("KnowledgeTransfer", () => {
 
       const llmClient = createMockLLMClient([META_PATTERNS_RESPONSE]);
       const learningPipeline = makeMockLearningPipeline({ goal_a: [pattern] });
-      stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.5 });
+      await stateManager.writeRaw("goals/goal_a/state.json", { gap: 0.5 });
 
       const kt = new KnowledgeTransfer({
         llmClient, knowledgeManager: makeMockKnowledgeManager(),
@@ -1015,7 +1015,7 @@ describe("KnowledgeTransfer", () => {
 
     it("returns void (no return value)", async () => {
       const pattern = makePattern({ confidence: 0.8, source_goal_ids: ["goal_a"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a"],
         patternsPerGoal: { goal_a: [pattern] },
         llmResponses: [META_PATTERNS_RESPONSE],
@@ -1026,7 +1026,7 @@ describe("KnowledgeTransfer", () => {
 
     it("processes all goals even when one has no patterns", async () => {
       const patA = makePattern({ confidence: 0.8, source_goal_ids: ["goal_a"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_a: [patA] },
         llmResponses: [META_PATTERNS_RESPONSE],
@@ -1038,7 +1038,7 @@ describe("KnowledgeTransfer", () => {
     it("skips LLM when all patterns are below confidence threshold", async () => {
       const lowPat1 = makePattern({ pattern_id: "low1", confidence: 0.3, source_goal_ids: ["goal_a"] });
       const lowPat2 = makePattern({ pattern_id: "low2", confidence: 0.59, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_a: [lowPat1], goal_b: [lowPat2] },
         llmResponses: [],
@@ -1049,7 +1049,7 @@ describe("KnowledgeTransfer", () => {
 
     it("can be called multiple times and adds new entries each time", async () => {
       const pattern = makePattern({ confidence: 0.8, source_goal_ids: ["goal_a"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a"],
         patternsPerGoal: { goal_a: [pattern] },
         llmResponses: [META_PATTERNS_RESPONSE, META_PATTERNS_RESPONSE],
@@ -1067,7 +1067,7 @@ describe("KnowledgeTransfer", () => {
           pattern_id: `pat_${i}`, confidence: 0.8, source_goal_ids: ["goal_a"],
         }));
       }
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a"],
         patternsPerGoal: { goal_a: manyPatterns },
         llmResponses: [META_PATTERNS_RESPONSE],
@@ -1077,15 +1077,15 @@ describe("KnowledgeTransfer", () => {
     });
   });
 
-  describe("getTransferCandidates", () => {
-    it("returns empty array initially", () => {
-      const kt = createKT({ goalIds: [] });
+  describe("getTransferCandidates", async () => {
+    it("returns empty array initially", async () => {
+      const kt = await createKT({ goalIds: [] });
       expect(kt.getTransferCandidates()).toEqual([]);
     });
 
     it("returns all stored candidates after detection", async () => {
       const pat = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pat] },
       });
@@ -1097,7 +1097,7 @@ describe("KnowledgeTransfer", () => {
 
     it("returns a new array (not internal reference)", async () => {
       const pat = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pat] },
       });
@@ -1111,7 +1111,7 @@ describe("KnowledgeTransfer", () => {
     it("includes candidates from multiple detect calls", async () => {
       const patB = makePattern({ pattern_id: "pat_b", confidence: 0.8, source_goal_ids: ["goal_b"] });
       const patC = makePattern({ pattern_id: "pat_c", confidence: 0.8, source_goal_ids: ["goal_c"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b", "goal_c"],
         patternsPerGoal: { goal_b: [patB], goal_c: [patC] },
       });
@@ -1121,7 +1121,7 @@ describe("KnowledgeTransfer", () => {
 
     it("all candidates conform to TransferCandidate schema", async () => {
       const pat = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pat] },
       });
@@ -1138,15 +1138,15 @@ describe("KnowledgeTransfer", () => {
     });
   });
 
-  describe("getTransferResults", () => {
-    it("returns empty array initially", () => {
-      const kt = createKT({ goalIds: [] });
+  describe("getTransferResults", async () => {
+    it("returns empty array initially", async () => {
+      const kt = await createKT({ goalIds: [] });
       expect(kt.getTransferResults()).toEqual([]);
     });
 
     it("returns all stored results after apply", async () => {
       const pat = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pat] },
         llmResponses: [ADAPTATION_RESPONSE],
@@ -1158,7 +1158,7 @@ describe("KnowledgeTransfer", () => {
     });
 
     it("includes failed results", async () => {
-      const kt = createKT({ goalIds: ["goal_a"] });
+      const kt = await createKT({ goalIds: ["goal_a"] });
       await kt.applyTransfer("nonexistent", "goal_a");
       const results = kt.getTransferResults();
       expect(results.length).toBe(1);
@@ -1166,7 +1166,7 @@ describe("KnowledgeTransfer", () => {
     });
 
     it("returns a new array (not internal reference)", async () => {
-      const kt = createKT({ goalIds: ["goal_a"] });
+      const kt = await createKT({ goalIds: ["goal_a"] });
       await kt.applyTransfer("nonexistent", "goal_a");
       const r1 = kt.getTransferResults();
       const r2 = kt.getTransferResults();
@@ -1176,7 +1176,7 @@ describe("KnowledgeTransfer", () => {
 
     it("all results conform to TransferResult schema", async () => {
       const pat = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] });
-      const kt = createKT({
+      const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pat] },
         llmResponses: [ADAPTATION_RESPONSE],

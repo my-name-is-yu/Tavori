@@ -168,8 +168,8 @@ export class LoopController {
     this.setState({ running: false, status: "stopped", goalId: null });
   }
 
-  refreshState(goalId: string): void {
-    const goal = this.stateManager.loadGoal(goalId);
+  async refreshState(goalId: string): Promise<void> {
+    const goal = await this.stateManager.loadGoal(goalId);
     if (!goal) return;
 
     const dimensions: DimensionProgress[] = goal.dimensions.map((dim) => ({
@@ -180,7 +180,7 @@ export class LoopController {
       progress: calcDimensionProgress(dim.current_value, dim.threshold),
     }));
 
-    const trustScore = this.trustManager.getBalance(goalId).balance;
+    const trustScore = (await this.trustManager.getBalance(goalId)).balance;
 
     this.setState({ dimensions, trustScore });
   }

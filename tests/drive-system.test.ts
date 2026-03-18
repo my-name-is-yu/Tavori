@@ -59,65 +59,65 @@ describe("DriveSystem", () => {
   // ─── shouldActivate ───
 
   describe("shouldActivate", () => {
-    it("returns true when schedule is due (no schedule stored => always due)", () => {
+    it("returns true when schedule is due (no schedule stored => always due)", async () => {
       const goalId = crypto.randomUUID();
       const goal = makeGoal({ id: goalId, status: "active" });
-      stateManager.saveGoal(goal);
-      expect(driveSystem.shouldActivate(goalId)).toBe(true);
+      await stateManager.saveGoal(goal);
+      expect(await driveSystem.shouldActivate(goalId)).toBe(true);
     });
 
-    it("returns false when schedule is not yet due and no events", () => {
+    it("returns false when schedule is not yet due and no events", async () => {
       const goalId = crypto.randomUUID();
       const goal = makeGoal({ id: goalId, status: "active" });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       const futureTime = new Date(Date.now() + 10 * 60 * 60 * 1000).toISOString();
       const schedule = driveSystem.createDefaultSchedule(goalId, 10);
       // Override next_check_at to future
       driveSystem.updateSchedule(goalId, { ...schedule, next_check_at: futureTime });
 
-      expect(driveSystem.shouldActivate(goalId)).toBe(false);
+      expect(await driveSystem.shouldActivate(goalId)).toBe(false);
     });
 
-    it("returns true when schedule is overdue", () => {
+    it("returns true when schedule is overdue", async () => {
       const goalId = crypto.randomUUID();
       const goal = makeGoal({ id: goalId, status: "active" });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       const pastTime = new Date(Date.now() - 1000).toISOString();
       const schedule = driveSystem.createDefaultSchedule(goalId, 1);
       driveSystem.updateSchedule(goalId, { ...schedule, next_check_at: pastTime });
 
-      expect(driveSystem.shouldActivate(goalId)).toBe(true);
+      expect(await driveSystem.shouldActivate(goalId)).toBe(true);
     });
 
-    it("returns false when goal status is completed", () => {
+    it("returns false when goal status is completed", async () => {
       const goalId = crypto.randomUUID();
       const goal = makeGoal({ id: goalId, status: "completed" });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       // Even with no schedule (which defaults to due), should return false
-      expect(driveSystem.shouldActivate(goalId)).toBe(false);
+      expect(await driveSystem.shouldActivate(goalId)).toBe(false);
     });
 
-    it("returns false when goal status is cancelled", () => {
+    it("returns false when goal status is cancelled", async () => {
       const goalId = crypto.randomUUID();
       const goal = makeGoal({ id: goalId, status: "cancelled" });
-      stateManager.saveGoal(goal);
-      expect(driveSystem.shouldActivate(goalId)).toBe(false);
+      await stateManager.saveGoal(goal);
+      expect(await driveSystem.shouldActivate(goalId)).toBe(false);
     });
 
-    it("returns false when goal status is archived", () => {
+    it("returns false when goal status is archived", async () => {
       const goalId = crypto.randomUUID();
       const goal = makeGoal({ id: goalId, status: "archived" });
-      stateManager.saveGoal(goal);
-      expect(driveSystem.shouldActivate(goalId)).toBe(false);
+      await stateManager.saveGoal(goal);
+      expect(await driveSystem.shouldActivate(goalId)).toBe(false);
     });
 
-    it("returns true when event queue has an event targeting this goal (even if schedule not due)", () => {
+    it("returns true when event queue has an event targeting this goal (even if schedule not due)", async () => {
       const goalId = crypto.randomUUID();
       const goal = makeGoal({ id: goalId, status: "active" });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       // Set schedule to future so schedule check would be false
       const futureTime = new Date(Date.now() + 10 * 60 * 60 * 1000).toISOString();
@@ -128,14 +128,14 @@ describe("DriveSystem", () => {
       const eventsDir = path.join(tmpDir, "events");
       writeEventFile(eventsDir, "evt-001.json", makeEvent({ data: { goal_id: goalId } }));
 
-      expect(driveSystem.shouldActivate(goalId)).toBe(true);
+      expect(await driveSystem.shouldActivate(goalId)).toBe(true);
     });
 
-    it("returns false when event queue has events for a different goal (schedule not due)", () => {
+    it("returns false when event queue has events for a different goal (schedule not due)", async () => {
       const goalId = crypto.randomUUID();
       const otherGoalId = crypto.randomUUID();
       const goal = makeGoal({ id: goalId, status: "active" });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       // Set schedule to future so schedule check would be false
       const futureTime = new Date(Date.now() + 10 * 60 * 60 * 1000).toISOString();
@@ -146,13 +146,13 @@ describe("DriveSystem", () => {
       const eventsDir = path.join(tmpDir, "events");
       writeEventFile(eventsDir, "evt-002.json", makeEvent({ data: { goal_id: otherGoalId } }));
 
-      expect(driveSystem.shouldActivate(goalId)).toBe(false);
+      expect(await driveSystem.shouldActivate(goalId)).toBe(false);
     });
 
-    it("returns true for unknown goal (no saved goal, no schedule)", () => {
+    it("returns true for unknown goal (no saved goal, no schedule)", async () => {
       const goalId = "nonexistent-goal";
       // No goal stored, no schedule => schedule is due => true
-      expect(driveSystem.shouldActivate(goalId)).toBe(true);
+      expect(await driveSystem.shouldActivate(goalId)).toBe(true);
     });
   });
 

@@ -21,8 +21,8 @@ export interface SearchDeps {
 // ─── Standalone helpers ───
 
 /** Load all SharedKnowledgeEntries from the shared KB file. */
-export function loadSharedEntries(stateManager: StateManager): SharedKnowledgeEntry[] {
-  const raw = stateManager.readRaw(SHARED_KB_PATH);
+export async function loadSharedEntries(stateManager: StateManager): Promise<SharedKnowledgeEntry[]> {
+  const raw = await stateManager.readRaw(SHARED_KB_PATH);
   if (!raw || !Array.isArray(raw)) {
     return [];
   }
@@ -40,7 +40,7 @@ export async function loadDomainKnowledge(
   stateManager: StateManager,
   goalId: string
 ): Promise<DomainKnowledge> {
-  const raw = stateManager.readRaw(`goals/${goalId}/domain_knowledge.json`);
+  const raw = await stateManager.readRaw(`goals/${goalId}/domain_knowledge.json`);
 
   if (raw === null) {
     return DomainKnowledgeSchema.parse({
@@ -106,12 +106,12 @@ export async function searchAcrossGoals(
  * Query the shared knowledge base by tags (AND logic).
  * Optionally filter to entries contributed by a specific goal.
  */
-export function querySharedKnowledge(
+export async function querySharedKnowledge(
   stateManager: StateManager,
   tags: string[],
   goalId?: string
-): SharedKnowledgeEntry[] {
-  const all = loadSharedEntries(stateManager);
+): Promise<SharedKnowledgeEntry[]> {
+  const all = await loadSharedEntries(stateManager);
 
   return all.filter((entry) => {
     const tagsMatch =
@@ -136,7 +136,7 @@ export async function searchByEmbedding(
   }
 
   const results = await deps.vectorIndex.search(query, topK);
-  const all = loadSharedEntries(deps.stateManager);
+  const all = await loadSharedEntries(deps.stateManager);
   const output: { entry: SharedKnowledgeEntry; similarity: number }[] = [];
 
   for (const result of results) {

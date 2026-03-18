@@ -456,10 +456,10 @@ export async function cmdSuggest(
     return 1;
   }
 
-  const existingGoalIds = deps.stateManager.listGoalIds();
+  const existingGoalIds = await deps.stateManager.listGoalIds();
   const existingTitles: string[] = [];
   for (const id of existingGoalIds) {
-    const goal = deps.stateManager.loadGoal(id);
+    const goal = await deps.stateManager.loadGoal(id);
     if (goal?.title) {
       existingTitles.push(goal.title);
     }
@@ -564,10 +564,10 @@ export async function cmdImprove(
   const context = "";
 
   // Step 2: Suggest goals
-  const existingGoalIds = deps.stateManager.listGoalIds();
+  const existingGoalIds = await deps.stateManager.listGoalIds();
   const existingTitles: string[] = [];
   for (const id of existingGoalIds) {
-    const goal = deps.stateManager.loadGoal(id);
+    const goal = await deps.stateManager.loadGoal(id);
     if (goal?.title) {
       existingTitles.push(goal.title);
     }

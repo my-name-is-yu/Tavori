@@ -149,9 +149,9 @@ describe("goal add with real GoalNegotiator", () => {
     expect(code).toBe(0);
 
     // Verify a goal was actually saved to state
-    const goalIds = stateManager.listGoalIds();
+    const goalIds = await stateManager.listGoalIds();
     expect(goalIds.length).toBeGreaterThan(0);
-    const goals = goalIds.map((id) => stateManager.loadGoal(id)).filter(Boolean);
+    const goals = (await Promise.all(goalIds.map((id) => stateManager.loadGoal(id)))).filter(Boolean);
     expect(goals.length).toBeGreaterThan(0);
     expect(goals[0]!.description).toContain("Improve test coverage");
   });
@@ -228,7 +228,7 @@ describe("run subcommand with real CoreLoop (max_iterations=1)", () => {
   it("runs CoreLoop to completion with max_iterations=1 using MockLLM", async () => {
     // Pre-save a goal so CLIRunner can find it
     const goal = makeGoal({ id: "run-integ-goal" });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // CoreLoop needs LLM responses for:
     // 1. ObservationEngine (LLM-based observation for each dimension)
@@ -313,7 +313,7 @@ describe("run subcommand with real CoreLoop (max_iterations=1)", () => {
 
   it("exits with code 1 when ANTHROPIC_API_KEY is missing", async () => {
     delete process.env.ANTHROPIC_API_KEY;
-    stateManager.saveGoal(makeGoal({ id: "key-test-goal" }));
+    await stateManager.saveGoal(makeGoal({ id: "key-test-goal" }));
 
     const code = await runCLI(tmpDir, "run", "--goal", "key-test-goal");
     expect(code).toBe(1);
@@ -324,8 +324,8 @@ describe("run subcommand with real CoreLoop (max_iterations=1)", () => {
 
 describe("goal list reads real StateManager state", () => {
   it("shows goals saved directly to StateManager", async () => {
-    stateManager.saveGoal(makeGoal({ id: "direct-goal-1", title: "Direct Goal Alpha" }));
-    stateManager.saveGoal(makeGoal({ id: "direct-goal-2", title: "Direct Goal Beta" }));
+    await stateManager.saveGoal(makeGoal({ id: "direct-goal-1", title: "Direct Goal Alpha" }));
+    await stateManager.saveGoal(makeGoal({ id: "direct-goal-2", title: "Direct Goal Beta" }));
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const code = await runCLI(tmpDir, "goal", "list");

@@ -111,7 +111,7 @@ export async function observeFromDataSource(
     notes: `Data source: ${sourceId}`,
   });
 
-  applyObservation(goalId, entry);
+  await applyObservation(goalId, entry);
 
   return entry;
 }

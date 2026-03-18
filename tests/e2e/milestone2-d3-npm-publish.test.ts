@@ -220,12 +220,12 @@ describe("Milestone 2 D-3: npm publish preparation goal", () => {
   // Test 1: Satisficing judge correctly determines completion when all dims meet thresholds
   // ─────────────────────────────────────────────────────────────────────────
 
-  it("Satisficing judge correctly determines completion when all dimensions meet thresholds", () => {
+  it("Satisficing judge correctly determines completion when all dimensions meet thresholds", async () => {
     const stateManager = new StateManager(tempDir);
     const judge = new SatisficingJudge(stateManager);
 
     const goal = makeNpmPublishGoal("goal-d3-complete", true /* allMet */);
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const judgment = judge.isGoalComplete(goal);
 
@@ -238,12 +238,12 @@ describe("Milestone 2 D-3: npm publish preparation goal", () => {
   // Test 2: Satisficing judge does NOT trigger completion when dims below threshold
   // ─────────────────────────────────────────────────────────────────────────
 
-  it("Satisficing judge does NOT trigger completion when dimensions below threshold", () => {
+  it("Satisficing judge does NOT trigger completion when dimensions below threshold", async () => {
     const stateManager = new StateManager(tempDir);
     const judge = new SatisficingJudge(stateManager);
 
     const goal = makeNpmPublishGoal("goal-d3-incomplete", false /* not met */);
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const judgment = judge.isGoalComplete(goal);
 
@@ -308,7 +308,7 @@ describe("Milestone 2 D-3: npm publish preparation goal", () => {
 
     // Set up goal with ALL dimensions already meeting thresholds
     const goal = makeNpmPublishGoal(goalId, true /* allMet */);
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const result = await coreLoop.run(goalId);
 
@@ -366,7 +366,7 @@ describe("Milestone 2 D-3: npm publish preparation goal", () => {
     );
 
     const goal = makeNpmPublishGoal(goalId, false);
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // First task generation — no existing tasks
     await taskLifecycle.generateTask(goalId, "package_json_valid");
@@ -432,12 +432,12 @@ describe("Milestone 2 D-3: npm publish preparation goal", () => {
     );
 
     const goal = makeNpmPublishGoal(goalId, false);
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // Run observation
     await observationEngine.observe(goalId, [llmMethod, mechanicalMethod, llmMethod]);
 
-    const updatedGoal = stateManager.loadGoal(goalId);
+    const updatedGoal = await stateManager.loadGoal(goalId);
     expect(updatedGoal).not.toBeNull();
 
     // build_succeeds should be updated via FileExistence (dist/index.js exists = 1)
@@ -446,7 +446,7 @@ describe("Milestone 2 D-3: npm publish preparation goal", () => {
     expect(buildDim!.current_value).toBe(1);
 
     // Observation log should include a mechanical entry (from FileExistence)
-    const log = observationEngine.getObservationLog(goalId);
+    const log = await observationEngine.getObservationLog(goalId);
     const hasFileEntry = log.entries.some(
       (e) => e.layer === "mechanical" && e.dimension_name === "build_succeeds"
     );

@@ -9,6 +9,13 @@ import type { Threshold } from "../../src/types/core.js";
 import { makeTempDir } from "../helpers/temp-dir.js";
 import { makeGoal } from "../helpers/fixtures.js";
 
+/** Flush enough microtask/Promise queues for async StateManager I/O to settle */
+async function flushAsync(rounds = 10): Promise<void> {
+  for (let i = 0; i < rounds; i++) {
+    await Promise.resolve();
+  }
+}
+
 const OBS_METHOD = {
   type: "mechanical" as const,
   source: "test",
@@ -129,7 +136,7 @@ describe("calcDimensionProgress", () => {
 
 // ─── LoopController ───
 
-describe("LoopController", () => {
+describe("LoopController", async () => {
   let tmpDir: string;
   let stateManager: StateManager;
   let trustManager: TrustManager;
@@ -158,7 +165,7 @@ describe("LoopController", () => {
 
   it("start() sets running=true and status=running", async () => {
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // Use a loop that never resolves during this test
     const neverResolve = new Promise<LoopResult>(() => {});
@@ -187,7 +194,7 @@ describe("LoopController", () => {
 
   it("start() populates dimensions from StateManager", async () => {
     const goal = makeGoal({ dimensions: [{ name: "dim1", label: "Dimension One", current_value: 5, threshold: { type: "min", value: 10 }, confidence: 0.8, observation_method: OBS_METHOD, last_updated: new Date().toISOString(), history: [], weight: 1.0, uncertainty_weight: null, state_integrity: "ok", dimension_mapping: null }] });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const neverResolve = new Promise<LoopResult>(() => {});
     const loop = {
@@ -199,7 +206,7 @@ describe("LoopController", () => {
 
     const ctrl = new LoopController(loop, stateManager, trustManager);
     void ctrl.start("goal-1");
-    await Promise.resolve();
+    await flushAsync();
 
     const state = ctrl.getState();
     expect(state.dimensions).toHaveLength(1);
@@ -211,7 +218,7 @@ describe("LoopController", () => {
 
   it("onUpdate callback is called on state changes", async () => {
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const neverResolve = new Promise<LoopResult>(() => {});
     const loop = {
@@ -233,7 +240,7 @@ describe("LoopController", () => {
 
   it("stop() sets running=false and status=stopped, calls coreLoop.stop()", async () => {
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const neverResolve = new Promise<LoopResult>(() => {});
     const loop = {
@@ -257,7 +264,7 @@ describe("LoopController", () => {
 
   it("completes: state transitions to completed after coreLoop.run resolves", async () => {
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const loop = makeMockCoreLoop({ finalStatus: "completed", totalIterations: 5 });
     const ctrl = new LoopController(loop, stateManager, trustManager);
@@ -278,7 +285,7 @@ describe("LoopController", () => {
 
   it("polling interval calls refreshState every 2 seconds", async () => {
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const neverResolve = new Promise<LoopResult>(() => {});
     const loop = {
@@ -299,21 +306,21 @@ describe("LoopController", () => {
 
     // Advance 2 seconds to trigger one poll
     vi.advanceTimersByTime(2000);
-    await Promise.resolve();
+    await flushAsync();
 
     expect(updates.length).toBeGreaterThan(countAfterStart);
   });
 
-  it("refreshState does nothing when goal does not exist", () => {
+  it("refreshState does nothing when goal does not exist", async () => {
     const loop = makeMockCoreLoop();
     const ctrl = new LoopController(loop, stateManager, trustManager);
     // Should not throw
-    expect(() => ctrl.refreshState("nonexistent-goal")).not.toThrow();
+    expect(async () => await ctrl.refreshState("nonexistent-goal")).not.toThrow();
   });
 
   it("double start() is a no-op while already running", async () => {
     const goal = makeGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const neverResolve = new Promise<LoopResult>(() => {});
     const loop = {

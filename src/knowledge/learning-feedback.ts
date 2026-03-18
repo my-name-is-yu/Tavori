@@ -21,11 +21,11 @@ export interface FeedbackDeps {
 
 // ─── Persistence helpers ───
 
-export function getStructuralFeedback(
+export async function getStructuralFeedback(
   deps: FeedbackDeps,
   goalId: string
-): StructuralFeedback[] {
-  const raw = deps.stateManager.readRaw(
+): Promise<StructuralFeedback[]> {
+  const raw = await deps.stateManager.readRaw(
     `learning/${goalId}_structural_feedback.json`
   );
   if (!raw || !Array.isArray(raw)) return [];
@@ -44,14 +44,14 @@ export function getStructuralFeedback(
  * Record a structural feedback entry for a goal/iteration.
  * Validates with Zod and persists via StateManager.
  */
-export function recordStructuralFeedback(
+export async function recordStructuralFeedback(
   deps: FeedbackDeps,
   feedback: StructuralFeedback
-): void {
+): Promise<void> {
   const validated = StructuralFeedbackSchema.parse(feedback);
-  const existing = getStructuralFeedback(deps, validated.goalId);
+  const existing = await getStructuralFeedback(deps, validated.goalId);
   existing.push(validated);
-  deps.stateManager.writeRaw(
+  await deps.stateManager.writeRaw(
     `learning/${validated.goalId}_structural_feedback.json`,
     existing
   );
@@ -63,12 +63,12 @@ export function recordStructuralFeedback(
  * Aggregate structural feedback for a goal, optionally filtered by type.
  * Calculates averageDelta, recent trend (last 10 vs previous 10), and worst area.
  */
-export function aggregateFeedback(
+export async function aggregateFeedback(
   deps: FeedbackDeps,
   goalId: string,
   feedbackType?: StructuralFeedbackType
-): FeedbackAggregation[] {
-  const all = getStructuralFeedback(deps, goalId);
+): Promise<FeedbackAggregation[]> {
+  const all = await getStructuralFeedback(deps, goalId);
   const types: StructuralFeedbackType[] = feedbackType
     ? [feedbackType]
     : (StructuralFeedbackTypeEnum.options as StructuralFeedbackType[]);
@@ -152,11 +152,11 @@ export function aggregateFeedback(
  * Analyze feedback history and suggest parameter adjustments.
  * Only suggests when basedOnFeedbackCount >= 5 and confidence >= 0.6.
  */
-export function autoTuneParameters(
+export async function autoTuneParameters(
   deps: FeedbackDeps,
   goalId: string
-): ParameterTuning[] {
-  const all = getStructuralFeedback(deps, goalId);
+): Promise<ParameterTuning[]> {
+  const all = await getStructuralFeedback(deps, goalId);
   const suggestions: ParameterTuning[] = [];
 
   const typeGroups = new Map<StructuralFeedbackType, StructuralFeedback[]>();

@@ -90,10 +90,10 @@ export async function cmdGoalAddRaw(
     updated_at: now,
   };
 
-  stateManager.saveGoal(goal);
+  await stateManager.saveGoal(goal);
 
-  autoRegisterFileExistenceDataSources(stateManager, dimensions, title, goalId);
-  autoRegisterShellDataSources(stateManager, dimensions, goalId);
+  await autoRegisterFileExistenceDataSources(stateManager, dimensions, title, goalId);
+  await autoRegisterShellDataSources(stateManager, dimensions, goalId);
 
   console.log(`Goal registered successfully!`);
   console.log(`Goal ID:    ${goalId}`);

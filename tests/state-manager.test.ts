@@ -8,7 +8,7 @@ import type { GapHistoryEntry } from "../src/types/gap.js";
 import { makeTempDir } from "./helpers/temp-dir.js";
 import { makeGoal, makeDimension } from "./helpers/fixtures.js";
 
-describe("StateManager", () => {
+describe("StateManager", async () => {
   let tmpDir: string;
   let manager: StateManager;
 
@@ -35,11 +35,11 @@ describe("StateManager", () => {
     });
   });
 
-  describe("Goal CRUD", () => {
-    it("saves and loads a goal", () => {
+  describe("Goal CRUD", async () => {
+    it("saves and loads a goal", async () => {
       const goal = makeGoal({ id: "goal-1", title: "My Goal", dimensions: [makeDimension({ name: "test_dim" })] });
-      manager.saveGoal(goal);
-      const loaded = manager.loadGoal("goal-1");
+      await manager.saveGoal(goal);
+      const loaded = await manager.loadGoal("goal-1");
       expect(loaded).not.toBeNull();
       expect(loaded!.id).toBe("goal-1");
       expect(loaded!.title).toBe("My Goal");
@@ -47,57 +47,57 @@ describe("StateManager", () => {
       expect(loaded!.dimensions[0].name).toBe("test_dim");
     });
 
-    it("returns null for non-existent goal", () => {
-      const loaded = manager.loadGoal("nonexistent");
+    it("returns null for non-existent goal", async () => {
+      const loaded = await manager.loadGoal("nonexistent");
       expect(loaded).toBeNull();
     });
 
-    it("overwrites existing goal on save", () => {
+    it("overwrites existing goal on save", async () => {
       const goal = makeGoal({ id: "goal-1", title: "Original" });
-      manager.saveGoal(goal);
+      await manager.saveGoal(goal);
 
       const updated = makeGoal({ id: "goal-1", title: "Updated" });
-      manager.saveGoal(updated);
+      await manager.saveGoal(updated);
 
-      const loaded = manager.loadGoal("goal-1");
+      const loaded = await manager.loadGoal("goal-1");
       expect(loaded!.title).toBe("Updated");
     });
 
-    it("deletes a goal", () => {
+    it("deletes a goal", async () => {
       const goal = makeGoal({ id: "goal-del" });
-      manager.saveGoal(goal);
-      expect(manager.goalExists("goal-del")).toBe(true);
+      await manager.saveGoal(goal);
+      expect(await manager.goalExists("goal-del")).toBe(true);
 
-      const result = manager.deleteGoal("goal-del");
+      const result = await manager.deleteGoal("goal-del");
       expect(result).toBe(true);
-      expect(manager.goalExists("goal-del")).toBe(false);
-      expect(manager.loadGoal("goal-del")).toBeNull();
+      expect(await manager.goalExists("goal-del")).toBe(false);
+      expect(await manager.loadGoal("goal-del")).toBeNull();
     });
 
-    it("returns false when deleting non-existent goal", () => {
-      expect(manager.deleteGoal("nope")).toBe(false);
+    it("returns false when deleting non-existent goal", async () => {
+      expect(await manager.deleteGoal("nope")).toBe(false);
     });
 
-    it("lists goal IDs", () => {
-      manager.saveGoal(makeGoal({ id: "g1" }));
-      manager.saveGoal(makeGoal({ id: "g2" }));
-      manager.saveGoal(makeGoal({ id: "g3" }));
+    it("lists goal IDs", async () => {
+      await manager.saveGoal(makeGoal({ id: "g1" }));
+      await manager.saveGoal(makeGoal({ id: "g2" }));
+      await manager.saveGoal(makeGoal({ id: "g3" }));
 
-      const ids = manager.listGoalIds();
+      const ids = await manager.listGoalIds();
       expect(ids.sort()).toEqual(["g1", "g2", "g3"]);
     });
 
-    it("goalExists returns correct values", () => {
-      expect(manager.goalExists("nope")).toBe(false);
-      manager.saveGoal(makeGoal({ id: "exists" }));
-      expect(manager.goalExists("exists")).toBe(true);
+    it("goalExists returns correct values", async () => {
+      expect(await manager.goalExists("nope")).toBe(false);
+      await manager.saveGoal(makeGoal({ id: "exists" }));
+      expect(await manager.goalExists("exists")).toBe(true);
     });
   });
 
-  describe("atomic writes", () => {
-    it("does not leave .tmp files after successful write", () => {
+  describe("atomic writes", async () => {
+    it("does not leave .tmp files after successful write", async () => {
       const goal = makeGoal({ id: "atomic-test" });
-      manager.saveGoal(goal);
+      await manager.saveGoal(goal);
 
       const goalDir = path.join(tmpDir, "goals", "atomic-test");
       const files = fs.readdirSync(goalDir);
@@ -105,9 +105,9 @@ describe("StateManager", () => {
       expect(files.filter((f) => f.endsWith(".tmp"))).toHaveLength(0);
     });
 
-    it("writes valid JSON that can be parsed", () => {
+    it("writes valid JSON that can be parsed", async () => {
       const goal = makeGoal({ id: "json-test" });
-      manager.saveGoal(goal);
+      await manager.saveGoal(goal);
 
       const filePath = path.join(tmpDir, "goals", "json-test", "goal.json");
       const content = fs.readFileSync(filePath, "utf-8");
@@ -116,8 +116,8 @@ describe("StateManager", () => {
     });
   });
 
-  describe("Goal Tree", () => {
-    it("saves and loads a goal tree", () => {
+  describe("Goal Tree", async () => {
+    it("saves and loads a goal tree", async () => {
       const goal1 = makeGoal({ id: "root", children_ids: ["child1"] });
       const goal2 = makeGoal({ id: "child1", parent_id: "root", node_type: "subgoal" });
 
@@ -129,32 +129,32 @@ describe("StateManager", () => {
         },
       };
 
-      manager.saveGoalTree(tree);
-      const loaded = manager.loadGoalTree("root");
+      await manager.saveGoalTree(tree);
+      const loaded = await manager.loadGoalTree("root");
       expect(loaded).not.toBeNull();
       expect(loaded!.root_id).toBe("root");
       expect(Object.keys(loaded!.goals)).toHaveLength(2);
     });
 
-    it("returns null for non-existent tree", () => {
-      expect(manager.loadGoalTree("nonexistent")).toBeNull();
+    it("returns null for non-existent tree", async () => {
+      expect(await manager.loadGoalTree("nonexistent")).toBeNull();
     });
 
-    it("deletes a goal tree", () => {
+    it("deletes a goal tree", async () => {
       const tree: GoalTree = {
         root_id: "del-tree",
         goals: {
           "del-tree": makeGoal({ id: "del-tree" }),
         },
       };
-      manager.saveGoalTree(tree);
-      expect(manager.deleteGoalTree("del-tree")).toBe(true);
-      expect(manager.loadGoalTree("del-tree")).toBeNull();
+      await manager.saveGoalTree(tree);
+      expect(await manager.deleteGoalTree("del-tree")).toBe(true);
+      expect(await manager.loadGoalTree("del-tree")).toBeNull();
     });
   });
 
-  describe("Observation Log", () => {
-    it("saves and loads observation log", () => {
+  describe("Observation Log", async () => {
+    it("saves and loads observation log", async () => {
       const log = {
         goal_id: "obs-goal",
         entries: [
@@ -181,17 +181,17 @@ describe("StateManager", () => {
       };
 
       // Save the goal first so the directory exists
-      manager.saveGoal(makeGoal({ id: "obs-goal" }));
-      manager.saveObservationLog(log);
+      await manager.saveGoal(makeGoal({ id: "obs-goal" }));
+      await manager.saveObservationLog(log);
 
-      const loaded = manager.loadObservationLog("obs-goal");
+      const loaded = await manager.loadObservationLog("obs-goal");
       expect(loaded).not.toBeNull();
       expect(loaded!.entries).toHaveLength(1);
       expect(loaded!.entries[0].observation_id).toBe("obs-1");
     });
 
-    it("appends observations", () => {
-      manager.saveGoal(makeGoal({ id: "append-obs" }));
+    it("appends observations", async () => {
+      await manager.saveGoal(makeGoal({ id: "append-obs" }));
 
       const entry1: ObservationLogEntry = {
         observation_id: "obs-a",
@@ -219,23 +219,23 @@ describe("StateManager", () => {
         extracted_value: 20,
       };
 
-      manager.appendObservation("append-obs", entry1);
-      manager.appendObservation("append-obs", entry2);
+      await manager.appendObservation("append-obs", entry1);
+      await manager.appendObservation("append-obs", entry2);
 
-      const loaded = manager.loadObservationLog("append-obs");
+      const loaded = await manager.loadObservationLog("append-obs");
       expect(loaded!.entries).toHaveLength(2);
       expect(loaded!.entries[0].observation_id).toBe("obs-a");
       expect(loaded!.entries[1].observation_id).toBe("obs-b");
     });
 
-    it("returns null for non-existent observation log", () => {
-      expect(manager.loadObservationLog("nope")).toBeNull();
+    it("returns null for non-existent observation log", async () => {
+      expect(await manager.loadObservationLog("nope")).toBeNull();
     });
   });
 
-  describe("Gap History", () => {
-    it("saves and loads gap history", () => {
-      manager.saveGoal(makeGoal({ id: "gap-goal" }));
+  describe("Gap History", async () => {
+    it("saves and loads gap history", async () => {
+      await manager.saveGoal(makeGoal({ id: "gap-goal" }));
 
       const history: GapHistoryEntry[] = [
         {
@@ -248,14 +248,14 @@ describe("StateManager", () => {
         },
       ];
 
-      manager.saveGapHistory("gap-goal", history);
-      const loaded = manager.loadGapHistory("gap-goal");
+      await manager.saveGapHistory("gap-goal", history);
+      const loaded = await manager.loadGapHistory("gap-goal");
       expect(loaded).toHaveLength(1);
       expect(loaded[0].iteration).toBe(1);
     });
 
-    it("appends gap history entries", () => {
-      manager.saveGoal(makeGoal({ id: "gap-append" }));
+    it("appends gap history entries", async () => {
+      await manager.saveGoal(makeGoal({ id: "gap-append" }));
 
       const entry1: GapHistoryEntry = {
         iteration: 1,
@@ -271,21 +271,21 @@ describe("StateManager", () => {
         confidence_vector: [{ dimension_name: "d", confidence: 0.7 }],
       };
 
-      manager.appendGapHistoryEntry("gap-append", entry1);
-      manager.appendGapHistoryEntry("gap-append", entry2);
+      await manager.appendGapHistoryEntry("gap-append", entry1);
+      await manager.appendGapHistoryEntry("gap-append", entry2);
 
-      const loaded = manager.loadGapHistory("gap-append");
+      const loaded = await manager.loadGapHistory("gap-append");
       expect(loaded).toHaveLength(2);
       expect(loaded[0].gap_vector[0].normalized_weighted_gap).toBe(0.8);
       expect(loaded[1].gap_vector[0].normalized_weighted_gap).toBe(0.6);
     });
 
-    it("returns empty array for non-existent gap history", () => {
-      expect(manager.loadGapHistory("nonexistent")).toEqual([]);
+    it("returns empty array for non-existent gap history", async () => {
+      expect(await manager.loadGapHistory("nonexistent")).toEqual([]);
     });
   });
 
-  describe("milestone tracking", () => {
+  describe("milestone tracking", async () => {
     function makeMilestone(overrides: Partial<Goal> = {}): Goal {
       return makeGoal({
         node_type: "milestone",
@@ -416,15 +416,15 @@ describe("StateManager", () => {
       });
     });
 
-    describe("savePaceSnapshot", () => {
+    describe("savePaceSnapshot", async () => {
       it("persists pace snapshot to goal file", async () => {
         const milestone = makeMilestone({ id: "m-save" });
-        manager.saveGoal(milestone);
+        await manager.saveGoal(milestone);
 
         const snapshot = manager.evaluatePace(milestone, 0.5);
         await manager.savePaceSnapshot("m-save", snapshot);
 
-        const loaded = manager.loadGoal("m-save");
+        const loaded = await manager.loadGoal("m-save");
         expect(loaded).not.toBeNull();
         expect(loaded!.pace_snapshot).not.toBeNull();
         expect(loaded!.pace_snapshot!.achievement_ratio).toBe(0.5);
@@ -514,23 +514,23 @@ describe("StateManager", () => {
     });
   });
 
-  describe("raw read/write", () => {
-    it("writes and reads arbitrary JSON", () => {
-      manager.writeRaw("custom/data.json", { hello: "world" });
-      const loaded = manager.readRaw("custom/data.json");
+  describe("raw read/write", async () => {
+    it("writes and reads arbitrary JSON", async () => {
+      await manager.writeRaw("custom/data.json", { hello: "world" });
+      const loaded = await manager.readRaw("custom/data.json");
       expect(loaded).toEqual({ hello: "world" });
     });
 
-    it("returns null for non-existent raw path", () => {
-      expect(manager.readRaw("does/not/exist.json")).toBeNull();
+    it("returns null for non-existent raw path", async () => {
+      expect(await manager.readRaw("does/not/exist.json")).toBeNull();
     });
   });
 
-  describe("archiveGoal", () => {
-    it("archives a completed goal — moves all state files", () => {
+  describe("archiveGoal", async () => {
+    it("archives a completed goal — moves all state files", async () => {
       const goalId = "archive-full";
       const goal = makeGoal({ id: goalId });
-      manager.saveGoal(goal);
+      await manager.saveGoal(goal);
 
       // Create tasks/<goalId>/ directory with a file
       const tasksDir = path.join(tmpDir, "tasks", goalId);
@@ -552,7 +552,7 @@ describe("StateManager", () => {
       fs.mkdirSync(reportsDir, { recursive: true });
       fs.writeFileSync(path.join(reportsDir, "report.json"), JSON.stringify({ report: 1 }));
 
-      const result = manager.archiveGoal(goalId);
+      const result = await manager.archiveGoal(goalId);
       expect(result).toBe(true);
 
       const archiveBase = path.join(tmpDir, "archive", goalId);
@@ -579,17 +579,17 @@ describe("StateManager", () => {
       expect(fs.existsSync(reportsDir)).toBe(false);
     });
 
-    it("returns false for non-existent goal", () => {
-      const result = manager.archiveGoal("does-not-exist");
+    it("returns false for non-existent goal", async () => {
+      const result = await manager.archiveGoal("does-not-exist");
       expect(result).toBe(false);
     });
 
-    it("handles partial state (only goal dir, no tasks/strategies)", () => {
+    it("handles partial state (only goal dir, no tasks/strategies)", async () => {
       const goalId = "archive-partial";
       const goal = makeGoal({ id: goalId });
-      manager.saveGoal(goal);
+      await manager.saveGoal(goal);
 
-      const result = manager.archiveGoal(goalId);
+      const result = await manager.archiveGoal(goalId);
       expect(result).toBe(true);
 
       const archiveBase = path.join(tmpDir, "archive", goalId);
@@ -602,44 +602,44 @@ describe("StateManager", () => {
       expect(fs.existsSync(path.join(archiveBase, "stalls.json"))).toBe(false);
     });
 
-    it("listArchivedGoals returns archived goal IDs", () => {
+    it("listArchivedGoals returns archived goal IDs", async () => {
       // No archives yet
-      expect(manager.listArchivedGoals()).toEqual([]);
+      expect(await manager.listArchivedGoals()).toEqual([]);
 
       // Archive two goals
-      manager.saveGoal(makeGoal({ id: "arc-1" }));
-      manager.saveGoal(makeGoal({ id: "arc-2" }));
-      manager.archiveGoal("arc-1");
-      manager.archiveGoal("arc-2");
+      await manager.saveGoal(makeGoal({ id: "arc-1" }));
+      await manager.saveGoal(makeGoal({ id: "arc-2" }));
+      await manager.archiveGoal("arc-1");
+      await manager.archiveGoal("arc-2");
 
-      const archived = manager.listArchivedGoals().sort();
+      const archived = (await manager.listArchivedGoals()).sort();
       expect(archived).toEqual(["arc-1", "arc-2"]);
     });
 
-    it("loadGoal falls back to archive after archiveGoal()", () => {
+    it("loadGoal falls back to archive after archiveGoal()", async () => {
       // Create and save a goal
       const goal = makeGoal({ id: "fallback-test", title: "Archived Goal" });
-      manager.saveGoal(goal);
+      await manager.saveGoal(goal);
 
       // Verify it's loadable from active path
-      expect(manager.loadGoal("fallback-test")).not.toBeNull();
+      expect(await manager.loadGoal("fallback-test")).not.toBeNull();
 
       // Archive it — this removes the active-path directory
-      manager.archiveGoal("fallback-test");
+      await manager.archiveGoal("fallback-test");
 
       // Active path should no longer exist
       const activePath = path.join(tmpDir, "goals", "fallback-test");
       expect(fs.existsSync(activePath)).toBe(false);
 
       // loadGoal should still return the goal via archive fallback
-      const loaded = manager.loadGoal("fallback-test");
+      const loaded = await manager.loadGoal("fallback-test");
       expect(loaded).not.toBeNull();
       expect(loaded!.id).toBe("fallback-test");
       expect(loaded!.title).toBe("Archived Goal");
     });
 
-    it("loadGoal returns null for a goal that was never saved nor archived", () => {
-      expect(manager.loadGoal("never-existed")).toBeNull();
+    it("loadGoal returns null for a goal that was never saved nor archived", async () => {
+      expect(await manager.loadGoal("never-existed")).toBeNull();
     });
   });
 });

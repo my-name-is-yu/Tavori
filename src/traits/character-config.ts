@@ -24,8 +24,8 @@ export class CharacterConfigManager {
    * Returns DEFAULT_CHARACTER_CONFIG when no file exists.
    * Validates the stored data with Zod before returning.
    */
-  load(): CharacterConfig {
-    const raw = this.stateManager.readRaw(CHARACTER_CONFIG_PATH);
+  async load(): Promise<CharacterConfig> {
+    const raw = await this.stateManager.readRaw(CHARACTER_CONFIG_PATH);
     if (raw === null) {
       return DEFAULT_CHARACTER_CONFIG;
     }
@@ -35,27 +35,27 @@ export class CharacterConfigManager {
   /**
    * Validates config with Zod and writes it to disk atomically.
    */
-  save(config: CharacterConfig): void {
+  async save(config: CharacterConfig): Promise<void> {
     const parsed = CharacterConfigSchema.parse(config);
-    this.stateManager.writeRaw(CHARACTER_CONFIG_PATH, parsed);
+    await this.stateManager.writeRaw(CHARACTER_CONFIG_PATH, parsed);
   }
 
   /**
    * Resets config to DEFAULT_CHARACTER_CONFIG and persists it.
    */
-  reset(): void {
-    this.save(DEFAULT_CHARACTER_CONFIG);
+  async reset(): Promise<void> {
+    await this.save(DEFAULT_CHARACTER_CONFIG);
   }
 
   /**
    * Merges partial values into the current config, saves the result,
    * and returns the updated config.
    */
-  update(partial: Partial<CharacterConfig>): CharacterConfig {
-    const current = this.load();
+  async update(partial: Partial<CharacterConfig>): Promise<CharacterConfig> {
+    const current = await this.load();
     const merged = { ...current, ...partial };
     const validated = CharacterConfigSchema.parse(merged);
-    this.save(validated);
+    await this.save(validated);
     return validated;
   }
 }

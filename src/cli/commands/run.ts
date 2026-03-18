@@ -118,7 +118,7 @@ export async function cmdRun(
 
   const { coreLoop } = deps;
 
-  const goal = stateManager.loadGoal(goalId);
+  const goal = await stateManager.loadGoal(goalId);
   if (!goal) {
     rl?.close();
     logger.error(`Error: Goal "${goalId}" not found.`);

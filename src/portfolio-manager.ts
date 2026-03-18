@@ -70,15 +70,15 @@ export class PortfolioManager {
    * WaitStrategy instances are skipped (they do not generate tasks).
    * Returns null if no eligible active strategies exist.
    */
-  selectNextStrategyForTask(goalId: string): TaskSelectionResult | null {
-    const portfolio = this.strategyManager.getPortfolio(goalId);
+  async selectNextStrategyForTask(goalId: string): Promise<TaskSelectionResult | null> {
+    const portfolio = await this.strategyManager.getPortfolio(goalId);
     if (!portfolio) return null;
 
     const activeStrategies = portfolio.strategies.filter(
-      (s) => s.state === "active" || s.state === "evaluating"
+      (s: Strategy) => s.state === "active" || s.state === "evaluating"
     );
 
-    const eligible = activeStrategies.filter((s) => !this.isWaitStrategy(s));
+    const eligible = activeStrategies.filter((s: Strategy) => !this.isWaitStrategy(s));
     if (eligible.length === 0) return null;
 
     const now = Date.now();
@@ -126,12 +126,12 @@ export class PortfolioManager {
    * Requires a minimum number of task completions (default 3) before
    * producing a non-null score.
    */
-  calculateEffectiveness(goalId: string): EffectivenessRecord[] {
-    const portfolio = this.strategyManager.getPortfolio(goalId);
+  async calculateEffectiveness(goalId: string): Promise<EffectivenessRecord[]> {
+    const portfolio = await this.strategyManager.getPortfolio(goalId);
     if (!portfolio) return [];
 
     const activeStrategies = portfolio.strategies.filter(
-      (s) => s.state === "active" || s.state === "evaluating"
+      (s: Strategy) => s.state === "active" || s.state === "evaluating"
     );
 
     const now = new Date().toISOString();
@@ -139,7 +139,7 @@ export class PortfolioManager {
 
     for (const strategy of activeStrategies) {
       const sessionsConsumed = strategy.tasks_generated.length;
-      const gapDelta = this.calculateGapDeltaForStrategy(strategy, goalId);
+      const gapDelta = await this.calculateGapDeltaForStrategy(strategy, goalId);
 
       let score: number | null = null;
       if (sessionsConsumed >= this.config.effectiveness_min_tasks) {
@@ -168,7 +168,7 @@ export class PortfolioManager {
    *
    * Returns the trigger or null.
    */
-  shouldRebalance(goalId: string): RebalanceTrigger | null {
+  async shouldRebalance(goalId: string): Promise<RebalanceTrigger | null> {
     const now = Date.now();
 
     const lastRebalance = this.lastRebalanceTime.get(goalId) ?? 0;
@@ -181,18 +181,18 @@ export class PortfolioManager {
       };
     }
 
-    const currentRecords = this.calculateEffectiveness(goalId);
+    const currentRecords = await this.calculateEffectiveness(goalId);
     const history = this.rebalanceHistory.get(goalId) ?? [];
     if (history.length === 0) return null;
 
     for (const record of currentRecords) {
       if (record.effectiveness_score === null) continue;
 
-      const portfolio = this.strategyManager.getPortfolio(goalId);
+      const portfolio = await this.strategyManager.getPortfolio(goalId);
       if (!portfolio) continue;
 
       const strategy = portfolio.strategies.find(
-        (s) => s.id === record.strategy_id
+        (s: Strategy) => s.id === record.strategy_id
       );
       if (!strategy || strategy.effectiveness_score === null) continue;
 
@@ -226,10 +226,10 @@ export class PortfolioManager {
    * - If all terminated: set new_generation_needed = true
    * - Redistribute terminated strategy allocation proportionally
    */
-  rebalance(goalId: string, trigger: RebalanceTrigger): RebalanceResult {
+  async rebalance(goalId: string, trigger: RebalanceTrigger): Promise<RebalanceResult> {
     const now = new Date().toISOString();
-    const records = this.calculateEffectiveness(goalId);
-    const portfolio = this.strategyManager.getPortfolio(goalId);
+    const records = await this.calculateEffectiveness(goalId);
+    const portfolio = await this.strategyManager.getPortfolio(goalId);
 
     const result: RebalanceResult = {
       triggered_by: trigger.type,
@@ -240,23 +240,23 @@ export class PortfolioManager {
     };
 
     if (!portfolio) {
-      this.recordRebalance(goalId, result);
+      await this.recordRebalance(goalId, result);
       return result;
     }
 
     const activeStrategies = portfolio.strategies.filter(
-      (s) => s.state === "active" || s.state === "evaluating"
+      (s: Strategy) => s.state === "active" || s.state === "evaluating"
     );
 
     for (const strategy of activeStrategies) {
       if (this.checkTermination(strategy, records)) {
-        this.strategyManager.updateState(strategy.id, "terminated");
+        await this.strategyManager.updateState(strategy.id, "terminated");
         result.terminated_strategies.push(strategy.id);
       }
     }
 
     const remainingStrategies = activeStrategies.filter(
-      (s) => !result.terminated_strategies.includes(s.id)
+      (s: Strategy) => !result.terminated_strategies.includes(s.id)
     );
 
     if (
@@ -270,8 +270,8 @@ export class PortfolioManager {
 
     if (result.terminated_strategies.length > 0 && remainingStrategies.length > 0) {
       const freedAllocation = result.terminated_strategies.reduce(
-        (sum, sid) => {
-          const s = activeStrategies.find((st) => st.id === sid);
+        (sum: number, sid: string) => {
+          const s = activeStrategies.find((st: Strategy) => st.id === sid);
           return sum + (s?.allocation ?? 0);
         },
         0
@@ -414,14 +414,14 @@ export class PortfolioManager {
    * - Gap unchanged: activate fallback strategy if one exists
    * - Gap worsened: return rebalance trigger
    */
-  handleWaitStrategyExpiry(
+  async handleWaitStrategyExpiry(
     goalId: string,
     strategyId: string
-  ): RebalanceTrigger | null {
-    const portfolio = this.strategyManager.getPortfolio(goalId);
+  ): Promise<RebalanceTrigger | null> {
+    const portfolio = await this.strategyManager.getPortfolio(goalId);
     if (!portfolio) return null;
 
-    const strategy = portfolio.strategies.find((s) => s.id === strategyId);
+    const strategy = portfolio.strategies.find((s: Strategy) => s.id === strategyId);
     if (!strategy) return null;
 
     return _handleWaitStrategyExpiry(
@@ -431,7 +431,7 @@ export class PortfolioManager {
       (s) => this.isWaitStrategy(s),
       (gId, dim) => this.getCurrentGapForDimension(gId, dim),
       (sId, state) => this.strategyManager.updateState(sId, state as "active"),
-      (gId) => this.strategyManager.getPortfolio(gId)?.strategies ?? []
+      async (gId) => (await this.strategyManager.getPortfolio(gId))?.strategies ?? []
     );
   }
 
@@ -491,19 +491,19 @@ export class PortfolioManager {
 
   // ─── Private Helpers ───
 
-  private calculateGapDeltaForStrategy(strategy: Strategy, goalId: string): number {
+  private async calculateGapDeltaForStrategy(strategy: Strategy, goalId: string): Promise<number> {
     return _calculateGapDeltaForStrategy(
       strategy,
       goalId,
-      (path) => this.stateManager.readRaw(path)
+      async (path) => await this.stateManager.readRaw(path)
     );
   }
 
-  private getCurrentGapForDimension(goalId: string, dimension: string): number | null {
+  private async getCurrentGapForDimension(goalId: string, dimension: string): Promise<number | null> {
     return _getCurrentGapForDimension(
       goalId,
       dimension,
-      (path) => this.stateManager.readRaw(path)
+      async (path) => await this.stateManager.readRaw(path)
     );
   }
 
@@ -511,12 +511,12 @@ export class PortfolioManager {
    * Update a single strategy's allocation in the portfolio.
    * Reads portfolio, modifies the strategy, and writes back.
    */
-  private updateStrategyAllocation(
+  private async updateStrategyAllocation(
     goalId: string,
     strategyId: string,
     allocation: number
-  ): void {
-    const portfolio = this.strategyManager.getPortfolio(goalId);
+  ): Promise<void> {
+    const portfolio = await this.strategyManager.getPortfolio(goalId);
     if (!portfolio) return;
 
     const updated: Portfolio = {
@@ -528,7 +528,7 @@ export class PortfolioManager {
       ),
     };
 
-    this.stateManager.writeRaw(
+    await this.stateManager.writeRaw(
       `strategies/${goalId}/portfolio.json`,
       PortfolioSchema.parse(updated)
     );
@@ -537,14 +537,14 @@ export class PortfolioManager {
   /**
    * Record a rebalance result and update tracking state.
    */
-  private recordRebalance(goalId: string, result: RebalanceResult): void {
+  private async recordRebalance(goalId: string, result: RebalanceResult): Promise<void> {
     this.lastRebalanceTime.set(goalId, Date.now());
 
     const history = this.rebalanceHistory.get(goalId) ?? [];
     history.push(result);
     this.rebalanceHistory.set(goalId, history);
 
-    this.stateManager.writeRaw(
+    await this.stateManager.writeRaw(
       `strategies/${goalId}/rebalance-history.json`,
       history
     );

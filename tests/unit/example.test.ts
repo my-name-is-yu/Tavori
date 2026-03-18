@@ -292,7 +292,7 @@ describe("example unit coverage", () => {
       makeDimension("sales", { type: "min", value: 100 }, { current_value: 5, confidence: 0.9 }),
       makeDimension("nps", { type: "min", value: 40 }, { current_value: 40, confidence: 0.9 }),
     ]);
-    stateManager.writeRaw("tasks/proposal-goal/task-history.json", [
+    await stateManager.writeRaw("tasks/proposal-goal/task-history.json", [
       { primary_dimension: "sales", actual_elapsed_ms: 100, estimated_duration_ms: 500 },
       { primary_dimension: "sales", actual_elapsed_ms: 120, estimated_duration_ms: 500 },
       { primary_dimension: "sales", actual_elapsed_ms: 150, estimated_duration_ms: 500 },
@@ -322,7 +322,7 @@ describe("example unit coverage", () => {
     expect(mappings[0]?.parent_dimension).toBe("test coverage");
   });
 
-  it("covers tree completion and subgoal propagation flows", () => {
+  it("covers tree completion and subgoal propagation flows", async () => {
     const { stateManager, baseDir } = makeTempStateManager();
     tempDirs.push(baseDir);
 
@@ -343,28 +343,28 @@ describe("example unit coverage", () => {
       { children_ids: ["child-1", "child-2"] }
     );
 
-    stateManager.saveGoal(root);
-    stateManager.saveGoal(child);
-    stateManager.saveGoal(cancelledChild);
+    await stateManager.saveGoal(root);
+    await stateManager.saveGoal(child);
+    await stateManager.saveGoal(cancelledChild);
 
-    expect(judge.judgeTreeCompletion("root")).toMatchObject({
+    expect(await judge.judgeTreeCompletion("root")).toMatchObject({
       is_complete: true,
       blocking_dimensions: [],
       low_confidence_dimensions: [],
     });
-    expect(judge.judgeTreeCompletion("missing-root").is_complete).toBe(false);
+    expect((await judge.judgeTreeCompletion("missing-root")).is_complete).toBe(false);
 
     const parent = makeGoal("parent", [
       makeDimension("shipping", { type: "min", value: 100 }, { current_value: 0, confidence: 0.9 }),
       makeDimension("quality_gate", { type: "present" }, { current_value: false, confidence: 0.9 }),
     ]);
-    stateManager.saveGoal(parent);
+    await stateManager.saveGoal(parent);
 
-    judge.propagateSubgoalCompletion("shipping", "parent");
-    let updatedParent = stateManager.loadGoal("parent");
+    await judge.propagateSubgoalCompletion("shipping", "parent");
+    let updatedParent = await stateManager.loadGoal("parent");
     expect(updatedParent?.dimensions.find((dim) => dim.name === "shipping")?.current_value).toBe(100);
 
-    judge.propagateSubgoalCompletion("subgoal-1", "parent", [
+    await judge.propagateSubgoalCompletion("subgoal-1", "parent", [
       makeDimension("throughput-a", { type: "min", value: 100 }, {
         current_value: 80,
         confidence: 0.9,
@@ -382,7 +382,7 @@ describe("example unit coverage", () => {
       }),
     ]);
 
-    updatedParent = stateManager.loadGoal("parent");
+    updatedParent = await stateManager.loadGoal("parent");
     expect(updatedParent?.dimensions.find((dim) => dim.name === "shipping")?.current_value).toBe(90);
     expect(updatedParent?.dimensions.find((dim) => dim.name === "quality_gate")?.current_value).toBe(
       true

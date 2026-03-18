@@ -8,7 +8,7 @@ export async function cmdReport(stateManager: StateManager, goalId: string): Pro
   const logger = getCliLogger();
   const reportingEngine = new ReportingEngine(stateManager);
 
-  const goal = stateManager.loadGoal(goalId);
+  const goal = await stateManager.loadGoal(goalId);
   if (!goal) {
     logger.error(`Error: Goal "${goalId}" not found.`);
     return 1;

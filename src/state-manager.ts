@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import * as fsp from "node:fs/promises";
 import * as path from "node:path";
 import { getMotivaDirPath } from "./utils/paths.js";
 import type { Logger } from "./runtime/logger.js";
@@ -60,24 +61,25 @@ export class StateManager {
     }
   }
 
-  private goalDir(goalId: string): string {
+  private async goalDir(goalId: string): Promise<string> {
     const dir = path.join(this.baseDir, "goals", goalId);
-    fs.mkdirSync(dir, { recursive: true });
+    await fsp.mkdir(dir, { recursive: true });
     return dir;
   }
 
   // ─── Atomic Write ───
 
-  private atomicWrite(filePath: string, data: unknown): void {
+  private async atomicWrite(filePath: string, data: unknown): Promise<void> {
+    await fsp.mkdir(path.dirname(filePath), { recursive: true });
     const tmpPath = filePath + ".tmp";
-    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), "utf-8");
-    fs.renameSync(tmpPath, filePath);
+    await fsp.writeFile(tmpPath, JSON.stringify(data, null, 2), "utf-8");
+    await fsp.rename(tmpPath, filePath);
   }
 
-  private readJsonFile<T>(filePath: string): T | null {
+  private async atomicRead<T>(filePath: string): Promise<T | null> {
     let content: string;
     try {
-      content = fs.readFileSync(filePath, "utf-8");
+      content = await fsp.readFile(filePath, "utf-8");
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") {
         return null;
@@ -94,29 +96,33 @@ export class StateManager {
 
   // ─── Goal CRUD ───
 
-  saveGoal(goal: Goal): void {
+  async saveGoal(goal: Goal): Promise<void> {
     const parsed = GoalSchema.parse(goal);
-    const dir = this.goalDir(parsed.id);
-    this.atomicWrite(path.join(dir, "goal.json"), parsed);
+    const dir = await this.goalDir(parsed.id);
+    await this.atomicWrite(path.join(dir, "goal.json"), parsed);
   }
 
-  loadGoal(goalId: string): Goal | null {
+  async loadGoal(goalId: string): Promise<Goal | null> {
     // Primary path: active goals
     const filePath = path.join(this.baseDir, "goals", goalId, "goal.json");
-    const raw = this.readJsonFile<unknown>(filePath);
+    const raw = await this.atomicRead<unknown>(filePath);
     if (raw !== null) return GoalSchema.parse(raw);
 
     // Fallback: archived goals (archiveGoal() copies goal dir to archive/<goalId>/goal/)
     const archivePath = path.join(this.baseDir, "archive", goalId, "goal", "goal.json");
-    const archiveRaw = this.readJsonFile<unknown>(archivePath);
+    const archiveRaw = await this.atomicRead<unknown>(archivePath);
     if (archiveRaw === null) return null;
     return GoalSchema.parse(archiveRaw);
   }
 
-  deleteGoal(goalId: string): boolean {
+  async deleteGoal(goalId: string): Promise<boolean> {
     const dir = path.join(this.baseDir, "goals", goalId);
-    if (!fs.existsSync(dir)) return false;
-    fs.rmSync(dir, { recursive: true, force: true });
+    try {
+      await fsp.access(dir);
+    } catch {
+      return false;
+    }
+    await fsp.rm(dir, { recursive: true, force: true });
     return true;
   }
 
@@ -133,49 +139,57 @@ export class StateManager {
    *
    * Returns true if the goal was archived, false if the goal was not found.
    */
-  archiveGoal(goalId: string): boolean {
+  async archiveGoal(goalId: string): Promise<boolean> {
     const goalDir = path.join(this.baseDir, "goals", goalId);
-    if (!fs.existsSync(goalDir)) return false;
+    try {
+      await fsp.access(goalDir);
+    } catch {
+      return false;
+    }
 
     const archiveBase = path.join(this.baseDir, "archive", goalId);
-    fs.mkdirSync(archiveBase, { recursive: true });
+    await fsp.mkdir(archiveBase, { recursive: true });
 
     // Move goals/<goalId>/ → archive/<goalId>/goal/
     const archiveGoalDir = path.join(archiveBase, "goal");
-    fs.cpSync(goalDir, archiveGoalDir, { recursive: true });
-    fs.rmSync(goalDir, { recursive: true, force: true });
+    await fsp.cp(goalDir, archiveGoalDir, { recursive: true });
+    await fsp.rm(goalDir, { recursive: true, force: true });
 
     // Move tasks/<goalId>/ → archive/<goalId>/tasks/ (if exists)
     const tasksDir = path.join(this.baseDir, "tasks", goalId);
-    if (fs.existsSync(tasksDir)) {
+    try {
+      await fsp.access(tasksDir);
       const archiveTasksDir = path.join(archiveBase, "tasks");
-      fs.cpSync(tasksDir, archiveTasksDir, { recursive: true });
-      fs.rmSync(tasksDir, { recursive: true, force: true });
-    }
+      await fsp.cp(tasksDir, archiveTasksDir, { recursive: true });
+      await fsp.rm(tasksDir, { recursive: true, force: true });
+    } catch { /* not found, skip */ }
 
     // Move strategies/<goalId>/ → archive/<goalId>/strategies/ (if exists)
     const strategiesDir = path.join(this.baseDir, "strategies", goalId);
-    if (fs.existsSync(strategiesDir)) {
+    try {
+      await fsp.access(strategiesDir);
       const archiveStrategiesDir = path.join(archiveBase, "strategies");
-      fs.cpSync(strategiesDir, archiveStrategiesDir, { recursive: true });
-      fs.rmSync(strategiesDir, { recursive: true, force: true });
-    }
+      await fsp.cp(strategiesDir, archiveStrategiesDir, { recursive: true });
+      await fsp.rm(strategiesDir, { recursive: true, force: true });
+    } catch { /* not found, skip */ }
 
     // Move stalls/<goalId>.json → archive/<goalId>/stalls.json (if exists)
     const stallsFile = path.join(this.baseDir, "stalls", `${goalId}.json`);
-    if (fs.existsSync(stallsFile)) {
+    try {
+      await fsp.access(stallsFile);
       const archiveStallsFile = path.join(archiveBase, "stalls.json");
-      fs.cpSync(stallsFile, archiveStallsFile);
-      fs.rmSync(stallsFile, { force: true });
-    }
+      await fsp.cp(stallsFile, archiveStallsFile);
+      await fsp.rm(stallsFile, { force: true });
+    } catch { /* not found, skip */ }
 
     // Move reports/<goalId>/ → archive/<goalId>/reports/ (if exists)
     const reportsDir = path.join(this.baseDir, "reports", goalId);
-    if (fs.existsSync(reportsDir)) {
+    try {
+      await fsp.access(reportsDir);
       const archiveReportsDir = path.join(archiveBase, "reports");
-      fs.cpSync(reportsDir, archiveReportsDir, { recursive: true });
-      fs.rmSync(reportsDir, { recursive: true, force: true });
-    }
+      await fsp.cp(reportsDir, archiveReportsDir, { recursive: true });
+      await fsp.rm(reportsDir, { recursive: true, force: true });
+    } catch { /* not found, skip */ }
 
     return true;
   }
@@ -183,110 +197,115 @@ export class StateManager {
   /**
    * Returns the goal IDs of all archived goals under <base>/archive/.
    */
-  listArchivedGoals(): string[] {
+  async listArchivedGoals(): Promise<string[]> {
     const archiveDir = path.join(this.baseDir, "archive");
-    if (!fs.existsSync(archiveDir)) return [];
-    return fs
-      .readdirSync(archiveDir, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => d.name);
+    try {
+      const entries = await fsp.readdir(archiveDir, { withFileTypes: true });
+      return entries.filter((d) => d.isDirectory()).map((d) => d.name);
+    } catch {
+      return [];
+    }
   }
 
-  listGoalIds(): string[] {
+  async listGoalIds(): Promise<string[]> {
     const goalsDir = path.join(this.baseDir, "goals");
-    if (!fs.existsSync(goalsDir)) return [];
-    return fs
-      .readdirSync(goalsDir, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => d.name);
+    try {
+      const entries = await fsp.readdir(goalsDir, { withFileTypes: true });
+      return entries.filter((d) => d.isDirectory()).map((d) => d.name);
+    } catch {
+      return [];
+    }
   }
 
   // ─── Goal Tree ───
 
-  saveGoalTree(tree: GoalTree): void {
+  async saveGoalTree(tree: GoalTree): Promise<void> {
     const parsed = GoalTreeSchema.parse(tree);
     const filePath = path.join(
       this.baseDir,
       "goal-trees",
       `${parsed.root_id}.json`
     );
-    this.atomicWrite(filePath, parsed);
+    await this.atomicWrite(filePath, parsed);
   }
 
-  loadGoalTree(rootId: string): GoalTree | null {
+  async loadGoalTree(rootId: string): Promise<GoalTree | null> {
     const filePath = path.join(this.baseDir, "goal-trees", `${rootId}.json`);
-    const raw = this.readJsonFile<unknown>(filePath);
+    const raw = await this.atomicRead<unknown>(filePath);
     if (raw === null) return null;
     return GoalTreeSchema.parse(raw);
   }
 
-  deleteGoalTree(rootId: string): boolean {
+  async deleteGoalTree(rootId: string): Promise<boolean> {
     const filePath = path.join(this.baseDir, "goal-trees", `${rootId}.json`);
-    if (!fs.existsSync(filePath)) return false;
-    fs.unlinkSync(filePath);
-    return true;
+    try {
+      await fsp.unlink(filePath);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   // ─── Observation Log ───
 
-  saveObservationLog(log: ObservationLog): void {
+  async saveObservationLog(log: ObservationLog): Promise<void> {
     const parsed = ObservationLogSchema.parse(log);
-    const dir = this.goalDir(parsed.goal_id);
-    this.atomicWrite(path.join(dir, "observations.json"), parsed);
+    const dir = await this.goalDir(parsed.goal_id);
+    await this.atomicWrite(path.join(dir, "observations.json"), parsed);
   }
 
-  loadObservationLog(goalId: string): ObservationLog | null {
+  async loadObservationLog(goalId: string): Promise<ObservationLog | null> {
     const filePath = path.join(
       this.baseDir,
       "goals",
       goalId,
       "observations.json"
     );
-    const raw = this.readJsonFile<unknown>(filePath);
+    const raw = await this.atomicRead<unknown>(filePath);
     if (raw === null) return null;
     return ObservationLogSchema.parse(raw);
   }
 
-  appendObservation(goalId: string, entry: ObservationLogEntry): void {
+  async appendObservation(goalId: string, entry: ObservationLogEntry): Promise<void> {
     const parsed = ObservationLogEntrySchema.parse(entry);
     if (parsed.goal_id !== goalId) {
       throw new Error(
         `appendObservation: entry.goal_id ("${parsed.goal_id}") does not match goalId ("${goalId}")`
       );
     }
-    let log = this.loadObservationLog(goalId);
+    let log = await this.loadObservationLog(goalId);
     if (log === null) {
       log = { goal_id: goalId, entries: [] };
     }
     log.entries.push(parsed);
-    this.saveObservationLog(log);
+    await this.saveObservationLog(log);
   }
 
   // ─── Gap History ───
 
-  saveGapHistory(goalId: string, history: GapHistoryEntry[]): void {
+  async saveGapHistory(goalId: string, history: GapHistoryEntry[]): Promise<void> {
     const parsed = history.map((e) => GapHistoryEntrySchema.parse(e));
-    const dir = this.goalDir(goalId);
-    this.atomicWrite(path.join(dir, "gap-history.json"), parsed);
+    const dir = await this.goalDir(goalId);
+    await this.atomicWrite(path.join(dir, "gap-history.json"), parsed);
   }
 
-  loadGapHistory(goalId: string): GapHistoryEntry[] {
+  async loadGapHistory(goalId: string): Promise<GapHistoryEntry[]> {
     const filePath = path.join(
       this.baseDir,
       "goals",
       goalId,
       "gap-history.json"
     );
-    const raw = this.readJsonFile<unknown[]>(filePath);
+    const raw = await this.atomicRead<unknown[]>(filePath);
     if (raw === null) return [];
     return raw.map((e) => GapHistoryEntrySchema.parse(e));
   }
 
-  appendGapHistoryEntry(goalId: string, entry: GapHistoryEntry): void {
+  async appendGapHistoryEntry(goalId: string, entry: GapHistoryEntry): Promise<void> {
     const parsed = GapHistoryEntrySchema.parse(entry);
-    const history = this.loadGapHistory(goalId);
+    const history = await this.loadGapHistory(goalId);
     history.push(parsed);
-    this.saveGapHistory(goalId, history);
+    await this.saveGapHistory(goalId, history);
   }
 
   // ─── Milestone Tracking ───
@@ -382,12 +401,12 @@ export class StateManager {
    * Save a pace snapshot to a milestone goal (persists to disk).
    */
   async savePaceSnapshot(goalId: string, snapshot: PaceSnapshot): Promise<void> {
-    const goal = this.loadGoal(goalId);
+    const goal = await this.loadGoal(goalId);
     if (!goal) {
       throw new Error(`savePaceSnapshot: goal "${goalId}" not found`);
     }
     const updated: Goal = { ...goal, pace_snapshot: snapshot };
-    this.saveGoal(updated);
+    await this.saveGoal(updated);
   }
 
   /**
@@ -453,8 +472,8 @@ export class StateManager {
    * Returns null if the root goal doesn't exist.
    * Returns goals in BFS order: root first, then children level by level.
    */
-  getGoalTree(rootId: string): Goal[] | null {
-    const root = this.loadGoal(rootId);
+  async getGoalTree(rootId: string): Promise<Goal[] | null> {
+    const root = await this.loadGoal(rootId);
     if (root === null) return null;
 
     const result: Goal[] = [];
@@ -466,7 +485,7 @@ export class StateManager {
       if (visited.has(currentId)) continue;
       visited.add(currentId);
 
-      const goal = this.loadGoal(currentId);
+      const goal = await this.loadGoal(currentId);
       if (goal === null) continue;
 
       result.push(goal);
@@ -485,8 +504,8 @@ export class StateManager {
    * Get all goals in the subtree of goalId (including goalId itself).
    * Returns [] if goal not found.
    */
-  getSubtree(goalId: string): Goal[] {
-    const root = this.loadGoal(goalId);
+  async getSubtree(goalId: string): Promise<Goal[]> {
+    const root = await this.loadGoal(goalId);
     if (root === null) return [];
 
     const result: Goal[] = [];
@@ -498,7 +517,7 @@ export class StateManager {
       if (visited.has(currentId)) continue;
       visited.add(currentId);
 
-      const goal = this.loadGoal(currentId);
+      const goal = await this.loadGoal(currentId);
       if (goal === null) continue;
 
       result.push(goal);
@@ -518,8 +537,8 @@ export class StateManager {
    * Merges updates into the existing goal, preserving its id.
    * If the goal has a parent_id, ensures the parent's children_ids still includes this goal.
    */
-  updateGoalInTree(goalId: string, updates: Partial<Goal>): void {
-    const existingGoal = this.loadGoal(goalId);
+  async updateGoalInTree(goalId: string, updates: Partial<Goal>): Promise<void> {
+    const existingGoal = await this.loadGoal(goalId);
     if (existingGoal === null) {
       throw new Error(`updateGoalInTree: goal "${goalId}" not found`);
     }
@@ -530,13 +549,13 @@ export class StateManager {
       id: existingGoal.id,  // id is immutable
     };
 
-    this.saveGoal(updatedGoal);
+    await this.saveGoal(updatedGoal);
 
     // Ensure parent's children_ids still includes this goal
     if (existingGoal.parent_id !== null) {
-      const parent = this.loadGoal(existingGoal.parent_id);
+      const parent = await this.loadGoal(existingGoal.parent_id);
       if (parent !== null && !parent.children_ids.includes(goalId)) {
-        this.saveGoal({
+        await this.saveGoal({
           ...parent,
           children_ids: [...parent.children_ids, goalId],
           updated_at: new Date().toISOString(),
@@ -548,23 +567,26 @@ export class StateManager {
   // ─── Utility ───
 
   /** Check whether a goal directory exists */
-  goalExists(goalId: string): boolean {
-    return fs.existsSync(
-      path.join(this.baseDir, "goals", goalId, "goal.json")
-    );
+  async goalExists(goalId: string): Promise<boolean> {
+    try {
+      await fsp.access(path.join(this.baseDir, "goals", goalId, "goal.json"));
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /** Read raw JSON from any path relative to base dir */
-  readRaw(relativePath: string): unknown | null {
+  async readRaw(relativePath: string): Promise<unknown | null> {
     const filePath = path.join(this.baseDir, relativePath);
-    return this.readJsonFile<unknown>(filePath);
+    return this.atomicRead<unknown>(filePath);
   }
 
   /** Write raw JSON to any path relative to base dir (atomic) */
-  writeRaw(relativePath: string, data: unknown): void {
+  async writeRaw(relativePath: string, data: unknown): Promise<void> {
     const filePath = path.join(this.baseDir, relativePath);
     const dir = path.dirname(filePath);
-    fs.mkdirSync(dir, { recursive: true });
-    this.atomicWrite(filePath, data);
+    await fsp.mkdir(dir, { recursive: true });
+    await this.atomicWrite(filePath, data);
   }
 }

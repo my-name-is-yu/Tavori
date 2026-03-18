@@ -219,7 +219,7 @@ describe("CLIRunner construction", () => {
 
 // ─── Unknown subcommand ───────────────────────────────────────────────────────
 
-describe("unknown subcommand", () => {
+describe("unknown subcommand", async () => {
   it("exits with code 1 for an unknown subcommand", async () => {
     const code = await runCLI("unknown-command");
     expect(code).toBe(1);
@@ -243,7 +243,7 @@ describe("unknown subcommand", () => {
 
 // ─── `run` subcommand ─────────────────────────────────────────────────────────
 
-describe("run subcommand", () => {
+describe("run subcommand", async () => {
   it("exits with code 1 when --goal is missing", async () => {
     const code = await runCLI("run");
     expect(code).toBe(1);
@@ -256,7 +256,7 @@ describe("run subcommand", () => {
   });
 
   it("calls CoreLoop.run() with the correct goalId", async () => {
-    stateManager.saveGoal(makeGoal({ id: "goal-abc" }));
+    await stateManager.saveGoal(makeGoal({ id: "goal-abc" }));
 
     const mockRun = vi.fn().mockResolvedValue(makeLoopResult({ goalId: "goal-abc" }));
     vi.mocked(CoreLoop).mockImplementation(
@@ -269,7 +269,7 @@ describe("run subcommand", () => {
   });
 
   it("exits with code 0 when finalStatus is completed", async () => {
-    stateManager.saveGoal(makeGoal({ id: "g-completed" }));
+    await stateManager.saveGoal(makeGoal({ id: "g-completed" }));
 
     vi.mocked(CoreLoop).mockImplementation(() => ({
       run: vi.fn().mockResolvedValue(makeLoopResult({ finalStatus: "completed" })),
@@ -281,7 +281,7 @@ describe("run subcommand", () => {
   });
 
   it("exits with code 0 when finalStatus is max_iterations", async () => {
-    stateManager.saveGoal(makeGoal({ id: "g-max" }));
+    await stateManager.saveGoal(makeGoal({ id: "g-max" }));
 
     vi.mocked(CoreLoop).mockImplementation(() => ({
       run: vi.fn().mockResolvedValue(makeLoopResult({ finalStatus: "max_iterations" })),
@@ -293,7 +293,7 @@ describe("run subcommand", () => {
   });
 
   it("exits with code 0 when finalStatus is stopped", async () => {
-    stateManager.saveGoal(makeGoal({ id: "g-stopped" }));
+    await stateManager.saveGoal(makeGoal({ id: "g-stopped" }));
 
     vi.mocked(CoreLoop).mockImplementation(() => ({
       run: vi.fn().mockResolvedValue(makeLoopResult({ finalStatus: "stopped" })),
@@ -305,7 +305,7 @@ describe("run subcommand", () => {
   });
 
   it("exits with code 2 when finalStatus is stalled", async () => {
-    stateManager.saveGoal(makeGoal({ id: "g-stalled" }));
+    await stateManager.saveGoal(makeGoal({ id: "g-stalled" }));
 
     vi.mocked(CoreLoop).mockImplementation(() => ({
       run: vi.fn().mockResolvedValue(makeLoopResult({ finalStatus: "stalled" })),
@@ -317,7 +317,7 @@ describe("run subcommand", () => {
   });
 
   it("exits with code 1 when finalStatus is error", async () => {
-    stateManager.saveGoal(makeGoal({ id: "g-error" }));
+    await stateManager.saveGoal(makeGoal({ id: "g-error" }));
 
     vi.mocked(CoreLoop).mockImplementation(() => ({
       run: vi.fn().mockResolvedValue(makeLoopResult({ finalStatus: "error" })),
@@ -329,7 +329,7 @@ describe("run subcommand", () => {
   });
 
   it("exits with code 1 when CoreLoop.run() throws an error", async () => {
-    stateManager.saveGoal(makeGoal({ id: "g-throw" }));
+    await stateManager.saveGoal(makeGoal({ id: "g-throw" }));
 
     vi.mocked(CoreLoop).mockImplementation(() => ({
       run: vi.fn().mockRejectedValue(new Error("Unexpected LLM failure")),
@@ -342,14 +342,14 @@ describe("run subcommand", () => {
 
   it("exits with code 1 when ANTHROPIC_API_KEY is not set", async () => {
     delete process.env.ANTHROPIC_API_KEY;
-    stateManager.saveGoal(makeGoal({ id: "g-nokey" }));
+    await stateManager.saveGoal(makeGoal({ id: "g-nokey" }));
 
     const code = await runCLI("run", "--goal", "g-nokey");
     expect(code).toBe(1);
   });
 
   it("prints goal title before starting the loop", async () => {
-    stateManager.saveGoal(makeGoal({ id: "g-print", title: "My Test Goal" }));
+    await stateManager.saveGoal(makeGoal({ id: "g-print", title: "My Test Goal" }));
 
     vi.mocked(CoreLoop).mockImplementation(() => ({
       run: vi.fn().mockResolvedValue(makeLoopResult()),
@@ -365,7 +365,7 @@ describe("run subcommand", () => {
   });
 
   it("forwards --max-iterations to CoreLoop as maxIterations number", async () => {
-    stateManager.saveGoal(makeGoal({ id: "g-maxiter" }));
+    await stateManager.saveGoal(makeGoal({ id: "g-maxiter" }));
 
     vi.mocked(CoreLoop).mockImplementation(
       (_deps, config) =>
@@ -387,7 +387,7 @@ describe("run subcommand", () => {
 
 // ─── `--yes` flag position independence ──────────────────────────────────────
 
-describe("--yes flag position independence", () => {
+describe("--yes flag position independence", async () => {
   // The mock CoreLoop never calls approvalFn, so we cannot observe "Auto-approved"
   // in console output. Instead we verify that:
   //   (a) routing succeeds (exit code 0, not "unknown subcommand")
@@ -395,7 +395,7 @@ describe("--yes flag position independence", () => {
   // This confirms --yes is correctly stripped before subcommand dispatch.
 
   it("honours --yes placed before the subcommand (motiva --yes run --goal <id>)", async () => {
-    stateManager.saveGoal(makeGoal({ id: "g-yes-before" }));
+    await stateManager.saveGoal(makeGoal({ id: "g-yes-before" }));
 
     const mockRun = vi.fn().mockResolvedValue(makeLoopResult({ goalId: "g-yes-before" }));
     vi.mocked(CoreLoop).mockImplementation(
@@ -411,7 +411,7 @@ describe("--yes flag position independence", () => {
   });
 
   it("honours --yes placed after --goal (motiva run --goal <id> --yes)", async () => {
-    stateManager.saveGoal(makeGoal({ id: "g-yes-after" }));
+    await stateManager.saveGoal(makeGoal({ id: "g-yes-after" }));
 
     const mockRun = vi.fn().mockResolvedValue(makeLoopResult({ goalId: "g-yes-after" }));
     vi.mocked(CoreLoop).mockImplementation(
@@ -426,7 +426,7 @@ describe("--yes flag position independence", () => {
   });
 
   it("honours -y shorthand placed before the subcommand", async () => {
-    stateManager.saveGoal(makeGoal({ id: "g-y-before" }));
+    await stateManager.saveGoal(makeGoal({ id: "g-y-before" }));
 
     const mockRun = vi.fn().mockResolvedValue(makeLoopResult({ goalId: "g-y-before" }));
     vi.mocked(CoreLoop).mockImplementation(
@@ -440,7 +440,7 @@ describe("--yes flag position independence", () => {
   });
 
   it("--yes before subcommand does not break exit-code when loop fails", async () => {
-    stateManager.saveGoal(makeGoal({ id: "g-yes-fail" }));
+    await stateManager.saveGoal(makeGoal({ id: "g-yes-fail" }));
 
     vi.mocked(CoreLoop).mockImplementation(() => ({
       run: vi.fn().mockResolvedValue(makeLoopResult({ finalStatus: "stalled" })),
@@ -455,14 +455,14 @@ describe("--yes flag position independence", () => {
 
   it("--yes before 'goal archive' skips confirmation for non-completed goals", async () => {
     // A goal that is NOT completed — without --yes/--force this should return exit 1
-    stateManager.saveGoal(makeGoal({ id: "g-archive-yes", status: "active" }));
+    await stateManager.saveGoal(makeGoal({ id: "g-archive-yes", status: "active" }));
 
     // Without --yes: should fail (status not completed, no force flag)
     const codeNoYes = await runCLI("goal", "archive", "g-archive-yes");
     expect(codeNoYes).toBe(1);
 
     // Save the goal again since archiving may have side effects on first call
-    stateManager.saveGoal(makeGoal({ id: "g-archive-yes2", status: "active" }));
+    await stateManager.saveGoal(makeGoal({ id: "g-archive-yes2", status: "active" }));
 
     // With global --yes before subcommand: should succeed (confirmation skipped)
     const codeWithYes = await runCLI("--yes", "goal", "archive", "g-archive-yes2");
@@ -472,7 +472,7 @@ describe("--yes flag position independence", () => {
 
 // ─── `goal add` subcommand ───────────────────────────────────────────────────
 
-describe("goal add subcommand", () => {
+describe("goal add subcommand", async () => {
   it("exits with code 1 when description argument is missing", async () => {
     const code = await runCLI("goal", "add");
     expect(code).toBe(1);
@@ -589,7 +589,7 @@ describe("goal add subcommand", () => {
 
 // ─── `goal add` raw mode ─────────────────────────────────────────────────────
 
-describe("goal add raw mode", () => {
+describe("goal add raw mode", async () => {
   it("exits with code 0 for a single --dim flag", async () => {
     const code = await runCLI("goal", "add", "--title", "tsc zero", "--dim", "tsc_error_count:min:0");
     expect(code).toBe(0);
@@ -647,15 +647,15 @@ describe("goal add raw mode", () => {
 
 // ─── `goal list` subcommand ───────────────────────────────────────────────────
 
-describe("goal list subcommand", () => {
+describe("goal list subcommand", async () => {
   it("exits with code 0 when no goals exist", async () => {
     const code = await runCLI("goal", "list");
     expect(code).toBe(0);
   });
 
   it("exits with code 0 when goals exist", async () => {
-    stateManager.saveGoal(makeGoal({ id: "g1", title: "First Goal" }));
-    stateManager.saveGoal(makeGoal({ id: "g2", title: "Second Goal" }));
+    await stateManager.saveGoal(makeGoal({ id: "g1", title: "First Goal" }));
+    await stateManager.saveGoal(makeGoal({ id: "g2", title: "Second Goal" }));
 
     const code = await runCLI("goal", "list");
     expect(code).toBe(0);
@@ -672,8 +672,8 @@ describe("goal list subcommand", () => {
   });
 
   it("lists all registered goal IDs in the output", async () => {
-    stateManager.saveGoal(makeGoal({ id: "goal-alpha", title: "Alpha" }));
-    stateManager.saveGoal(makeGoal({ id: "goal-beta", title: "Beta" }));
+    await stateManager.saveGoal(makeGoal({ id: "goal-alpha", title: "Alpha" }));
+    await stateManager.saveGoal(makeGoal({ id: "goal-beta", title: "Beta" }));
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     await runCLI("goal", "list");
@@ -685,7 +685,7 @@ describe("goal list subcommand", () => {
   });
 
   it("shows goal titles in the listing output", async () => {
-    stateManager.saveGoal(makeGoal({ id: "goal-xyz", title: "My Important Goal" }));
+    await stateManager.saveGoal(makeGoal({ id: "goal-xyz", title: "My Important Goal" }));
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     await runCLI("goal", "list");
@@ -696,7 +696,7 @@ describe("goal list subcommand", () => {
   });
 
   it("shows goal status in the listing output", async () => {
-    stateManager.saveGoal(makeGoal({ id: "goal-active", title: "Active Goal", status: "active" }));
+    await stateManager.saveGoal(makeGoal({ id: "goal-active", title: "Active Goal", status: "active" }));
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     await runCLI("goal", "list");
@@ -707,9 +707,9 @@ describe("goal list subcommand", () => {
   });
 
   it("shows the count of goals found", async () => {
-    stateManager.saveGoal(makeGoal({ id: "ga", title: "A" }));
-    stateManager.saveGoal(makeGoal({ id: "gb", title: "B" }));
-    stateManager.saveGoal(makeGoal({ id: "gc", title: "C" }));
+    await stateManager.saveGoal(makeGoal({ id: "ga", title: "A" }));
+    await stateManager.saveGoal(makeGoal({ id: "gb", title: "B" }));
+    await stateManager.saveGoal(makeGoal({ id: "gc", title: "C" }));
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     await runCLI("goal", "list");
@@ -722,7 +722,7 @@ describe("goal list subcommand", () => {
 
 // ─── `goal` with unknown sub-subcommand ──────────────────────────────────────
 
-describe("goal subcommand — unknown sub-subcommand", () => {
+describe("goal subcommand — unknown sub-subcommand", async () => {
   it("exits with code 1 for unknown goal sub-subcommand", async () => {
     const code = await runCLI("goal", "delete");
     expect(code).toBe(1);
@@ -741,7 +741,7 @@ describe("goal subcommand — unknown sub-subcommand", () => {
 
 // ─── `status` subcommand ──────────────────────────────────────────────────────
 
-describe("status subcommand", () => {
+describe("status subcommand", async () => {
   it("exits with code 1 when --goal is missing", async () => {
     const code = await runCLI("status");
     expect(code).toBe(1);
@@ -753,7 +753,7 @@ describe("status subcommand", () => {
   });
 
   it("exits with code 0 for an existing goal with no reports", async () => {
-    stateManager.saveGoal(makeGoal({ id: "goal-no-rep", title: "Goal With No Reports" }));
+    await stateManager.saveGoal(makeGoal({ id: "goal-no-rep", title: "Goal With No Reports" }));
 
     const code = await runCLI("status", "--goal", "goal-no-rep");
     expect(code).toBe(0);
@@ -761,7 +761,7 @@ describe("status subcommand", () => {
 
   it("exits with code 0 for an existing goal with reports", async () => {
     const goal = makeGoal({ id: "goal-with-rep" });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // Write a report in the expected directory layout
     const reportDir = path.join(tmpDir, "reports", "goal-with-rep");
@@ -784,7 +784,7 @@ describe("status subcommand", () => {
   });
 
   it("displays the goal ID in the output", async () => {
-    stateManager.saveGoal(makeGoal({ id: "goal-display", title: "Display Goal" }));
+    await stateManager.saveGoal(makeGoal({ id: "goal-display", title: "Display Goal" }));
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     await runCLI("status", "--goal", "goal-display");
@@ -795,7 +795,7 @@ describe("status subcommand", () => {
   });
 
   it("displays goal status in the output", async () => {
-    stateManager.saveGoal(makeGoal({ id: "goal-stat", status: "active" }));
+    await stateManager.saveGoal(makeGoal({ id: "goal-stat", status: "active" }));
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     await runCLI("status", "--goal", "goal-stat");
@@ -806,7 +806,7 @@ describe("status subcommand", () => {
   });
 
   it("shows 'no execution reports yet' message when no reports exist", async () => {
-    stateManager.saveGoal(makeGoal({ id: "goal-norep2" }));
+    await stateManager.saveGoal(makeGoal({ id: "goal-norep2" }));
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     await runCLI("status", "--goal", "goal-norep2");
@@ -824,7 +824,7 @@ describe("status subcommand", () => {
 
 // ─── `report` subcommand ──────────────────────────────────────────────────────
 
-describe("report subcommand", () => {
+describe("report subcommand", async () => {
   it("exits with code 1 when --goal is missing", async () => {
     const code = await runCLI("report");
     expect(code).toBe(1);
@@ -836,14 +836,14 @@ describe("report subcommand", () => {
   });
 
   it("exits with code 0 when no reports exist for the goal", async () => {
-    stateManager.saveGoal(makeGoal({ id: "goal-no-rep3" }));
+    await stateManager.saveGoal(makeGoal({ id: "goal-no-rep3" }));
 
     const code = await runCLI("report", "--goal", "goal-no-rep3");
     expect(code).toBe(0);
   });
 
   it("exits with code 0 when reports exist for the goal", async () => {
-    stateManager.saveGoal(makeGoal({ id: "goal-rep2" }));
+    await stateManager.saveGoal(makeGoal({ id: "goal-rep2" }));
 
     const reportDir = path.join(tmpDir, "reports", "goal-rep2");
     fs.mkdirSync(reportDir, { recursive: true });
@@ -865,7 +865,7 @@ describe("report subcommand", () => {
   });
 
   it("outputs a message when no reports exist", async () => {
-    stateManager.saveGoal(makeGoal({ id: "goal-no-rep4" }));
+    await stateManager.saveGoal(makeGoal({ id: "goal-no-rep4" }));
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     await runCLI("report", "--goal", "goal-no-rep4");
@@ -876,7 +876,7 @@ describe("report subcommand", () => {
   });
 
   it("shows the goal ID in report output", async () => {
-    stateManager.saveGoal(makeGoal({ id: "goal-repout" }));
+    await stateManager.saveGoal(makeGoal({ id: "goal-repout" }));
 
     const reportDir = path.join(tmpDir, "reports", "goal-repout");
     fs.mkdirSync(reportDir, { recursive: true });
@@ -902,7 +902,7 @@ describe("report subcommand", () => {
   });
 
   it("shows the report title in output", async () => {
-    stateManager.saveGoal(makeGoal({ id: "goal-reptitle" }));
+    await stateManager.saveGoal(makeGoal({ id: "goal-reptitle" }));
 
     const reportDir = path.join(tmpDir, "reports", "goal-reptitle");
     fs.mkdirSync(reportDir, { recursive: true });
@@ -928,7 +928,7 @@ describe("report subcommand", () => {
   });
 
   it("shows the latest report when multiple reports exist", async () => {
-    stateManager.saveGoal(makeGoal({ id: "goal-multi-rep" }));
+    await stateManager.saveGoal(makeGoal({ id: "goal-multi-rep" }));
 
     const reportDir = path.join(tmpDir, "reports", "goal-multi-rep");
     fs.mkdirSync(reportDir, { recursive: true });
@@ -970,11 +970,11 @@ describe("report subcommand", () => {
 
 // ─── ANTHROPIC_API_KEY ────────────────────────────────────────────────────────
 
-describe("ANTHROPIC_API_KEY", () => {
+describe("ANTHROPIC_API_KEY", async () => {
   it("exits with code 1 and prints error when key is missing for run", async () => {
     delete process.env.ANTHROPIC_API_KEY;
     process.env.MOTIVA_LLM_PROVIDER = "anthropic";
-    stateManager.saveGoal(makeGoal({ id: "g-nokey2" }));
+    await stateManager.saveGoal(makeGoal({ id: "g-nokey2" }));
 
     const code = await runCLI("run", "--goal", "g-nokey2");
     expect(code).toBe(1);
@@ -997,7 +997,7 @@ describe("ANTHROPIC_API_KEY", () => {
 
   it("does not require API key for status", async () => {
     delete process.env.ANTHROPIC_API_KEY;
-    stateManager.saveGoal(makeGoal({ id: "g-nokey-status" }));
+    await stateManager.saveGoal(makeGoal({ id: "g-nokey-status" }));
 
     const code = await runCLI("status", "--goal", "g-nokey-status");
     expect(code).toBe(0);
@@ -1005,7 +1005,7 @@ describe("ANTHROPIC_API_KEY", () => {
 
   it("does not require API key for report", async () => {
     delete process.env.ANTHROPIC_API_KEY;
-    stateManager.saveGoal(makeGoal({ id: "g-nokey-report" }));
+    await stateManager.saveGoal(makeGoal({ id: "g-nokey-report" }));
 
     const code = await runCLI("report", "--goal", "g-nokey-report");
     expect(code).toBe(0);
@@ -1031,13 +1031,13 @@ describe("directory initialisation", () => {
 
 // ─── Integration: goal add then goal list ────────────────────────────────────
 
-describe("integration: goal add then goal list", () => {
+describe("integration: goal add then goal list", async () => {
   it("a goal added via negotiate() appears in goal list output", async () => {
     const goal = makeGoal({ id: "integ-goal", title: "Integration Test Goal" });
     // The real GoalNegotiator.negotiate() saves the goal internally before returning.
     // Simulate that behaviour in the mock so goal list can find it.
     const mockNegotiate = vi.fn().mockImplementation(async () => {
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
       return makeNegotiationResult(goal);
     });
     vi.mocked(GoalNegotiator).mockImplementation(

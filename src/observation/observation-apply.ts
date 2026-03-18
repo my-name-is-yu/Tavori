@@ -15,13 +15,13 @@ import { LAYER_PRIORITY, normalizeDimensionName } from "./observation-helpers.js
  * - Appends to dimension history.
  * - Optionally indexes the dimension name in the vector index (fire-and-forget).
  */
-export function applyObservation(
+export async function applyObservation(
   goalId: string,
   entry: ObservationLogEntry,
   stateManager: StateManager,
   options: ObservationEngineOptions
-): void {
-  const goal = stateManager.loadGoal(goalId);
+): Promise<void> {
+  const goal = await stateManager.loadGoal(goalId);
   if (goal === null) {
     throw new Error(`applyObservation: goal "${goalId}" not found`);
   }
@@ -89,10 +89,10 @@ export function applyObservation(
   };
 
   // Persist observation entry
-  stateManager.appendObservation(goalId, entry);
+  await stateManager.appendObservation(goalId, entry);
 
   // Persist updated goal
-  stateManager.saveGoal(updatedGoal);
+  await stateManager.saveGoal(updatedGoal);
 
   // Index dimension name for semantic search (fire-and-forget, non-blocking)
   if (options.vectorIndex) {

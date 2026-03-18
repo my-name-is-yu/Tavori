@@ -18,8 +18,8 @@ export interface DependencyDeps {
  * Reads the capability dependency map from disk.
  * Returns an empty array if the file does not exist.
  */
-export function loadDependencies(deps: DependencyDeps): CapabilityDependency[] {
-  const raw = deps.stateManager.readRaw(DEPENDENCIES_PATH);
+export async function loadDependencies(deps: DependencyDeps): Promise<CapabilityDependency[]> {
+  const raw = await deps.stateManager.readRaw(DEPENDENCIES_PATH);
   if (raw === null) {
     return [];
   }
@@ -34,8 +34,8 @@ export function loadDependencies(deps: DependencyDeps): CapabilityDependency[] {
 /**
  * Persists the dependency map to disk.
  */
-export function saveDependencies(deps: DependencyDeps, dependencies: CapabilityDependency[]): void {
-  deps.stateManager.writeRaw(DEPENDENCIES_PATH, dependencies);
+export async function saveDependencies(deps: DependencyDeps, dependencies: CapabilityDependency[]): Promise<void> {
+  await deps.stateManager.writeRaw(DEPENDENCIES_PATH, dependencies);
 }
 
 // ─── addDependency ───
@@ -44,12 +44,12 @@ export function saveDependencies(deps: DependencyDeps, dependencies: CapabilityD
  * Records that capabilityId depends on the capabilities listed in dependsOn.
  * If an entry already exists for capabilityId, it is replaced.
  */
-export function addDependency(
+export async function addDependency(
   deps: DependencyDeps,
   capabilityId: string,
   dependsOn: string[]
-): void {
-  const allDeps = loadDependencies(deps);
+): Promise<void> {
+  const allDeps = await loadDependencies(deps);
   const existingIndex = allDeps.findIndex((d) => d.capability_id === capabilityId);
   const entry: CapabilityDependency = { capability_id: capabilityId, depends_on: dependsOn };
   if (existingIndex >= 0) {
@@ -57,7 +57,7 @@ export function addDependency(
   } else {
     allDeps.push(entry);
   }
-  saveDependencies(deps, allDeps);
+  await saveDependencies(deps, allDeps);
 }
 
 // ─── getDependencies ───
@@ -66,8 +66,8 @@ export function addDependency(
  * Returns the list of capability IDs that the given capabilityId depends on.
  * Returns an empty array if no dependency entry exists.
  */
-export function getDependencies(deps: DependencyDeps, capabilityId: string): string[] {
-  const allDeps = loadDependencies(deps);
+export async function getDependencies(deps: DependencyDeps, capabilityId: string): Promise<string[]> {
+  const allDeps = await loadDependencies(deps);
   const entry = allDeps.find((d) => d.capability_id === capabilityId);
   return entry ? entry.depends_on : [];
 }
@@ -216,15 +216,15 @@ export function detectCircularDependency(dependencies: CapabilityDependency[]): 
  * other gaps in the list come after those dependencies.
  * Independent capabilities (no deps in the list) maintain their original relative order.
  */
-export function getAcquisitionOrder(
+export async function getAcquisitionOrder(
   deps: DependencyDeps,
   gaps: CapabilityGap[]
-): CapabilityGap[] {
+): Promise<CapabilityGap[]> {
   if (gaps.length === 0) {
     return [];
   }
 
-  const allDeps = loadDependencies(deps);
+  const allDeps = await loadDependencies(deps);
 
   // Build a dependency list restricted to capabilities that appear in the gaps list
   const gapIds = new Set(gaps.map((g) => g.missing_capability.name));

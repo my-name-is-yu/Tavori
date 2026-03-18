@@ -415,21 +415,21 @@ export class EthicsGate {
 
   // ─── Private: Log I/O ───
 
-  private loadLogs(): EthicsLog[] {
-    const raw = this.stateManager.readRaw(ETHICS_LOG_PATH);
+  private async loadLogs(): Promise<EthicsLog[]> {
+    const raw = await this.stateManager.readRaw(ETHICS_LOG_PATH);
     if (raw === null) return [];
     if (!Array.isArray(raw)) return [];
     return (raw as unknown[]).map((entry) => EthicsLogSchema.parse(entry));
   }
 
-  private saveLogs(logs: EthicsLog[]): void {
-    this.stateManager.writeRaw(ETHICS_LOG_PATH, logs);
+  private async saveLogs(logs: EthicsLog[]): Promise<void> {
+    await this.stateManager.writeRaw(ETHICS_LOG_PATH, logs);
   }
 
-  private appendLog(entry: EthicsLog): void {
-    const logs = this.loadLogs();
+  private async appendLog(entry: EthicsLog): Promise<void> {
+    const logs = await this.loadLogs();
     logs.push(EthicsLogSchema.parse(entry));
-    this.saveLogs(logs);
+    await this.saveLogs(logs);
   }
 
   // ─── Private: Layer 1 evaluation ───
@@ -568,7 +568,7 @@ export class EthicsGate {
         verdict: layer1Result,
         layer1_triggered: true,
       });
-      this.appendLog(logEntry);
+      await this.appendLog(logEntry);
       return layer1Result;
     }
 
@@ -593,7 +593,7 @@ export class EthicsGate {
       layer1_triggered: false,
     });
 
-    this.appendLog(logEntry);
+    await this.appendLog(logEntry);
 
     return verdict;
   }
@@ -626,7 +626,7 @@ export class EthicsGate {
         verdict: layer1Result,
         layer1_triggered: true,
       });
-      this.appendLog(logEntry);
+      await this.appendLog(logEntry);
       return layer1Result;
     }
 
@@ -651,7 +651,7 @@ export class EthicsGate {
       layer1_triggered: false,
     });
 
-    this.appendLog(logEntry);
+    await this.appendLog(logEntry);
 
     return verdict;
   }
@@ -659,11 +659,11 @@ export class EthicsGate {
   /**
    * Retrieve all persisted ethics logs, with optional filtering.
    */
-  getLogs(filter?: {
+  async getLogs(filter?: {
     subjectId?: string;
     verdict?: "reject" | "flag" | "pass";
-  }): EthicsLog[] {
-    let logs = this.loadLogs();
+  }): Promise<EthicsLog[]> {
+    let logs = await this.loadLogs();
 
     if (filter?.subjectId !== undefined) {
       const targetId = filter.subjectId;

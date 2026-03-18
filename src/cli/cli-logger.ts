@@ -9,7 +9,7 @@ let _cliLogger: Logger | null = null;
 export function getCliLogger(): Logger {
   if (!_cliLogger) {
     const motivaDir = path.join(os.homedir(), ".motiva", "logs");
-    _cliLogger = new Logger({ dir: motivaDir, level: "warn", consoleOutput: false });
+    _cliLogger = new Logger({ dir: motivaDir, level: "warn", consoleOutput: true });
   }
   return _cliLogger;
 }

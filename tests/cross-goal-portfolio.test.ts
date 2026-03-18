@@ -116,72 +116,72 @@ afterEach(() => {
 
 // ─── calculateGoalPriorities ───
 
-describe("CrossGoalPortfolio", () => {
-  describe("calculateGoalPriorities", () => {
-    it("returns empty array for empty goalIds", () => {
-      const result = portfolio.calculateGoalPriorities([]);
+describe("CrossGoalPortfolio", async () => {
+  describe("calculateGoalPriorities", async () => {
+    it("returns empty array for empty goalIds", async () => {
+      const result = await portfolio.calculateGoalPriorities([]);
       expect(result).toEqual([]);
     });
 
-    it("single goal returns one GoalPriorityFactors entry", () => {
+    it("single goal returns one GoalPriorityFactors entry", async () => {
       const goal = makeGoal({ id: "g1" });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
-      const result = portfolio.calculateGoalPriorities(["g1"]);
+      const result = await portfolio.calculateGoalPriorities(["g1"]);
       expect(result).toHaveLength(1);
       expect(result[0]!.goal_id).toBe("g1");
     });
 
-    it("missing goal IDs are skipped", () => {
+    it("missing goal IDs are skipped", async () => {
       const goal = makeGoal({ id: "g1" });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
-      const result = portfolio.calculateGoalPriorities(["g1", "missing-goal"]);
+      const result = await portfolio.calculateGoalPriorities(["g1", "missing-goal"]);
       expect(result).toHaveLength(1);
     });
 
-    it("multiple goals returns sorted by computed_priority descending", () => {
+    it("multiple goals returns sorted by computed_priority descending", async () => {
       const now = new Date();
       // g1 has a near deadline → high urgency
       const deadline = new Date(now.getTime() + 2 * 60 * 60 * 1000).toISOString(); // 2h away
       const g1 = makeGoal({ id: "g1", deadline });
       const g2 = makeGoal({ id: "g2" }); // no deadline
-      stateManager.saveGoal(g1);
-      stateManager.saveGoal(g2);
+      await stateManager.saveGoal(g1);
+      await stateManager.saveGoal(g2);
 
-      const result = portfolio.calculateGoalPriorities(["g1", "g2"]);
+      const result = await portfolio.calculateGoalPriorities(["g1", "g2"]);
       expect(result).toHaveLength(2);
       expect(result[0]!.computed_priority).toBeGreaterThanOrEqual(
         result[1]!.computed_priority
       );
     });
 
-    it("deadline_urgency is higher when deadline is imminent", () => {
+    it("deadline_urgency is higher when deadline is imminent", async () => {
       const now = new Date();
       const nearDeadline = new Date(now.getTime() + 1 * 60 * 60 * 1000).toISOString();
       const farDeadline = new Date(now.getTime() + 1000 * 60 * 60 * 1000).toISOString();
 
       const gNear = makeGoal({ id: "g-near", deadline: nearDeadline });
       const gFar = makeGoal({ id: "g-far", deadline: farDeadline });
-      stateManager.saveGoal(gNear);
-      stateManager.saveGoal(gFar);
+      await stateManager.saveGoal(gNear);
+      await stateManager.saveGoal(gFar);
 
-      const result = portfolio.calculateGoalPriorities(["g-near", "g-far"]);
+      const result = await portfolio.calculateGoalPriorities(["g-near", "g-far"]);
       const near = result.find((r) => r.goal_id === "g-near")!;
       const far = result.find((r) => r.goal_id === "g-far")!;
 
       expect(near.deadline_urgency).toBeGreaterThan(far.deadline_urgency);
     });
 
-    it("deadline_urgency is 0 when no deadline is set", () => {
+    it("deadline_urgency is 0 when no deadline is set", async () => {
       const goal = makeGoal({ id: "g1" });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
-      const result = portfolio.calculateGoalPriorities(["g1"]);
+      const result = await portfolio.calculateGoalPriorities(["g1"]);
       expect(result[0]!.deadline_urgency).toBe(0);
     });
 
-    it("gap_severity picks max dimension gap", () => {
+    it("gap_severity picks max dimension gap", async () => {
       const g = makeGoal({
         id: "g1",
         dimensions: [
@@ -190,13 +190,13 @@ describe("CrossGoalPortfolio", () => {
           makeMinDimension("d3", 0, 100),  // gap = 100/100 = 1.0
         ],
       });
-      stateManager.saveGoal(g);
+      await stateManager.saveGoal(g);
 
-      const result = portfolio.calculateGoalPriorities(["g1"]);
+      const result = await portfolio.calculateGoalPriorities(["g1"]);
       expect(result[0]!.gap_severity).toBeCloseTo(1.0, 3);
     });
 
-    it("gap_severity is 0 when all dimensions are satisfied", () => {
+    it("gap_severity is 0 when all dimensions are satisfied", async () => {
       const g = makeGoal({
         id: "g1",
         dimensions: [
@@ -204,27 +204,27 @@ describe("CrossGoalPortfolio", () => {
           makeMinDimension("d2", 200, 100), // already satisfied
         ],
       });
-      stateManager.saveGoal(g);
+      await stateManager.saveGoal(g);
 
-      const result = portfolio.calculateGoalPriorities(["g1"]);
+      const result = await portfolio.calculateGoalPriorities(["g1"]);
       expect(result[0]!.gap_severity).toBe(0);
     });
 
-    it("gap_severity is 0 for goal with no dimensions", () => {
+    it("gap_severity is 0 for goal with no dimensions", async () => {
       const g = makeGoal({ id: "g1", dimensions: [] });
-      stateManager.saveGoal(g);
+      await stateManager.saveGoal(g);
 
-      const result = portfolio.calculateGoalPriorities(["g1"]);
+      const result = await portfolio.calculateGoalPriorities(["g1"]);
       expect(result[0]!.gap_severity).toBe(0);
     });
 
-    it("dependency_weight reflects number of goals that depend on this goal", () => {
+    it("dependency_weight reflects number of goals that depend on this goal", async () => {
       const g1 = makeGoal({ id: "g1" });
       const g2 = makeGoal({ id: "g2" });
       const g3 = makeGoal({ id: "g3" });
-      stateManager.saveGoal(g1);
-      stateManager.saveGoal(g2);
-      stateManager.saveGoal(g3);
+      await stateManager.saveGoal(g1);
+      await stateManager.saveGoal(g2);
+      await stateManager.saveGoal(g3);
 
       // g1 is a prerequisite for both g2 and g3
       depGraph.addEdge({
@@ -250,33 +250,31 @@ describe("CrossGoalPortfolio", () => {
         reasoning: null,
       });
 
-      const result = portfolio.calculateGoalPriorities(["g1", "g2", "g3"]);
+      const result = await portfolio.calculateGoalPriorities(["g1", "g2", "g3"]);
       const g1Priority = result.find((r) => r.goal_id === "g1")!;
       const g2Priority = result.find((r) => r.goal_id === "g2")!;
 
       expect(g1Priority.dependency_weight).toBeGreaterThan(g2Priority.dependency_weight);
     });
 
-    it("dependency_weight is 0 for solo goal", () => {
+    it("dependency_weight is 0 for solo goal", async () => {
       const g = makeGoal({ id: "g1" });
-      stateManager.saveGoal(g);
+      await stateManager.saveGoal(g);
 
-      const result = portfolio.calculateGoalPriorities(["g1"]);
+      const result = await portfolio.calculateGoalPriorities(["g1"]);
       expect(result[0]!.dependency_weight).toBe(0);
     });
 
-    it("user_priority normalises 1-5 scale to 0-1", () => {
-      const goals = [1, 2, 3, 4, 5].map((level) => {
-        const g = makeGoal({
-          id: `g-p${level}`,
-          constraints: [`priority:${level}`],
-        });
-        stateManager.saveGoal(g);
-        return g;
-      });
+    it("user_priority normalises 1-5 scale to 0-1", async () => {
+      const goals = [1, 2, 3, 4, 5].map((level) =>
+        makeGoal({ id: `g-p${level}`, constraints: [`priority:${level}`] })
+      );
+      for (const g of goals) {
+        await stateManager.saveGoal(g);
+      }
 
       const ids = goals.map((g) => g.id);
-      const result = portfolio.calculateGoalPriorities(ids);
+      const result = await portfolio.calculateGoalPriorities(ids);
 
       const findUserPriority = (level: number) =>
         result.find((r) => r.goal_id === `g-p${level}`)!.user_priority;
@@ -288,22 +286,22 @@ describe("CrossGoalPortfolio", () => {
       expect(findUserPriority(5)).toBeCloseTo(1.0, 5);
     });
 
-    it("user_priority defaults to 0.5 when not specified", () => {
+    it("user_priority defaults to 0.5 when not specified", async () => {
       const g = makeGoal({ id: "g1", constraints: [] });
-      stateManager.saveGoal(g);
+      await stateManager.saveGoal(g);
 
-      const result = portfolio.calculateGoalPriorities(["g1"]);
+      const result = await portfolio.calculateGoalPriorities(["g1"]);
       expect(result[0]!.user_priority).toBe(0.5);
     });
 
-    it("synergy bonus is applied to both goals in a synergy pair", () => {
+    it("synergy bonus is applied to both goals in a synergy pair", async () => {
       const g1 = makeGoal({ id: "g1" });
       const g2 = makeGoal({ id: "g2" });
-      stateManager.saveGoal(g1);
-      stateManager.saveGoal(g2);
+      await stateManager.saveGoal(g1);
+      await stateManager.saveGoal(g2);
 
       // Without synergy
-      const before = portfolio.calculateGoalPriorities(["g1", "g2"]);
+      const before = await portfolio.calculateGoalPriorities(["g1", "g2"]);
       const beforeG1 = before.find((r) => r.goal_id === "g1")!.computed_priority;
 
       // Add synergy edge
@@ -319,20 +317,20 @@ describe("CrossGoalPortfolio", () => {
         reasoning: null,
       });
 
-      const after = portfolio.calculateGoalPriorities(["g1", "g2"]);
+      const after = await portfolio.calculateGoalPriorities(["g1", "g2"]);
       const afterG1 = after.find((r) => r.goal_id === "g1")!.computed_priority;
 
       expect(afterG1).toBeGreaterThanOrEqual(beforeG1);
     });
 
-    it("conflict penalty reduces the lower-priority goal", () => {
+    it("conflict penalty reduces the lower-priority goal", async () => {
       const g1 = makeGoal({ id: "g1", constraints: ["priority:5"] });
       const g2 = makeGoal({ id: "g2", constraints: ["priority:1"] });
-      stateManager.saveGoal(g1);
-      stateManager.saveGoal(g2);
+      await stateManager.saveGoal(g1);
+      await stateManager.saveGoal(g2);
 
       // Without conflict
-      const before = portfolio.calculateGoalPriorities(["g1", "g2"]);
+      const before = await portfolio.calculateGoalPriorities(["g1", "g2"]);
       const beforeG2 = before.find((r) => r.goal_id === "g2")!.computed_priority;
 
       // Add conflict edge
@@ -348,14 +346,14 @@ describe("CrossGoalPortfolio", () => {
         reasoning: null,
       });
 
-      const after = portfolio.calculateGoalPriorities(["g1", "g2"]);
+      const after = await portfolio.calculateGoalPriorities(["g1", "g2"]);
       const afterG2 = after.find((r) => r.goal_id === "g2")!.computed_priority;
 
       // Low-priority goal should receive penalty
       expect(afterG2).toBeLessThanOrEqual(beforeG2);
     });
 
-    it("computed_priority is clamped to [0, 1]", () => {
+    it("computed_priority is clamped to [0, 1]", async () => {
       const now = new Date();
       const nearDeadline = new Date(now.getTime() + 1 * 60 * 60 * 1000).toISOString();
       const g = makeGoal({
@@ -364,20 +362,20 @@ describe("CrossGoalPortfolio", () => {
         constraints: ["priority:5"],
         dimensions: [makeMinDimension("d1", 0, 100)],
       });
-      stateManager.saveGoal(g);
+      await stateManager.saveGoal(g);
 
-      const result = portfolio.calculateGoalPriorities(["g1"]);
+      const result = await portfolio.calculateGoalPriorities(["g1"]);
       expect(result[0]!.computed_priority).toBeGreaterThanOrEqual(0);
       expect(result[0]!.computed_priority).toBeLessThanOrEqual(1);
     });
 
-    it("all priorities are within [0,1]", () => {
+    it("all priorities are within [0,1]", async () => {
       for (let i = 0; i < 5; i++) {
         const g = makeGoal({ id: `g${i}`, constraints: [`priority:${i + 1}`] });
-        stateManager.saveGoal(g);
+        await stateManager.saveGoal(g);
       }
       const ids = Array.from({ length: 5 }, (_, i) => `g${i}`);
-      const result = portfolio.calculateGoalPriorities(ids);
+      const result = await portfolio.calculateGoalPriorities(ids);
       for (const r of result) {
         expect(r.computed_priority).toBeGreaterThanOrEqual(0);
         expect(r.computed_priority).toBeLessThanOrEqual(1);
@@ -506,62 +504,62 @@ describe("CrossGoalPortfolio", () => {
 
   // ─── rebalanceGoals ───
 
-  describe("rebalanceGoals", () => {
-    beforeEach(() => {
+  describe("rebalanceGoals", async () => {
+    beforeEach(async () => {
       const g1 = makeGoal({ id: "g1" });
       const g2 = makeGoal({ id: "g2" });
-      stateManager.saveGoal(g1);
-      stateManager.saveGoal(g2);
+      await stateManager.saveGoal(g1);
+      await stateManager.saveGoal(g2);
       // Warm up cache
-      portfolio.calculateGoalPriorities(["g1", "g2"]);
+      await portfolio.calculateGoalPriorities(["g1", "g2"]);
     });
 
-    it("periodic trigger returns a CrossGoalRebalanceResult", () => {
-      const result = portfolio.rebalanceGoals("periodic");
+    it("periodic trigger returns a CrossGoalRebalanceResult", async () => {
+      const result = await portfolio.rebalanceGoals("periodic");
       expect(result.triggered_by).toBe("periodic");
       expect(result.allocations).toBeDefined();
       expect(result.timestamp).toBeDefined();
     });
 
-    it("goal_completed trigger recalculates correctly", () => {
-      const result = portfolio.rebalanceGoals("goal_completed");
+    it("goal_completed trigger recalculates correctly", async () => {
+      const result = await portfolio.rebalanceGoals("goal_completed");
       expect(result.triggered_by).toBe("goal_completed");
     });
 
-    it("goal_added trigger recalculates correctly", () => {
-      const result = portfolio.rebalanceGoals("goal_added");
+    it("goal_added trigger recalculates correctly", async () => {
+      const result = await portfolio.rebalanceGoals("goal_added");
       expect(result.triggered_by).toBe("goal_added");
     });
 
-    it("priority_shift trigger recalculates correctly", () => {
-      const result = portfolio.rebalanceGoals("priority_shift");
+    it("priority_shift trigger recalculates correctly", async () => {
+      const result = await portfolio.rebalanceGoals("priority_shift");
       expect(result.triggered_by).toBe("priority_shift");
     });
 
-    it("timestamp is a valid ISO datetime", () => {
-      const result = portfolio.rebalanceGoals("periodic");
+    it("timestamp is a valid ISO datetime", async () => {
+      const result = await portfolio.rebalanceGoals("periodic");
       expect(() => new Date(result.timestamp)).not.toThrow();
       expect(new Date(result.timestamp).toISOString()).toBe(result.timestamp);
     });
 
-    it("allocations reflect re-calculated priorities", () => {
-      const result = portfolio.rebalanceGoals("periodic", ["g1", "g2"]);
+    it("allocations reflect re-calculated priorities", async () => {
+      const result = await portfolio.rebalanceGoals("periodic", ["g1", "g2"]);
       expect(result.allocations.length).toBeGreaterThan(0);
       const total = result.allocations.reduce((s, a) => s + a.resource_share, 0);
       expect(total).toBeCloseTo(1.0, 5);
     });
 
-    it("rebalance with explicit goalIds overrides cached list", () => {
+    it("rebalance with explicit goalIds overrides cached list", async () => {
       const g3 = makeGoal({ id: "g3" });
-      stateManager.saveGoal(g3);
-      const result = portfolio.rebalanceGoals("goal_added", ["g1", "g3"]);
+      await stateManager.saveGoal(g3);
+      const result = await portfolio.rebalanceGoals("goal_added", ["g1", "g3"]);
       const ids = result.allocations.map((a) => a.goal_id);
       expect(ids).toContain("g1");
       expect(ids).toContain("g3");
       expect(ids).not.toContain("g2");
     });
 
-    it("rebalance with empty goalIds returns empty allocations", () => {
+    it("rebalance with empty goalIds returns empty allocations", async () => {
       // Clear cache by creating fresh portfolio
       const freshPortfolio = new CrossGoalPortfolio(
         stateManager,
@@ -570,14 +568,14 @@ describe("CrossGoalPortfolio", () => {
         embeddingClient,
         {}
       );
-      const result = freshPortfolio.rebalanceGoals("periodic", []);
+      const result = await freshPortfolio.rebalanceGoals("periodic", []);
       expect(result.allocations).toEqual([]);
     });
   });
 
   // ─── getRecommendedTemplates ───
 
-  describe("getRecommendedTemplates", () => {
+  describe("getRecommendedTemplates", async () => {
     it("returns empty array when goalId does not exist", async () => {
       const result = await portfolio.getRecommendedTemplates(
         "nonexistent-goal",
@@ -592,7 +590,7 @@ describe("CrossGoalPortfolio", () => {
         title: "Reduce churn rate",
         constraints: ["domain:saas"],
       });
-      stateManager.saveGoal(g);
+      await stateManager.saveGoal(g);
 
       const result = await portfolio.getRecommendedTemplates("g1", vectorIndex);
       expect(result).toEqual([]);
@@ -605,7 +603,7 @@ describe("CrossGoalPortfolio", () => {
         description: "Onboarding improvements to retain users",
         constraints: ["domain:saas"],
       });
-      stateManager.saveGoal(g);
+      await stateManager.saveGoal(g);
 
       const meta = makeStrategyTemplateMetadata({
         template_id: "tmpl-1",
@@ -626,7 +624,7 @@ describe("CrossGoalPortfolio", () => {
         title: "Scale hardware infrastructure",
         constraints: ["domain:hardware"],
       });
-      stateManager.saveGoal(g);
+      await stateManager.saveGoal(g);
 
       const meta = makeStrategyTemplateMetadata({
         template_id: "tmpl-saas",
@@ -647,7 +645,7 @@ describe("CrossGoalPortfolio", () => {
         description: "No specific domain",
         constraints: [], // no domain tags
       });
-      stateManager.saveGoal(g);
+      await stateManager.saveGoal(g);
 
       const meta = makeStrategyTemplateMetadata({
         template_id: "tmpl-any",
@@ -668,7 +666,7 @@ describe("CrossGoalPortfolio", () => {
         description: "Improve retention",
         constraints: ["domain:saas"],
       });
-      stateManager.saveGoal(g);
+      await stateManager.saveGoal(g);
 
       const highEffMeta = makeStrategyTemplateMetadata({
         template_id: "tmpl-high",
@@ -707,7 +705,7 @@ describe("CrossGoalPortfolio", () => {
         title: "Grow user base",
         constraints: ["domain:growth"],
       });
-      stateManager.saveGoal(g);
+      await stateManager.saveGoal(g);
 
       for (let i = 0; i < 5; i++) {
         const meta = makeStrategyTemplateMetadata({
@@ -729,7 +727,7 @@ describe("CrossGoalPortfolio", () => {
         title: "Build mobile app",
         constraints: ["domain:mobile"],
       });
-      stateManager.saveGoal(g);
+      await stateManager.saveGoal(g);
 
       // Add templates with completely different domain
       const meta = makeStrategyTemplateMetadata({
@@ -750,7 +748,7 @@ describe("CrossGoalPortfolio", () => {
         title: "Improve performance",
         constraints: [],
       });
-      stateManager.saveGoal(g);
+      await stateManager.saveGoal(g);
 
       // Add an entry with missing template fields
       await vectorIndex.add("raw-entry", "Some text", {
@@ -767,7 +765,7 @@ describe("CrossGoalPortfolio", () => {
         title: "Reduce latency",
         constraints: ["domain:infra"],
       });
-      stateManager.saveGoal(g);
+      await stateManager.saveGoal(g);
 
       const meta = makeStrategyTemplateMetadata({
         template_id: "tmpl-cache",

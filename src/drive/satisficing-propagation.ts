@@ -15,12 +15,12 @@ import type { Logger } from "../runtime/logger.js";
  * @param isGoalComplete Function to check leaf node completion.
  * @returns CompletionJudgment for the root node.
  */
-export function judgeTreeCompletion(
+export async function judgeTreeCompletion(
   rootId: string,
   stateManager: StateManager,
   isGoalComplete: (goal: Goal) => CompletionJudgment
-): CompletionJudgment {
-  const goal = stateManager.loadGoal(rootId);
+): Promise<CompletionJudgment> {
+  const goal = await stateManager.loadGoal(rootId);
   if (goal === null) {
     return {
       is_complete: false,
@@ -42,7 +42,7 @@ export function judgeTreeCompletion(
   let needsVerification = false;
 
   for (const childId of goal.children_ids) {
-    const child = stateManager.loadGoal(childId);
+    const child = await stateManager.loadGoal(childId);
 
     // Missing child is treated as blocking
     if (child === null) {
@@ -56,7 +56,7 @@ export function judgeTreeCompletion(
     }
 
     // Recurse into child
-    const childJudgment = judgeTreeCompletion(childId, stateManager, isGoalComplete);
+    const childJudgment = await judgeTreeCompletion(childId, stateManager, isGoalComplete);
 
     if (!childJudgment.is_complete) {
       // Aggregate child's blocking and low-confidence dimensions
@@ -102,15 +102,15 @@ export function judgeTreeCompletion(
  * @param computeActualProgress Function to compute progress for a dimension.
  * @param subgoalDimensions Optional subgoal dimensions for aggregation mapping.
  */
-export function propagateSubgoalCompletion(
+export async function propagateSubgoalCompletion(
   subgoalId: string,
   parentGoalId: string,
   stateManager: StateManager,
   computeActualProgress: (dim: import("../types/goal.js").Dimension) => number,
   subgoalDimensions?: import("../types/goal.js").Dimension[],
   logger?: Logger
-): void {
-  const parentGoal = stateManager.loadGoal(parentGoalId);
+): Promise<void> {
+  const parentGoal = await stateManager.loadGoal(parentGoalId);
   if (parentGoal === null) {
     throw new Error(
       `propagateSubgoalCompletion: parent goal "${parentGoalId}" not found`
@@ -213,7 +213,7 @@ export function propagateSubgoalCompletion(
       }
     }
 
-    stateManager.saveGoal({
+    await stateManager.saveGoal({
       ...parentGoal,
       dimensions: updatedDimensions,
       updated_at: now,
@@ -242,7 +242,7 @@ export function propagateSubgoalCompletion(
       : d
   );
 
-  stateManager.saveGoal({
+  await stateManager.saveGoal({
     ...parentGoal,
     dimensions: updatedDimensions,
     updated_at: now,

@@ -244,7 +244,7 @@ describe("R1-1: task cycle always runs within an iteration", () => {
     const { deps, stateManager, satisficingJudgeMock, taskLifecycleMock } = createDeps(tmpDir);
 
     // Save a goal whose quality dimension is already above the min threshold (9.5 >= 9.0)
-    stateManager.saveGoal(makeGoal());
+    await stateManager.saveGoal(makeGoal());
 
     // Make isGoalComplete return true (pre-task) — simulates a goal already at threshold+0.01
     satisficingJudgeMock.isGoalComplete.mockReturnValue(
@@ -267,7 +267,7 @@ describe("R1-1: task cycle always runs within an iteration", () => {
     // (because the task might have changed the state). The final judgment should reflect
     // the post-task value.
     const { deps, stateManager, satisficingJudgeMock } = createDeps(tmpDir);
-    stateManager.saveGoal(makeGoal());
+    await stateManager.saveGoal(makeGoal());
 
     let callCount = 0;
     satisficingJudgeMock.isGoalComplete.mockImplementation(() => {
@@ -292,7 +292,7 @@ describe("R1-1: task cycle always runs within an iteration", () => {
 describe("R1-2: minIterations forces minimum number of full iterations", () => {
   it("default minIterations=1: loop exits after 1 iteration when goal is complete", async () => {
     const { deps, stateManager, satisficingJudgeMock } = createDeps(tmpDir);
-    stateManager.saveGoal(makeGoal());
+    await stateManager.saveGoal(makeGoal());
 
     // Always complete
     satisficingJudgeMock.isGoalComplete.mockReturnValue(
@@ -309,7 +309,7 @@ describe("R1-2: minIterations forces minimum number of full iterations", () => {
 
   it("minIterations=2 forces at least 2 iterations even if goal is complete after iteration 1", async () => {
     const { deps, stateManager, satisficingJudgeMock } = createDeps(tmpDir);
-    stateManager.saveGoal(makeGoal());
+    await stateManager.saveGoal(makeGoal());
 
     // Goal is complete on every check (including after iteration 0)
     satisficingJudgeMock.isGoalComplete.mockReturnValue(
@@ -326,7 +326,7 @@ describe("R1-2: minIterations forces minimum number of full iterations", () => {
 
   it("minIterations=3 forces exactly 3 iterations when goal is always complete", async () => {
     const { deps, stateManager, satisficingJudgeMock } = createDeps(tmpDir);
-    stateManager.saveGoal(makeGoal());
+    await stateManager.saveGoal(makeGoal());
 
     satisficingJudgeMock.isGoalComplete.mockReturnValue(
       makeCompletionJudgment({ is_complete: true, blocking_dimensions: [] })
@@ -342,7 +342,7 @@ describe("R1-2: minIterations forces minimum number of full iterations", () => {
 
   it("default minIterations=1 means at least one full task cycle always runs", async () => {
     const { deps, stateManager, satisficingJudgeMock, taskLifecycleMock } = createDeps(tmpDir);
-    stateManager.saveGoal(makeGoal());
+    await stateManager.saveGoal(makeGoal());
 
     satisficingJudgeMock.isGoalComplete.mockReturnValue(
       makeCompletionJudgment({ is_complete: true, blocking_dimensions: [] })
@@ -359,7 +359,7 @@ describe("R1-2: minIterations forces minimum number of full iterations", () => {
     // Setting minIterations=0 means loopIndex(0) >= 0-1 = -1, so condition is always met.
     // This restores the old immediate-exit behavior but at the loop level (task still runs per R1-1).
     const { deps, stateManager, satisficingJudgeMock } = createDeps(tmpDir);
-    stateManager.saveGoal(makeGoal());
+    await stateManager.saveGoal(makeGoal());
 
     satisficingJudgeMock.isGoalComplete.mockReturnValue(
       makeCompletionJudgment({ is_complete: true, blocking_dimensions: [] })
@@ -376,7 +376,7 @@ describe("R1-2: minIterations forces minimum number of full iterations", () => {
 describe("R1-1 + R1-2 combined: full flow guarantees", () => {
   it("a goal complete at start still executes task cycle AND loop still exits cleanly", async () => {
     const { deps, stateManager, satisficingJudgeMock, taskLifecycleMock } = createDeps(tmpDir);
-    stateManager.saveGoal(makeGoal());
+    await stateManager.saveGoal(makeGoal());
 
     satisficingJudgeMock.isGoalComplete.mockReturnValue(
       makeCompletionJudgment({ is_complete: true, blocking_dimensions: [] })

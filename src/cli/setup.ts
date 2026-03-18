@@ -52,7 +52,7 @@ export async function buildDeps(
   logger?: Logger,
   onProgress?: (event: ProgressEvent) => void
 ) {
-  const characterConfig = characterConfigManager.load();
+  const characterConfig = await characterConfigManager.load();
   const llmClient = await buildLLMClient();
   const trustManager = new TrustManager(stateManager);
   const driveSystem = new DriveSystem(stateManager);
@@ -91,9 +91,9 @@ export async function buildDeps(
 
   const contextProvider = createWorkspaceContextProvider(
     { workDir: process.cwd() },
-    (goalId: string) => {
+    async (goalId: string) => {
       try {
-        const goal = stateManager.loadGoal(goalId);
+        const goal = await stateManager.loadGoal(goalId);
         return goal?.description;
       } catch (err) {
         getCliLogger().error(formatOperationError(`resolve workspace context goal description for "${goalId}"`, err));

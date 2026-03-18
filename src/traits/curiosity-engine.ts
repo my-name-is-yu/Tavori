@@ -109,14 +109,29 @@ export class CuriosityEngine {
     // Merge user config with defaults
     this.config = CuriosityConfigSchema.parse(deps.config ?? {});
 
-    // Load persisted state (or initialize empty)
-    this.state = this.loadState();
+    // Initialize with empty state; actual state is loaded asynchronously via ensureStateLoaded()
+    this.state = CuriosityStateSchema.parse({
+      proposals: [],
+      learning_records: [],
+      last_exploration_at: null,
+      rejected_proposal_hashes: [],
+    });
+    this._stateLoaded = false;
+  }
+
+  private _stateLoaded: boolean;
+
+  private async ensureStateLoaded(): Promise<void> {
+    if (!this._stateLoaded) {
+      this.state = await this.loadState();
+      this._stateLoaded = true;
+    }
   }
 
   // ─── State Persistence ───
 
-  private loadState(): CuriosityState {
-    const raw = this.stateManager.readRaw(CURIOSITY_STATE_PATH);
+  private async loadState(): Promise<CuriosityState> {
+    const raw = await this.stateManager.readRaw(CURIOSITY_STATE_PATH);
     if (raw === null) {
       return CuriosityStateSchema.parse({
         proposals: [],
@@ -138,9 +153,9 @@ export class CuriosityEngine {
     }
   }
 
-  private saveState(): void {
+  private async saveState(): Promise<void> {
     const parsed = CuriosityStateSchema.parse(this.state);
-    this.stateManager.writeRaw(CURIOSITY_STATE_PATH, parsed);
+    await this.stateManager.writeRaw(CURIOSITY_STATE_PATH, parsed);
   }
 
   // ─── Trigger Helpers ───
@@ -223,13 +238,13 @@ export class CuriosityEngine {
    * 2.3: Repeated domain failures — StallDetector reports consecutive_failure
    * or global_stall for any active user goal.
    */
-  private checkRepeatedFailures(goals: Goal[]): CuriosityTrigger | null {
+  private async checkRepeatedFailures(goals: Goal[]): Promise<CuriosityTrigger | null> {
     const activeUserGoals = goals.filter(
       (g) => g.status === "active" && g.origin !== "curiosity"
     );
 
     for (const goal of activeUserGoals) {
-      const stallState = this.stallDetector.getStallState(goal.id);
+      const stallState = await this.stallDetector.getStallState(goal.id);
 
       // Check dimension-level escalation: any dimension with escalation_level > 0
       // that was caused by consecutive failures
@@ -329,8 +344,9 @@ export class CuriosityEngine {
    * Evaluate all 5 trigger conditions against current goal state.
    * Returns an array of fired triggers (may be empty if none fire).
    */
-  evaluateTriggers(goals: Goal[]): CuriosityTrigger[] {
+  async evaluateTriggers(goals: Goal[]): Promise<CuriosityTrigger[]> {
     if (!this.config.enabled) return [];
+    await this.ensureStateLoaded();
 
     const triggers: CuriosityTrigger[] = [];
 
@@ -340,7 +356,7 @@ export class CuriosityEngine {
     const t2 = this.checkUnexpectedObservation(goals);
     if (t2) triggers.push(t2);
 
-    const t3 = this.checkRepeatedFailures(goals);
+    const t3 = await this.checkRepeatedFailures(goals);
     if (t3) triggers.push(t3);
 
     const t4 = this.checkUndefinedProblems(goals);
@@ -560,7 +576,7 @@ export class CuriosityEngine {
    * - Any of the quick-check conditions are met (task queue empty,
    *   periodic exploration overdue, or any stall state detected)
    */
-  shouldExplore(goals: Goal[]): boolean {
+  async shouldExplore(goals: Goal[]): Promise<boolean> {
     if (!this.config.enabled) return false;
 
     // Quick check 1: task queue empty
@@ -588,7 +604,7 @@ export class CuriosityEngine {
       (g) => g.status === "active" && g.origin !== "curiosity"
     );
     for (const goal of activeGoals) {
-      const stallState = this.stallDetector.getStallState(goal.id);
+      const stallState = await this.stallDetector.getStallState(goal.id);
       const hasEscalated = Object.values(stallState.dimension_escalation).some(
         (level) => level > 0
       );

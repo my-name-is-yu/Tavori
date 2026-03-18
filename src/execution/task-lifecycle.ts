@@ -227,7 +227,7 @@ export class TaskLifecycle {
    */
   async checkIrreversibleApproval(task: Task, confidence: number = 0.5): Promise<boolean> {
     const domain = task.task_category;
-    const needsApproval = this.trustManager.requiresApproval(
+    const needsApproval = await this.trustManager.requiresApproval(
       task.reversibility,
       domain,
       confidence,
@@ -323,7 +323,7 @@ export class TaskLifecycle {
     // 1. Select target dimension (with confidence-tier weighting when available)
     let goalDimensions: Dimension[] | undefined;
     try {
-      const goal = this.stateManager.loadGoal(goalId);
+      const goal = await this.stateManager.loadGoal(goalId);
       goalDimensions = goal?.dimensions ?? undefined;
     } catch {
       // If goal load fails, fall back to unweighted selection
@@ -362,7 +362,7 @@ export class TaskLifecycle {
     }
 
     // Reload task from disk to get accurate status/started_at/completed_at set by executeTask
-    const taskForVerification = reloadTaskFromDisk(this.stateManager, task);
+    const taskForVerification = await reloadTaskFromDisk(this.stateManager, task);
 
     // 5. Verify task
     const verificationResult = await this.verifyTask(taskForVerification, executionResult);

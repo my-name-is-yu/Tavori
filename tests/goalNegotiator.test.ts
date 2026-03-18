@@ -111,7 +111,7 @@ describe("GoalNegotiator lightweight unit coverage", () => {
       dimensions: [makeDimension({ name: "test_coverage", label: "Test Coverage", threshold_type: "min", threshold_value: 80 })],
     });
 
-    const saved = stateManager.loadGoal(goal.id);
+    const saved = await stateManager.loadGoal(goal.id);
     expect(saved?.id).toBe(goal.id);
     expect(saved?.title).toBe("Improve repository quality");
     expect(saved?.dimensions).toHaveLength(1);
@@ -122,7 +122,7 @@ describe("GoalNegotiator lightweight unit coverage", () => {
       dimensions: [makeDimension({ name: "quality_score", label: "Quality Score", threshold_type: "min", threshold_value: 90 })],
     });
 
-    expect(stateManager.listGoalIds()).toContain(goal.id);
+    expect(await stateManager.listGoalIds()).toContain(goal.id);
   });
 
   it("stores deadline and constraints from negotiation options", async () => {
@@ -134,7 +134,7 @@ describe("GoalNegotiator lightweight unit coverage", () => {
       },
     });
 
-    const saved = stateManager.loadGoal(goal.id);
+    const saved = await stateManager.loadGoal(goal.id);
     expect(saved?.deadline).toBe("2026-04-01");
     expect(saved?.constraints).toEqual(["No production downtime", "Stay within budget"]);
   });
@@ -269,7 +269,7 @@ describe("GoalNegotiator lightweight unit coverage", () => {
     );
 
     await expect(negotiator.negotiate("Do something disallowed")).rejects.toBeInstanceOf(EthicsRejectedError);
-    expect(stateManager.listGoalIds()).toEqual([]);
+    expect(await stateManager.listGoalIds()).toEqual([]);
   });
 
   it("renegotiates an existing goal and updates its persisted dimensions", async () => {
@@ -284,7 +284,7 @@ describe("GoalNegotiator lightweight unit coverage", () => {
         },
       ],
     });
-    stateManager.saveGoal(existingGoal);
+    await stateManager.saveGoal(existingGoal);
 
     const llm = createMockLLMClient([
       JSON.stringify([
@@ -317,7 +317,7 @@ describe("GoalNegotiator lightweight unit coverage", () => {
 
     expect(response.accepted).toBe(true);
     expect(goal.dimensions[0]?.threshold).toEqual({ type: "min", value: 90 });
-    expect(stateManager.loadGoal("goal-renegotiate")?.dimensions[0]?.threshold).toEqual({
+    expect((await stateManager.loadGoal("goal-renegotiate"))?.dimensions[0]?.threshold).toEqual({
       type: "min",
       value: 90,
     });
@@ -360,10 +360,10 @@ describe("GoalNegotiator lightweight unit coverage", () => {
       observationEngine
     );
 
-    expect(negotiator.getNegotiationLog(goal.id)).toEqual(log);
+    expect(await negotiator.getNegotiationLog(goal.id)).toEqual(log);
   });
 
-  it("returns null for a missing negotiation log", () => {
+  it("returns null for a missing negotiation log", async () => {
     const negotiator = new GoalNegotiator(
       stateManager,
       createMockLLMClient([]),
@@ -377,7 +377,7 @@ describe("GoalNegotiator lightweight unit coverage", () => {
       observationEngine
     );
 
-    expect(negotiator.getNegotiationLog("missing-goal")).toBeNull();
+    expect(await negotiator.getNegotiationLog("missing-goal")).toBeNull();
   });
 
   it("decomposes a parent goal into persisted subgoals and records rejected ones", async () => {
@@ -440,7 +440,7 @@ describe("GoalNegotiator lightweight unit coverage", () => {
 
     expect(result.subgoals).toHaveLength(1);
     expect(result.subgoals[0]?.parent_id).toBe(parentGoal.id);
-    expect(stateManager.loadGoal(result.subgoals[0]!.id)?.title).toBe("Raise test coverage");
+    expect((await stateManager.loadGoal(result.subgoals[0]!.id))?.title).toBe("Raise test coverage");
     expect(result.rejectedSubgoals).toEqual([
       {
         description: "Do unsafe thing",
@@ -451,7 +451,7 @@ describe("GoalNegotiator lightweight unit coverage", () => {
 
   it("returns null from decomposeIntoSubgoals when no goal tree manager is configured", async () => {
     const goal = makeGoal({ id: "goal-no-tree" });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const negotiator = new GoalNegotiator(
       stateManager,
@@ -471,7 +471,7 @@ describe("GoalNegotiator lightweight unit coverage", () => {
 
   it("delegates decomposeIntoSubgoals to the injected goal tree manager", async () => {
     const goal = makeGoal({ id: "goal-tree" });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const decomposeGoal = vi.fn().mockResolvedValue({
       root_goal_id: goal.id,

@@ -85,7 +85,7 @@ export class CrossGoalPortfolio {
    * @param goalIds — IDs of goals to evaluate (missing goals are skipped)
    * @returns GoalPriorityFactors[] sorted by computed_priority descending
    */
-  calculateGoalPriorities(goalIds: string[]): GoalPriorityFactors[] {
+  async calculateGoalPriorities(goalIds: string[]): Promise<GoalPriorityFactors[]> {
     if (goalIds.length === 0) return [];
 
     const totalGoals = goalIds.length;
@@ -104,7 +104,7 @@ export class CrossGoalPortfolio {
     const rawList: RawFactors[] = [];
 
     for (const goalId of goalIds) {
-      const goal = this.stateManager.loadGoal(goalId);
+      const goal = await this.stateManager.loadGoal(goalId);
       if (!goal) continue;
 
       // deadline_urgency — use scoreDeadline with maxGap=1 as the
@@ -283,12 +283,12 @@ export class CrossGoalPortfolio {
    * @param goalIds — explicit list of goal IDs to consider; if omitted, the
    *                  IDs from the last calculateGoalPriorities call are used
    */
-  rebalanceGoals(
+  async rebalanceGoals(
     trigger: CrossGoalRebalanceTrigger,
     goalIds?: string[]
-  ): CrossGoalRebalanceResult {
+  ): Promise<CrossGoalRebalanceResult> {
     const ids = goalIds ?? Array.from(this.lastPriorities.keys());
-    const priorities = this.calculateGoalPriorities(ids);
+    const priorities = await this.calculateGoalPriorities(ids);
     const allocations = this.allocateResources(priorities);
 
     return {
@@ -322,7 +322,7 @@ export class CrossGoalPortfolio {
     vectorIndex: VectorIndex,
     limit: number = 3
   ): Promise<StrategyTemplate[]> {
-    const goal = this.stateManager.loadGoal(goalId);
+    const goal = await this.stateManager.loadGoal(goalId);
     if (!goal) return [];
 
     // Build a query string from the goal
@@ -508,8 +508,8 @@ export class CrossGoalPortfolio {
    * Recomputes allocations based on current goal states.
    * Returns a Map suitable for use by PortfolioManager.selectNextStrategyAcrossGoals().
    */
-  getAllocationMap(goalIds: string[]): Map<string, number> {
-    const priorities = this.calculateGoalPriorities(goalIds);
+  async getAllocationMap(goalIds: string[]): Promise<Map<string, number>> {
+    const priorities = await this.calculateGoalPriorities(goalIds);
     const allocations = this.allocateResources(priorities);
 
     const map = new Map<string, number>();

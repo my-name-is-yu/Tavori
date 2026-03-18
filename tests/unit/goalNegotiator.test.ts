@@ -377,10 +377,10 @@ describe("GoalNegotiator helper coverage", () => {
     expect(ethicsGate.check).toHaveBeenCalledTimes(1);
   });
 
-  it("returns null when no negotiation log exists", () => {
+  it("returns null when no negotiation log exists", async () => {
     const negotiator = setup();
 
-    expect(negotiator.getNegotiationLog("missing-goal")).toBeNull();
+    expect(await negotiator.getNegotiationLog("missing-goal")).toBeNull();
   });
 
   it("persists and reloads a negotiation log through negotiate", async () => {
@@ -434,8 +434,8 @@ describe("GoalNegotiator helper coverage", () => {
     );
 
     const result = await negotiator.negotiate("Raise unit test coverage");
-    const savedGoal = stateManager.loadGoal(result.goal.id);
-    const log = negotiator.getNegotiationLog(result.goal.id);
+    const savedGoal = await stateManager.loadGoal(result.goal.id);
+    const log = await negotiator.getNegotiationLog(result.goal.id);
 
     expect(result.response.type).toBe("accept");
     expect(savedGoal?.description).toBe("Raise unit test coverage");
@@ -609,7 +609,7 @@ describe("GoalNegotiator helper coverage", () => {
     expect(result.rejectedSubgoals).toEqual([
       { description: "Abuse system", reason: "Unsafe" },
     ]);
-    expect(stateManager.listGoalIds()).toHaveLength(1);
+    expect(await stateManager.listGoalIds()).toHaveLength(1);
   });
 
   it("renegotiates an existing goal using quantitative history when available", async () => {
@@ -617,7 +617,7 @@ describe("GoalNegotiator helper coverage", () => {
     tempDirs.push(tmpDir);
     const stateManager = new StateManager(tmpDir);
     const goal = makeStoredGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
     const observationEngine = new ObservationEngine(stateManager);
     const llmClient = {
       sendMessage: vi
@@ -654,7 +654,7 @@ describe("GoalNegotiator helper coverage", () => {
       path: "quantitative",
       assessment: "realistic",
     });
-    expect(stateManager.loadGoal(goal.id)?.updated_at).not.toBe(goal.updated_at);
+    expect((await stateManager.loadGoal(goal.id))?.updated_at).not.toBe(goal.updated_at);
   });
 
   it("throws when renegotiating a missing goal", async () => {
@@ -684,7 +684,7 @@ describe("GoalNegotiator helper coverage", () => {
     tempDirs.push(tmpDir);
     const stateManager = new StateManager(tmpDir);
     const goal = makeStoredGoal();
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
     const goalTreeManager = {
       decomposeGoal: vi.fn().mockResolvedValue({
         created: 2,

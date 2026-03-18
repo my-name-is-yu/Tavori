@@ -35,9 +35,9 @@ function makeDimension(overrides: Partial<Dimension> = {}): Dimension {
 
 /**
  * Write task history entries for a goal into the StateManager backing directory.
- * Each entry mimics the format written by TaskLifecycle.appendTaskHistory().
+ * Each entry mimics the format written by await TaskLifecycle.appendTaskHistory().
  */
-function writeTaskHistory(
+async function writeTaskHistory(
   stateManager: StateManager,
   goalId: string,
   entries: Array<{
@@ -46,7 +46,7 @@ function writeTaskHistory(
     estimated_duration_ms: number | null;
     status?: string;
   }>
-): void {
+): Promise<void> {
   const history = entries.map((e, i) => ({
     task_id: `task-${i}`,
     status: e.status ?? "completed",
@@ -56,7 +56,7 @@ function writeTaskHistory(
     actual_elapsed_ms: e.actual_elapsed_ms,
     estimated_duration_ms: e.estimated_duration_ms,
   }));
-  stateManager.writeRaw(`tasks/${goalId}/task-history.json`, history);
+  await stateManager.writeRaw(`tasks/${goalId}/task-history.json`, history);
 }
 
 // ─── Setup ───
@@ -78,21 +78,21 @@ afterEach(() => {
 // ─── Tests ───
 
 describe("Condition 3: resource undershoot", () => {
-  it("triggers when 3+ tasks complete at <50% of estimated time and progress <50%", () => {
+  it("triggers when 3+ tasks complete at <50% of estimated time and progress <50%", async () => {
     // current_value=30, threshold min=100 → progress=30%
     const goal = makeGoal({
       dimensions: [makeDimension({ current_value: 30, threshold: { type: "min", value: 100 } })],
     });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // 3 tasks: actual=20min, estimated=60min (actual is ~33% of estimated → undershoot)
-    writeTaskHistory(stateManager, goal.id, [
+    await writeTaskHistory(stateManager, goal.id, [
       { primary_dimension: "test_dim", actual_elapsed_ms: 20 * 60_000, estimated_duration_ms: 60 * 60_000 },
       { primary_dimension: "test_dim", actual_elapsed_ms: 18 * 60_000, estimated_duration_ms: 60 * 60_000 },
       { primary_dimension: "test_dim", actual_elapsed_ms: 22 * 60_000, estimated_duration_ms: 60 * 60_000 },
     ]);
 
-    const proposals = judge.detectThresholdAdjustmentNeeded(goal, new Map());
+    const proposals = await judge.detectThresholdAdjustmentNeeded(goal, new Map());
 
     expect(proposals).toHaveLength(1);
     const p = proposals[0]!;
@@ -101,73 +101,73 @@ describe("Condition 3: resource undershoot", () => {
     expect(p.goal_id).toBe(goal.id);
   });
 
-  it("does NOT trigger when fewer than 3 tasks have timing data", () => {
+  it("does NOT trigger when fewer than 3 tasks have timing data", async () => {
     const goal = makeGoal({
       dimensions: [makeDimension({ current_value: 30, threshold: { type: "min", value: 100 } })],
     });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // Only 2 tasks — not enough
-    writeTaskHistory(stateManager, goal.id, [
+    await writeTaskHistory(stateManager, goal.id, [
       { primary_dimension: "test_dim", actual_elapsed_ms: 10 * 60_000, estimated_duration_ms: 60 * 60_000 },
       { primary_dimension: "test_dim", actual_elapsed_ms: 12 * 60_000, estimated_duration_ms: 60 * 60_000 },
     ]);
 
-    const proposals = judge.detectThresholdAdjustmentNeeded(goal, new Map());
+    const proposals = await judge.detectThresholdAdjustmentNeeded(goal, new Map());
     const undershootProposals = proposals.filter((p) => p.reason === "resource_undershoot");
     expect(undershootProposals).toHaveLength(0);
   });
 
-  it("does NOT trigger when actual time is >= 50% of estimated (no undershoot)", () => {
+  it("does NOT trigger when actual time is >= 50% of estimated (no undershoot)", async () => {
     const goal = makeGoal({
       dimensions: [makeDimension({ current_value: 30, threshold: { type: "min", value: 100 } })],
     });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // actual=55min, estimated=60min → ~92% of estimated → no undershoot
-    writeTaskHistory(stateManager, goal.id, [
+    await writeTaskHistory(stateManager, goal.id, [
       { primary_dimension: "test_dim", actual_elapsed_ms: 55 * 60_000, estimated_duration_ms: 60 * 60_000 },
       { primary_dimension: "test_dim", actual_elapsed_ms: 58 * 60_000, estimated_duration_ms: 60 * 60_000 },
       { primary_dimension: "test_dim", actual_elapsed_ms: 52 * 60_000, estimated_duration_ms: 60 * 60_000 },
     ]);
 
-    const proposals = judge.detectThresholdAdjustmentNeeded(goal, new Map());
+    const proposals = await judge.detectThresholdAdjustmentNeeded(goal, new Map());
     const undershootProposals = proposals.filter((p) => p.reason === "resource_undershoot");
     expect(undershootProposals).toHaveLength(0);
   });
 
-  it("does NOT trigger when progress >= 50% (goal not stagnant)", () => {
+  it("does NOT trigger when progress >= 50% (goal not stagnant)", async () => {
     // current_value=80, threshold min=100 → progress=80%
     const goal = makeGoal({
       dimensions: [makeDimension({ current_value: 80, threshold: { type: "min", value: 100 } })],
     });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // Tasks are undershooting time-wise, but goal is already 80% done
-    writeTaskHistory(stateManager, goal.id, [
+    await writeTaskHistory(stateManager, goal.id, [
       { primary_dimension: "test_dim", actual_elapsed_ms: 10 * 60_000, estimated_duration_ms: 60 * 60_000 },
       { primary_dimension: "test_dim", actual_elapsed_ms: 12 * 60_000, estimated_duration_ms: 60 * 60_000 },
       { primary_dimension: "test_dim", actual_elapsed_ms: 11 * 60_000, estimated_duration_ms: 60 * 60_000 },
     ]);
 
-    const proposals = judge.detectThresholdAdjustmentNeeded(goal, new Map());
+    const proposals = await judge.detectThresholdAdjustmentNeeded(goal, new Map());
     const undershootProposals = proposals.filter((p) => p.reason === "resource_undershoot");
     expect(undershootProposals).toHaveLength(0);
   });
 
-  it("proposal has reason='resource_undershoot' and proposed_threshold = 85% of current", () => {
+  it("proposal has reason='resource_undershoot' and proposed_threshold = 85% of current", async () => {
     const goal = makeGoal({
       dimensions: [makeDimension({ current_value: 10, threshold: { type: "min", value: 200 } })],
     });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
-    writeTaskHistory(stateManager, goal.id, [
+    await writeTaskHistory(stateManager, goal.id, [
       { primary_dimension: "test_dim", actual_elapsed_ms: 5 * 60_000, estimated_duration_ms: 60 * 60_000 },
       { primary_dimension: "test_dim", actual_elapsed_ms: 6 * 60_000, estimated_duration_ms: 60 * 60_000 },
       { primary_dimension: "test_dim", actual_elapsed_ms: 4 * 60_000, estimated_duration_ms: 60 * 60_000 },
     ]);
 
-    const proposals = judge.detectThresholdAdjustmentNeeded(goal, new Map());
+    const proposals = await judge.detectThresholdAdjustmentNeeded(goal, new Map());
     const p = proposals.find((p) => p.reason === "resource_undershoot");
     expect(p).toBeDefined();
     expect(p!.reason).toBe("resource_undershoot");
@@ -177,14 +177,14 @@ describe("Condition 3: resource undershoot", () => {
     expect(p!.evidence).toContain("ms estimated");
   });
 
-  it("ignores history entries with null timing data (treats as no timing available)", () => {
+  it("ignores history entries with null timing data (treats as no timing available)", async () => {
     const goal = makeGoal({
       dimensions: [makeDimension({ current_value: 30, threshold: { type: "min", value: 100 } })],
     });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // Mix: 2 with timing, 3 without — should NOT trigger (need 3 with timing)
-    writeTaskHistory(stateManager, goal.id, [
+    await writeTaskHistory(stateManager, goal.id, [
       { primary_dimension: "test_dim", actual_elapsed_ms: 10 * 60_000, estimated_duration_ms: 60 * 60_000 },
       { primary_dimension: "test_dim", actual_elapsed_ms: null, estimated_duration_ms: null },
       { primary_dimension: "test_dim", actual_elapsed_ms: null, estimated_duration_ms: null },
@@ -192,76 +192,76 @@ describe("Condition 3: resource undershoot", () => {
       { primary_dimension: "test_dim", actual_elapsed_ms: 12 * 60_000, estimated_duration_ms: 60 * 60_000 },
     ]);
 
-    const proposals = judge.detectThresholdAdjustmentNeeded(goal, new Map());
+    const proposals = await judge.detectThresholdAdjustmentNeeded(goal, new Map());
     const undershootProposals = proposals.filter((p) => p.reason === "resource_undershoot");
     expect(undershootProposals).toHaveLength(0);
   });
 
-  it("ignores history entries with zero estimated_duration_ms", () => {
+  it("ignores history entries with zero estimated_duration_ms", async () => {
     const goal = makeGoal({
       dimensions: [makeDimension({ current_value: 30, threshold: { type: "min", value: 100 } })],
     });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // 3 entries but estimated=0 → filtered out by > 0 guard
-    writeTaskHistory(stateManager, goal.id, [
+    await writeTaskHistory(stateManager, goal.id, [
       { primary_dimension: "test_dim", actual_elapsed_ms: 1, estimated_duration_ms: 0 },
       { primary_dimension: "test_dim", actual_elapsed_ms: 1, estimated_duration_ms: 0 },
       { primary_dimension: "test_dim", actual_elapsed_ms: 1, estimated_duration_ms: 0 },
     ]);
 
-    const proposals = judge.detectThresholdAdjustmentNeeded(goal, new Map());
+    const proposals = await judge.detectThresholdAdjustmentNeeded(goal, new Map());
     const undershootProposals = proposals.filter((p) => p.reason === "resource_undershoot");
     expect(undershootProposals).toHaveLength(0);
   });
 });
 
 describe("Regression: conditions 1 and 2 still work after condition 3 addition", () => {
-  it("condition 1 (high_failure_no_progress) still fires with >= 3 failures and < 10% progress", () => {
+  it("condition 1 (high_failure_no_progress) still fires with >= 3 failures and < 10% progress", async () => {
     const goal = makeGoal({
       dimensions: [makeDimension({ current_value: 1, threshold: { type: "min", value: 100 } })],
     });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const failureCounts = new Map([["test_dim", 5]]);
-    const proposals = judge.detectThresholdAdjustmentNeeded(goal, failureCounts);
+    const proposals = await judge.detectThresholdAdjustmentNeeded(goal, failureCounts);
 
     const cond1 = proposals.find((p) => p.reason === "high_failure_no_progress");
     expect(cond1).toBeDefined();
     expect(cond1!.dimension_name).toBe("test_dim");
   });
 
-  it("condition 2 (bottleneck_dimension) still fires when all other dims satisfied and this one < 30%", () => {
+  it("condition 2 (bottleneck_dimension) still fires when all other dims satisfied and this one < 30%", async () => {
     const goal = makeGoal({
       dimensions: [
         makeDimension({ name: "dim_a", current_value: 100, threshold: { type: "min", value: 100 } }),
         makeDimension({ name: "dim_b", current_value: 20, threshold: { type: "min", value: 100 } }),
       ],
     });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
-    const proposals = judge.detectThresholdAdjustmentNeeded(goal, new Map());
+    const proposals = await judge.detectThresholdAdjustmentNeeded(goal, new Map());
     const cond2 = proposals.find((p) => p.reason === "bottleneck_dimension");
     expect(cond2).toBeDefined();
     expect(cond2!.dimension_name).toBe("dim_b");
   });
 
-  it("condition 3 coexists with condition 1 without duplication", () => {
+  it("condition 3 coexists with condition 1 without duplication", async () => {
     // Dim has 3+ failures AND task history with undershoot — condition 1 fires first,
     // condition 3 should NOT add a duplicate proposal for the same dimension.
     const goal = makeGoal({
       dimensions: [makeDimension({ current_value: 1, threshold: { type: "min", value: 100 } })],
     });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
-    writeTaskHistory(stateManager, goal.id, [
+    await writeTaskHistory(stateManager, goal.id, [
       { primary_dimension: "test_dim", actual_elapsed_ms: 5 * 60_000, estimated_duration_ms: 60 * 60_000 },
       { primary_dimension: "test_dim", actual_elapsed_ms: 5 * 60_000, estimated_duration_ms: 60 * 60_000 },
       { primary_dimension: "test_dim", actual_elapsed_ms: 5 * 60_000, estimated_duration_ms: 60 * 60_000 },
     ]);
 
     const failureCounts = new Map([["test_dim", 5]]);
-    const proposals = judge.detectThresholdAdjustmentNeeded(goal, failureCounts);
+    const proposals = await judge.detectThresholdAdjustmentNeeded(goal, failureCounts);
 
     // Only one proposal per dimension (condition 1 fires first, condition 3 skips)
     const dimProposals = proposals.filter((p) => p.dimension_name === "test_dim");

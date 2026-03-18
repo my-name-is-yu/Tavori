@@ -141,36 +141,36 @@ describe("CharacterConfigSchema — invalid values", () => {
 // ─── CharacterConfigManager.load ───
 
 describe("CharacterConfigManager.load", () => {
-  it("returns DEFAULT_CHARACTER_CONFIG when no file exists", () => {
-    const config = manager.load();
+  it("returns DEFAULT_CHARACTER_CONFIG when no file exists", async () => {
+    const config = await manager.load();
     expect(config).toEqual(DEFAULT_CHARACTER_CONFIG);
   });
 
-  it("returns DEFAULT_CHARACTER_CONFIG values: caution=2, stall=1, directness=3, proactivity=2", () => {
-    const config = manager.load();
+  it("returns DEFAULT_CHARACTER_CONFIG values: caution=2, stall=1, directness=3, proactivity=2", async () => {
+    const config = await manager.load();
     expect(config.caution_level).toBe(2);
     expect(config.stall_flexibility).toBe(1);
     expect(config.communication_directness).toBe(3);
     expect(config.proactivity_level).toBe(2);
   });
 
-  it("loads existing config from disk correctly", () => {
+  it("loads existing config from disk correctly", async () => {
     const saved: CharacterConfig = {
       caution_level: 4,
       stall_flexibility: 3,
       communication_directness: 5,
       proactivity_level: 1,
     };
-    manager.save(saved);
+    await manager.save(saved);
 
-    const loaded = manager.load();
+    const loaded = await manager.load();
     expect(loaded.caution_level).toBe(4);
     expect(loaded.stall_flexibility).toBe(3);
     expect(loaded.communication_directness).toBe(5);
     expect(loaded.proactivity_level).toBe(1);
   });
 
-  it("validates config from disk with Zod on load", () => {
+  it("validates config from disk with Zod on load", async () => {
     // Write invalid data directly to the file
     const configPath = path.join(tempDir, "character-config.json");
     fs.writeFileSync(
@@ -179,20 +179,20 @@ describe("CharacterConfigManager.load", () => {
       "utf-8"
     );
 
-    expect(() => manager.load()).toThrow();
+    await expect(manager.load()).rejects.toThrow();
   });
 
-  it("persists across manager instances (same stateManager)", () => {
+  it("persists across manager instances (same stateManager)", async () => {
     const config: CharacterConfig = {
       caution_level: 5,
       stall_flexibility: 5,
       communication_directness: 1,
       proactivity_level: 4,
     };
-    manager.save(config);
+    await manager.save(config);
 
     const manager2 = new CharacterConfigManager(stateManager);
-    const loaded = manager2.load();
+    const loaded = await manager2.load();
     expect(loaded.caution_level).toBe(5);
     expect(loaded.stall_flexibility).toBe(5);
   });
@@ -201,102 +201,102 @@ describe("CharacterConfigManager.load", () => {
 // ─── CharacterConfigManager.save ───
 
 describe("CharacterConfigManager.save", () => {
-  it("saves config and file exists afterward", () => {
+  it("saves config and file exists afterward", async () => {
     const config: CharacterConfig = {
       caution_level: 3,
       stall_flexibility: 2,
       communication_directness: 4,
       proactivity_level: 3,
     };
-    manager.save(config);
+    await manager.save(config);
 
     const configPath = path.join(tempDir, "character-config.json");
     expect(fs.existsSync(configPath)).toBe(true);
   });
 
-  it("saved data round-trips correctly", () => {
+  it("saved data round-trips correctly", async () => {
     const config: CharacterConfig = {
       caution_level: 1,
       stall_flexibility: 5,
       communication_directness: 2,
       proactivity_level: 5,
     };
-    manager.save(config);
-    const loaded = manager.load();
+    await manager.save(config);
+    const loaded = await manager.load();
     expect(loaded).toEqual(config);
   });
 
-  it("overwrites existing config on second save", () => {
-    manager.save({
+  it("overwrites existing config on second save", async () => {
+    await manager.save({
       caution_level: 1,
       stall_flexibility: 1,
       communication_directness: 1,
       proactivity_level: 1,
     });
-    manager.save({
+    await manager.save({
       caution_level: 5,
       stall_flexibility: 5,
       communication_directness: 5,
       proactivity_level: 5,
     });
 
-    const loaded = manager.load();
+    const loaded = await manager.load();
     expect(loaded.caution_level).toBe(5);
     expect(loaded.stall_flexibility).toBe(5);
     expect(loaded.communication_directness).toBe(5);
     expect(loaded.proactivity_level).toBe(5);
   });
 
-  it("saves boundary values (1 and 5) without error", () => {
-    expect(() =>
+  it("saves boundary values (1 and 5) without error", async () => {
+    await expect(
       manager.save({
         caution_level: 1,
         stall_flexibility: 5,
         communication_directness: 1,
         proactivity_level: 5,
       })
-    ).not.toThrow();
+    ).resolves.not.toThrow();
   });
 
-  it("throws when saving invalid config (value out of range)", () => {
-    expect(() =>
+  it("throws when saving invalid config (value out of range)", async () => {
+    await expect(
       manager.save({
         caution_level: 0,
         stall_flexibility: 1,
         communication_directness: 3,
         proactivity_level: 2,
       } as unknown as CharacterConfig)
-    ).toThrow();
+    ).rejects.toThrow();
   });
 });
 
 // ─── CharacterConfigManager.reset ───
 
 describe("CharacterConfigManager.reset", () => {
-  it("resets to DEFAULT_CHARACTER_CONFIG values", () => {
-    manager.save({
+  it("resets to DEFAULT_CHARACTER_CONFIG values", async () => {
+    await manager.save({
       caution_level: 5,
       stall_flexibility: 5,
       communication_directness: 5,
       proactivity_level: 5,
     });
 
-    manager.reset();
-    const loaded = manager.load();
+    await manager.reset();
+    const loaded = await manager.load();
 
     expect(loaded).toEqual(DEFAULT_CHARACTER_CONFIG);
   });
 
-  it("reset creates file if it did not exist", () => {
-    manager.reset();
+  it("reset creates file if it did not exist", async () => {
+    await manager.reset();
     const configPath = path.join(tempDir, "character-config.json");
     expect(fs.existsSync(configPath)).toBe(true);
   });
 
-  it("reset is idempotent (calling twice still yields defaults)", () => {
-    manager.reset();
-    manager.reset();
-    const loaded = manager.load();
+  it("reset is idempotent (calling twice still yields defaults)", async () => {
+    await manager.reset();
+    await manager.reset();
+    const loaded = await manager.load();
     expect(loaded).toEqual(DEFAULT_CHARACTER_CONFIG);
   });
 });
@@ -304,16 +304,16 @@ describe("CharacterConfigManager.reset", () => {
 // ─── CharacterConfigManager.update ───
 
 describe("CharacterConfigManager.update", () => {
-  it("updates a single field and preserves others", () => {
-    const updated = manager.update({ caution_level: 5 });
+  it("updates a single field and preserves others", async () => {
+    const updated = await manager.update({ caution_level: 5 });
     expect(updated.caution_level).toBe(5);
     expect(updated.stall_flexibility).toBe(DEFAULT_CHARACTER_CONFIG.stall_flexibility);
     expect(updated.communication_directness).toBe(DEFAULT_CHARACTER_CONFIG.communication_directness);
     expect(updated.proactivity_level).toBe(DEFAULT_CHARACTER_CONFIG.proactivity_level);
   });
 
-  it("updates multiple fields simultaneously", () => {
-    const updated = manager.update({
+  it("updates multiple fields simultaneously", async () => {
+    const updated = await manager.update({
       caution_level: 3,
       proactivity_level: 4,
     });
@@ -323,54 +323,54 @@ describe("CharacterConfigManager.update", () => {
     expect(updated.communication_directness).toBe(DEFAULT_CHARACTER_CONFIG.communication_directness);
   });
 
-  it("returns the updated config", () => {
-    const result = manager.update({ stall_flexibility: 3 });
+  it("returns the updated config", async () => {
+    const result = await manager.update({ stall_flexibility: 3 });
     expect(result.stall_flexibility).toBe(3);
   });
 
-  it("persists the updated config to disk", () => {
-    manager.update({ communication_directness: 1 });
-    const loaded = manager.load();
+  it("persists the updated config to disk", async () => {
+    await manager.update({ communication_directness: 1 });
+    const loaded = await manager.load();
     expect(loaded.communication_directness).toBe(1);
   });
 
-  it("update with empty object preserves all current values", () => {
-    manager.save({
+  it("update with empty object preserves all current values", async () => {
+    await manager.save({
       caution_level: 4,
       stall_flexibility: 2,
       communication_directness: 5,
       proactivity_level: 3,
     });
-    const updated = manager.update({});
+    const updated = await manager.update({});
     expect(updated.caution_level).toBe(4);
     expect(updated.stall_flexibility).toBe(2);
     expect(updated.communication_directness).toBe(5);
     expect(updated.proactivity_level).toBe(3);
   });
 
-  it("update merges on top of previously saved config (not defaults)", () => {
-    manager.save({
+  it("update merges on top of previously saved config (not defaults)", async () => {
+    await manager.save({
       caution_level: 4,
       stall_flexibility: 4,
       communication_directness: 4,
       proactivity_level: 4,
     });
-    const updated = manager.update({ caution_level: 1 });
+    const updated = await manager.update({ caution_level: 1 });
     expect(updated.caution_level).toBe(1);
     expect(updated.stall_flexibility).toBe(4);
     expect(updated.communication_directness).toBe(4);
     expect(updated.proactivity_level).toBe(4);
   });
 
-  it("throws when update produces an invalid config", () => {
-    expect(() =>
+  it("throws when update produces an invalid config", async () => {
+    await expect(
       manager.update({ caution_level: 0 as unknown as 1 })
-    ).toThrow();
+    ).rejects.toThrow();
   });
 
-  it("chained updates apply sequentially", () => {
-    manager.update({ caution_level: 3 });
-    const final = manager.update({ stall_flexibility: 5 });
+  it("chained updates apply sequentially", async () => {
+    await manager.update({ caution_level: 3 });
+    const final = await manager.update({ stall_flexibility: 5 });
     expect(final.caution_level).toBe(3);
     expect(final.stall_flexibility).toBe(5);
   });

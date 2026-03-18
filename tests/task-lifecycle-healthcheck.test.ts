@@ -150,7 +150,7 @@ describe("TaskLifecycle — post-execution health check", () => {
     });
 
     // Write a minimal goal so executeTask/verifyTask don't crash on state reads
-    stateManager.writeRaw("goals/goal-1/goal.json", {
+    await stateManager.writeRaw("goals/goal-1/goal.json", {
       id: "goal-1",
       title: "Test Goal",
       dimensions: [
@@ -161,7 +161,7 @@ describe("TaskLifecycle — post-execution health check", () => {
         },
       ],
     });
-    stateManager.writeRaw("goals/goal-1/strategy.json", null);
+    await stateManager.writeRaw("goals/goal-1/strategy.json", null);
 
     await lifecycle.executeTask(task, adapter);
 
@@ -219,7 +219,7 @@ describe("TaskLifecycle — post-execution health check", () => {
       .mockResolvedValue({ healthy: true, output: "Build and tests passed" });
 
     const now = new Date().toISOString();
-    stateManager.writeRaw("goals/goal-2/goal.json", {
+    await stateManager.writeRaw("goals/goal-2/goal.json", {
       id: "goal-2",
       title: "Test Goal 2",
       status: "active",
@@ -346,7 +346,7 @@ describe("TaskLifecycle — post-execution health check", () => {
 
     const healthCheckSpy = vi.spyOn(lifecycle, "runPostExecutionHealthCheck");
 
-    stateManager.writeRaw("goals/goal-5/goal.json", {
+    await stateManager.writeRaw("goals/goal-5/goal.json", {
       id: "goal-5",
       title: "Test Goal 5",
       dimensions: [

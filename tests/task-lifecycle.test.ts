@@ -181,7 +181,7 @@ const UNKNOWN_REVERSIBILITY_RESPONSE = `\`\`\`json
 
 // ─── Test Suite ───
 
-describe("TaskLifecycle", () => {
+describe("TaskLifecycle", async () => {
   let tmpDir: string;
   let stateManager: StateManager;
   let sessionManager: SessionManager;
@@ -499,7 +499,7 @@ describe("TaskLifecycle", () => {
   // generateTask
   // ─────────────────────────────────────────────
 
-  describe("generateTask", () => {
+  describe("generateTask", async () => {
     it("calls LLM with a prompt containing goalId and targetDimension", async () => {
       const spy = createSpyLLMClient([VALID_TASK_RESPONSE]);
       const lifecycle = createLifecycle(spy);
@@ -585,7 +585,7 @@ describe("TaskLifecycle", () => {
 
       const task = await lifecycle.generateTask("goal-1", "dim");
 
-      const persisted = stateManager.readRaw(`tasks/goal-1/${task.id}.json`);
+      const persisted = await stateManager.readRaw(`tasks/goal-1/${task.id}.json`);
       expect(persisted).not.toBeNull();
       expect((persisted as Record<string, unknown>).id).toBe(task.id);
     });
@@ -704,7 +704,7 @@ describe("TaskLifecycle", () => {
       const lifecycle = createLifecycle(llm);
 
       const task = await lifecycle.generateTask("goal-1", "dim");
-      const raw = stateManager.readRaw(`tasks/goal-1/${task.id}.json`) as Record<string, unknown>;
+      const raw = await stateManager.readRaw(`tasks/goal-1/${task.id}.json`) as Record<string, unknown>;
 
       expect(raw.work_description).toBe(task.work_description);
       expect(raw.status).toBe("pending");
@@ -717,7 +717,7 @@ describe("TaskLifecycle", () => {
   // checkIrreversibleApproval
   // ─────────────────────────────────────────────
 
-  describe("checkIrreversibleApproval", () => {
+  describe("checkIrreversibleApproval", async () => {
     function makeTask(overrides: Partial<Task> = {}): Task {
       return {
         id: "task-1",
@@ -761,7 +761,7 @@ describe("TaskLifecycle", () => {
       const lifecycle = createLifecycle(llm);
 
       // Set trust high enough for autonomous quadrant
-      trustManager.setOverride("normal", 30, "test");
+      await trustManager.setOverride("normal", 30, "test");
 
       const task = makeTask({ reversibility: "reversible" });
       const result = await lifecycle.checkIrreversibleApproval(task, 0.8);
@@ -855,8 +855,8 @@ describe("TaskLifecycle", () => {
         },
       });
 
-      trustManager.addPermanentGate("normal", "normal");
-      trustManager.setOverride("normal", 50, "test"); // high trust
+      await trustManager.addPermanentGate("normal", "normal");
+      await trustManager.setOverride("normal", 50, "test"); // high trust
 
       const task = makeTask({ reversibility: "reversible" });
       await lifecycle.checkIrreversibleApproval(task, 0.9);
@@ -889,7 +889,7 @@ describe("TaskLifecycle", () => {
       });
 
       // Set high trust for "verification" domain
-      trustManager.setOverride("verification", 50, "test");
+      await trustManager.setOverride("verification", 50, "test");
 
       const task = makeTask({
         reversibility: "reversible",
@@ -907,7 +907,7 @@ describe("TaskLifecycle", () => {
       });
 
       // Set trust to exactly threshold (20)
-      trustManager.setOverride("normal", 20, "test");
+      await trustManager.setOverride("normal", 20, "test");
 
       const task = makeTask({ reversibility: "reversible" });
       // Default confidence is 0.5, which is >= HIGH_CONFIDENCE_THRESHOLD (0.5)
@@ -1015,7 +1015,7 @@ describe("TaskLifecycle", () => {
   // executeTask
   // ─────────────────────────────────────────────
 
-  describe("executeTask", () => {
+  describe("executeTask", async () => {
     it("creates a session with correct type and IDs", async () => {
       const llm = createMockLLMClient([]);
       const lifecycle = createLifecycle(llm);
@@ -1075,10 +1075,10 @@ describe("TaskLifecycle", () => {
       const task = makeTask();
 
       // Persist task first
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       await lifecycle.executeTask(task, adapter);
 
-      const persisted = stateManager.readRaw(`tasks/goal-1/task-1.json`) as Record<string, unknown>;
+      const persisted = await stateManager.readRaw(`tasks/goal-1/task-1.json`) as Record<string, unknown>;
       expect(persisted.status).toBe("completed");
     });
 
@@ -1092,10 +1092,10 @@ describe("TaskLifecycle", () => {
       }]);
       const task = makeTask();
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       await lifecycle.executeTask(task, adapter);
 
-      const persisted = stateManager.readRaw(`tasks/goal-1/task-1.json`) as Record<string, unknown>;
+      const persisted = await stateManager.readRaw(`tasks/goal-1/task-1.json`) as Record<string, unknown>;
       expect(persisted.status).toBe("timed_out");
     });
 
@@ -1109,10 +1109,10 @@ describe("TaskLifecycle", () => {
       }]);
       const task = makeTask();
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       await lifecycle.executeTask(task, adapter);
 
-      const persisted = stateManager.readRaw(`tasks/goal-1/task-1.json`) as Record<string, unknown>;
+      const persisted = await stateManager.readRaw(`tasks/goal-1/task-1.json`) as Record<string, unknown>;
       expect(persisted.status).toBe("error");
     });
 
@@ -1122,10 +1122,10 @@ describe("TaskLifecycle", () => {
       const adapter = createMockAdapter([{ success: true }]);
       const task = makeTask();
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       await lifecycle.executeTask(task, adapter);
 
-      const persisted = stateManager.readRaw(`tasks/goal-1/task-1.json`) as Record<string, unknown>;
+      const persisted = await stateManager.readRaw(`tasks/goal-1/task-1.json`) as Record<string, unknown>;
       expect(persisted).not.toBeNull();
       expect(persisted.completed_at).toBeDefined();
     });
@@ -1300,7 +1300,7 @@ describe("TaskLifecycle", () => {
       const before = new Date().toISOString();
       await lifecycle.executeTask(task, adapter);
 
-      const persisted = stateManager.readRaw(`tasks/goal-1/task-1.json`) as Record<string, unknown>;
+      const persisted = await stateManager.readRaw(`tasks/goal-1/task-1.json`) as Record<string, unknown>;
       // started_at should be set when task moves to running
       expect(persisted.started_at).toBeDefined();
       expect(typeof persisted.started_at).toBe("string");
@@ -1389,7 +1389,7 @@ describe("TaskLifecycle", () => {
   // verifyTask
   // ─────────────────────────────────────────────
 
-  describe("verifyTask", () => {
+  describe("verifyTask", async () => {
     function makeExecutionResult(
       overrides: Partial<import("../src/execution/task-lifecycle.js").AgentResult> = {}
     ): import("../src/execution/task-lifecycle.js").AgentResult {
@@ -1626,7 +1626,7 @@ describe("TaskLifecycle", () => {
 
       const verification = await lifecycle.verifyTask(task, result);
 
-      const persisted = stateManager.readRaw(
+      const persisted = await stateManager.readRaw(
         `verification/${task.id}/verification-result.json`
       ) as Record<string, unknown>;
       expect(persisted).not.toBeNull();
@@ -1792,7 +1792,7 @@ describe("TaskLifecycle", () => {
       const task = makeTask({ target_dimensions: ["dim"] });
       const result = makeExecutionResult();
 
-      stateManager.writeRaw("goals/goal-1/goal.json", {
+      await stateManager.writeRaw("goals/goal-1/goal.json", {
         id: "goal-1",
         title: "Test Goal",
         status: "active",
@@ -1814,7 +1814,7 @@ describe("TaskLifecycle", () => {
       const task = makeTask({ target_dimensions: ["dim"] });
       const result = makeExecutionResult();
 
-      stateManager.writeRaw("goals/goal-1/goal.json", {
+      await stateManager.writeRaw("goals/goal-1/goal.json", {
         id: "goal-1",
         title: "Test Goal",
         status: "active",
@@ -1838,7 +1838,7 @@ describe("TaskLifecycle", () => {
       const task = makeTask({ target_dimensions: ["dim"] });
       const result = makeExecutionResult();
 
-      stateManager.writeRaw("goals/goal-1/goal.json", {
+      await stateManager.writeRaw("goals/goal-1/goal.json", {
         id: "goal-1",
         title: "Test Goal",
         status: "active",
@@ -1870,7 +1870,7 @@ describe("TaskLifecycle", () => {
       });
       const result = makeExecutionResult();
 
-      stateManager.writeRaw("goals/goal-1/goal.json", {
+      await stateManager.writeRaw("goals/goal-1/goal.json", {
         id: "goal-1",
         title: "Test Goal",
         status: "active",
@@ -1894,7 +1894,7 @@ describe("TaskLifecycle", () => {
   // handleVerdict
   // ─────────────────────────────────────────────
 
-  describe("handleVerdict", () => {
+  describe("handleVerdict", async () => {
     function makeVerificationResult(
       overrides: Partial<import("../src/types/task.js").VerificationResult> = {}
     ): import("../src/types/task.js").VerificationResult {
@@ -1919,12 +1919,12 @@ describe("TaskLifecycle", () => {
       const task = makeTask();
       const vr = makeVerificationResult({ verdict: "pass" });
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       const result = await lifecycle.handleVerdict(task, vr);
 
       expect(result.action).toBe("completed");
       // Trust should have increased
-      const balance = trustManager.getBalance("normal");
+      const balance = await trustManager.getBalance("normal");
       expect(balance.balance).toBe(3); // +3 for success
     });
 
@@ -1934,7 +1934,7 @@ describe("TaskLifecycle", () => {
       const task = makeTask({ consecutive_failure_count: 2 });
       const vr = makeVerificationResult({ verdict: "pass" });
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       const result = await lifecycle.handleVerdict(task, vr);
 
       expect(result.task.consecutive_failure_count).toBe(0);
@@ -1946,7 +1946,7 @@ describe("TaskLifecycle", () => {
       const task = makeTask({ status: "running" as const });
       const vr = makeVerificationResult({ verdict: "pass" });
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       const result = await lifecycle.handleVerdict(task, vr);
 
       expect(result.task.status).toBe("completed");
@@ -1958,10 +1958,10 @@ describe("TaskLifecycle", () => {
       const task = makeTask();
       const vr = makeVerificationResult({ verdict: "pass" });
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       await lifecycle.handleVerdict(task, vr);
 
-      const persisted = stateManager.readRaw(`tasks/goal-1/task-1.json`) as Record<string, unknown>;
+      const persisted = await stateManager.readRaw(`tasks/goal-1/task-1.json`) as Record<string, unknown>;
       expect(persisted.consecutive_failure_count).toBe(0);
       expect(persisted.status).toBe("completed");
     });
@@ -1978,7 +1978,7 @@ describe("TaskLifecycle", () => {
         ],
       });
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       const result = await lifecycle.handleVerdict(task, vr);
 
       expect(result.action).toBe("keep");
@@ -1996,7 +1996,7 @@ describe("TaskLifecycle", () => {
         ],
       });
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       const result = await lifecycle.handleVerdict(task, vr);
 
       // Should delegate to handleFailure (direction wrong)
@@ -2015,7 +2015,7 @@ describe("TaskLifecycle", () => {
         ],
       });
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       const result = await lifecycle.handleVerdict(task, vr);
 
       // Should delegate to handleFailure
@@ -2029,10 +2029,10 @@ describe("TaskLifecycle", () => {
       const task = makeTask();
       const vr = makeVerificationResult({ verdict: "pass" });
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       await lifecycle.handleVerdict(task, vr);
 
-      const history = stateManager.readRaw(`tasks/goal-1/task-history.json`) as Array<Record<string, unknown>>;
+      const history = await stateManager.readRaw(`tasks/goal-1/task-history.json`) as Array<Record<string, unknown>>;
       expect(history).not.toBeNull();
       expect(history.length).toBe(1);
       expect(history[0]!.task_id).toBe("task-1");
@@ -2044,7 +2044,7 @@ describe("TaskLifecycle", () => {
       const task = makeTask();
       const vr = makeVerificationResult({ verdict: "pass" });
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       const result = await lifecycle.handleVerdict(task, vr);
 
       expect(result.task.completed_at).toBeDefined();
@@ -2059,7 +2059,7 @@ describe("TaskLifecycle", () => {
 
       // Write goal with a dimension whose last_updated is null
       const oldTimestamp = null;
-      stateManager.writeRaw("goals/goal-1/goal.json", {
+      await stateManager.writeRaw("goals/goal-1/goal.json", {
         id: "goal-1",
         title: "Test Goal",
         status: "active",
@@ -2070,13 +2070,13 @@ describe("TaskLifecycle", () => {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
 
       const before = new Date().toISOString();
       await lifecycle.handleVerdict(task, vr);
       const after = new Date().toISOString();
 
-      const goal = stateManager.readRaw("goals/goal-1/goal.json") as Record<string, unknown>;
+      const goal = await stateManager.readRaw("goals/goal-1/goal.json") as Record<string, unknown>;
       const dims = goal.dimensions as Array<Record<string, unknown>>;
       const coverageDim = dims.find((d) => d.name === "coverage");
       const performanceDim = dims.find((d) => d.name === "performance");
@@ -2097,7 +2097,7 @@ describe("TaskLifecycle", () => {
       const vr = makeVerificationResult({ verdict: "pass" });
 
       const oldTimestamp = "2020-01-01T00:00:00.000Z";
-      stateManager.writeRaw("goals/goal-1/goal.json", {
+      await stateManager.writeRaw("goals/goal-1/goal.json", {
         id: "goal-1",
         title: "Test Goal",
         status: "active",
@@ -2107,11 +2107,11 @@ describe("TaskLifecycle", () => {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
 
       await lifecycle.handleVerdict(task, vr);
 
-      const goal = stateManager.readRaw("goals/goal-1/goal.json") as Record<string, unknown>;
+      const goal = await stateManager.readRaw("goals/goal-1/goal.json") as Record<string, unknown>;
       const dims = goal.dimensions as Array<Record<string, unknown>>;
       const coverageDim = dims.find((d) => d.name === "coverage");
 
@@ -2126,7 +2126,7 @@ describe("TaskLifecycle", () => {
       const vr = makeVerificationResult({ verdict: "pass" });
 
       // No goal written to state — should complete without throwing
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       const result = await lifecycle.handleVerdict(task, vr);
 
       expect(result.action).toBe("completed");
@@ -2145,7 +2145,7 @@ describe("TaskLifecycle", () => {
       });
 
       const oldTimestamp = "2020-01-01T00:00:00.000Z";
-      stateManager.writeRaw("goals/goal-1/goal.json", {
+      await stateManager.writeRaw("goals/goal-1/goal.json", {
         id: "goal-1",
         title: "Test Goal",
         status: "active",
@@ -2155,11 +2155,11 @@ describe("TaskLifecycle", () => {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
 
       await lifecycle.handleVerdict(task, vr);
 
-      const goal = stateManager.readRaw("goals/goal-1/goal.json") as Record<string, unknown>;
+      const goal = await stateManager.readRaw("goals/goal-1/goal.json") as Record<string, unknown>;
       const dims = goal.dimensions as Array<Record<string, unknown>>;
       const coverageDim = dims.find((d) => d.name === "coverage");
 
@@ -2182,7 +2182,7 @@ describe("TaskLifecycle", () => {
         ],
       });
 
-      stateManager.writeRaw("goals/goal-1/goal.json", {
+      await stateManager.writeRaw("goals/goal-1/goal.json", {
         id: "goal-1",
         title: "Test Goal",
         status: "active",
@@ -2192,11 +2192,11 @@ describe("TaskLifecycle", () => {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
 
       await lifecycle.handleVerdict(task, vr);
 
-      const goal = stateManager.readRaw("goals/goal-1/goal.json") as Record<string, unknown>;
+      const goal = await stateManager.readRaw("goals/goal-1/goal.json") as Record<string, unknown>;
       const dims = goal.dimensions as Array<Record<string, unknown>>;
       const coverageDim = dims.find((d) => d.name === "coverage");
 
@@ -2217,7 +2217,7 @@ describe("TaskLifecycle", () => {
         ],
       });
 
-      stateManager.writeRaw("goals/goal-1/goal.json", {
+      await stateManager.writeRaw("goals/goal-1/goal.json", {
         id: "goal-1",
         title: "Test Goal",
         status: "active",
@@ -2227,11 +2227,11 @@ describe("TaskLifecycle", () => {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
 
       await lifecycle.handleVerdict(task, vr);
 
-      const goal = stateManager.readRaw("goals/goal-1/goal.json") as Record<string, unknown>;
+      const goal = await stateManager.readRaw("goals/goal-1/goal.json") as Record<string, unknown>;
       const dims = goal.dimensions as Array<Record<string, unknown>>;
       const coverageDim = dims.find((d) => d.name === "coverage");
 
@@ -2256,7 +2256,7 @@ describe("TaskLifecycle", () => {
         ],
       });
 
-      stateManager.writeRaw("goals/goal-1/goal.json", {
+      await stateManager.writeRaw("goals/goal-1/goal.json", {
         id: "goal-1",
         title: "Test Goal",
         status: "active",
@@ -2266,12 +2266,12 @@ describe("TaskLifecycle", () => {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
 
       const result = await lifecycle.handleVerdict(task, vr);
       expect(result.action).toBe("keep");
 
-      const goal = stateManager.readRaw("goals/goal-1/goal.json") as Record<string, unknown>;
+      const goal = await stateManager.readRaw("goals/goal-1/goal.json") as Record<string, unknown>;
       const dims = goal.dimensions as Array<Record<string, unknown>>;
       const qualityDim = dims.find((d) => d.name === "quality");
 
@@ -2293,7 +2293,7 @@ describe("TaskLifecycle", () => {
         dimension_updates: [],
       });
 
-      stateManager.writeRaw("goals/goal-1.json", {
+      await stateManager.writeRaw("goals/goal-1.json", {
         id: "goal-1",
         title: "Test Goal",
         status: "active",
@@ -2303,11 +2303,11 @@ describe("TaskLifecycle", () => {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
 
       await lifecycle.handleVerdict(task, vr);
 
-      const goal = stateManager.readRaw("goals/goal-1.json") as Record<string, unknown>;
+      const goal = await stateManager.readRaw("goals/goal-1.json") as Record<string, unknown>;
       const dims = goal.dimensions as Array<Record<string, unknown>>;
       const coverageDim = dims.find((d) => d.name === "coverage");
 
@@ -2320,7 +2320,7 @@ describe("TaskLifecycle", () => {
   // handleFailure
   // ─────────────────────────────────────────────
 
-  describe("handleFailure", () => {
+  describe("handleFailure", async () => {
     function makeVerificationResult(
       overrides: Partial<import("../src/types/task.js").VerificationResult> = {}
     ): import("../src/types/task.js").VerificationResult {
@@ -2344,7 +2344,7 @@ describe("TaskLifecycle", () => {
       const task = makeTask({ consecutive_failure_count: 0 });
       const vr = makeVerificationResult();
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       const result = await lifecycle.handleFailure(task, vr);
 
       expect(result.task.consecutive_failure_count).toBe(1);
@@ -2356,10 +2356,10 @@ describe("TaskLifecycle", () => {
       const task = makeTask();
       const vr = makeVerificationResult();
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       await lifecycle.handleFailure(task, vr);
 
-      const balance = trustManager.getBalance("normal");
+      const balance = await trustManager.getBalance("normal");
       expect(balance.balance).toBe(-10); // -10 for failure
     });
 
@@ -2369,10 +2369,10 @@ describe("TaskLifecycle", () => {
       const task = makeTask({ consecutive_failure_count: 0 });
       const vr = makeVerificationResult();
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       await lifecycle.handleFailure(task, vr);
 
-      const persisted = stateManager.readRaw(`tasks/goal-1/task-1.json`) as Record<string, unknown>;
+      const persisted = await stateManager.readRaw(`tasks/goal-1/task-1.json`) as Record<string, unknown>;
       expect(persisted.consecutive_failure_count).toBe(1);
     });
 
@@ -2382,7 +2382,7 @@ describe("TaskLifecycle", () => {
       const task = makeTask({ consecutive_failure_count: 2 }); // will become 3
       const vr = makeVerificationResult();
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       const result = await lifecycle.handleFailure(task, vr);
 
       expect(result.action).toBe("escalate");
@@ -2400,7 +2400,7 @@ describe("TaskLifecycle", () => {
         ],
       });
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       const result = await lifecycle.handleFailure(task, vr);
 
       expect(result.action).toBe("escalate");
@@ -2418,7 +2418,7 @@ describe("TaskLifecycle", () => {
         ],
       });
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       const result = await lifecycle.handleFailure(task, vr);
 
       expect(result.action).toBe("keep");
@@ -2438,7 +2438,7 @@ describe("TaskLifecycle", () => {
         ],
       });
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       const result = await lifecycle.handleFailure(task, vr);
 
       expect(result.action).toBe("discard");
@@ -2458,7 +2458,7 @@ describe("TaskLifecycle", () => {
         ],
       });
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       const result = await lifecycle.handleFailure(task, vr);
 
       expect(result.action).toBe("discard");
@@ -2479,20 +2479,20 @@ describe("TaskLifecycle", () => {
       });
 
       // Set up a goal with dimensions for state_integrity update
-      stateManager.writeRaw(`goals/goal-1/goal.json`, {
+      await stateManager.writeRaw(`goals/goal-1/goal.json`, {
         id: "goal-1",
         title: "Test goal",
         dimensions: [{ name: "dim", state_integrity: "ok" }],
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       const result = await lifecycle.handleFailure(task, vr);
 
       expect(result.action).toBe("escalate");
 
       // Verify state_integrity was set to uncertain
-      const goal = stateManager.readRaw(`goals/goal-1/goal.json`) as Record<string, unknown>;
+      const goal = await stateManager.readRaw(`goals/goal-1/goal.json`) as Record<string, unknown>;
       const dims = goal.dimensions as Array<Record<string, unknown>>;
       expect(dims[0]!.state_integrity).toBe("uncertain");
     });
@@ -2511,7 +2511,7 @@ describe("TaskLifecycle", () => {
         ],
       });
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       const result = await lifecycle.handleFailure(task, vr);
 
       expect(result.action).toBe("escalate");
@@ -2531,7 +2531,7 @@ describe("TaskLifecycle", () => {
         ],
       });
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       const result = await lifecycle.handleFailure(task, vr);
 
       expect(result.action).toBe("escalate");
@@ -2549,7 +2549,7 @@ describe("TaskLifecycle", () => {
         ],
       });
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       const result = await lifecycle.handleFailure(task, vr);
 
       expect(result.task.consecutive_failure_count).toBe(2);
@@ -2568,11 +2568,11 @@ describe("TaskLifecycle", () => {
             { layer: "self_report", description: "Progress", confidence: 0.3 },
           ],
         });
-        stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+        await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
         await lifecycle.handleFailure(task, vr);
       }
 
-      const balance = trustManager.getBalance("normal");
+      const balance = await trustManager.getBalance("normal");
       expect(balance.balance).toBe(-20); // -10 * 2
     });
 
@@ -2587,10 +2587,10 @@ describe("TaskLifecycle", () => {
         ],
       });
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       await lifecycle.handleFailure(task, vr);
 
-      const history = stateManager.readRaw(`tasks/goal-1/task-history.json`) as Array<Record<string, unknown>>;
+      const history = await stateManager.readRaw(`tasks/goal-1/task-history.json`) as Array<Record<string, unknown>>;
       expect(history).not.toBeNull();
       expect(history.length).toBe(1);
     });
@@ -2600,7 +2600,7 @@ describe("TaskLifecycle", () => {
   // runTaskCycle
   // ─────────────────────────────────────────────
 
-  describe("runTaskCycle", () => {
+  describe("runTaskCycle", async () => {
     it("happy path: select -> generate -> approve -> execute -> verify pass -> completed", async () => {
       // LLM responses: 1) task generation, 2) L2 review (L1 no longer uses LLM)
       const llm = createMockLLMClient([
@@ -2731,7 +2731,7 @@ describe("TaskLifecycle", () => {
   // Persistence
   // ─────────────────────────────────────────────
 
-  describe("persistence", () => {
+  describe("persistence", async () => {
     it("verification result saved to correct path", async () => {
       const llm = createMockLLMClient([LLM_REVIEW_PASS]);
       const lifecycle = createLifecycle(llm);
@@ -2747,7 +2747,7 @@ describe("TaskLifecycle", () => {
 
       await lifecycle.verifyTask(task, result);
 
-      const saved = stateManager.readRaw("verification/task-persist-test/verification-result.json");
+      const saved = await stateManager.readRaw("verification/task-persist-test/verification-result.json");
       expect(saved).not.toBeNull();
       expect((saved as Record<string, unknown>).task_id).toBe("task-persist-test");
     });
@@ -2770,11 +2770,11 @@ describe("TaskLifecycle", () => {
           timestamp: new Date().toISOString(),
         };
 
-        stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+        await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
         await lifecycle.handleVerdict(task, vr);
       }
 
-      const history = stateManager.readRaw("tasks/goal-1/task-history.json") as Array<Record<string, unknown>>;
+      const history = await stateManager.readRaw("tasks/goal-1/task-history.json") as Array<Record<string, unknown>>;
       expect(history.length).toBe(2);
       expect(history[0]!.task_id).toBe("task-1");
       expect(history[1]!.task_id).toBe("task-2");
@@ -2795,10 +2795,10 @@ describe("TaskLifecycle", () => {
         timestamp: new Date().toISOString(),
       };
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       await lifecycle.handleVerdict(task, vr);
 
-      const history = stateManager.readRaw("tasks/goal-1/task-history.json") as Array<Record<string, unknown>>;
+      const history = await stateManager.readRaw("tasks/goal-1/task-history.json") as Array<Record<string, unknown>>;
       expect(history[0]!.primary_dimension).toBe("coverage");
     });
 
@@ -2818,10 +2818,10 @@ describe("TaskLifecycle", () => {
         timestamp: new Date().toISOString(),
       };
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       await lifecycle.handleFailure(task, vr);
 
-      const history = stateManager.readRaw("tasks/goal-1/task-history.json") as Array<Record<string, unknown>>;
+      const history = await stateManager.readRaw("tasks/goal-1/task-history.json") as Array<Record<string, unknown>>;
       expect(history[0]!.consecutive_failure_count).toBe(2);
     });
 
@@ -2833,7 +2833,7 @@ describe("TaskLifecycle", () => {
         adapterType: "mock",
         async execute() {
           // Check status during execution
-          const raw = stateManager.readRaw("tasks/goal-1/task-1.json") as Record<string, unknown>;
+          const raw = await stateManager.readRaw("tasks/goal-1/task-1.json") as Record<string, unknown>;
           statusDuringExecution = raw?.status as string;
           return {
             success: true, output: "ok", error: null,
@@ -2843,7 +2843,7 @@ describe("TaskLifecycle", () => {
       };
       const task = makeTask();
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       await lifecycle.executeTask(task, adapter);
 
       expect(statusDuringExecution).toBe("running");
@@ -2854,7 +2854,7 @@ describe("TaskLifecycle", () => {
   // failure handling paths
   // ─────────────────────────────────────────────
 
-  describe("failure handling paths", () => {
+  describe("failure handling paths", async () => {
     // ── Test 1: L1 mechanical verification ─────────────────────────────────
     // The current MVP implementation marks L1 as applicable-but-assumed-pass
     // when any success criterion has a shell-command verification method.
@@ -2879,7 +2879,7 @@ describe("TaskLifecycle", () => {
         ],
       });
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       const result = await lifecycle.verifyTask(task, {
         success: true,
         output: "All tests passed",
@@ -2915,7 +2915,7 @@ describe("TaskLifecycle", () => {
         ],
       });
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       const result = await lifecycle.verifyTask(task, {
         success: false,
         output: "TypeScript errors found",
@@ -2944,7 +2944,7 @@ describe("TaskLifecycle", () => {
         ],
       });
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       const result = await lifecycle.verifyTask(task, {
         success: true,
         output: "Review done",
@@ -2981,9 +2981,9 @@ describe("TaskLifecycle", () => {
         timestamp: new Date().toISOString(),
       };
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       // Save a goal so dimension updates can be applied
-      stateManager.writeRaw("goals/goal-1.json", {
+      await stateManager.writeRaw("goals/goal-1.json", {
         id: "goal-1",
         dimensions: [{ name: "dim", current_value: 0.5 }],
       });
@@ -3016,7 +3016,7 @@ describe("TaskLifecycle", () => {
         timestamp: new Date().toISOString(),
       };
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       const result = await lifecycle.handleFailure(task, vr);
       expect(result.action).toBe("discard");
     });
@@ -3042,7 +3042,7 @@ describe("TaskLifecycle", () => {
         timestamp: new Date().toISOString(),
       };
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       const result = await lifecycle.handleFailure(task, vr);
       expect(result.action).toBe("escalate");
       expect(result.task.consecutive_failure_count).toBe(3);
@@ -3069,7 +3069,7 @@ describe("TaskLifecycle", () => {
         timestamp: new Date().toISOString(),
       };
 
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
       const result = await lifecycle.handleFailure(task, vr);
       expect(result.action).toBe("escalate");
     });
@@ -3088,7 +3088,7 @@ describe("TaskLifecycle", () => {
       };
 
       const task = makeTask({ id: "task-timeout" });
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
 
       const result = await lifecycle.executeTask(task, timeoutAdapter);
 
@@ -3123,7 +3123,7 @@ describe("TaskLifecycle", () => {
           },
         ],
       });
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
 
       const executionResult = await lifecycle.executeTask(task, timeoutAdapter);
       expect(executionResult.success).toBe(false);
@@ -3145,7 +3145,7 @@ describe("TaskLifecycle", () => {
       };
 
       const task = makeTask({ id: "task-bad-throw" });
-      stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+      await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
 
       const result = await lifecycle.executeTask(task, badAdapter);
 
@@ -3159,7 +3159,7 @@ describe("TaskLifecycle", () => {
   // runTaskCycle — ethics means check
   // ─────────────────────────────────────────────
 
-  describe("runTaskCycle — ethics means check", () => {
+  describe("runTaskCycle — ethics means check", async () => {
     // Shared helper: a mock EthicsGate with controllable checkMeans
     function makeMockEthicsGate(checkMeansImpl: () => Promise<import("../src/types/ethics.js").EthicsVerdict>) {
       return {
@@ -3733,7 +3733,7 @@ describe("TaskLifecycle", () => {
   // capability acquisition flow
   // ─────────────────────────────────────────────
 
-  describe("capability acquisition flow", () => {
+  describe("capability acquisition flow", async () => {
     function createMockCapabilityDetector(overrides: Partial<any> = {}) {
       return {
         detectDeficiency: vi.fn().mockResolvedValue(null),

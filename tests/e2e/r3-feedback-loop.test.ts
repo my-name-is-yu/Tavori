@@ -285,7 +285,7 @@ describe("R3-1: verifyTask dimension_updates are applied to goal state via handl
     const goal = makeGoalWithDimension("goal-r3-1", 0.3, 0.7);
 
     // saveGoal writes to goals/<goalId>/goal.json — same path that handleVerdict reads/writes
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const taskLifecycle = makeTaskLifecycle(stateManager);
     const task = makeTask(goal.id);
@@ -300,7 +300,7 @@ describe("R3-1: verifyTask dimension_updates are applied to goal state via handl
     expect(verdictResult.action).toBe("completed");
 
     // Read back the updated goal state via the nested path (goals/<goalId>/goal.json)
-    const updatedGoal = stateManager.readRaw(`goals/${goal.id}/goal.json`) as {
+    const updatedGoal = await stateManager.readRaw(`goals/${goal.id}/goal.json`) as {
       dimensions: Array<{ name: string; current_value: number }>;
     };
     expect(updatedGoal).not.toBeNull();
@@ -315,7 +315,7 @@ describe("R3-1: verifyTask dimension_updates are applied to goal state via handl
   it("pass verdict: dimension value is capped at 1.0 when delta would exceed it", async () => {
     const stateManager = new StateManager(tmpDir);
     const goal = makeGoalWithDimension("goal-r3-1b", 0.9, 0.7);
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const taskLifecycle = makeTaskLifecycle(stateManager);
     const task = makeTask(goal.id);
@@ -327,7 +327,7 @@ describe("R3-1: verifyTask dimension_updates are applied to goal state via handl
 
     await taskLifecycle.handleVerdict(task, verificationResult);
 
-    const updatedGoal = stateManager.readRaw(`goals/${goal.id}/goal.json`) as {
+    const updatedGoal = await stateManager.readRaw(`goals/${goal.id}/goal.json`) as {
       dimensions: Array<{ name: string; current_value: number }>;
     };
     const qualityDim = updatedGoal.dimensions.find((d) => d.name === "quality");
@@ -344,7 +344,7 @@ describe("R3-2: CoreLoop iteration applies dimension_updates from task cycle", (
     const goal = makeGoalWithDimension(goalId, 0.3, 0.8);
 
     // saveGoal writes to goals/<goalId>/goal.json — the path CoreLoop and TaskLifecycle use
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // TaskCycleResult with pass verdict and dimension_update +0.4
     const taskCycleResult = makeTaskCycleResult(goalId, "pass");
@@ -458,7 +458,7 @@ describe("R3-3: fail verdict produces no dimension_updates", () => {
   it("fail verdict leaves dimension current_value unchanged", async () => {
     const stateManager = new StateManager(tmpDir);
     const goal = makeGoalWithDimension("goal-r3-3", 0.3, 0.7);
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const taskLifecycle = makeTaskLifecycle(stateManager);
     const task = makeTask(goal.id);
@@ -469,7 +469,7 @@ describe("R3-3: fail verdict produces no dimension_updates", () => {
     await taskLifecycle.handleVerdict(task, verificationResult);
 
     // Read back the goal state — should remain unchanged at the nested path
-    const updatedGoal = stateManager.readRaw(`goals/${goal.id}/goal.json`) as {
+    const updatedGoal = await stateManager.readRaw(`goals/${goal.id}/goal.json`) as {
       dimensions: Array<{ name: string; current_value: number }>;
     };
 
@@ -482,7 +482,7 @@ describe("R3-3: fail verdict produces no dimension_updates", () => {
   it("fail verdict: handleVerdict returns keep or escalate action (not completed)", async () => {
     const stateManager = new StateManager(tmpDir);
     const goal = makeGoalWithDimension("goal-r3-3b", 0.3, 0.7);
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const taskLifecycle = makeTaskLifecycle(stateManager);
     const task = makeTask(goal.id, 0);
@@ -503,7 +503,7 @@ describe("R3-4: consecutive failures trigger stall detection", () => {
     const stateManager = new StateManager(tmpDir);
     const goalId = "goal-r3-4";
     const goal = makeGoalWithDimension(goalId, 0.3, 0.8);
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // A stall report representing consecutive failures
     const stallReport = {
@@ -615,7 +615,7 @@ describe("R3-4: consecutive failures trigger stall detection", () => {
   it("TaskLifecycle.handleFailure increments consecutive_failure_count and returns escalate after 3 failures", async () => {
     const stateManager = new StateManager(tmpDir);
     const goal = makeGoalWithDimension("goal-r3-4b", 0.3, 0.7);
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const taskLifecycle = makeTaskLifecycle(stateManager);
 

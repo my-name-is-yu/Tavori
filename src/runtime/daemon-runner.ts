@@ -1,5 +1,5 @@
-import * as fs from "node:fs";
 import * as fsp from "node:fs/promises";
+import type { Stats } from "node:fs";
 import * as path from "node:path";
 import { CoreLoop } from "../core-loop.js";
 import type { LoopResult } from "../core-loop.js";
@@ -103,8 +103,8 @@ export class DaemonRunner {
    */
   async start(goalIds: string[]): Promise<void> {
     // 1. Check if already running
-    if (this.pidManager.isRunning()) {
-      const info = this.pidManager.readPID();
+    if (await this.pidManager.isRunning()) {
+      const info = await this.pidManager.readPID();
       throw new Error(
         `Daemon is already running (PID ${info?.pid ?? "unknown"}). ` +
           `Stop it first or remove the PID file at: ${this.pidManager.getPath()}`
@@ -112,7 +112,7 @@ export class DaemonRunner {
     }
 
     // 2. Write PID file
-    this.pidManager.writePID();
+    await this.pidManager.writePID();
 
     // 2b. Rotate log if needed, then check for crash recovery marker
     await this.rotateLog();
@@ -168,7 +168,7 @@ export class DaemonRunner {
       crash_count: 0,
       last_error: null,
     });
-    this.saveDaemonState();
+    await this.saveDaemonState();
 
     // 5b. Write "running" shutdown marker (crash detection on next startup)
     await this.writeShutdownMarker({
@@ -220,7 +220,8 @@ export class DaemonRunner {
     this.state.status = "stopping";
     // Save current active_goals as interrupted_goals for state restoration
     this.state.interrupted_goals = [...this.state.active_goals];
-    this.saveDaemonState();
+    // Do NOT persist here — cleanup() will save the final state after the loop exits.
+    // Calling saveDaemonState() here would race with cleanup()'s save and corrupt the file.
     this.logger.info("Stop requested — daemon will stop after current iteration");
   }
 
@@ -233,7 +234,7 @@ export class DaemonRunner {
     while (this.running && !this.shuttingDown) {
       try {
         // 1. Determine which goals need activation
-        const activeGoals = this.determineActiveGoals(goalIds);
+        const activeGoals = await this.determineActiveGoals(goalIds);
 
         if (activeGoals.length === 0) {
           this.logger.info("No goals need activation this cycle", {
@@ -265,7 +266,7 @@ export class DaemonRunner {
         }
 
         // 3. Save state
-        this.saveDaemonState();
+        await this.saveDaemonState();
 
         // 4. Wait for next check interval
         if (this.running) {
@@ -274,12 +275,12 @@ export class DaemonRunner {
           await this.sleep(intervalMs);
         }
       } catch (err) {
-        this.handleCriticalError(err);
+        await this.handleCriticalError(err);
       }
     }
 
     // Cleanup after loop exits
-    this.cleanup();
+    await this.cleanup();
   }
 
   // ─── Private: Goal Activation ───
@@ -288,12 +289,12 @@ export class DaemonRunner {
    * Determine which goals should be activated this cycle.
    * Uses DriveSystem.shouldActivate() for each goal, then sorts by priority.
    */
-  private determineActiveGoals(goalIds: string[]): string[] {
+  private async determineActiveGoals(goalIds: string[]): Promise<string[]> {
     const eligibleIds: string[] = [];
     const scores = new Map<string, number>();
 
     for (const goalId of goalIds) {
-      if (this.driveSystem.shouldActivate(goalId)) {
+      if (await this.driveSystem.shouldActivate(goalId)) {
         eligibleIds.push(goalId);
         // Load goal to get a rough priority signal (gap or drive score not available here)
         // Use schedule consecutive_actions as a tiebreaker — more urgent goals first
@@ -368,12 +369,12 @@ export class DaemonRunner {
    * Handle a critical daemon-level error (outer loop catch).
    * Marks state as crashed and stops the loop.
    */
-  private handleCriticalError(err: unknown): void {
+  private async handleCriticalError(err: unknown): Promise<void> {
     const msg = err instanceof Error ? err.message : String(err);
     this.logger.error("Critical daemon error", { error: msg });
     this.state.status = "crashed";
     this.state.last_error = msg;
-    this.saveDaemonState();
+    await this.saveDaemonState();
     this.running = false;
   }
 
@@ -382,12 +383,12 @@ export class DaemonRunner {
   /**
    * Save daemon state to {baseDir}/daemon-state.json atomically.
    */
-  private saveDaemonState(): void {
+  private async saveDaemonState(): Promise<void> {
     const statePath = path.join(this.baseDir, "daemon-state.json");
     const tmpPath = statePath + ".tmp";
     try {
-      fs.writeFileSync(tmpPath, JSON.stringify(this.state, null, 2), "utf-8");
-      fs.renameSync(tmpPath, statePath);
+      await fsp.writeFile(tmpPath, JSON.stringify(this.state, null, 2), "utf-8");
+      await fsp.rename(tmpPath, statePath);
     } catch (err) {
       // Non-fatal — log but don't crash the daemon
       this.logger.warn("Failed to save daemon state", {
@@ -400,11 +401,11 @@ export class DaemonRunner {
    * Load daemon state from {baseDir}/daemon-state.json.
    * Returns null if the file doesn't exist or fails to parse.
    */
-  private loadDaemonState(): DaemonState | null {
+  private async loadDaemonState(): Promise<DaemonState | null> {
     const statePath = path.join(this.baseDir, "daemon-state.json");
     try {
-      if (!fs.existsSync(statePath)) return null;
-      const data = JSON.parse(fs.readFileSync(statePath, "utf-8"));
+      const content = await fsp.readFile(statePath, "utf-8");
+      const data = JSON.parse(content);
       return DaemonStateSchema.parse(data);
     } catch {
       return null;
@@ -417,7 +418,7 @@ export class DaemonRunner {
    * Returns the merged goal ID array.
    */
   private async restoreState(goalIds: string[]): Promise<string[]> {
-    const saved = this.loadDaemonState();
+    const saved = await this.loadDaemonState();
     if (!saved || !saved.interrupted_goals || saved.interrupted_goals.length === 0) {
       return goalIds;
     }
@@ -438,16 +439,16 @@ export class DaemonRunner {
    * Perform cleanup after the loop exits: update state, remove PID file, log.
    * Also writes "clean_shutdown" marker to enable crash-vs-clean detection on next startup.
    */
-  private cleanup(): void {
+  private async cleanup(): Promise<void> {
     // Only set to "stopped" if not already "crashed"
     const wasCrashed = this.state.status === "crashed";
     if (!wasCrashed) {
       this.state.status = "stopped";
     }
-    this.saveDaemonState();
-    this.pidManager.cleanup();
+    await this.saveDaemonState();
+    await this.pidManager.cleanup();
 
-    // Write clean shutdown marker (fire-and-forget; synchronous fallback)
+    // Write clean shutdown marker (async, atomic)
     const markerPath = path.join(this.baseDir, "shutdown-state.json");
     const marker: ShutdownMarker = {
       goal_ids: this.currentGoalIds,
@@ -458,8 +459,8 @@ export class DaemonRunner {
     };
     try {
       const tmp = markerPath + ".tmp";
-      fs.writeFileSync(tmp, JSON.stringify(marker, null, 2), "utf-8");
-      fs.renameSync(tmp, markerPath);
+      await fsp.writeFile(tmp, JSON.stringify(marker, null, 2), "utf-8");
+      await fsp.rename(tmp, markerPath);
     } catch {
       // Non-fatal
     }
@@ -590,7 +591,7 @@ export class DaemonRunner {
 
     try {
       // Check if log file exists and exceeds size limit
-      let stat: fs.Stats;
+      let stat: Stats;
       try {
         stat = await fsp.stat(logPath);
       } catch {

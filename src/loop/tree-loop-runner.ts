@@ -18,7 +18,7 @@ export async function runTreeIteration(
   const orchestrator = deps.treeLoopOrchestrator!;
 
   // 0. Auto-decompose if root has no children yet
-  const rootGoalForDecomp = deps.stateManager.loadGoal(rootId);
+  const rootGoalForDecomp = await deps.stateManager.loadGoal(rootId);
   if (rootGoalForDecomp && rootGoalForDecomp.children_ids.length === 0 && deps.goalTreeManager) {
     const defaultConfig = { min_specificity: 0.7, max_depth: 3, parallel_loop_limit: 3, auto_prune_threshold: 0.3 };
     try {
@@ -32,14 +32,14 @@ export async function runTreeIteration(
   }
 
   // 1. Select next node to iterate
-  const selectedNodeId = orchestrator.selectNextNode(rootId);
+  const selectedNodeId = await orchestrator.selectNextNode(rootId);
 
   // 2. If null, all nodes are completed/paused — check root completion
   if (selectedNodeId === null) {
-    const rootGoal = deps.stateManager.loadGoal(rootId);
+    const rootGoal = await deps.stateManager.loadGoal(rootId);
     const isComplete = rootGoal
       ? (rootGoal.children_ids.length > 0
-          ? deps.satisficingJudge.judgeTreeCompletion(rootId)
+          ? await deps.satisficingJudge.judgeTreeCompletion(rootId)
           : deps.satisficingJudge.isGoalComplete(rootGoal))
       : { is_complete: false, blocking_dimensions: [], low_confidence_dimensions: [], needs_verification_task: false, checked_at: new Date().toISOString() };
 
@@ -63,20 +63,20 @@ export async function runTreeIteration(
 
   // 3b. After each iteration, propagate state upward through parent chain
   if (deps.stateAggregator) {
-    const selectedGoal = deps.stateManager.loadGoal(selectedNodeId);
+    const selectedGoal = await deps.stateManager.loadGoal(selectedNodeId);
     let parentId = selectedGoal?.parent_id ?? null;
     while (parentId !== null) {
       try {
-        deps.stateAggregator.aggregateChildStates(parentId);
+        await deps.stateAggregator.aggregateChildStates(parentId);
       } catch { break; }
-      const parent = deps.stateManager.loadGoal(parentId);
+      const parent = await deps.stateManager.loadGoal(parentId);
       parentId = parent?.parent_id ?? null;
     }
   }
 
   // 4. If the node's goal is now completed, call onNodeCompleted
   if (result.completionJudgment.is_complete) {
-    orchestrator.onNodeCompleted(selectedNodeId);
+    await orchestrator.onNodeCompleted(selectedNodeId);
   }
 
   return result;
@@ -113,7 +113,7 @@ export async function runMultiGoalIteration(
   let allocationMap: Map<string, number>;
 
   if (deps.crossGoalPortfolio) {
-    allocationMap = deps.crossGoalPortfolio.getAllocationMap(goalIds);
+    allocationMap = await deps.crossGoalPortfolio.getAllocationMap(goalIds);
   } else {
     // Fall back to equal allocation when CrossGoalPortfolio is not provided
     const equalShare = 1.0 / goalIds.length;

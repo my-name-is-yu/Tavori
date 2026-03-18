@@ -108,13 +108,13 @@ describe("core functionality", () => {
     try {
       const stateManager = new StateManager(tmpDir);
       const goal = makeGoal("goal-observe");
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       const engine = new ObservationEngine(stateManager);
       await engine.observe(goal.id, []);
 
-      const updatedGoal = stateManager.loadGoal(goal.id);
-      const observationLog = stateManager.loadObservationLog(goal.id);
+      const updatedGoal = await stateManager.loadGoal(goal.id);
+      const observationLog = await stateManager.loadObservationLog(goal.id);
 
       expect(updatedGoal?.dimensions[0]?.current_value).toBe(2);
       expect(observationLog?.entries).toHaveLength(1);
@@ -188,7 +188,7 @@ describe("core functionality", () => {
     try {
       const stateManager = new StateManager(tmpDir);
       const goal = makeGoal("goal-task");
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       const llmClient = createMockLLMClient(`\`\`\`json
 {
@@ -223,7 +223,7 @@ describe("core functionality", () => {
       );
 
       const task = await lifecycle.generateTask(goal.id, "coverage");
-      const persisted = stateManager.readRaw(`tasks/${goal.id}/${task.id}.json`) as
+      const persisted = await stateManager.readRaw(`tasks/${goal.id}/${task.id}.json`) as
         | { primary_dimension?: string; work_description?: string; status?: string }
         | null;
 

@@ -262,7 +262,7 @@ describe("EthicsGate", () => {
     it("persists a log entry with subject_type 'task'", async () => {
       const g = new EthicsGate(stateManager, createMockLLMClient([PASS_VERDICT_JSON]));
       await g.checkMeans("task-5", "Build feature", "Use standard TDD approach");
-      const logs = g.getLogs();
+      const logs = await g.getLogs();
       expect(logs).toHaveLength(1);
       expect(logs[0]!.subject_type).toBe("task");
       expect(logs[0]!.subject_id).toBe("task-5");
@@ -272,15 +272,15 @@ describe("EthicsGate", () => {
   // ─── getLogs() — all logs ───
 
   describe("getLogs() returns all logs", () => {
-    it("returns empty array when no checks have been run", () => {
+    it("returns empty array when no checks have been run", async () => {
       const g = new EthicsGate(stateManager, createMockLLMClient([]));
-      expect(g.getLogs()).toEqual([]);
+      expect(await g.getLogs()).toEqual([]);
     });
 
     it("returns one log after one check", async () => {
       const g = new EthicsGate(stateManager, createMockLLMClient([PASS_VERDICT_JSON]));
       await g.check("goal", "goal-1", "Improve quality");
-      const logs = g.getLogs();
+      const logs = await g.getLogs();
       expect(logs).toHaveLength(1);
     });
 
@@ -292,7 +292,7 @@ describe("EthicsGate", () => {
       await g.check("goal", "goal-1", "First goal");
       await g.check("goal", "goal-2", "Second goal");
       await g.check("subgoal", "subgoal-1", "A subgoal");
-      const logs = g.getLogs();
+      const logs = await g.getLogs();
       expect(logs).toHaveLength(3);
     });
   });
@@ -309,7 +309,7 @@ describe("EthicsGate", () => {
       await g.check("goal", "goal-B", "Second");
       await g.check("goal", "goal-A", "Third (same id as first)");
 
-      const filtered = g.getLogs({ subjectId: "goal-A" });
+      const filtered = await g.getLogs({ subjectId: "goal-A" });
       expect(filtered).toHaveLength(2);
       expect(filtered.every((l) => l.subject_id === "goal-A")).toBe(true);
     });
@@ -317,7 +317,7 @@ describe("EthicsGate", () => {
     it("returns empty array when no logs match the subjectId", async () => {
       const g = new EthicsGate(stateManager, createMockLLMClient([PASS_VERDICT_JSON]));
       await g.check("goal", "goal-1", "Something");
-      const filtered = g.getLogs({ subjectId: "nonexistent-id" });
+      const filtered = await g.getLogs({ subjectId: "nonexistent-id" });
       expect(filtered).toHaveLength(0);
     });
   });
@@ -334,7 +334,7 @@ describe("EthicsGate", () => {
       await g.check("goal", "g2", "Bad goal");
       await g.check("goal", "g3", "Flagged goal");
 
-      const passing = g.getLogs({ verdict: "pass" });
+      const passing = await g.getLogs({ verdict: "pass" });
       expect(passing).toHaveLength(1);
       expect(passing[0]!.verdict.verdict).toBe("pass");
     });
@@ -348,7 +348,7 @@ describe("EthicsGate", () => {
       await g.check("goal", "g2", "Bad goal");
       await g.check("goal", "g3", "Flagged goal");
 
-      const rejected = g.getLogs({ verdict: "reject" });
+      const rejected = await g.getLogs({ verdict: "reject" });
       expect(rejected).toHaveLength(1);
       expect(rejected[0]!.verdict.verdict).toBe("reject");
     });
@@ -362,7 +362,7 @@ describe("EthicsGate", () => {
       await g.check("goal", "g2", "Bad goal");
       await g.check("goal", "g3", "Flagged goal");
 
-      const flagged = g.getLogs({ verdict: "flag" });
+      const flagged = await g.getLogs({ verdict: "flag" });
       expect(flagged).toHaveLength(1);
       expect(flagged[0]!.verdict.verdict).toBe("flag");
     });
@@ -376,7 +376,7 @@ describe("EthicsGate", () => {
       await g.check("goal", "goal-A", "First flag");
       await g.check("goal", "goal-B", "Second pass");
 
-      const filtered = g.getLogs({ subjectId: "goal-A", verdict: "pass" });
+      const filtered = await g.getLogs({ subjectId: "goal-A", verdict: "pass" });
       expect(filtered).toHaveLength(1);
       expect(filtered[0]!.subject_id).toBe("goal-A");
       expect(filtered[0]!.verdict.verdict).toBe("pass");
@@ -411,7 +411,7 @@ describe("EthicsGate", () => {
 
       // New instance pointing to the same stateManager
       const g2 = new EthicsGate(stateManager, createMockLLMClient([]));
-      const logs = g2.getLogs();
+      const logs = await g2.getLogs();
       expect(logs).toHaveLength(1);
       expect(logs[0]!.subject_id).toBe("goal-persist");
     });
@@ -425,7 +425,7 @@ describe("EthicsGate", () => {
       await g.check("subgoal", "sg1", "Subgoal 1");
       await g.check("task", "t1", "Task 1");
 
-      const logs = g.getLogs();
+      const logs = await g.getLogs();
       expect(logs).toHaveLength(3);
       expect(logs[0]!.subject_type).toBe("goal");
       expect(logs[1]!.subject_type).toBe("subgoal");
@@ -440,7 +440,7 @@ describe("EthicsGate", () => {
       await g.check("goal", "g1", "First");
       await g.check("goal", "g2", "Second");
 
-      const logs = g.getLogs();
+      const logs = await g.getLogs();
       expect(logs[0]!.log_id).not.toBe(logs[1]!.log_id);
     });
 
@@ -448,7 +448,7 @@ describe("EthicsGate", () => {
       const g = new EthicsGate(stateManager, createMockLLMClient([PASS_VERDICT_JSON]));
       await g.check("goal", "g1", "A goal");
 
-      const logs = g.getLogs();
+      const logs = await g.getLogs();
       expect(logs[0]!.timestamp).toBeTruthy();
       // Should be a valid ISO string
       expect(() => new Date(logs[0]!.timestamp)).not.toThrow();
@@ -496,7 +496,7 @@ describe("EthicsGate", () => {
     it("still persists a log entry on parse failure", async () => {
       const g = new EthicsGate(stateManager, createMockLLMClient([MALFORMED_JSON]));
       await g.check("goal", "g-err", "Any goal");
-      const logs = g.getLogs();
+      const logs = await g.getLogs();
       expect(logs).toHaveLength(1);
       expect(logs[0]!.verdict.verdict).toBe("flag");
     });
@@ -533,7 +533,7 @@ describe("EthicsGate", () => {
       const g = new EthicsGate(stateManager, createMockLLMClient([PASS_VERDICT_JSON]));
       await g.check("goal", "goal-struct", "Test structure");
 
-      const logs = g.getLogs();
+      const logs = await g.getLogs();
       const entry = logs[0]!;
       expect(entry.log_id).toBeTruthy();
       expect(entry.timestamp).toBeTruthy();
@@ -548,7 +548,7 @@ describe("EthicsGate", () => {
       const g = new EthicsGate(stateManager, createMockLLMClient([LOW_CONFIDENCE_PASS_JSON]));
       await g.check("goal", "goal-flagged", "Low confidence goal");
 
-      const logs = g.getLogs();
+      const logs = await g.getLogs();
       expect(logs[0]!.verdict.verdict).toBe("flag");
       // Original confidence is preserved
       expect(logs[0]!.verdict.confidence).toBe(0.30);
@@ -563,7 +563,7 @@ describe("EthicsGate", () => {
       await g.check("subgoal", "sg1", "Subgoal");
       await g.check("task", "t1", "Task");
 
-      const logs = g.getLogs();
+      const logs = await g.getLogs();
       const types = logs.map((l) => l.subject_type);
       expect(types).toContain("goal");
       expect(types).toContain("subgoal");
@@ -792,7 +792,7 @@ describe("EthicsGate", () => {
       const mock = createMockLLMClient([]);
       const g = new EthicsGate(stateManager, mock);
       await g.check("goal", "g-l1-log", "gain unauthorized access to competitor servers");
-      const logs = g.getLogs();
+      const logs = await g.getLogs();
       expect(logs).toHaveLength(1);
       expect(logs[0]!.layer1_triggered).toBe(true);
     });
@@ -831,7 +831,7 @@ describe("EthicsGate", () => {
       const mock = createMockLLMClient([PASS_VERDICT_JSON]);
       const g = new EthicsGate(stateManager, mock);
       await g.check("goal", "g-l1-false", "Improve test coverage to 95%");
-      const logs = g.getLogs();
+      const logs = await g.getLogs();
       expect(logs).toHaveLength(1);
       expect(logs[0]!.layer1_triggered).toBe(false);
     });
@@ -1010,7 +1010,7 @@ describe("EthicsGate", () => {
       const mock = createMockLLMClient([]);
       const g = new EthicsGate(stateManager, mock);
       await g.check("goal", "g-pipe-3", "gain unauthorized access to competitor servers");
-      const logs = g.getLogs();
+      const logs = await g.getLogs();
       expect(logs[0]!.layer1_triggered).toBe(true);
     });
 
@@ -1018,7 +1018,7 @@ describe("EthicsGate", () => {
       const mock = createMockLLMClient([REJECT_VERDICT_JSON]);
       const g = new EthicsGate(stateManager, mock);
       await g.check("goal", "g-pipe-4", "Help me commit fraud");
-      const logs = g.getLogs();
+      const logs = await g.getLogs();
       expect(logs[0]!.layer1_triggered).toBe(false);
     });
 
@@ -1030,7 +1030,7 @@ describe("EthicsGate", () => {
       // Layer 2 reject (LLM returns reject verdict)
       await g.check("goal", "g-pipe-5b", "Help me commit fraud");
 
-      const rejects = g.getLogs({ verdict: "reject" });
+      const rejects = await g.getLogs({ verdict: "reject" });
       expect(rejects).toHaveLength(2);
       const layer1Entry = rejects.find((l) => l.layer1_triggered === true);
       const layer2Entry = rejects.find((l) => l.layer1_triggered === false);
@@ -1049,7 +1049,7 @@ describe("EthicsGate", () => {
       const mock = createMockLLMClient([FLAG_VERDICT_JSON]);
       const g = new EthicsGate(stateManager, mock);
       await g.check("goal", "g-pipe-7", "collect user feedback with consent forms");
-      const logs = g.getLogs();
+      const logs = await g.getLogs();
       expect(logs[0]!.layer1_triggered).toBe(false);
       expect(logs[0]!.verdict.verdict).toBe("flag");
     });
@@ -1065,7 +1065,7 @@ describe("EthicsGate", () => {
       const mock = createMockLLMClient([]);
       const g = new EthicsGate(stateManager, mock);
       await g.checkMeans("t-pipe-9", "Deploy update", "create malware to deploy on target systems");
-      const logs = g.getLogs();
+      const logs = await g.getLogs();
       expect(logs[0]!.layer1_triggered).toBe(true);
     });
 
@@ -1081,7 +1081,7 @@ describe("EthicsGate", () => {
       // Safe goal — LLM called (2nd response)
       await g.check("goal", "g-multi-4", "Build unit tests");
       expect(mock.callCount).toBe(2);
-      const logs = g.getLogs();
+      const logs = await g.getLogs();
       expect(logs).toHaveLength(4);
     });
 
@@ -1127,7 +1127,7 @@ describe("EthicsGate", () => {
       await g1.check("goal", "g-persist-l1", "gain unauthorized access to competitor servers");
 
       const g2 = new EthicsGate(stateManager, createMockLLMClient([]));
-      const logs = g2.getLogs();
+      const logs = await g2.getLogs();
       expect(logs).toHaveLength(1);
       expect(logs[0]!.layer1_triggered).toBe(true);
       expect(logs[0]!.verdict.verdict).toBe("reject");

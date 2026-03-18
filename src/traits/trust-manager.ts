@@ -59,11 +59,11 @@ export class TrustManager {
 
   // ─── Private: Store I/O ───
 
-  private loadStore(): TrustStore {
+  private async loadStore(): Promise<TrustStore> {
     if (this.cache !== null) {
       return this.cache;
     }
-    const raw = this.stateManager.readRaw(TRUST_STORE_PATH);
+    const raw = await this.stateManager.readRaw(TRUST_STORE_PATH);
     if (raw === null) {
       this.cache = emptyStore();
     } else {
@@ -72,10 +72,10 @@ export class TrustManager {
     return this.cache;
   }
 
-  private saveStore(store: TrustStore): void {
+  private async saveStore(store: TrustStore): Promise<void> {
     const parsed = TrustStoreSchema.parse(store);
     this.cache = parsed;
-    this.stateManager.writeRaw(TRUST_STORE_PATH, parsed);
+    await this.stateManager.writeRaw(TRUST_STORE_PATH, parsed);
   }
 
   // ─── Public API ───
@@ -84,8 +84,8 @@ export class TrustManager {
    * Get the trust balance for a domain.
    * Returns a default balance (score=0) if the domain is not yet tracked.
    */
-  getBalance(domain: string): TrustBalance {
-    const store = this.loadStore();
+  async getBalance(domain: string): Promise<TrustBalance> {
+    const store = await this.loadStore();
     const existing = store.balances[domain];
     if (existing === undefined) {
       return defaultBalance(domain);
@@ -97,15 +97,15 @@ export class TrustManager {
    * Record a successful task for a domain.
    * Adds TRUST_SUCCESS_DELTA (+3), clamps to [-100, +100], and persists.
    */
-  recordSuccess(domain: string): TrustBalance {
-    const store = this.loadStore();
+  async recordSuccess(domain: string): Promise<TrustBalance> {
+    const store = await this.loadStore();
     const current = store.balances[domain] ?? defaultBalance(domain);
     const updated = TrustBalanceSchema.parse({
       ...current,
       balance: clamp(current.balance + TRUST_SUCCESS_DELTA),
     });
     store.balances[domain] = updated;
-    this.saveStore(store);
+    await this.saveStore(store);
     return updated;
   }
 
@@ -113,15 +113,15 @@ export class TrustManager {
    * Record a failed task for a domain.
    * Adds TRUST_FAILURE_DELTA (-10), clamps to [-100, +100], and persists.
    */
-  recordFailure(domain: string): TrustBalance {
-    const store = this.loadStore();
+  async recordFailure(domain: string): Promise<TrustBalance> {
+    const store = await this.loadStore();
     const current = store.balances[domain] ?? defaultBalance(domain);
     const updated = TrustBalanceSchema.parse({
       ...current,
       balance: clamp(current.balance + TRUST_FAILURE_DELTA),
     });
     store.balances[domain] = updated;
-    this.saveStore(store);
+    await this.saveStore(store);
     return updated;
   }
 
@@ -134,8 +134,8 @@ export class TrustManager {
    *   trust <  20 AND confidence >= 0.50 → "execute_with_confirm"
    *   trust <  20 AND confidence < 0.50  → "observe_and_propose"
    */
-  getActionQuadrant(domain: string, confidence: number): ActionQuadrant {
-    const { balance } = this.getBalance(domain);
+  async getActionQuadrant(domain: string, confidence: number): Promise<ActionQuadrant> {
+    const { balance } = await this.getBalance(domain);
     const highTrust = balance >= HIGH_TRUST_THRESHOLD;
     const highConfidence = confidence >= HIGH_CONFIDENCE_THRESHOLD;
 
@@ -156,19 +156,19 @@ export class TrustManager {
    *   - a permanent gate exists for the given domain and category, OR
    *   - the action quadrant is not "autonomous"
    */
-  requiresApproval(
+  async requiresApproval(
     reversibility: string,
     domain: string,
     confidence: number,
     category?: string
-  ): boolean {
+  ): Promise<boolean> {
     if (reversibility === "irreversible" || reversibility === "unknown") {
       return true;
     }
-    if (category && this.hasPermanentGate(domain, category)) {
+    if (category && await this.hasPermanentGate(domain, category)) {
       return true;
     }
-    const quadrant = this.getActionQuadrant(domain, confidence);
+    const quadrant = await this.getActionQuadrant(domain, confidence);
     return quadrant === "observe_and_propose";
   }
 
@@ -176,8 +176,8 @@ export class TrustManager {
    * Override the trust balance for a domain to a specific value.
    * Logs the override with a reason and persists.
    */
-  setOverride(domain: string, balance: number, reason: string): void {
-    const store = this.loadStore();
+  async setOverride(domain: string, balance: number, reason: string): Promise<void> {
+    const store = await this.loadStore();
     const current = store.balances[domain] ?? defaultBalance(domain);
     const balanceBefore = current.balance;
     const balanceAfter = clamp(balance);
@@ -198,7 +198,7 @@ export class TrustManager {
     });
     store.override_log.push(logEntry);
 
-    this.saveStore(store);
+    await this.saveStore(store);
   }
 
   /**
@@ -206,8 +206,8 @@ export class TrustManager {
    * Actions with this category will always require approval regardless of trust/confidence.
    * Logs the gate addition and persists.
    */
-  addPermanentGate(domain: string, category: string): void {
-    const store = this.loadStore();
+  async addPermanentGate(domain: string, category: string): Promise<void> {
+    const store = await this.loadStore();
 
     if (!store.permanent_gates[domain]) {
       store.permanent_gates[domain] = [];
@@ -227,14 +227,14 @@ export class TrustManager {
     });
     store.override_log.push(logEntry);
 
-    this.saveStore(store);
+    await this.saveStore(store);
   }
 
   /**
    * Check whether a permanent gate exists for the given domain and category.
    */
-  hasPermanentGate(domain: string, category: string): boolean {
-    const store = this.loadStore();
+  async hasPermanentGate(domain: string, category: string): Promise<boolean> {
+    const store = await this.loadStore();
     const gates = store.permanent_gates[domain];
     if (!gates) return false;
     return gates.includes(category);

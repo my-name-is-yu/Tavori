@@ -414,7 +414,7 @@ describe("GoalNegotiator", () => {
       const negotiator = new GoalNegotiator(stateManager, mockLLM, ethicsGate, observationEngine);
 
       const result = await negotiator.negotiate("Test goal");
-      const loaded = stateManager.loadGoal(result.goal.id);
+      const loaded = await stateManager.loadGoal(result.goal.id);
       expect(loaded).not.toBeNull();
       expect(loaded!.id).toBe(result.goal.id);
     });
@@ -434,8 +434,8 @@ describe("GoalNegotiator", () => {
 
       const result = await negotiator.negotiate("Launch a beta program");
 
-      const goalIds = stateManager.listGoalIds();
-      const storedGoal = stateManager.loadGoal(result.goal.id);
+      const goalIds = await stateManager.listGoalIds();
+      const storedGoal = await stateManager.loadGoal(result.goal.id);
 
       expect(goalIds).toContain(result.goal.id);
       expect(storedGoal).not.toBeNull();
@@ -456,9 +456,9 @@ describe("GoalNegotiator", () => {
 
       const result = await negotiator.negotiate("Retire stale feature flags");
 
-      expect(stateManager.deleteGoal(result.goal.id)).toBe(true);
-      expect(stateManager.loadGoal(result.goal.id)).toBeNull();
-      expect(stateManager.listGoalIds()).not.toContain(result.goal.id);
+      expect(await stateManager.deleteGoal(result.goal.id)).toBe(true);
+      expect(await stateManager.loadGoal(result.goal.id)).toBeNull();
+      expect(await stateManager.listGoalIds()).not.toContain(result.goal.id);
     });
 
     it("gets all negotiated goals currently stored in state", async () => {
@@ -479,10 +479,9 @@ describe("GoalNegotiator", () => {
       const first = await negotiator.negotiate("Improve onboarding completion");
       const second = await negotiator.negotiate("Reduce support response time");
 
-      const goals = stateManager
-        .listGoalIds()
-        .map((goalId) => stateManager.loadGoal(goalId))
-        .filter((goal): goal is Goal => goal !== null);
+      const goalIds = await stateManager.listGoalIds();
+      const loadedGoals = await Promise.all(goalIds.map((goalId) => stateManager.loadGoal(goalId)));
+      const goals = loadedGoals.filter((goal): goal is Goal => goal !== null);
 
       expect(goals).toHaveLength(2);
       expect(goals.map((goal) => goal.id)).toEqual(
@@ -535,9 +534,9 @@ describe("GoalNegotiator", () => {
         // expected
       }
 
-      const goalIds = stateManager.listGoalIds();
+      const goalIds = await stateManager.listGoalIds();
       // No goals should have been created (ethics log dir may exist but not goal dir)
-      const goals = goalIds.filter((id) => stateManager.loadGoal(id) !== null);
+      const goals = goalIds.filter(async (id) => await stateManager.loadGoal(id) !== null);
       expect(goals).toHaveLength(0);
     });
 
@@ -912,13 +911,13 @@ describe("GoalNegotiator", () => {
 
   // ─── getNegotiationLog() ───
 
-  describe("getNegotiationLog()", () => {
-    it("returns null when no log exists", () => {
+  describe("await getNegotiationLog()", () => {
+    it("returns null when no log exists", async () => {
       const mockLLM = createMockLLMClient([]);
       const ethicsGate = new EthicsGate(stateManager, mockLLM);
       const negotiator = new GoalNegotiator(stateManager, mockLLM, ethicsGate, observationEngine);
 
-      const log = negotiator.getNegotiationLog("nonexistent");
+      const log = await negotiator.getNegotiationLog("nonexistent");
       expect(log).toBeNull();
     });
 
@@ -934,7 +933,7 @@ describe("GoalNegotiator", () => {
       const negotiator = new GoalNegotiator(stateManager, mockLLM, ethicsGate, observationEngine);
 
       const result = await negotiator.negotiate("Test goal");
-      const log = negotiator.getNegotiationLog(result.goal.id);
+      const log = await negotiator.getNegotiationLog(result.goal.id);
       expect(log).not.toBeNull();
       expect(log!.goal_id).toBe(result.goal.id);
     });
@@ -951,7 +950,7 @@ describe("GoalNegotiator", () => {
       const negotiator = new GoalNegotiator(stateManager, mockLLM, ethicsGate, observationEngine);
 
       const result = await negotiator.negotiate("Test goal");
-      const log = negotiator.getNegotiationLog(result.goal.id);
+      const log = await negotiator.getNegotiationLog(result.goal.id);
 
       expect(log!.step2_decomposition).not.toBeNull();
       expect(log!.step3_baseline).not.toBeNull();
@@ -971,7 +970,7 @@ describe("GoalNegotiator", () => {
       const negotiator = new GoalNegotiator(stateManager, mockLLM, ethicsGate, observationEngine);
 
       const result = await negotiator.negotiate("Test goal");
-      const log = negotiator.getNegotiationLog(result.goal.id);
+      const log = await negotiator.getNegotiationLog(result.goal.id);
       expect(log!.is_renegotiation).toBe(false);
     });
 
@@ -1129,7 +1128,7 @@ describe("GoalNegotiator", () => {
       const result = await negotiator.decompose(negotiateResult.goal.id, negotiateResult.goal);
 
       for (const subgoal of result.subgoals) {
-        const loaded = stateManager.loadGoal(subgoal.id);
+        const loaded = await stateManager.loadGoal(subgoal.id);
         expect(loaded).not.toBeNull();
       }
     });
@@ -1187,7 +1186,7 @@ describe("GoalNegotiator", () => {
 
     it("uses default decomposition config when none is provided", async () => {
       const parentGoal = makeTestGoal({ id: "goal-for-default-decompose" });
-      stateManager.saveGoal(parentGoal);
+      await stateManager.saveGoal(parentGoal);
 
       const mockLLM = createMockLLMClient([]);
       const ethicsGate = new EthicsGate(stateManager, mockLLM);
@@ -1219,7 +1218,7 @@ describe("GoalNegotiator", () => {
 
     it("passes through an explicit decomposition config", async () => {
       const parentGoal = makeTestGoal({ id: "goal-for-custom-decompose" });
-      stateManager.saveGoal(parentGoal);
+      await stateManager.saveGoal(parentGoal);
 
       const mockLLM = createMockLLMClient([]);
       const ethicsGate = new EthicsGate(stateManager, mockLLM);
@@ -1282,7 +1281,7 @@ describe("GoalNegotiator", () => {
 
       expect(suggestions).toHaveLength(1);
       expect(suggestions[0]?.title).toBe("Increase Test Coverage");
-      expect(stateManager.listGoalIds()).toEqual([]);
+      expect(await stateManager.listGoalIds()).toEqual([]);
     });
   });
 
@@ -1443,7 +1442,7 @@ describe("GoalNegotiator", () => {
       const initial = await negotiator.negotiate("Test goal");
       await negotiator.renegotiate(initial.goal.id, "stall");
 
-      const log = negotiator.getNegotiationLog(initial.goal.id);
+      const log = await negotiator.getNegotiationLog(initial.goal.id);
       expect(log).not.toBeNull();
       expect(log!.is_renegotiation).toBe(true);
     });
@@ -1466,7 +1465,7 @@ describe("GoalNegotiator", () => {
       const initial = await negotiator.negotiate("Test goal");
       const renegResult = await negotiator.renegotiate(initial.goal.id, "user_request");
 
-      const loaded = stateManager.loadGoal(initial.goal.id);
+      const loaded = await stateManager.loadGoal(initial.goal.id);
       expect(loaded).not.toBeNull();
       expect(loaded!.updated_at).toBe(renegResult.goal.updated_at);
     });
@@ -1677,7 +1676,7 @@ describe("GoalNegotiator", () => {
     it("uses quantitative path when history data is available", async () => {
       // First, create a goal with history data
       const goalWithHistory = makeTestGoal();
-      stateManager.saveGoal(goalWithHistory);
+      await stateManager.saveGoal(goalWithHistory);
 
       // Dimension response that matches existing dimension name
       const matchingDimension = JSON.stringify([
@@ -2583,7 +2582,7 @@ describe("GoalNegotiator CharacterConfig integration", () => {
       const negotiator = makePersistenceTestNegotiator();
 
       const result = await negotiator.negotiate("Ship the onboarding checklist");
-      const savedGoal = stateManager.loadGoal(result.goal.id);
+      const savedGoal = await stateManager.loadGoal(result.goal.id);
 
       expect(savedGoal).not.toBeNull();
       expect(savedGoal?.id).toBe(result.goal.id);
@@ -2596,10 +2595,10 @@ describe("GoalNegotiator CharacterConfig integration", () => {
       const negotiator = makePersistenceTestNegotiator();
 
       const result = await negotiator.negotiate("Archive outdated project notes");
-      const deleted = stateManager.deleteGoal(result.goal.id);
+      const deleted = await stateManager.deleteGoal(result.goal.id);
 
       expect(deleted).toBe(true);
-      expect(stateManager.loadGoal(result.goal.id)).toBeNull();
+      expect(await stateManager.loadGoal(result.goal.id)).toBeNull();
     });
 
     it("gets persisted goals after multiple negotiations", async () => {
@@ -2609,10 +2608,9 @@ describe("GoalNegotiator CharacterConfig integration", () => {
       const first = await firstNegotiator.negotiate("Prepare sprint retrospective");
       const second = await secondNegotiator.negotiate("Write API migration notes");
 
-      const goalIds = stateManager.listGoalIds();
-      const goals = goalIds
-        .map((goalId) => stateManager.loadGoal(goalId))
-        .filter((goal): goal is Goal => goal !== null);
+      const goalIds = await stateManager.listGoalIds();
+      const loadedGoals2 = await Promise.all(goalIds.map((goalId) => stateManager.loadGoal(goalId)));
+      const goals = loadedGoals2.filter((goal): goal is Goal => goal !== null);
 
       expect(goalIds).toEqual(expect.arrayContaining([first.goal.id, second.goal.id]));
       expect(goals).toHaveLength(2);

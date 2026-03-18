@@ -266,7 +266,7 @@ describe("saveRegistry", () => {
     };
     await detector.saveRegistry(registry);
 
-    const raw = stateManager.readRaw("capability_registry.json");
+    const raw = await stateManager.readRaw("capability_registry.json");
     expect(raw).not.toBeNull();
     const parsed = CapabilityRegistrySchema.parse(raw);
     expect(parsed.capabilities).toHaveLength(1);
@@ -1263,18 +1263,18 @@ describe("detectGoalCapabilityGap", () => {
 // ─── dependency helpers ───
 
 describe("dependency helpers", () => {
-  it("addDependency persists dependencies that getDependencies can read back", () => {
+  it("addDependency persists dependencies that getDependencies can read back", async () => {
     const detector = new CapabilityDetector(stateManager, createMockLLMClient([]), reportingEngine);
 
-    detector.addDependency("deploy", ["build", "test"]);
+    await detector.addDependency("deploy", ["build", "test"]);
 
-    expect(detector.getDependencies("deploy")).toEqual(["build", "test"]);
+    expect(await detector.getDependencies("deploy")).toEqual(["build", "test"]);
   });
 
-  it("getDependencies returns an empty array when a capability has no dependency entry", () => {
+  it("getDependencies returns an empty array when a capability has no dependency entry", async () => {
     const detector = new CapabilityDetector(stateManager, createMockLLMClient([]), reportingEngine);
 
-    expect(detector.getDependencies("nonexistent")).toEqual([]);
+    expect(await detector.getDependencies("nonexistent")).toEqual([]);
   });
 
   it("resolveDependencies orders prerequisites before dependents", () => {

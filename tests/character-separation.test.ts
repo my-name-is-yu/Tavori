@@ -169,46 +169,46 @@ describe("stall_flexibility does not affect safety floors", () => {
     expect(atThreshold?.stall_type).toBe("consecutive_failure");
   });
 
-  it("stall_flexibility=5 does not change ESCALATION_CAP (still 3)", () => {
+  it("stall_flexibility=5 does not change ESCALATION_CAP (still 3)", async () => {
     const stateManager = new StateManager(tmpDir);
     const detector = new StallDetector(stateManager, MOST_AMBITIOUS);
 
     // Increment escalation 5 times — cap must remain at 3
-    detector.incrementEscalation("goal-1", "dim-1");
-    detector.incrementEscalation("goal-1", "dim-1");
-    detector.incrementEscalation("goal-1", "dim-1");
-    detector.incrementEscalation("goal-1", "dim-1");
-    const level = detector.incrementEscalation("goal-1", "dim-1");
+    await detector.incrementEscalation("goal-1", "dim-1");
+    await detector.incrementEscalation("goal-1", "dim-1");
+    await detector.incrementEscalation("goal-1", "dim-1");
+    await detector.incrementEscalation("goal-1", "dim-1");
+    const level = await detector.incrementEscalation("goal-1", "dim-1");
 
     expect(level).toBe(3);
   });
 
-  it("stall_flexibility=1 does not change ESCALATION_CAP (still 3)", () => {
+  it("stall_flexibility=1 does not change ESCALATION_CAP (still 3)", async () => {
     const stateManager = new StateManager(tmpDir);
     const detector = new StallDetector(stateManager, MOST_CONSERVATIVE);
 
-    detector.incrementEscalation("goal-1", "dim-1");
-    detector.incrementEscalation("goal-1", "dim-1");
-    detector.incrementEscalation("goal-1", "dim-1");
-    detector.incrementEscalation("goal-1", "dim-1");
-    const level = detector.incrementEscalation("goal-1", "dim-1");
+    await detector.incrementEscalation("goal-1", "dim-1");
+    await detector.incrementEscalation("goal-1", "dim-1");
+    await detector.incrementEscalation("goal-1", "dim-1");
+    await detector.incrementEscalation("goal-1", "dim-1");
+    const level = await detector.incrementEscalation("goal-1", "dim-1");
 
     expect(level).toBe(3);
   });
 
-  it("stall_flexibility=5 escalation cap is the same as default config", () => {
+  it("stall_flexibility=5 escalation cap is the same as default config", async () => {
     const stateManager = new StateManager(tmpDir);
     const detectorDefault = new StallDetector(stateManager, DEFAULT_CHARACTER_CONFIG);
     const detectorExtreme = new StallDetector(stateManager, MOST_AMBITIOUS);
 
     // Apply many increments to both, using different goal IDs
     for (let i = 0; i < 10; i++) {
-      detectorDefault.incrementEscalation("goal-default", "dim-a");
-      detectorExtreme.incrementEscalation("goal-extreme", "dim-a");
+      await detectorDefault.incrementEscalation("goal-default", "dim-a");
+      await detectorExtreme.incrementEscalation("goal-extreme", "dim-a");
     }
 
-    const levelDefault = detectorDefault.getEscalationLevel("goal-default", "dim-a");
-    const levelExtreme = detectorExtreme.getEscalationLevel("goal-extreme", "dim-a");
+    const levelDefault = await detectorDefault.getEscalationLevel("goal-default", "dim-a");
+    const levelExtreme = await detectorExtreme.getEscalationLevel("goal-extreme", "dim-a");
 
     expect(levelDefault).toBe(levelExtreme);
     expect(levelDefault).toBe(3); // ESCALATION_CAP

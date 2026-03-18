@@ -263,11 +263,11 @@ describe("Milestone 2 D-2: E2E loop test automation goal", () => {
       ...fullGoal,
       dimensions: [fullGoal.dimensions[0]!],
     };
-    stateManager.saveGoal(singleDimGoal);
+    await stateManager.saveGoal(singleDimGoal);
 
     await engine.observe(goalId, [singleDimGoal.dimensions[0]!.observation_method]);
 
-    const log = engine.getObservationLog(goalId);
+    const log = await engine.getObservationLog(goalId);
     expect(log.entries.length).toBeGreaterThan(0);
 
     // Find the entry for e2e_test_file_exists specifically
@@ -297,14 +297,14 @@ describe("Milestone 2 D-2: E2E loop test automation goal", () => {
       ...fullGoal,
       dimensions: [fullGoal.dimensions[1]!],
     };
-    stateManager.saveGoal(singleDimGoal);
+    await stateManager.saveGoal(singleDimGoal);
 
     const llmMethod = singleDimGoal.dimensions[0]!.observation_method;
     await engine.observe(goalId, [llmMethod]);
 
     expect(mockLLMClient.callCount).toBeGreaterThanOrEqual(1);
 
-    const log = engine.getObservationLog(goalId);
+    const log = await engine.getObservationLog(goalId);
     expect(log.entries.length).toBeGreaterThan(0);
 
     // Find the entry for e2e_test_passing specifically
@@ -386,7 +386,7 @@ describe("Milestone 2 D-2: E2E loop test automation goal", () => {
 
     const goalId = "d2-test3-goal";
     const goal = makeE2EGoal(goalId, tempDir);
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // Run one iteration
     const result = await coreLoop.run(goalId);
@@ -448,7 +448,7 @@ describe("Milestone 2 D-2: E2E loop test automation goal", () => {
 
     const goalId = "d2-test4-goal";
     const goal = makeE2EGoal(goalId, tempDir);
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // Observe e2e_test_file_exists dimension (index 0)
     const mechanicalMethod = goal.dimensions[0]!.observation_method;
@@ -461,12 +461,12 @@ describe("Milestone 2 D-2: E2E loop test automation goal", () => {
     expect(mockLLMClient.sendMessage).not.toHaveBeenCalled();
 
     // Observation layer is mechanical (DataSource, not LLM)
-    const log = engine.getObservationLog(goalId);
+    const log = await engine.getObservationLog(goalId);
     const lastEntry = log.entries[log.entries.length - 1]!;
     expect(lastEntry.layer).toBe("mechanical");
 
     // The observed value should be 1 (file exists)
-    const updatedGoal = stateManager.loadGoal(goalId);
+    const updatedGoal = await stateManager.loadGoal(goalId);
     expect(updatedGoal).not.toBeNull();
     const dim = updatedGoal!.dimensions.find((d) => d.name === "e2e_test_file_exists");
     expect(dim).not.toBeNull();

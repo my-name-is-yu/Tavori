@@ -49,8 +49,8 @@ export async function cmdStart(
     dir: path.join(deps.stateManager.getBaseDir(), "logs"),
   });
 
-  if (pidManager.isRunning()) {
-    const info = pidManager.readPID();
+  if (await pidManager.isRunning()) {
+    const info = await pidManager.readPID();
     logger.error(`Daemon already running (PID: ${info?.pid})`);
     process.exit(1);
   }
@@ -71,12 +71,12 @@ export async function cmdStop(_args: string[]): Promise<void> {
   const baseDir = path.join(os.homedir(), ".motiva");
   const pidManager = new PIDManager(baseDir);
 
-  if (!pidManager.isRunning()) {
+  if (!(await pidManager.isRunning())) {
     console.log("No running daemon found");
     return;
   }
 
-  const info = pidManager.readPID();
+  const info = await pidManager.readPID();
   if (info) {
     console.log(`Stopping daemon (PID: ${info.pid})...`);
     try {
@@ -84,7 +84,7 @@ export async function cmdStop(_args: string[]): Promise<void> {
       console.log("Stop signal sent");
     } catch (err) {
       getCliLogger().error(formatOperationError(`stop daemon process ${info.pid}`, err));
-      pidManager.cleanup();
+      await pidManager.cleanup();
     }
   }
 }

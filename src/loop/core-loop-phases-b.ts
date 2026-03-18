@@ -28,7 +28,7 @@ export async function checkCompletionAndMilestones(
   // R1-1: record pre-task judgment (do NOT early-return here)
   try {
     const judgment = goal.children_ids.length > 0
-      ? ctx.deps.satisficingJudge.judgeTreeCompletion(goalId)
+      ? await ctx.deps.satisficingJudge.judgeTreeCompletion(goalId)
       : ctx.deps.satisficingJudge.isGoalComplete(goal);
     result.completionJudgment = judgment;
   } catch (err) {
@@ -42,7 +42,7 @@ export async function checkCompletionAndMilestones(
   try {
     const allGoals = [goal];
     for (const childId of goal.children_ids) {
-      const child = ctx.deps.stateManager.loadGoal(childId);
+      const child = await ctx.deps.stateManager.loadGoal(childId);
       if (child) allGoals.push(child);
     }
 
@@ -97,7 +97,7 @@ export async function detectStallsAndRebalance(
   result: LoopIterationResult
 ): Promise<void> {
   try {
-    const gapHistory = ctx.deps.stateManager.loadGapHistory(goalId);
+    const gapHistory = await ctx.deps.stateManager.loadGapHistory(goalId);
 
     // Per-dimension stall check
     for (const dim of goal.dimensions) {
@@ -128,14 +128,14 @@ export async function detectStallsAndRebalance(
           }
         }
 
-        const escalationLevel = ctx.deps.stallDetector.getEscalationLevel(goalId, dim.name);
+        const escalationLevel = await ctx.deps.stallDetector.getEscalationLevel(goalId, dim.name);
         const newStrategy = await ctx.deps.strategyManager.onStallDetected(
           goalId,
           escalationLevel + 1
         );
         if (newStrategy) result.pivotOccurred = true;
 
-        ctx.deps.stallDetector.incrementEscalation(goalId, dim.name);
+        await ctx.deps.stallDetector.incrementEscalation(goalId, dim.name);
         break;
       }
     }
@@ -176,9 +176,9 @@ export async function detectStallsAndRebalance(
     // Portfolio: check rebalance after stall detection
     if (ctx.deps.portfolioManager) {
       try {
-        const rebalanceTrigger = ctx.deps.portfolioManager.shouldRebalance(goalId);
+        const rebalanceTrigger = await ctx.deps.portfolioManager.shouldRebalance(goalId);
         if (rebalanceTrigger) {
-          const rebalanceResult = ctx.deps.portfolioManager.rebalance(goalId, rebalanceTrigger);
+          const rebalanceResult = await ctx.deps.portfolioManager.rebalance(goalId, rebalanceTrigger);
           if (rebalanceResult.new_generation_needed) {
             await ctx.deps.strategyManager.onStallDetected(goalId, 3);
           }
@@ -188,16 +188,16 @@ export async function detectStallsAndRebalance(
       }
 
       try {
-        const portfolio = ctx.deps.strategyManager.getPortfolio(goalId);
+        const portfolio = await ctx.deps.strategyManager.getPortfolio(goalId);
         if (portfolio) {
           for (const strategy of portfolio.strategies) {
             if (ctx.deps.portfolioManager.isWaitStrategy(strategy)) {
-              const waitTrigger = ctx.deps.portfolioManager.handleWaitStrategyExpiry(
+              const waitTrigger = await ctx.deps.portfolioManager.handleWaitStrategyExpiry(
                 goalId,
                 strategy.id
               );
               if (waitTrigger) {
-                ctx.deps.portfolioManager.rebalance(goalId, waitTrigger);
+                await ctx.deps.portfolioManager.rebalance(goalId, waitTrigger);
               }
             }
           }
@@ -260,7 +260,7 @@ export async function runTaskCycleWithContext(
     // Portfolio: select strategy for next task
     if (ctx.deps.portfolioManager) {
       try {
-        const selectionResult = ctx.deps.portfolioManager.selectNextStrategyForTask(goalId);
+        const selectionResult = await ctx.deps.portfolioManager.selectNextStrategyForTask(goalId);
         if (selectionResult) {
           ctx.deps.taskLifecycle.setOnTaskComplete((strategyId: string) => {
             ctx.deps.portfolioManager?.recordTaskCompletion(strategyId);
@@ -353,10 +353,10 @@ export async function runTaskCycleWithContext(
     }
 
     // Re-check completion after task execution
-    const updatedGoal = ctx.deps.stateManager.loadGoal(goalId);
+    const updatedGoal = await ctx.deps.stateManager.loadGoal(goalId);
     if (updatedGoal) {
       const postTaskJudgment = updatedGoal.children_ids.length > 0
-        ? ctx.deps.satisficingJudge.judgeTreeCompletion(updatedGoal.id)
+        ? await ctx.deps.satisficingJudge.judgeTreeCompletion(updatedGoal.id)
         : ctx.deps.satisficingJudge.isGoalComplete(updatedGoal);
       result.completionJudgment = postTaskJudgment;
     }
@@ -370,7 +370,7 @@ export async function runTaskCycleWithContext(
 
   // Track curiosity goal loop count
   if (ctx.deps.curiosityEngine) {
-    const currentGoal = ctx.deps.stateManager.loadGoal(goalId);
+    const currentGoal = await ctx.deps.stateManager.loadGoal(goalId);
     if (currentGoal?.origin === "curiosity") {
       ctx.deps.curiosityEngine.incrementLoopCount(goalId);
     }

@@ -27,8 +27,8 @@ describe("SessionManager", () => {
   // ─── createSession ───
 
   describe("createSession", () => {
-    it("creates a task_execution session with correct shape", () => {
-      const session = manager.createSession("task_execution", "goal-1", "task-1");
+    it("creates a task_execution session with correct shape", async () => {
+      const session = await manager.createSession("task_execution", "goal-1", "task-1");
       expect(session.session_type).toBe("task_execution");
       expect(session.goal_id).toBe("goal-1");
       expect(session.task_id).toBe("task-1");
@@ -39,64 +39,64 @@ describe("SessionManager", () => {
       expect(session.id.length).toBeGreaterThan(0);
     });
 
-    it("creates an observation session with null taskId", () => {
-      const session = manager.createSession("observation", "goal-2", null);
+    it("creates an observation session with null taskId", async () => {
+      const session = await manager.createSession("observation", "goal-2", null);
       expect(session.session_type).toBe("observation");
       expect(session.goal_id).toBe("goal-2");
       expect(session.task_id).toBeNull();
     });
 
-    it("creates a task_review session", () => {
-      const session = manager.createSession("task_review", "goal-3", "task-3");
+    it("creates a task_review session", async () => {
+      const session = await manager.createSession("task_review", "goal-3", "task-3");
       expect(session.session_type).toBe("task_review");
     });
 
-    it("creates a goal_review session with null taskId", () => {
-      const session = manager.createSession("goal_review", "goal-4", null);
+    it("creates a goal_review session with null taskId", async () => {
+      const session = await manager.createSession("goal_review", "goal-4", null);
       expect(session.session_type).toBe("goal_review");
       expect(session.task_id).toBeNull();
     });
 
-    it("respects custom contextBudget", () => {
-      const session = manager.createSession("goal_review", "goal-5", null, 10_000);
+    it("respects custom contextBudget", async () => {
+      const session = await manager.createSession("goal_review", "goal-5", null, 10_000);
       expect(session.context_budget).toBe(10_000);
     });
 
-    it("sets started_at to a valid ISO timestamp", () => {
-      const session = manager.createSession("task_execution", "goal-1", "task-1");
+    it("sets started_at to a valid ISO timestamp", async () => {
+      const session = await manager.createSession("task_execution", "goal-1", "task-1");
       const date = new Date(session.started_at);
       expect(isNaN(date.getTime())).toBe(false);
     });
 
-    it("generates unique IDs for each session", () => {
-      const s1 = manager.createSession("task_execution", "goal-1", "task-1");
-      const s2 = manager.createSession("task_execution", "goal-1", "task-1");
+    it("generates unique IDs for each session", async () => {
+      const s1 = await manager.createSession("task_execution", "goal-1", "task-1");
+      const s2 = await manager.createSession("task_execution", "goal-1", "task-1");
       expect(s1.id).not.toBe(s2.id);
     });
 
-    it("persists session to sessions/<session_id>.json", () => {
-      const session = manager.createSession("task_execution", "goal-1", "task-1");
+    it("persists session to sessions/<session_id>.json", async () => {
+      const session = await manager.createSession("task_execution", "goal-1", "task-1");
       const filePath = path.join(tmpDir, "sessions", `${session.id}.json`);
       expect(fs.existsSync(filePath)).toBe(true);
     });
 
-    it("task_execution session includes 4 context slots", () => {
-      const session = manager.createSession("task_execution", "goal-1", "task-1");
+    it("task_execution session includes 4 context slots", async () => {
+      const session = await manager.createSession("task_execution", "goal-1", "task-1");
       expect(session.context_slots).toHaveLength(4);
     });
 
-    it("observation session includes 4 context slots", () => {
-      const session = manager.createSession("observation", "goal-1", null);
+    it("observation session includes 4 context slots", async () => {
+      const session = await manager.createSession("observation", "goal-1", null);
       expect(session.context_slots).toHaveLength(4);
     });
 
-    it("task_review session includes 2 context slots", () => {
-      const session = manager.createSession("task_review", "goal-1", "task-1");
+    it("task_review session includes 2 context slots", async () => {
+      const session = await manager.createSession("task_review", "goal-1", "task-1");
       expect(session.context_slots).toHaveLength(2);
     });
 
-    it("goal_review session includes 3 context slots", () => {
-      const session = manager.createSession("goal_review", "goal-1", null);
+    it("goal_review session includes 3 context slots", async () => {
+      const session = await manager.createSession("goal_review", "goal-1", null);
       expect(session.context_slots).toHaveLength(3);
     });
   });
@@ -316,47 +316,47 @@ describe("SessionManager", () => {
   // ─── endSession ───
 
   describe("endSession", () => {
-    it("sets ended_at on the session", () => {
-      const session = manager.createSession("task_execution", "goal-1", "task-1");
-      manager.endSession(session.id, "task completed successfully");
-      const updated = manager.getSession(session.id)!;
+    it("sets ended_at on the session", async () => {
+      const session = await manager.createSession("task_execution", "goal-1", "task-1");
+      await manager.endSession(session.id, "task completed successfully");
+      const updated = (await manager.getSession(session.id))!;
       expect(updated.ended_at).not.toBeNull();
     });
 
-    it("sets result_summary on the session", () => {
-      const session = manager.createSession("task_execution", "goal-1", "task-1");
-      manager.endSession(session.id, "coverage improved to 85%");
-      const updated = manager.getSession(session.id)!;
+    it("sets result_summary on the session", async () => {
+      const session = await manager.createSession("task_execution", "goal-1", "task-1");
+      await manager.endSession(session.id, "coverage improved to 85%");
+      const updated = (await manager.getSession(session.id))!;
       expect(updated.result_summary).toBe("coverage improved to 85%");
     });
 
-    it("ended_at is a valid ISO timestamp", () => {
-      const session = manager.createSession("goal_review", "goal-1", null);
-      manager.endSession(session.id, "review done");
-      const updated = manager.getSession(session.id)!;
+    it("ended_at is a valid ISO timestamp", async () => {
+      const session = await manager.createSession("goal_review", "goal-1", null);
+      await manager.endSession(session.id, "review done");
+      const updated = (await manager.getSession(session.id))!;
       const date = new Date(updated.ended_at!);
       expect(isNaN(date.getTime())).toBe(false);
     });
 
-    it("persists the updated session to disk", () => {
-      const session = manager.createSession("observation", "goal-1", null);
-      manager.endSession(session.id, "observed");
+    it("persists the updated session to disk", async () => {
+      const session = await manager.createSession("observation", "goal-1", null);
+      await manager.endSession(session.id, "observed");
 
       // Load via a fresh manager to confirm disk persistence
       const manager2 = new SessionManager(stateManager);
-      const loaded = manager2.getSession(session.id)!;
+      const loaded = (await manager2.getSession(session.id))!;
       expect(loaded.result_summary).toBe("observed");
       expect(loaded.ended_at).not.toBeNull();
     });
 
-    it("throws if session does not exist", () => {
-      expect(() => manager.endSession("nonexistent-id", "done")).toThrow();
+    it("throws if session does not exist", async () => {
+      await expect(manager.endSession("nonexistent-id", "done")).rejects.toThrow();
     });
 
-    it("does not change other session fields after endSession", () => {
-      const session = manager.createSession("task_review", "goal-1", "task-1");
-      manager.endSession(session.id, "review complete");
-      const updated = manager.getSession(session.id)!;
+    it("does not change other session fields after endSession", async () => {
+      const session = await manager.createSession("task_review", "goal-1", "task-1");
+      await manager.endSession(session.id, "review complete");
+      const updated = (await manager.getSession(session.id))!;
       expect(updated.session_type).toBe("task_review");
       expect(updated.goal_id).toBe("goal-1");
       expect(updated.task_id).toBe("task-1");
@@ -367,22 +367,22 @@ describe("SessionManager", () => {
   // ─── getSession ───
 
   describe("getSession", () => {
-    it("returns null for a non-existent session ID", () => {
-      const result = manager.getSession("does-not-exist");
+    it("returns null for a non-existent session ID", async () => {
+      const result = await manager.getSession("does-not-exist");
       expect(result).toBeNull();
     });
 
-    it("returns the session for a valid session ID", () => {
-      const session = manager.createSession("task_execution", "goal-1", "task-1");
-      const loaded = manager.getSession(session.id);
+    it("returns the session for a valid session ID", async () => {
+      const session = await manager.createSession("task_execution", "goal-1", "task-1");
+      const loaded = await manager.getSession(session.id);
       expect(loaded).not.toBeNull();
       expect(loaded!.id).toBe(session.id);
     });
 
-    it("returns the session from a fresh manager (disk persistence)", () => {
-      const session = manager.createSession("observation", "goal-2", null);
+    it("returns the session from a fresh manager (disk persistence)", async () => {
+      const session = await manager.createSession("observation", "goal-2", null);
       const manager2 = new SessionManager(stateManager);
-      const loaded = manager2.getSession(session.id);
+      const loaded = await manager2.getSession(session.id);
       expect(loaded!.id).toBe(session.id);
       expect(loaded!.goal_id).toBe("goal-2");
     });
@@ -391,49 +391,49 @@ describe("SessionManager", () => {
   // ─── getActiveSessions ───
 
   describe("getActiveSessions", () => {
-    it("returns empty array when no sessions exist", () => {
-      const sessions = manager.getActiveSessions("goal-1");
+    it("returns empty array when no sessions exist", async () => {
+      const sessions = await manager.getActiveSessions("goal-1");
       expect(sessions).toHaveLength(0);
     });
 
-    it("returns active sessions for a goal", () => {
-      manager.createSession("task_execution", "goal-1", "task-1");
-      manager.createSession("observation", "goal-1", null);
-      const sessions = manager.getActiveSessions("goal-1");
+    it("returns active sessions for a goal", async () => {
+      await manager.createSession("task_execution", "goal-1", "task-1");
+      await manager.createSession("observation", "goal-1", null);
+      const sessions = await manager.getActiveSessions("goal-1");
       expect(sessions).toHaveLength(2);
     });
 
-    it("filters out ended sessions", () => {
-      const s1 = manager.createSession("task_execution", "goal-1", "task-1");
-      manager.createSession("observation", "goal-1", null);
-      manager.endSession(s1.id, "done");
-      const sessions = manager.getActiveSessions("goal-1");
+    it("filters out ended sessions", async () => {
+      const s1 = await manager.createSession("task_execution", "goal-1", "task-1");
+      await manager.createSession("observation", "goal-1", null);
+      await manager.endSession(s1.id, "done");
+      const sessions = await manager.getActiveSessions("goal-1");
       expect(sessions).toHaveLength(1);
       expect(sessions[0].session_type).toBe("observation");
     });
 
-    it("does not include sessions from other goals", () => {
-      manager.createSession("task_execution", "goal-A", "task-1");
-      manager.createSession("observation", "goal-B", null);
-      const sessionsA = manager.getActiveSessions("goal-A");
-      const sessionsB = manager.getActiveSessions("goal-B");
+    it("does not include sessions from other goals", async () => {
+      await manager.createSession("task_execution", "goal-A", "task-1");
+      await manager.createSession("observation", "goal-B", null);
+      const sessionsA = await manager.getActiveSessions("goal-A");
+      const sessionsB = await manager.getActiveSessions("goal-B");
       expect(sessionsA).toHaveLength(1);
       expect(sessionsB).toHaveLength(1);
       expect(sessionsA[0].goal_id).toBe("goal-A");
       expect(sessionsB[0].goal_id).toBe("goal-B");
     });
 
-    it("returns empty array when all sessions for goal are ended", () => {
-      const s1 = manager.createSession("task_execution", "goal-1", "task-1");
-      manager.endSession(s1.id, "done");
-      const sessions = manager.getActiveSessions("goal-1");
+    it("returns empty array when all sessions for goal are ended", async () => {
+      const s1 = await manager.createSession("task_execution", "goal-1", "task-1");
+      await manager.endSession(s1.id, "done");
+      const sessions = await manager.getActiveSessions("goal-1");
       expect(sessions).toHaveLength(0);
     });
 
-    it("each returned session has correct goal_id", () => {
-      manager.createSession("task_execution", "goal-X", "task-1");
-      manager.createSession("goal_review", "goal-X", null);
-      const sessions = manager.getActiveSessions("goal-X");
+    it("each returned session has correct goal_id", async () => {
+      await manager.createSession("task_execution", "goal-X", "task-1");
+      await manager.createSession("goal_review", "goal-X", null);
+      const sessions = await manager.getActiveSessions("goal-X");
       for (const s of sessions) {
         expect(s.goal_id).toBe("goal-X");
       }

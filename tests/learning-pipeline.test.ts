@@ -144,8 +144,8 @@ function makeStallReport(goalId: string): StallReport {
 }
 
 /** Write a logs file for a goal so analyzeLogs has data to work with */
-function writeLogs(stateManager: StateManager, goalId: string, data: unknown = [{ task: "test" }]): void {
-  stateManager.writeRaw(`learning/${goalId}_logs.json`, data);
+async function writeLogs(stateManager: StateManager, goalId: string, data: unknown = [{ task: "test" }]): Promise<void> {
+  await stateManager.writeRaw(`learning/${goalId}_logs.json`, data);
 }
 
 // ─── Tests ───
@@ -425,7 +425,7 @@ describe("LearningPipeline", () => {
       };
       await pipeline.analyzeLogs(trigger);
 
-      const saved = pipeline.getPatterns("goal-1");
+      const saved = await pipeline.getPatterns("goal-1");
       expect(saved).toHaveLength(1);
       expect(saved[0]!.type).toBe("scope_sizing");
     });
@@ -484,7 +484,7 @@ describe("LearningPipeline", () => {
       };
       await pipeline.analyzeLogs(trigger);
 
-      const saved = pipeline.getPatterns("goal-1");
+      const saved = await pipeline.getPatterns("goal-1");
       expect(saved.length).toBeLessThanOrEqual(2);
     });
 
@@ -534,7 +534,7 @@ describe("LearningPipeline", () => {
       };
       await pipeline.analyzeLogs(trigger);
 
-      const saved = pipeline.getPatterns("goal-1");
+      const saved = await pipeline.getPatterns("goal-1");
       expect(saved).toHaveLength(1);
       expect(saved[0]!.description).toContain("High confidence");
     });
@@ -568,7 +568,7 @@ describe("LearningPipeline", () => {
       };
       await pipeline.analyzeLogs(trigger);
 
-      const saved = pipeline.getPatterns("goal-1");
+      const saved = await pipeline.getPatterns("goal-1");
       expect(saved[0]!.embedding_id).not.toBeNull();
     });
 
@@ -608,7 +608,7 @@ describe("LearningPipeline", () => {
       await pipeline.analyzeLogs(trigger);
       await pipeline.analyzeLogs({ ...trigger, context: "second run" });
 
-      const saved = pipeline.getPatterns("goal-1");
+      const saved = await pipeline.getPatterns("goal-1");
       expect(saved.length).toBeGreaterThanOrEqual(2);
     });
 
@@ -737,7 +737,7 @@ describe("LearningPipeline", () => {
       const llm = createMockLLMClient([]);
       const pipeline = new LearningPipeline(llm, vectorIndex, stateManager);
 
-      const result = pipeline.generateFeedback([]);
+      const result = await pipeline.generateFeedback([]);
       expect(result).toEqual([]);
     });
 
@@ -753,7 +753,7 @@ describe("LearningPipeline", () => {
         timestamp: new Date().toISOString(),
       };
       const patterns = await pipeline.analyzeLogs(trigger);
-      const feedback = pipeline.generateFeedback(patterns);
+      const feedback = await pipeline.generateFeedback(patterns);
 
       expect(feedback[0]!.target_step).toBe("observation");
     });
@@ -770,7 +770,7 @@ describe("LearningPipeline", () => {
         timestamp: new Date().toISOString(),
       };
       const patterns = await pipeline.analyzeLogs(trigger);
-      const feedback = pipeline.generateFeedback(patterns);
+      const feedback = await pipeline.generateFeedback(patterns);
 
       expect(feedback[0]!.target_step).toBe("strategy");
     });
@@ -787,7 +787,7 @@ describe("LearningPipeline", () => {
         timestamp: new Date().toISOString(),
       };
       const patterns = await pipeline.analyzeLogs(trigger);
-      const feedback = pipeline.generateFeedback(patterns);
+      const feedback = await pipeline.generateFeedback(patterns);
 
       expect(feedback[0]!.target_step).toBe("task");
     });
@@ -804,7 +804,7 @@ describe("LearningPipeline", () => {
         timestamp: new Date().toISOString(),
       };
       const patterns = await pipeline.analyzeLogs(trigger);
-      const feedback = pipeline.generateFeedback(patterns);
+      const feedback = await pipeline.generateFeedback(patterns);
 
       expect(feedback[0]!.target_step).toBe("task");
     });
@@ -821,7 +821,7 @@ describe("LearningPipeline", () => {
         timestamp: new Date().toISOString(),
       };
       const patterns = await pipeline.analyzeLogs(trigger);
-      const feedback = pipeline.generateFeedback(patterns);
+      const feedback = await pipeline.generateFeedback(patterns);
 
       expect(feedback[0]!.adjustment).toBe(patterns[0]!.description);
     });
@@ -858,7 +858,7 @@ describe("LearningPipeline", () => {
         },
       ];
 
-      const feedback = pipeline.generateFeedback(patterns);
+      const feedback = await pipeline.generateFeedback(patterns);
       expect(feedback).toHaveLength(2);
       const ids = feedback.map((f) => f.feedback_id);
       expect(new Set(ids).size).toBe(2);
@@ -876,9 +876,9 @@ describe("LearningPipeline", () => {
         timestamp: new Date().toISOString(),
       };
       const patterns = await pipeline.analyzeLogs(trigger);
-      pipeline.generateFeedback(patterns);
+      await pipeline.generateFeedback(patterns);
 
-      const saved = pipeline.getFeedbackEntries("goal-1");
+      const saved = await pipeline.getFeedbackEntries("goal-1");
       expect(saved.length).toBeGreaterThan(0);
     });
 
@@ -902,7 +902,7 @@ describe("LearningPipeline", () => {
         },
       ];
 
-      const feedback = pipeline.generateFeedback(patterns);
+      const feedback = await pipeline.generateFeedback(patterns);
       expect(feedback[0]!.effect_observed).toBeNull();
     });
 
@@ -938,10 +938,10 @@ describe("LearningPipeline", () => {
         },
       ];
 
-      pipeline.generateFeedback(patterns);
+      await pipeline.generateFeedback(patterns);
 
-      const goal1Feedback = pipeline.getFeedbackEntries("goal-1");
-      const goal2Feedback = pipeline.getFeedbackEntries("goal-2");
+      const goal1Feedback = await pipeline.getFeedbackEntries("goal-1");
+      const goal2Feedback = await pipeline.getFeedbackEntries("goal-2");
       expect(goal1Feedback).toHaveLength(1);
       expect(goal2Feedback).toHaveLength(1);
     });
@@ -966,7 +966,7 @@ describe("LearningPipeline", () => {
         },
       ];
 
-      const feedback = pipeline.generateFeedback(patterns);
+      const feedback = await pipeline.generateFeedback(patterns);
       // Returns entries but no feedback is saved to any goal
       expect(feedback).toHaveLength(1);
     });
@@ -996,16 +996,16 @@ describe("LearningPipeline", () => {
         created_at: now,
         last_applied_at: null,
       };
-      const existing = pipeline.getPatterns(goalId);
-      pipeline.savePatterns(goalId, [...existing, pattern]);
-      pipeline.generateFeedback([pattern]);
+      const existing = await pipeline.getPatterns(goalId);
+      await pipeline.savePatterns(goalId, [...existing, pattern]);
+      await pipeline.generateFeedback([pattern]);
     }
 
     it("should return empty array for goal with no feedback entries", () => {
       const llm = createMockLLMClient([]);
       const pipeline = new LearningPipeline(llm, vectorIndex, stateManager);
 
-      const result = pipeline.applyFeedback("goal-nonexistent", "observation");
+      const result = await pipeline.applyFeedback("goal-nonexistent", "observation");
       expect(result).toEqual([]);
     });
 
@@ -1014,7 +1014,7 @@ describe("LearningPipeline", () => {
       const pipeline = new LearningPipeline(llm, vectorIndex, stateManager);
       makePatternAndFeedback(pipeline, "goal-1", "strategy", "Use incremental approach", 0.9);
 
-      const result = pipeline.applyFeedback("goal-1", "observation"); // different step
+      const result = await pipeline.applyFeedback("goal-1", "observation"); // different step
       expect(result).toEqual([]);
     });
 
@@ -1024,7 +1024,7 @@ describe("LearningPipeline", () => {
       makePatternAndFeedback(pipeline, "goal-1", "observation", "Observation feedback", 0.9);
       makePatternAndFeedback(pipeline, "goal-1", "strategy", "Strategy feedback", 0.8);
 
-      const result = pipeline.applyFeedback("goal-1", "observation");
+      const result = await pipeline.applyFeedback("goal-1", "observation");
       expect(result).toHaveLength(1);
       expect(result[0]).toBe("Observation feedback");
     });
@@ -1036,7 +1036,7 @@ describe("LearningPipeline", () => {
       makePatternAndFeedback(pipeline, "goal-1", "task", "High confidence pattern", 0.95);
       makePatternAndFeedback(pipeline, "goal-1", "task", "Medium confidence pattern", 0.8);
 
-      const result = pipeline.applyFeedback("goal-1", "task");
+      const result = await pipeline.applyFeedback("goal-1", "task");
       expect(result[0]).toBe("High confidence pattern");
       expect(result[1]).toBe("Medium confidence pattern");
       expect(result[2]).toBe("Low confidence pattern");
@@ -1050,7 +1050,7 @@ describe("LearningPipeline", () => {
         makePatternAndFeedback(pipeline, "goal-1", "task", `Pattern ${i}`, 0.7 + i * 0.01);
       }
 
-      const result = pipeline.applyFeedback("goal-1", "task");
+      const result = await pipeline.applyFeedback("goal-1", "task");
       expect(result).toHaveLength(3);
     });
 
@@ -1059,7 +1059,7 @@ describe("LearningPipeline", () => {
       const pipeline = new LearningPipeline(llm, vectorIndex, stateManager);
       makePatternAndFeedback(pipeline, "goal-1", "strategy", "Use incremental approach", 0.9);
 
-      const result = pipeline.applyFeedback("goal-1", "strategy");
+      const result = await pipeline.applyFeedback("goal-1", "strategy");
       expect(typeof result[0]).toBe("string");
       expect(result[0]).toBe("Use incremental approach");
     });
@@ -1072,7 +1072,7 @@ describe("LearningPipeline", () => {
       makePatternAndFeedback(pipeline, "goal-1", "task", "First", 0.95);
       makePatternAndFeedback(pipeline, "goal-1", "task", "Second", 0.85);
 
-      const result = pipeline.applyFeedback("goal-1", "task");
+      const result = await pipeline.applyFeedback("goal-1", "task");
       expect(result).toEqual(["First", "Second", "Third"]);
     });
 
@@ -1082,7 +1082,7 @@ describe("LearningPipeline", () => {
       makePatternAndFeedback(pipeline, "goal-1", "observation", "Feedback A", 0.9);
       makePatternAndFeedback(pipeline, "goal-1", "observation", "Feedback B", 0.8);
 
-      const result = pipeline.applyFeedback("goal-1", "observation");
+      const result = await pipeline.applyFeedback("goal-1", "observation");
       expect(result).toHaveLength(2);
     });
 
@@ -1100,9 +1100,9 @@ describe("LearningPipeline", () => {
         applied_at: now,
         effect_observed: null,
       };
-      pipeline.saveFeedbackEntries("goal-1", [orphanFeedback]);
+      await pipeline.saveFeedbackEntries("goal-1", [orphanFeedback]);
 
-      const result = pipeline.applyFeedback("goal-1", "task");
+      const result = await pipeline.applyFeedback("goal-1", "task");
       expect(result).toContain("Orphan feedback");
     });
   });
@@ -1192,7 +1192,7 @@ describe("LearningPipeline", () => {
         source_goal_ids: ["goal-target"],
         created_at: now,
       };
-      pipeline.savePatterns("goal-target", [existingPattern]);
+      await pipeline.savePatterns("goal-target", [existingPattern]);
 
       // Add vector index entry to make it "similar"
       await vectorIndex.add(
@@ -1297,7 +1297,7 @@ describe("LearningPipeline", () => {
         created_at: now,
         last_applied_at: null,
       };
-      pipeline.savePatterns("goal-target", [existingTargetPattern]);
+      await pipeline.savePatterns("goal-target", [existingTargetPattern]);
 
       // Add vector entry for target
       await vectorIndex.add(
@@ -1569,7 +1569,7 @@ describe("LearningPipeline", () => {
           },
         ];
 
-        pipeline.savePatterns("goal-persist", patterns);
+        await pipeline.savePatterns("goal-persist", patterns);
         const loaded = pipeline.getPatterns("goal-persist");
 
         expect(loaded).toHaveLength(1);
@@ -1612,8 +1612,8 @@ describe("LearningPipeline", () => {
           },
         ];
 
-        pipeline.savePatterns("goal-x", patterns1);
-        pipeline.savePatterns("goal-x", patterns2);
+        await pipeline.savePatterns("goal-x", patterns1);
+        await pipeline.savePatterns("goal-x", patterns2);
         const loaded = pipeline.getPatterns("goal-x");
 
         expect(loaded).toHaveLength(1);
@@ -1624,7 +1624,7 @@ describe("LearningPipeline", () => {
         const llm = createMockLLMClient([]);
         const pipeline = new LearningPipeline(llm, vectorIndex, stateManager);
 
-        pipeline.savePatterns("goal-empty", []);
+        await pipeline.savePatterns("goal-empty", []);
         // readRaw returns [] (an array), which is truthy but isArray check passes
         const loaded = pipeline.getPatterns("goal-empty");
         expect(loaded).toEqual([]);
@@ -1689,7 +1689,7 @@ describe("LearningPipeline", () => {
           },
         ];
 
-        pipeline.saveFeedbackEntries("goal-persist", entries);
+        await pipeline.saveFeedbackEntries("goal-persist", entries);
         const loaded = pipeline.getFeedbackEntries("goal-persist");
 
         expect(loaded).toHaveLength(1);
@@ -1724,8 +1724,8 @@ describe("LearningPipeline", () => {
           },
         ];
 
-        pipeline.saveFeedbackEntries("goal-x", entries1);
-        pipeline.saveFeedbackEntries("goal-x", entries2);
+        await pipeline.saveFeedbackEntries("goal-x", entries1);
+        await pipeline.saveFeedbackEntries("goal-x", entries2);
         const loaded = pipeline.getFeedbackEntries("goal-x");
 
         expect(loaded).toHaveLength(1);
@@ -1736,7 +1736,7 @@ describe("LearningPipeline", () => {
         const llm = createMockLLMClient([]);
         const pipeline = new LearningPipeline(llm, vectorIndex, stateManager);
 
-        pipeline.saveFeedbackEntries("goal-empty", []);
+        await pipeline.saveFeedbackEntries("goal-empty", []);
         const loaded = pipeline.getFeedbackEntries("goal-empty");
         expect(loaded).toEqual([]);
       });
@@ -1878,7 +1878,7 @@ describe("LearningPipeline", () => {
       await pipeline.analyzeLogs({ ...triggerBase, context: "run 2" });
       await pipeline.analyzeLogs({ ...triggerBase, context: "run 3" });
 
-      const saved = pipeline.getPatterns("goal-1");
+      const saved = await pipeline.getPatterns("goal-1");
       expect(saved.length).toBeGreaterThanOrEqual(3);
     });
 
@@ -1902,14 +1902,14 @@ describe("LearningPipeline", () => {
         },
       ];
 
-      pipeline.savePatterns("goal-2026-q1-sprint-3", patterns);
+      await pipeline.savePatterns("goal-2026-q1-sprint-3", patterns);
       const loaded = pipeline.getPatterns("goal-2026-q1-sprint-3");
       expect(loaded).toHaveLength(1);
     });
 
     it("should not throw when logs file contains non-array data", async () => {
       // Write a non-array as logs
-      stateManager.writeRaw("learning/goal-odd_logs.json", { single: "object" });
+      await stateManager.writeRaw("learning/goal-odd_logs.json", { single: "object" });
 
       const llm = createMockLLMClient([TRIPLETS_RESPONSE, PATTERNS_RESPONSE]);
       const pipeline = new LearningPipeline(llm, vectorIndex, stateManager);
@@ -2097,11 +2097,11 @@ describe("LearningPipeline", () => {
       };
 
       const patterns1 = await pipeline.analyzeLogs(trigger);
-      pipeline.generateFeedback(patterns1);
+      await pipeline.generateFeedback(patterns1);
       const countAfterFirst = pipeline.getFeedbackEntries("goal-1").length;
 
       const patterns2 = await pipeline.analyzeLogs({ ...trigger, context: "run 2" });
-      pipeline.generateFeedback(patterns2);
+      await pipeline.generateFeedback(patterns2);
       const countAfterSecond = pipeline.getFeedbackEntries("goal-1").length;
 
       expect(countAfterSecond).toBeGreaterThan(countAfterFirst);
@@ -2123,9 +2123,9 @@ describe("LearningPipeline", () => {
           effect_observed: null,
         },
       ];
-      pipeline.saveFeedbackEntries("goal-1", entries);
+      await pipeline.saveFeedbackEntries("goal-1", entries);
 
-      const result = pipeline.applyFeedback("goal-1", "gap");
+      const result = await pipeline.applyFeedback("goal-1", "gap");
       expect(result).toEqual([]);
     });
 
@@ -2149,7 +2149,7 @@ describe("LearningPipeline", () => {
         },
       ];
 
-      const feedback = pipeline.generateFeedback(patterns);
+      const feedback = await pipeline.generateFeedback(patterns);
       expect(feedback[0]).toHaveProperty("feedback_id");
       expect(feedback[0]).toHaveProperty("pattern_id");
       expect(feedback[0]).toHaveProperty("target_step");
@@ -2159,23 +2159,23 @@ describe("LearningPipeline", () => {
       expect(feedback[0]!.pattern_id).toBe("pat-schema-check");
     });
 
-    it("getPatterns returns empty array when stored data is not a valid array", () => {
+    it("getPatterns returns empty array when stored data is not a valid array", async () => {
       const llm = createMockLLMClient([]);
       const pipeline = new LearningPipeline(llm, vectorIndex, stateManager);
 
       // Write corrupt data (not an array)
-      stateManager.writeRaw("learning/goal-corrupt_patterns.json", { not: "an array" });
+      await stateManager.writeRaw("learning/goal-corrupt_patterns.json", { not: "an array" });
 
       const result = pipeline.getPatterns("goal-corrupt");
       expect(result).toEqual([]);
     });
 
-    it("getFeedbackEntries returns empty array when stored data is not a valid array", () => {
+    it("getFeedbackEntries returns empty array when stored data is not a valid array", async () => {
       const llm = createMockLLMClient([]);
       const pipeline = new LearningPipeline(llm, vectorIndex, stateManager);
 
       // Write corrupt data (not an array)
-      stateManager.writeRaw("learning/goal-corrupt_feedback.json", { not: "an array" });
+      await stateManager.writeRaw("learning/goal-corrupt_feedback.json", { not: "an array" });
 
       const result = pipeline.getFeedbackEntries("goal-corrupt");
       expect(result).toEqual([]);
@@ -2289,7 +2289,7 @@ describe("LearningPipeline", () => {
       await pipeline.analyzeLogs(trigger);
 
       // No patterns saved because none passed the threshold
-      const saved = pipeline.getPatterns("goal-1");
+      const saved = await pipeline.getPatterns("goal-1");
       expect(saved).toEqual([]);
     });
 
@@ -2326,11 +2326,11 @@ describe("LearningPipeline", () => {
         last_applied_at: null,
       }));
 
-      pipeline.saveFeedbackEntries("goal-all-steps", allEntries);
-      pipeline.savePatterns("goal-all-steps", allPatterns);
+      await pipeline.saveFeedbackEntries("goal-all-steps", allEntries);
+      await pipeline.savePatterns("goal-all-steps", allPatterns);
 
       for (const step of allSteps) {
-        const result = pipeline.applyFeedback("goal-all-steps", step);
+        const result = await pipeline.applyFeedback("goal-all-steps", step);
         expect(result).toHaveLength(1);
         expect(result[0]).toBe(`Adjustment for ${step}`);
       }
@@ -2402,7 +2402,7 @@ describe("LearningPipeline", () => {
         last_applied_at: now,
       };
 
-      pipeline.savePatterns("goal-full", [pattern]);
+      await pipeline.savePatterns("goal-full", [pattern]);
       const loaded = pipeline.getPatterns("goal-full");
 
       expect(loaded[0]!.pattern_id).toBe(pattern.pattern_id);
@@ -2429,7 +2429,7 @@ describe("LearningPipeline", () => {
         effect_observed: "positive",
       };
 
-      pipeline.saveFeedbackEntries("goal-full", [entry]);
+      await pipeline.saveFeedbackEntries("goal-full", [entry]);
       const loaded = pipeline.getFeedbackEntries("goal-full");
 
       expect(loaded[0]!.feedback_id).toBe(entry.feedback_id);

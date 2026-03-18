@@ -315,7 +315,7 @@ describe("Milestone 2 D-1: README quality goal", () => {
 
     const goalId = "readme-goal-tier-test";
     const goal = makeReadmeGoal(goalId);
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // Observe all 3 dimensions via LLM
     await observationEngine.observe(goalId, [
@@ -325,7 +325,7 @@ describe("Milestone 2 D-1: README quality goal", () => {
     ]);
 
     // Verify that all observations are recorded with independent_review layer
-    const log = observationEngine.getObservationLog(goalId);
+    const log = await observationEngine.getObservationLog(goalId);
     expect(log.entries.length).toBeGreaterThanOrEqual(3);
 
     const llmEntries = log.entries.filter((e) => e.layer === "independent_review");
@@ -383,7 +383,7 @@ describe("Milestone 2 D-1: README quality goal", () => {
     const coreLoop = buildCoreLoop(stateManager, llmClient, 2);
 
     const goal = makeReadmeGoal(goalId);
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const result = await coreLoop.run(goalId);
 
@@ -424,7 +424,7 @@ describe("Milestone 2 D-1: README quality goal", () => {
     const coreLoop = buildCoreLoop(stateManager, llmClient, 1);
 
     const goal = makeReadmeGoal(goalId);
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const result = await coreLoop.run(goalId);
 
@@ -474,7 +474,7 @@ describe("Milestone 2 D-1: README quality goal", () => {
     const coreLoop = buildCoreLoop(stateManager, llmClient, 1);
 
     const goal = makeReadmeGoal(goalId);
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const result = await coreLoop.run(goalId);
 

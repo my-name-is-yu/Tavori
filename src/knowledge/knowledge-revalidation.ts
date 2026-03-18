@@ -82,8 +82,8 @@ Respond with JSON:
 /**
  * Return shared knowledge entries whose revalidation_due_at is in the past.
  */
-export function getStaleEntries(stateManager: StateManager): SharedKnowledgeEntry[] {
-  const all = loadSharedEntries(stateManager);
+export async function getStaleEntries(stateManager: StateManager): Promise<SharedKnowledgeEntry[]> {
+  const all = await loadSharedEntries(stateManager);
   const now = new Date();
 
   return all.filter((entry) => {

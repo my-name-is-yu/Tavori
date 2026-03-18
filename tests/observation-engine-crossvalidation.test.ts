@@ -89,7 +89,7 @@ describe("ObservationEngine cross-validation", () => {
     const engine = new ObservationEngine(stateManager, [mockDs], mockLLMClient);
 
     const goal = makeGoal({ id: "goal-xval-off" });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     await engine.observe("goal-xval-off", [defaultMethod]);
 
@@ -113,7 +113,7 @@ describe("ObservationEngine cross-validation", () => {
     );
 
     const goal = makeGoal({ id: "goal-xval-on" });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     await engine.observe("goal-xval-on", [defaultMethod]);
 
@@ -147,7 +147,7 @@ describe("ObservationEngine cross-validation", () => {
         },
       ],
     });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // DataSource returns 5, LLM returns score=0.51 → extractedValue = 0.51*10 = 5.1
     const mockLLMClient = createMockLLMClient(0.51);
@@ -196,7 +196,7 @@ describe("ObservationEngine cross-validation", () => {
         },
       ],
     });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // DataSource returns 5, LLM returns score=0.0 → extractedValue=0
     const mockLLMClient = createMockLLMClient(0.0, "nothing found");
@@ -245,7 +245,7 @@ describe("ObservationEngine cross-validation", () => {
         },
       ],
     });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const mockLLMClient = createMockLLMClient(llmScore);
     const mockDs = makeMockDataSource(mechanicalValue);
@@ -259,7 +259,7 @@ describe("ObservationEngine cross-validation", () => {
 
     await engine.observe("goal-xval-retain", [defaultMethod]);
 
-    const updatedGoal = stateManager.loadGoal("goal-xval-retain");
+    const updatedGoal = await stateManager.loadGoal("goal-xval-retain");
     expect(updatedGoal).not.toBeNull();
     const dim = updatedGoal!.dimensions.find((d) => d.name === "code_quality");
     expect(dim).not.toBeNull();
@@ -268,7 +268,7 @@ describe("ObservationEngine cross-validation", () => {
     expect(dim!.current_value).toBe(mechanicalValue);
 
     // There should be exactly 1 observation log entry (mechanical only)
-    const log = engine.getObservationLog("goal-xval-retain");
+    const log = await engine.getObservationLog("goal-xval-retain");
     expect(log.entries.length).toBe(1);
     expect(log.entries[0]!.layer).toBe("mechanical");
   });
@@ -277,7 +277,7 @@ describe("ObservationEngine cross-validation", () => {
 
   it("LLM failure during cross-validation is caught and observation still completes", async () => {
     const goal = makeGoal({ id: "goal-xval-llm-fail" });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const failingLLMClient: ILLMClient = {
       sendMessage: vi.fn().mockRejectedValue(new Error("LLM service unavailable")),
@@ -304,7 +304,7 @@ describe("ObservationEngine cross-validation", () => {
     expect(crossValWarn).toBeDefined();
 
     // The goal state should still reflect the mechanical value
-    const updatedGoal = stateManager.loadGoal("goal-xval-llm-fail");
+    const updatedGoal = await stateManager.loadGoal("goal-xval-llm-fail");
     expect(updatedGoal).not.toBeNull();
     const dim = updatedGoal!.dimensions.find((d) => d.name === "dim1");
     expect(dim).not.toBeNull();

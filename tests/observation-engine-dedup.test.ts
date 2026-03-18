@@ -60,10 +60,10 @@ describe("ObservationEngine dimension name dedup normalization", () => {
 
   // ─── Integration: applyObservation with deduplicated key ───
 
-  it("applyObservation succeeds when dimension_name has _2 suffix matching a real dimension", () => {
+  it("applyObservation succeeds when dimension_name has _2 suffix matching a real dimension", async () => {
     const goalId = "goal-dedup-int";
     const goal = makeGoal({ id: goalId, dimensions: [makeDimension({ name: "todo_count", label: "Todo Count" })] });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // Build an entry with the deduplicated key "todo_count_2"
     const entry = engine.createObservationEntry({
@@ -78,20 +78,20 @@ describe("ObservationEngine dimension name dedup normalization", () => {
     });
 
     // Should NOT throw — normalization maps "todo_count_2" → "todo_count"
-    expect(() => engine.applyObservation(goalId, entry)).not.toThrow();
+    await expect(engine.applyObservation(goalId, entry)).resolves.not.toThrow();
 
     // The goal dimension should have been updated
-    const updated = stateManager.loadGoal(goalId);
+    const updated = await stateManager.loadGoal(goalId);
     expect(updated).not.toBeNull();
     const dim = updated!.dimensions.find((d) => d.name === "todo_count");
     expect(dim).not.toBeUndefined();
     expect(dim!.current_value).toBe(8);
   });
 
-  it("applyObservation throws when stripped name still has no match in goal dimensions", () => {
+  it("applyObservation throws when stripped name still has no match in goal dimensions", async () => {
     const goalId = "goal-dedup-unknown";
     const goal = makeGoal({ id: goalId }); // only has "dim1"
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     // "unknown_metric_2" strips to "unknown_metric" — still not in goal
     const entry = engine.createObservationEntry({
@@ -105,7 +105,7 @@ describe("ObservationEngine dimension name dedup normalization", () => {
       confidence: 0.9,
     });
 
-    expect(() => engine.applyObservation(goalId, entry)).toThrow(
+    await expect(engine.applyObservation(goalId, entry)).rejects.toThrow(
       /dimension "unknown_metric_2" not found/
     );
   });

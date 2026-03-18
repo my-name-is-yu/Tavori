@@ -118,7 +118,7 @@ describe("generateCandidates", () => {
       pastStrategies: [],
     });
 
-    const portfolio = manager.getPortfolio("goal-1");
+    const portfolio = await manager.getPortfolio("goal-1");
     expect(portfolio).not.toBeNull();
     expect(portfolio!.strategies).toHaveLength(1);
     expect(portfolio!.strategies[0].state).toBe("candidate");
@@ -213,7 +213,7 @@ describe("activateBestCandidate", () => {
     });
     await manager.activateBestCandidate("goal-1");
 
-    const portfolio = manager.getPortfolio("goal-1");
+    const portfolio = await manager.getPortfolio("goal-1");
     const active = portfolio!.strategies.find((s) => s.state === "active");
     expect(active).toBeDefined();
     expect(active!.started_at).not.toBeNull();
@@ -270,9 +270,9 @@ describe("updateState — valid transitions", () => {
       pastStrategies: [],
     });
 
-    expect(() => manager.updateState(candidate.id, "active")).not.toThrow();
+    await expect(manager.updateState(candidate.id, "active")).resolves.not.toThrow();
 
-    const portfolio = manager.getPortfolio("goal-1");
+    const portfolio = await manager.getPortfolio("goal-1");
     const updated = portfolio!.strategies.find((s) => s.id === candidate.id);
     expect(updated!.state).toBe("active");
   });
@@ -285,10 +285,10 @@ describe("updateState — valid transitions", () => {
       pastStrategies: [],
     });
 
-    manager.updateState(candidate.id, "active");
-    manager.updateState(candidate.id, "completed");
+    await manager.updateState(candidate.id, "active");
+    await manager.updateState(candidate.id, "completed");
 
-    const portfolio = manager.getPortfolio("goal-1");
+    const portfolio = await manager.getPortfolio("goal-1");
     const updated = portfolio!.strategies.find((s) => s.id === candidate.id);
     expect(updated!.state).toBe("completed");
     expect(updated!.completed_at).not.toBeNull();
@@ -302,10 +302,10 @@ describe("updateState — valid transitions", () => {
       pastStrategies: [],
     });
 
-    manager.updateState(candidate.id, "active");
-    manager.updateState(candidate.id, "terminated");
+    await manager.updateState(candidate.id, "active");
+    await manager.updateState(candidate.id, "terminated");
 
-    const history = manager.getStrategyHistory("goal-1");
+    const history = await manager.getStrategyHistory("goal-1");
     expect(history).toHaveLength(1);
     expect(history[0].id).toBe(candidate.id);
     expect(history[0].state).toBe("terminated");
@@ -320,10 +320,10 @@ describe("updateState — valid transitions", () => {
       pastStrategies: [],
     });
 
-    manager.updateState(candidate.id, "active");
-    manager.updateState(candidate.id, "evaluating");
+    await manager.updateState(candidate.id, "active");
+    await manager.updateState(candidate.id, "evaluating");
 
-    const portfolio = manager.getPortfolio("goal-1");
+    const portfolio = await manager.getPortfolio("goal-1");
     const updated = portfolio!.strategies.find((s) => s.id === candidate.id);
     expect(updated!.state).toBe("evaluating");
   });
@@ -336,11 +336,11 @@ describe("updateState — valid transitions", () => {
       pastStrategies: [],
     });
 
-    manager.updateState(candidate.id, "active");
-    manager.updateState(candidate.id, "evaluating");
-    manager.updateState(candidate.id, "active");
+    await manager.updateState(candidate.id, "active");
+    await manager.updateState(candidate.id, "evaluating");
+    await manager.updateState(candidate.id, "active");
 
-    const portfolio = manager.getPortfolio("goal-1");
+    const portfolio = await manager.getPortfolio("goal-1");
     const updated = portfolio!.strategies.find((s) => s.id === candidate.id);
     expect(updated!.state).toBe("active");
   });
@@ -353,11 +353,11 @@ describe("updateState — valid transitions", () => {
       pastStrategies: [],
     });
 
-    manager.updateState(candidate.id, "active");
-    manager.updateState(candidate.id, "evaluating");
-    manager.updateState(candidate.id, "terminated");
+    await manager.updateState(candidate.id, "active");
+    await manager.updateState(candidate.id, "evaluating");
+    await manager.updateState(candidate.id, "terminated");
 
-    const history = manager.getStrategyHistory("goal-1");
+    const history = await manager.getStrategyHistory("goal-1");
     expect(history[0].state).toBe("terminated");
   });
 
@@ -369,10 +369,10 @@ describe("updateState — valid transitions", () => {
       pastStrategies: [],
     });
 
-    manager.updateState(candidate.id, "active");
-    manager.updateState(candidate.id, "completed", { effectiveness_score: 0.85 });
+    await manager.updateState(candidate.id, "active");
+    await manager.updateState(candidate.id, "completed", { effectiveness_score: 0.85 });
 
-    const portfolio = manager.getPortfolio("goal-1");
+    const portfolio = await manager.getPortfolio("goal-1");
     const updated = portfolio!.strategies.find((s) => s.id === candidate.id);
     expect(updated!.effectiveness_score).toBe(0.85);
   });
@@ -387,7 +387,7 @@ describe("updateState — invalid transitions", () => {
       pastStrategies: [],
     });
 
-    expect(() => manager.updateState(candidate.id, "completed")).toThrow(
+    await expect(manager.updateState(candidate.id, "completed")).rejects.toThrow(
       "invalid transition"
     );
   });
@@ -400,10 +400,10 @@ describe("updateState — invalid transitions", () => {
       pastStrategies: [],
     });
 
-    manager.updateState(candidate.id, "active");
-    manager.updateState(candidate.id, "completed");
+    await manager.updateState(candidate.id, "active");
+    await manager.updateState(candidate.id, "completed");
 
-    expect(() => manager.updateState(candidate.id, "active")).toThrow(
+    await expect(manager.updateState(candidate.id, "active")).rejects.toThrow(
       "invalid transition"
     );
   });
@@ -416,19 +416,19 @@ describe("updateState — invalid transitions", () => {
       pastStrategies: [],
     });
 
-    manager.updateState(candidate.id, "active");
-    manager.updateState(candidate.id, "terminated");
+    await manager.updateState(candidate.id, "active");
+    await manager.updateState(candidate.id, "terminated");
 
-    expect(() => manager.updateState(candidate.id, "active")).toThrow(
+    await expect(manager.updateState(candidate.id, "active")).rejects.toThrow(
       "invalid transition"
     );
   });
 
-  it("throws when strategy not found", () => {
+  it("throws when strategy not found", async () => {
     const mock = createMockLLMClient([]);
     const manager = new StrategyManager(stateManager, mock);
 
-    expect(() => manager.updateState("non-existent-id", "active")).toThrow(
+    await expect(async () => await manager.updateState("non-existent-id", "active")).rejects.toThrow(
       "not found"
     );
   });
@@ -463,7 +463,7 @@ describe("onStallDetected", () => {
 
     await manager.onStallDetected("goal-1", 1);
 
-    const still = manager.getActiveStrategy("goal-1");
+    const still = await manager.getActiveStrategy("goal-1");
     expect(still?.id).toBe(original.id);
     expect(still?.state).toBe("active");
   });
@@ -480,7 +480,7 @@ describe("onStallDetected", () => {
 
     await manager.onStallDetected("goal-1", 2);
 
-    const history = manager.getStrategyHistory("goal-1");
+    const history = await manager.getStrategyHistory("goal-1");
     const terminated = history.find((s) => s.id === original.id);
     expect(terminated).toBeDefined();
     expect(terminated!.state).toBe("terminated");
@@ -559,11 +559,11 @@ describe("onStallDetected", () => {
 // ─── getActiveStrategy ───
 
 describe("getActiveStrategy", () => {
-  it("returns null when no strategy exists", () => {
+  it("returns null when no strategy exists", async () => {
     const mock = createMockLLMClient([]);
     const manager = new StrategyManager(stateManager, mock);
 
-    expect(manager.getActiveStrategy("goal-1")).toBeNull();
+    expect(await manager.getActiveStrategy("goal-1")).toBeNull();
   });
 
   it("returns null when only candidates exist", async () => {
@@ -575,7 +575,7 @@ describe("getActiveStrategy", () => {
       pastStrategies: [],
     });
 
-    expect(manager.getActiveStrategy("goal-1")).toBeNull();
+    expect(await manager.getActiveStrategy("goal-1")).toBeNull();
   });
 
   it("returns the active strategy after activation", async () => {
@@ -588,7 +588,7 @@ describe("getActiveStrategy", () => {
     });
     const activated = await manager.activateBestCandidate("goal-1");
 
-    const result = manager.getActiveStrategy("goal-1");
+    const result = await manager.getActiveStrategy("goal-1");
     expect(result).not.toBeNull();
     expect(result!.id).toBe(activated.id);
     expect(result!.state).toBe("active");
@@ -603,20 +603,20 @@ describe("getActiveStrategy", () => {
       pastStrategies: [],
     });
     const activated = await manager.activateBestCandidate("goal-1");
-    manager.updateState(activated.id, "terminated");
+    await manager.updateState(activated.id, "terminated");
 
-    expect(manager.getActiveStrategy("goal-1")).toBeNull();
+    expect(await manager.getActiveStrategy("goal-1")).toBeNull();
   });
 });
 
 // ─── getPortfolio ───
 
 describe("getPortfolio", () => {
-  it("returns null before any operations", () => {
+  it("returns null before any operations", async () => {
     const mock = createMockLLMClient([]);
     const manager = new StrategyManager(stateManager, mock);
 
-    expect(manager.getPortfolio("goal-1")).toBeNull();
+    expect(await manager.getPortfolio("goal-1")).toBeNull();
   });
 
   it("returns portfolio after generating candidates", async () => {
@@ -628,7 +628,7 @@ describe("getPortfolio", () => {
       pastStrategies: [],
     });
 
-    const portfolio = manager.getPortfolio("goal-1");
+    const portfolio = await manager.getPortfolio("goal-1");
     expect(portfolio).not.toBeNull();
     expect(portfolio!.goal_id).toBe("goal-1");
     expect(portfolio!.strategies).toHaveLength(1);
@@ -645,7 +645,7 @@ describe("getPortfolio", () => {
 
     // Create new instance with same stateManager
     const manager2 = new StrategyManager(stateManager, createMockLLMClient([]));
-    const portfolio = manager2.getPortfolio("goal-1");
+    const portfolio = await manager2.getPortfolio("goal-1");
     expect(portfolio).not.toBeNull();
     expect(portfolio!.strategies).toHaveLength(1);
   });
@@ -663,7 +663,7 @@ describe("getPortfolio", () => {
       pastStrategies: [],
     });
 
-    const portfolio = manager.getPortfolio("goal-1");
+    const portfolio = await manager.getPortfolio("goal-1");
     expect(portfolio!.strategies).toHaveLength(2);
   });
 });
@@ -671,7 +671,7 @@ describe("getPortfolio", () => {
 // ─── detectStrategyGap ───
 
 describe("detectStrategyGap", () => {
-  it("returns strategy_deadlock signal when candidates array is empty", () => {
+  it("returns strategy_deadlock signal when candidates array is empty", async () => {
     const mock = createMockLLMClient([]);
     const manager = new StrategyManager(stateManager, mock);
     const result = manager.detectStrategyGap([]);
@@ -720,21 +720,21 @@ describe("detectStrategyGap", () => {
     expect(result).toBeNull();
   });
 
-  it("empty signal has source_step = strategy_selection", () => {
+  it("empty signal has source_step = strategy_selection", async () => {
     const mock = createMockLLMClient([]);
     const manager = new StrategyManager(stateManager, mock);
     const result = manager.detectStrategyGap([]);
     expect(result!.source_step).toBe("strategy_selection");
   });
 
-  it("signal has non-empty missing_knowledge description", () => {
+  it("signal has non-empty missing_knowledge description", async () => {
     const mock = createMockLLMClient([]);
     const manager = new StrategyManager(stateManager, mock);
     const result = manager.detectStrategyGap([]);
     expect(result!.missing_knowledge.length).toBeGreaterThan(0);
   });
 
-  it("related_dimension is null for strategy deadlock signal", () => {
+  it("related_dimension is null for strategy deadlock signal", async () => {
     const mock = createMockLLMClient([]);
     const manager = new StrategyManager(stateManager, mock);
     const result = manager.detectStrategyGap([]);
@@ -754,7 +754,7 @@ describe("Phase 2 methods", () => {
         pastStrategies: [],
       });
 
-      const activated = manager.activateMultiple("goal-1", [candidate!.id]);
+      const activated = await manager.activateMultiple("goal-1", [candidate!.id]);
 
       expect(activated).toHaveLength(1);
       expect(activated[0]!.state).toBe("active");
@@ -769,7 +769,7 @@ describe("Phase 2 methods", () => {
         pastStrategies: [],
       });
 
-      const activated = manager.activateMultiple("goal-1", candidates.map((c) => c.id));
+      const activated = await manager.activateMultiple("goal-1", candidates.map((c) => c.id));
 
       expect(activated).toHaveLength(2);
       expect(activated[0]!.allocation).toBeCloseTo(0.5, 5);
@@ -787,7 +787,7 @@ describe("Phase 2 methods", () => {
         pastStrategies: [],
       });
 
-      const activated = manager.activateMultiple("goal-1", candidates.map((c) => c.id));
+      const activated = await manager.activateMultiple("goal-1", candidates.map((c) => c.id));
 
       for (const s of activated) {
         expect(s.allocation).toBeGreaterThanOrEqual(0.1);
@@ -799,7 +799,7 @@ describe("Phase 2 methods", () => {
       const mock = createMockLLMClient([]);
       const manager = new StrategyManager(stateManager, mock);
 
-      expect(() => manager.activateMultiple("goal-1", [])).toThrow();
+      await expect(async () => await manager.activateMultiple("goal-1", [])).rejects.toThrow();
     });
 
     it("throws when a strategy is not in candidate state", async () => {
@@ -811,10 +811,10 @@ describe("Phase 2 methods", () => {
       });
 
       // First activation succeeds
-      manager.activateMultiple("goal-1", [candidate!.id]);
+      await manager.activateMultiple("goal-1", [candidate!.id]);
 
       // Second attempt on already-active strategy throws
-      expect(() => manager.activateMultiple("goal-1", [candidate!.id])).toThrow(
+      await expect(async () => await manager.activateMultiple("goal-1", [candidate!.id])).rejects.toThrow(
         "not in candidate state"
       );
     });
@@ -828,9 +828,9 @@ describe("Phase 2 methods", () => {
         currentGap: 0.7,
         pastStrategies: [],
       });
-      manager.updateState(candidate!.id, "active");
+      await manager.updateState(candidate!.id, "active");
 
-      const terminated = manager.terminateStrategy("goal-1", candidate!.id, "test reason");
+      const terminated = await manager.terminateStrategy("goal-1", candidate!.id, "test reason");
 
       expect(terminated.state).toBe("terminated");
     });
@@ -844,12 +844,12 @@ describe("Phase 2 methods", () => {
       });
 
       // Activate both with equal split (0.5 each)
-      manager.activateMultiple("goal-1", candidates.map((c) => c.id));
+      await manager.activateMultiple("goal-1", candidates.map((c) => c.id));
 
       // Terminate first; second should get all its allocation
-      manager.terminateStrategy("goal-1", candidates[0]!.id, "test reason");
+      await manager.terminateStrategy("goal-1", candidates[0]!.id, "test reason");
 
-      const portfolio = manager.getPortfolio("goal-1");
+      const portfolio = await manager.getPortfolio("goal-1");
       const remaining = portfolio!.strategies.find((s) => s.id === candidates[1]!.id);
       expect(remaining!.allocation).toBeGreaterThan(0.5);
     });
@@ -861,15 +861,14 @@ describe("Phase 2 methods", () => {
         currentGap: 0.7,
         pastStrategies: [],
       });
-      manager.activateMultiple("goal-1", [candidate!.id]);
+      await manager.activateMultiple("goal-1", [candidate!.id]);
 
       // Should not throw even with no remaining strategies
-      expect(() =>
-        manager.terminateStrategy("goal-1", candidate!.id, "last strategy")
+      expect(async () => await manager.terminateStrategy("goal-1", candidate!.id, "last strategy")
       ).not.toThrow();
 
-      const terminated = manager.terminateStrategy === undefined ? null : manager.getPortfolio("goal-1");
-      const history = manager.getStrategyHistory("goal-1");
+      const terminated = manager.terminateStrategy === undefined ? null : await manager.getPortfolio("goal-1");
+      const history = await manager.getStrategyHistory("goal-1");
       expect(history.some((s) => s.state === "terminated")).toBe(true);
     });
 
@@ -880,21 +879,21 @@ describe("Phase 2 methods", () => {
         currentGap: 0.7,
         pastStrategies: [],
       });
-      manager.updateState(candidate!.id, "active");
+      await manager.updateState(candidate!.id, "active");
 
-      manager.terminateStrategy("goal-1", candidate!.id, "test reason");
+      await manager.terminateStrategy("goal-1", candidate!.id, "test reason");
 
-      const history = manager.getStrategyHistory("goal-1");
+      const history = await manager.getStrategyHistory("goal-1");
       expect(history.some((s) => s.id === candidate!.id && s.state === "terminated")).toBe(true);
     });
   });
 
   describe("createWaitStrategy", () => {
-    it("creates strategy with wait fields", () => {
+    it("creates strategy with wait fields", async () => {
       const mock = createMockLLMClient([]);
       const manager = new StrategyManager(stateManager, mock);
 
-      const result = manager.createWaitStrategy("goal-1", {
+      const result = await manager.createWaitStrategy("goal-1", {
         hypothesis: "Wait for external data",
         wait_reason: "Awaiting market data",
         wait_until: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
@@ -908,11 +907,11 @@ describe("Phase 2 methods", () => {
       expect(result.hypothesis).toBe("Wait for external data");
     });
 
-    it("sets state to candidate", () => {
+    it("sets state to candidate", async () => {
       const mock = createMockLLMClient([]);
       const manager = new StrategyManager(stateManager, mock);
 
-      const result = manager.createWaitStrategy("goal-1", {
+      const result = await manager.createWaitStrategy("goal-1", {
         hypothesis: "Wait for external data",
         wait_reason: "Awaiting market data",
         wait_until: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
@@ -925,11 +924,11 @@ describe("Phase 2 methods", () => {
       expect(result.state).toBe("candidate");
     });
 
-    it("stores in portfolio", () => {
+    it("stores in portfolio", async () => {
       const mock = createMockLLMClient([]);
       const manager = new StrategyManager(stateManager, mock);
 
-      const result = manager.createWaitStrategy("goal-1", {
+      const result = await manager.createWaitStrategy("goal-1", {
         hypothesis: "Wait for external data",
         wait_reason: "Awaiting market data",
         wait_until: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
@@ -939,12 +938,12 @@ describe("Phase 2 methods", () => {
         primary_dimension: "word_count",
       });
 
-      const portfolio = manager.getPortfolio("goal-1");
+      const portfolio = await manager.getPortfolio("goal-1");
       expect(portfolio).not.toBeNull();
       expect(portfolio!.strategies.some((s) => s.id === result.id)).toBe(true);
     });
 
-    it("assigns unique ID", () => {
+    it("assigns unique ID", async () => {
       const mock = createMockLLMClient([]);
       const manager = new StrategyManager(stateManager, mock);
       const params = {
@@ -957,8 +956,8 @@ describe("Phase 2 methods", () => {
         primary_dimension: "dim1",
       };
 
-      const s1 = manager.createWaitStrategy("goal-1", params);
-      const s2 = manager.createWaitStrategy("goal-1", params);
+      const s1 = await manager.createWaitStrategy("goal-1", params);
+      const s2 = await manager.createWaitStrategy("goal-1", params);
 
       expect(s1.id).not.toBe(s2.id);
     });
@@ -972,9 +971,9 @@ describe("Phase 2 methods", () => {
         currentGap: 0.7,
         pastStrategies: [],
       });
-      manager.updateState(candidate!.id, "active");
+      await manager.updateState(candidate!.id, "active");
 
-      const suspended = manager.suspendStrategy("goal-1", candidate!.id);
+      const suspended = await manager.suspendStrategy("goal-1", candidate!.id);
 
       expect(suspended.state).toBe("suspended");
     });
@@ -987,10 +986,10 @@ describe("Phase 2 methods", () => {
         pastStrategies: [],
       });
 
-      manager.activateMultiple("goal-1", candidates.map((c) => c.id));
-      manager.suspendStrategy("goal-1", candidates[0]!.id);
+      await manager.activateMultiple("goal-1", candidates.map((c) => c.id));
+      await manager.suspendStrategy("goal-1", candidates[0]!.id);
 
-      const portfolio = manager.getPortfolio("goal-1");
+      const portfolio = await manager.getPortfolio("goal-1");
       const remaining = portfolio!.strategies.find((s) => s.id === candidates[1]!.id);
       expect(remaining!.allocation).toBeGreaterThan(0.5);
     });
@@ -999,7 +998,7 @@ describe("Phase 2 methods", () => {
       const mock = createMockLLMClient([]);
       const manager = new StrategyManager(stateManager, mock);
 
-      expect(() => manager.suspendStrategy("goal-1", "nonexistent-id")).toThrow("not found");
+      await expect(async () => await manager.suspendStrategy("goal-1", "nonexistent-id")).rejects.toThrow("not found");
     });
 
     it("throws when strategy is not active or evaluating", async () => {
@@ -1011,7 +1010,7 @@ describe("Phase 2 methods", () => {
       });
 
       // candidate state is not active — should throw
-      expect(() => manager.suspendStrategy("goal-1", candidate!.id)).toThrow();
+      await expect(async () => await manager.suspendStrategy("goal-1", candidate!.id)).rejects.toThrow();
     });
   });
 
@@ -1024,10 +1023,10 @@ describe("Phase 2 methods", () => {
         pastStrategies: [],
       });
 
-      manager.activateMultiple("goal-1", candidates.map((c) => c.id));
-      manager.suspendStrategy("goal-1", candidates[0]!.id);
+      await manager.activateMultiple("goal-1", candidates.map((c) => c.id));
+      await manager.suspendStrategy("goal-1", candidates[0]!.id);
 
-      const resumed = manager.resumeStrategy("goal-1", candidates[0]!.id, 0.4);
+      const resumed = await manager.resumeStrategy("goal-1", candidates[0]!.id, 0.4);
 
       expect(resumed.state).toBe("active");
       expect(resumed.allocation).toBe(0.4);
@@ -1041,11 +1040,11 @@ describe("Phase 2 methods", () => {
         pastStrategies: [],
       });
 
-      manager.activateMultiple("goal-1", candidates.map((c) => c.id));
-      manager.suspendStrategy("goal-1", candidates[0]!.id);
-      manager.resumeStrategy("goal-1", candidates[0]!.id, 0.4);
+      await manager.activateMultiple("goal-1", candidates.map((c) => c.id));
+      await manager.suspendStrategy("goal-1", candidates[0]!.id);
+      await manager.resumeStrategy("goal-1", candidates[0]!.id, 0.4);
 
-      const portfolio = manager.getPortfolio("goal-1");
+      const portfolio = await manager.getPortfolio("goal-1");
       const active = portfolio!.strategies.filter(
         (s) => s.state === "active" || s.state === "evaluating"
       );
@@ -1060,9 +1059,9 @@ describe("Phase 2 methods", () => {
         currentGap: 0.7,
         pastStrategies: [],
       });
-      manager.updateState(candidate!.id, "active");
+      await manager.updateState(candidate!.id, "active");
 
-      expect(() => manager.resumeStrategy("goal-1", candidate!.id, 0.5)).toThrow(
+      await expect(async () => await manager.resumeStrategy("goal-1", candidate!.id, 0.5)).rejects.toThrow(
         "must be suspended"
       );
     });
@@ -1077,11 +1076,11 @@ describe("Phase 2 methods", () => {
         pastStrategies: [],
       });
 
-      manager.activateMultiple("goal-1", candidates.map((c) => c.id));
+      await manager.activateMultiple("goal-1", candidates.map((c) => c.id));
       // Move first to evaluating
-      manager.updateState(candidates[0]!.id, "evaluating");
+      await manager.updateState(candidates[0]!.id, "evaluating");
 
-      const active = manager.getAllActiveStrategies("goal-1");
+      const active = await manager.getAllActiveStrategies("goal-1");
 
       expect(active).toHaveLength(2);
       const states = active.map((s) => s.state);
@@ -1098,21 +1097,21 @@ describe("Phase 2 methods", () => {
       });
 
       // Activate both, then suspend one
-      manager.activateMultiple("goal-1", candidates.map((c) => c.id));
-      manager.suspendStrategy("goal-1", candidates[0]!.id);
+      await manager.activateMultiple("goal-1", candidates.map((c) => c.id));
+      await manager.suspendStrategy("goal-1", candidates[0]!.id);
 
-      const active = manager.getAllActiveStrategies("goal-1");
+      const active = await manager.getAllActiveStrategies("goal-1");
 
       // Only the non-suspended one should appear
       expect(active).toHaveLength(1);
       expect(active[0]!.id).toBe(candidates[1]!.id);
     });
 
-    it("returns empty array when no active strategies exist", () => {
+    it("returns empty array when no active strategies exist", async () => {
       const mock = createMockLLMClient([]);
       const manager = new StrategyManager(stateManager, mock);
 
-      expect(manager.getAllActiveStrategies("goal-1")).toEqual([]);
+      expect(await manager.getAllActiveStrategies("goal-1")).toEqual([]);
     });
   });
 
@@ -1124,11 +1123,11 @@ describe("Phase 2 methods", () => {
         currentGap: 0.7,
         pastStrategies: [],
       });
-      manager.updateState(candidate!.id, "active");
+      await manager.updateState(candidate!.id, "active");
 
-      manager.updateAllocation("goal-1", candidate!.id, 0.6);
+      await manager.updateAllocation("goal-1", candidate!.id, 0.6);
 
-      const portfolio = manager.getPortfolio("goal-1");
+      const portfolio = await manager.getPortfolio("goal-1");
       const updated = portfolio!.strategies.find((s) => s.id === candidate!.id);
       expect(updated!.allocation).toBe(0.6);
     });
@@ -1141,18 +1140,16 @@ describe("Phase 2 methods", () => {
         pastStrategies: [],
       });
 
-      expect(() =>
-        manager.updateAllocation("goal-1", candidate!.id, 1.5)
-      ).toThrow("allocation must be in [0, 1]");
+      await expect(async () => await manager.updateAllocation("goal-1", candidate!.id, 1.5)
+      ).rejects.toThrow("allocation must be in [0, 1]");
     });
 
-    it("throws when strategy not found", () => {
+    it("throws when strategy not found", async () => {
       const mock = createMockLLMClient([]);
       const manager = new StrategyManager(stateManager, mock);
 
-      expect(() =>
-        manager.updateAllocation("goal-1", "nonexistent-id", 0.5)
-      ).toThrow("not found");
+      await expect(async () => await manager.updateAllocation("goal-1", "nonexistent-id", 0.5)
+      ).rejects.toThrow("not found");
     });
 
     it("persists updated allocation across manager instances", async () => {
@@ -1162,11 +1159,11 @@ describe("Phase 2 methods", () => {
         currentGap: 0.7,
         pastStrategies: [],
       });
-      manager1.updateState(candidate!.id, "active");
-      manager1.updateAllocation("goal-1", candidate!.id, 0.55);
+      await manager1.updateState(candidate!.id, "active");
+      await manager1.updateAllocation("goal-1", candidate!.id, 0.55);
 
       const manager2 = new StrategyManager(stateManager, createMockLLMClient([]));
-      const portfolio = manager2.getPortfolio("goal-1");
+      const portfolio = await manager2.getPortfolio("goal-1");
       const strategy = portfolio!.strategies.find((s) => s.id === candidate!.id);
       expect(strategy!.allocation).toBe(0.55);
     });
@@ -1176,11 +1173,11 @@ describe("Phase 2 methods", () => {
 // ─── getStrategyHistory ───
 
 describe("getStrategyHistory", () => {
-  it("returns empty array when no history exists", () => {
+  it("returns empty array when no history exists", async () => {
     const mock = createMockLLMClient([]);
     const manager = new StrategyManager(stateManager, mock);
 
-    expect(manager.getStrategyHistory("goal-1")).toEqual([]);
+    expect(await manager.getStrategyHistory("goal-1")).toEqual([]);
   });
 
   it("includes terminated strategies in history", async () => {
@@ -1192,10 +1189,10 @@ describe("getStrategyHistory", () => {
       pastStrategies: [],
     });
 
-    manager.updateState(candidate.id, "active");
-    manager.updateState(candidate.id, "terminated");
+    await manager.updateState(candidate.id, "active");
+    await manager.updateState(candidate.id, "terminated");
 
-    const history = manager.getStrategyHistory("goal-1");
+    const history = await manager.getStrategyHistory("goal-1");
     expect(history).toHaveLength(1);
     expect(history[0].state).toBe("terminated");
   });
@@ -1209,10 +1206,10 @@ describe("getStrategyHistory", () => {
       pastStrategies: [],
     });
 
-    manager.updateState(candidate.id, "active");
-    manager.updateState(candidate.id, "completed");
+    await manager.updateState(candidate.id, "active");
+    await manager.updateState(candidate.id, "completed");
 
-    const history = manager.getStrategyHistory("goal-1");
+    const history = await manager.getStrategyHistory("goal-1");
     expect(history).toHaveLength(1);
     expect(history[0].state).toBe("completed");
   });
@@ -1227,7 +1224,7 @@ describe("getStrategyHistory", () => {
     });
     await manager.activateBestCandidate("goal-1");
 
-    const history = manager.getStrategyHistory("goal-1");
+    const history = await manager.getStrategyHistory("goal-1");
     expect(history).toHaveLength(0);
   });
 
@@ -1239,11 +1236,11 @@ describe("getStrategyHistory", () => {
       currentGap: 0.7,
       pastStrategies: [],
     });
-    manager1.updateState(candidate.id, "active");
-    manager1.updateState(candidate.id, "terminated");
+    await manager1.updateState(candidate.id, "active");
+    await manager1.updateState(candidate.id, "terminated");
 
     const manager2 = new StrategyManager(stateManager, createMockLLMClient([]));
-    const history = manager2.getStrategyHistory("goal-1");
+    const history = await manager2.getStrategyHistory("goal-1");
     expect(history).toHaveLength(1);
     expect(history[0].state).toBe("terminated");
   });

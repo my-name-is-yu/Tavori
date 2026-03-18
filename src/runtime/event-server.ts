@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import * as fsp from "node:fs/promises";
 import * as path from "node:path";
 import * as http from "node:http";
 import type { DriveSystem } from "../drive/drive-system.js";
@@ -32,6 +33,7 @@ export class EventServer {
 
   /** Start HTTP server */
   async start(): Promise<void> {
+    await fsp.mkdir(this.eventsDir, { recursive: true });
     return new Promise((resolve, reject) => {
       this.server = http.createServer((req, res) => this.handleRequest(req, res));
       const server = this.server;
@@ -73,7 +75,6 @@ export class EventServer {
   startFileWatcher(): void {
     if (this.fileWatcher) return; // already watching
 
-    // Ensure directory exists
     fs.mkdirSync(this.eventsDir, { recursive: true });
 
     this.fileWatcher = fs.watch(this.eventsDir, (eventType, filename) => {

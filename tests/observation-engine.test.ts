@@ -387,25 +387,25 @@ describe("ObservationEngine", () => {
   // ─── applyObservation ───
 
   describe("applyObservation", () => {
-    it("throws when goal is not found", () => {
+    it("throws when goal is not found", async () => {
       const entry = makeEntry({ goal_id: "nonexistent" });
-      expect(() => engine.applyObservation("nonexistent", entry)).toThrow(
+      await expect(engine.applyObservation("nonexistent", entry)).rejects.toThrow(
         /goal "nonexistent" not found/
       );
     });
 
-    it("throws when dimension is not found in goal", () => {
+    it("throws when dimension is not found in goal", async () => {
       const goal = makeGoal({ id: "goal-1" });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
       const entry = makeEntry({ goal_id: "goal-1", dimension_name: "nonexistent_dim" });
-      expect(() => engine.applyObservation("goal-1", entry)).toThrow(
+      await expect(engine.applyObservation("goal-1", entry)).rejects.toThrow(
         /dimension "nonexistent_dim" not found/
       );
     });
 
-    it("updates dimension current_value after applying observation", () => {
+    it("updates dimension current_value after applying observation", async () => {
       const goal = makeGoal({ id: "goal-1", dimensions: [testDimension] });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       const entry = engine.createObservationEntry({
         goalId: "goal-1",
@@ -418,18 +418,18 @@ describe("ObservationEngine", () => {
         confidence: 0.95,
       });
 
-      engine.applyObservation("goal-1", entry);
+      await engine.applyObservation("goal-1", entry);
 
-      const updatedGoal = stateManager.loadGoal("goal-1");
+      const updatedGoal = await stateManager.loadGoal("goal-1");
       expect(updatedGoal).not.toBeNull();
       const dim = updatedGoal!.dimensions.find((d) => d.name === "test_dim");
       expect(dim).not.toBeNull();
       expect(dim!.current_value).toBe(80);
     });
 
-    it("updates dimension confidence after applying observation", () => {
+    it("updates dimension confidence after applying observation", async () => {
       const goal = makeGoal({ id: "goal-1", dimensions: [testDimension] });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       const entry = engine.createObservationEntry({
         goalId: "goal-1",
@@ -442,16 +442,16 @@ describe("ObservationEngine", () => {
         confidence: 0.95,
       });
 
-      engine.applyObservation("goal-1", entry);
+      await engine.applyObservation("goal-1", entry);
 
-      const updatedGoal = stateManager.loadGoal("goal-1");
+      const updatedGoal = await stateManager.loadGoal("goal-1");
       const dim = updatedGoal!.dimensions.find((d) => d.name === "test_dim");
       expect(dim!.confidence).toBe(entry.confidence);
     });
 
-    it("appends entry to dimension history with correct source_observation_id", () => {
+    it("appends entry to dimension history with correct source_observation_id", async () => {
       const goal = makeGoal({ id: "goal-1", dimensions: [testDimension] });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       const entry = engine.createObservationEntry({
         goalId: "goal-1",
@@ -464,18 +464,18 @@ describe("ObservationEngine", () => {
         confidence: 0.95,
       });
 
-      engine.applyObservation("goal-1", entry);
+      await engine.applyObservation("goal-1", entry);
 
-      const updatedGoal = stateManager.loadGoal("goal-1");
+      const updatedGoal = await stateManager.loadGoal("goal-1");
       const dim = updatedGoal!.dimensions.find((d) => d.name === "test_dim");
       expect(dim!.history).toHaveLength(1);
       expect(dim!.history[0]!.source_observation_id).toBe(entry.observation_id);
       expect(dim!.history[0]!.value).toBe(80);
     });
 
-    it("persists the observation entry in the observation log", () => {
+    it("persists the observation entry in the observation log", async () => {
       const goal = makeGoal({ id: "goal-1", dimensions: [testDimension] });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       const entry = engine.createObservationEntry({
         goalId: "goal-1",
@@ -488,17 +488,17 @@ describe("ObservationEngine", () => {
         confidence: 0.95,
       });
 
-      engine.applyObservation("goal-1", entry);
+      await engine.applyObservation("goal-1", entry);
 
-      const log = stateManager.loadObservationLog("goal-1");
+      const log = await stateManager.loadObservationLog("goal-1");
       expect(log).not.toBeNull();
       expect(log!.entries).toHaveLength(1);
       expect(log!.entries[0]!.observation_id).toBe(entry.observation_id);
     });
 
-    it("accumulates multiple observations in history", () => {
+    it("accumulates multiple observations in history", async () => {
       const goal = makeGoal({ id: "goal-1", dimensions: [testDimension] });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       for (let i = 0; i < 3; i++) {
         const entry = engine.createObservationEntry({
@@ -511,10 +511,10 @@ describe("ObservationEngine", () => {
           extractedValue: 60 + i * 10,
           confidence: 0.90,
         });
-        engine.applyObservation("goal-1", entry);
+        await engine.applyObservation("goal-1", entry);
       }
 
-      const updatedGoal = stateManager.loadGoal("goal-1");
+      const updatedGoal = await stateManager.loadGoal("goal-1");
       const dim = updatedGoal!.dimensions.find((d) => d.name === "test_dim");
       expect(dim!.history).toHaveLength(3);
       expect(dim!.current_value).toBe(80); // last applied value
@@ -524,15 +524,15 @@ describe("ObservationEngine", () => {
   // ─── getObservationLog / saveObservationLog ───
 
   describe("getObservationLog", () => {
-    it("returns empty log when none exists", () => {
-      const log = engine.getObservationLog("goal-nonexistent");
+    it("returns empty log when none exists", async () => {
+      const log = await engine.getObservationLog("goal-nonexistent");
       expect(log.goal_id).toBe("goal-nonexistent");
       expect(log.entries).toHaveLength(0);
     });
 
-    it("returns existing log after entries are appended", () => {
+    it("returns existing log after entries are appended", async () => {
       const goal = makeGoal({ id: "goal-2", dimensions: [testDimension] });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       const entry = engine.createObservationEntry({
         goalId: "goal-2",
@@ -544,9 +544,9 @@ describe("ObservationEngine", () => {
         extractedValue: 70,
         confidence: 0.92,
       });
-      engine.applyObservation("goal-2", entry);
+      await engine.applyObservation("goal-2", entry);
 
-      const log = engine.getObservationLog("goal-2");
+      const log = await engine.getObservationLog("goal-2");
       expect(log.goal_id).toBe("goal-2");
       expect(log.entries).toHaveLength(1);
       expect(log.entries[0]!.observation_id).toBe(entry.observation_id);
@@ -554,28 +554,28 @@ describe("ObservationEngine", () => {
   });
 
   describe("saveObservationLog", () => {
-    it("persists a log and allows round-trip retrieval", () => {
+    it("persists a log and allows round-trip retrieval", async () => {
       const entry1 = makeEntry({ goal_id: "goal-3", observation_id: "obs-1", extracted_value: 55 });
       const entry2 = makeEntry({ goal_id: "goal-3", observation_id: "obs-2", extracted_value: 70 });
       const log = { goal_id: "goal-3", entries: [entry1, entry2] };
 
-      engine.saveObservationLog("goal-3", log);
+      await engine.saveObservationLog("goal-3", log);
 
-      const loaded = engine.getObservationLog("goal-3");
+      const loaded = await engine.getObservationLog("goal-3");
       expect(loaded.goal_id).toBe("goal-3");
       expect(loaded.entries).toHaveLength(2);
       expect(loaded.entries[0]!.observation_id).toBe("obs-1");
       expect(loaded.entries[1]!.observation_id).toBe("obs-2");
     });
 
-    it("overwrites previous log on second save", () => {
+    it("overwrites previous log on second save", async () => {
       const entry1 = makeEntry({ goal_id: "goal-4", observation_id: "obs-a", extracted_value: 40 });
-      engine.saveObservationLog("goal-4", { goal_id: "goal-4", entries: [entry1] });
+      await engine.saveObservationLog("goal-4", { goal_id: "goal-4", entries: [entry1] });
 
       const entry2 = makeEntry({ goal_id: "goal-4", observation_id: "obs-b", extracted_value: 80 });
-      engine.saveObservationLog("goal-4", { goal_id: "goal-4", entries: [entry2] });
+      await engine.saveObservationLog("goal-4", { goal_id: "goal-4", entries: [entry2] });
 
-      const loaded = engine.getObservationLog("goal-4");
+      const loaded = await engine.getObservationLog("goal-4");
       expect(loaded.entries).toHaveLength(1);
       expect(loaded.entries[0]!.observation_id).toBe("obs-b");
     });
@@ -704,7 +704,7 @@ describe("observeFromDataSource", () => {
         },
       ],
     });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const entry = await engineWithDs.observeFromDataSource("goal-ds-1", "cpu", "mock-ds");
 
@@ -774,7 +774,7 @@ describe("observeFromDataSource", () => {
           },
         ],
       });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       const entry = await eng.observeFromDataSource(goalId, "metric_x", "scoped-ds");
       expect(entry.extracted_value).toBe(99);
@@ -817,7 +817,7 @@ describe("observeFromDataSource", () => {
           },
         ],
       });
-      stateManager.saveGoal(goal);
+      await stateManager.saveGoal(goal);
 
       const entry = await eng.observeFromDataSource(goalId, "metric_y", "only-ds");
       expect(entry.extracted_value).toBe(55);
@@ -853,7 +853,7 @@ describe("observeFromDataSource", () => {
         },
       ],
     });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     await engineMapped.observeFromDataSource("goal-mapped", "cpu", "mapped-ds");
 
@@ -893,7 +893,7 @@ describe("observeFromDataSource", () => {
         },
       ],
     });
-    stateManager.saveGoal(goal);
+    await stateManager.saveGoal(goal);
 
     const entry = await engineStr.observeFromDataSource("goal-str", "test_dim", "mock-ds");
 

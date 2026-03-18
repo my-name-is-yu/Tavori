@@ -35,7 +35,7 @@ export interface EscalateDeps {
  * Returns an empty registry if the file does not exist.
  */
 export async function loadRegistry(deps: RegistryDeps): Promise<CapabilityRegistry> {
-  const raw = deps.stateManager.readRaw(REGISTRY_PATH);
+  const raw = await deps.stateManager.readRaw(REGISTRY_PATH);
   if (raw === null) {
     return CapabilityRegistrySchema.parse({
       capabilities: [],
@@ -55,7 +55,7 @@ export async function saveRegistry(
   registry: CapabilityRegistry
 ): Promise<void> {
   const parsed = CapabilityRegistrySchema.parse(registry);
-  deps.stateManager.writeRaw(REGISTRY_PATH, parsed);
+  await deps.stateManager.writeRaw(REGISTRY_PATH, parsed);
 }
 
 // ─── registerCapability ───
@@ -207,7 +207,7 @@ export async function escalateToUser(
   );
 
   try {
-    deps.reportingEngine.saveReport(notification);
+    await deps.reportingEngine.saveReport(notification);
   } catch (err) {
     logger?.error(
       "[CapabilityDetector] escalateToUser: failed to save report — " +

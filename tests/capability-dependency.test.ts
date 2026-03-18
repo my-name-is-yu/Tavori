@@ -156,78 +156,78 @@ describe("detectCircularDependency", () => {
 // ─── addDependency / getDependencies roundtrip ───
 
 describe("addDependency / getDependencies", () => {
-  it("returns empty array for an unknown capability", () => {
-    expect(detector.getDependencies("unknown")).toEqual([]);
+  it("returns empty array for an unknown capability", async () => {
+    expect(await detector.getDependencies("unknown")).toEqual([]);
   });
 
-  it("stores and retrieves a dependency entry", () => {
-    detector.addDependency("cap-A", ["cap-B", "cap-C"]);
-    expect(detector.getDependencies("cap-A")).toEqual(["cap-B", "cap-C"]);
+  it("stores and retrieves a dependency entry", async () => {
+    await detector.addDependency("cap-A", ["cap-B", "cap-C"]);
+    expect(await detector.getDependencies("cap-A")).toEqual(["cap-B", "cap-C"]);
   });
 
-  it("replaces an existing entry when called again with the same capabilityId", () => {
-    detector.addDependency("cap-A", ["cap-B"]);
-    detector.addDependency("cap-A", ["cap-C", "cap-D"]);
-    expect(detector.getDependencies("cap-A")).toEqual(["cap-C", "cap-D"]);
+  it("replaces an existing entry when called again with the same capabilityId", async () => {
+    await detector.addDependency("cap-A", ["cap-B"]);
+    await detector.addDependency("cap-A", ["cap-C", "cap-D"]);
+    expect(await detector.getDependencies("cap-A")).toEqual(["cap-C", "cap-D"]);
   });
 
-  it("persists dependencies across detector instances (same stateManager)", () => {
-    detector.addDependency("cap-X", ["cap-Y"]);
+  it("persists dependencies across detector instances (same stateManager)", async () => {
+    await detector.addDependency("cap-X", ["cap-Y"]);
     // Create a new detector pointing at the same tempDir
     const detector2 = new CapabilityDetector(
       stateManager,
       createMockLLMClient("{}"),
       reportingEngine
     );
-    expect(detector2.getDependencies("cap-X")).toEqual(["cap-Y"]);
+    expect(await detector2.getDependencies("cap-X")).toEqual(["cap-Y"]);
   });
 
-  it("stores multiple independent entries", () => {
-    detector.addDependency("cap-A", ["cap-B"]);
-    detector.addDependency("cap-C", ["cap-D", "cap-E"]);
-    expect(detector.getDependencies("cap-A")).toEqual(["cap-B"]);
-    expect(detector.getDependencies("cap-C")).toEqual(["cap-D", "cap-E"]);
+  it("stores multiple independent entries", async () => {
+    await detector.addDependency("cap-A", ["cap-B"]);
+    await detector.addDependency("cap-C", ["cap-D", "cap-E"]);
+    expect(await detector.getDependencies("cap-A")).toEqual(["cap-B"]);
+    expect(await detector.getDependencies("cap-C")).toEqual(["cap-D", "cap-E"]);
   });
 });
 
 // ─── getAcquisitionOrder ───
 
 describe("getAcquisitionOrder", () => {
-  it("returns empty array for empty input", () => {
-    expect(detector.getAcquisitionOrder([])).toEqual([]);
+  it("returns empty array for empty input", async () => {
+    expect(await detector.getAcquisitionOrder([])).toEqual([]);
   });
 
-  it("returns original order when no dependencies are registered", () => {
+  it("returns original order when no dependencies are registered", async () => {
     const gaps = [makeGap("tool-A"), makeGap("tool-B"), makeGap("tool-C")];
-    const result = detector.getAcquisitionOrder(gaps);
+    const result = await detector.getAcquisitionOrder(gaps);
     expect(result.map((g) => g.missing_capability.name)).toEqual(["tool-A", "tool-B", "tool-C"]);
   });
 
-  it("reorders gaps so dependency comes before dependent", () => {
+  it("reorders gaps so dependency comes before dependent", async () => {
     // tool-C depends on tool-A
-    detector.addDependency("tool-C", ["tool-A"]);
+    await detector.addDependency("tool-C", ["tool-A"]);
     const gaps = [makeGap("tool-C"), makeGap("tool-A")];
-    const result = detector.getAcquisitionOrder(gaps);
+    const result = await detector.getAcquisitionOrder(gaps);
     const names = result.map((g) => g.missing_capability.name);
     expect(names.indexOf("tool-A")).toBeLessThan(names.indexOf("tool-C"));
   });
 
-  it("handles a linear chain of three gaps: C depends on B depends on A", () => {
-    detector.addDependency("gap-C", ["gap-B"]);
-    detector.addDependency("gap-B", ["gap-A"]);
+  it("handles a linear chain of three gaps: C depends on B depends on A", async () => {
+    await detector.addDependency("gap-C", ["gap-B"]);
+    await detector.addDependency("gap-B", ["gap-A"]);
     const gaps = [makeGap("gap-C"), makeGap("gap-B"), makeGap("gap-A")];
-    const result = detector.getAcquisitionOrder(gaps);
+    const result = await detector.getAcquisitionOrder(gaps);
     const names = result.map((g) => g.missing_capability.name);
     expect(names.indexOf("gap-A")).toBeLessThan(names.indexOf("gap-B"));
     expect(names.indexOf("gap-B")).toBeLessThan(names.indexOf("gap-C"));
   });
 
-  it("ignores registered dependencies that reference capabilities not in the gaps list", () => {
+  it("ignores registered dependencies that reference capabilities not in the gaps list", async () => {
     // tool-A depends on some-other-tool which is not in gaps
-    detector.addDependency("tool-A", ["some-other-tool"]);
+    await detector.addDependency("tool-A", ["some-other-tool"]);
     const gaps = [makeGap("tool-A"), makeGap("tool-B")];
     // Should not throw and should return both gaps
-    const result = detector.getAcquisitionOrder(gaps);
+    const result = await detector.getAcquisitionOrder(gaps);
     expect(result).toHaveLength(2);
   });
 });

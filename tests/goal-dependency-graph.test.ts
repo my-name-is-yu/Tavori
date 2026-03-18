@@ -49,8 +49,8 @@ describe("GoalDependencyGraph", () => {
   // ─── addEdge ───
 
   describe("addEdge", () => {
-    it("returns a DependencyEdge with created_at set", () => {
-      const edge = graph.addEdge(makeEdge("goal-A", "goal-B"));
+    it("returns a DependencyEdge with created_at set", async () => {
+      const edge = await graph.addEdge(makeEdge("goal-A", "goal-B"));
       expect(edge.from_goal_id).toBe("goal-A");
       expect(edge.to_goal_id).toBe("goal-B");
       expect(edge.type).toBe("prerequisite");
@@ -58,42 +58,42 @@ describe("GoalDependencyGraph", () => {
       expect(new Date(edge.created_at).getTime()).not.toBeNaN();
     });
 
-    it("adds nodes for both goals", () => {
-      graph.addEdge(makeEdge("goal-X", "goal-Y"));
+    it("adds nodes for both goals", async () => {
+      await graph.addEdge(makeEdge("goal-X", "goal-Y"));
       const g = graph.getGraph();
       expect(g.nodes).toContain("goal-X");
       expect(g.nodes).toContain("goal-Y");
     });
 
-    it("does not add duplicate nodes", () => {
-      graph.addEdge(makeEdge("goal-A", "goal-B"));
-      graph.addEdge(makeEdge("goal-A", "goal-C"));
+    it("does not add duplicate nodes", async () => {
+      await graph.addEdge(makeEdge("goal-A", "goal-B"));
+      await graph.addEdge(makeEdge("goal-A", "goal-C"));
       const g = graph.getGraph();
       expect(g.nodes.filter((n) => n === "goal-A")).toHaveLength(1);
     });
 
-    it("adds multiple edges between different pairs", () => {
-      graph.addEdge(makeEdge("goal-A", "goal-B"));
-      graph.addEdge(makeEdge("goal-B", "goal-C"));
+    it("adds multiple edges between different pairs", async () => {
+      await graph.addEdge(makeEdge("goal-A", "goal-B"));
+      await graph.addEdge(makeEdge("goal-B", "goal-C"));
       expect(graph.getGraph().edges).toHaveLength(2);
     });
 
-    it("allows non-prerequisite edge types without cycle check", () => {
-      graph.addEdge(makeEdge("goal-A", "goal-B", "synergy"));
-      graph.addEdge(makeEdge("goal-B", "goal-A", "synergy")); // would be cycle if prerequisite, but not synergy
+    it("allows non-prerequisite edge types without cycle check", async () => {
+      await graph.addEdge(makeEdge("goal-A", "goal-B", "synergy"));
+      await graph.addEdge(makeEdge("goal-B", "goal-A", "synergy")); // would be cycle if prerequisite, but not synergy
       expect(graph.getGraph().edges).toHaveLength(2);
     });
 
-    it("throws if adding a prerequisite edge would create a cycle", () => {
-      graph.addEdge(makeEdge("goal-A", "goal-B", "prerequisite"));
-      graph.addEdge(makeEdge("goal-B", "goal-C", "prerequisite"));
-      expect(() =>
+    it("throws if adding a prerequisite edge would create a cycle", async () => {
+      await graph.addEdge(makeEdge("goal-A", "goal-B", "prerequisite"));
+      await graph.addEdge(makeEdge("goal-B", "goal-C", "prerequisite"));
+      await expect(
         graph.addEdge(makeEdge("goal-C", "goal-A", "prerequisite"))
-      ).toThrow(/cycle/i);
+      ).rejects.toThrow(/cycle/i);
     });
 
-    it("persists edge to disk", () => {
-      graph.addEdge(makeEdge("goal-A", "goal-B"));
+    it("persists edge to disk", async () => {
+      await graph.addEdge(makeEdge("goal-A", "goal-B"));
       const filePath = path.join(tmpDir, "dependency-graph.json");
       expect(fs.existsSync(filePath)).toBe(true);
     });
