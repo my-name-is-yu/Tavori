@@ -162,7 +162,7 @@ describe("saveReport / getReport", () => {
   });
 
   it("round-trips notification report through save/get", async () => {
-    const report = engine.generateNotification("urgent", {
+    const report = await engine.generateNotification("urgent", {
       goalId: "goal-001",
       message: "Critical failure",
       details: "Something went wrong",
@@ -265,8 +265,8 @@ describe("formatForCLI", () => {
     expect(formatted).toContain("total loops");
   });
 
-  it("formats notification reports with fallback format", () => {
-    const report = engine.generateNotification("urgent", {
+  it("formats notification reports with fallback format", async () => {
+    const report = await engine.generateNotification("urgent", {
       goalId: "goal-001",
       message: "Critical issue",
     });
@@ -279,8 +279,8 @@ describe("formatForCLI", () => {
 // ─── generateNotification ───
 
 describe("generateNotification", () => {
-  it("urgent notification → report_type = urgent_alert", () => {
-    const report = engine.generateNotification("urgent", {
+  it("urgent notification → report_type = urgent_alert", async () => {
+    const report = await engine.generateNotification("urgent", {
       goalId: "goal-001",
       message: "Critical failure",
     });
@@ -289,8 +289,8 @@ describe("generateNotification", () => {
     expect(report.content).toContain("Critical failure");
   });
 
-  it("approval_required notification → report_type = approval_request", () => {
-    const report = engine.generateNotification("approval_required", {
+  it("approval_required notification → report_type = approval_request", async () => {
+    const report = await engine.generateNotification("approval_required", {
       goalId: "goal-001",
       message: "Deploy to production",
     });
@@ -299,8 +299,8 @@ describe("generateNotification", () => {
     expect(report.content).toContain("Deploy to production");
   });
 
-  it("stall_escalation notification → report_type = stall_escalation", () => {
-    const report = engine.generateNotification("stall_escalation", {
+  it("stall_escalation notification → report_type = stall_escalation", async () => {
+    const report = await engine.generateNotification("stall_escalation", {
       goalId: "goal-001",
       message: "No progress in 5 loops",
     });
@@ -309,8 +309,8 @@ describe("generateNotification", () => {
     expect(report.content).toContain("No progress in 5 loops");
   });
 
-  it("completed notification → report_type = goal_completion", () => {
-    const report = engine.generateNotification("completed", {
+  it("completed notification → report_type = goal_completion", async () => {
+    const report = await engine.generateNotification("completed", {
       goalId: "goal-001",
       message: "All dimensions satisfied",
     });
@@ -319,8 +319,8 @@ describe("generateNotification", () => {
     expect(report.content).toContain("All dimensions satisfied");
   });
 
-  it("capability_insufficient notification → report_type = capability_escalation", () => {
-    const report = engine.generateNotification("capability_insufficient", {
+  it("capability_insufficient notification → report_type = capability_escalation", async () => {
+    const report = await engine.generateNotification("capability_insufficient", {
       goalId: "goal-001",
       message: "Cannot execute this task",
     });
@@ -329,8 +329,8 @@ describe("generateNotification", () => {
     expect(report.content).toContain("Cannot execute this task");
   });
 
-  it("includes details section when provided", () => {
-    const report = engine.generateNotification("urgent", {
+  it("includes details section when provided", async () => {
+    const report = await engine.generateNotification("urgent", {
       goalId: "goal-001",
       message: "Issue",
       details: "Additional context here",
@@ -339,23 +339,23 @@ describe("generateNotification", () => {
     expect(report.content).toContain("### Details");
   });
 
-  it("omits details section when details not provided", () => {
-    const report = engine.generateNotification("urgent", {
+  it("omits details section when details not provided", async () => {
+    const report = await engine.generateNotification("urgent", {
       goalId: "goal-001",
       message: "Issue",
     });
     expect(report.content).not.toContain("### Details");
   });
 
-  it("sets goal_id on notification", () => {
-    const report = engine.generateNotification("completed", {
+  it("sets goal_id on notification", async () => {
+    const report = await engine.generateNotification("completed", {
       goalId: "goal-xyz",
       message: "Done",
     });
     expect(report.goal_id).toBe("goal-xyz");
   });
 
-  it("all notifications have valid generated_at timestamp", () => {
+  it("all notifications have valid generated_at timestamp", async () => {
     const types: Array<Parameters<ReportingEngine["generateNotification"]>[0]> = [
       "urgent",
       "approval_required",
@@ -364,7 +364,7 @@ describe("generateNotification", () => {
       "capability_insufficient",
     ];
     for (const type of types) {
-      const report = engine.generateNotification(type, {
+      const report = await engine.generateNotification(type, {
         goalId: "goal-001",
         message: "test",
       });
@@ -540,8 +540,8 @@ describe("edge cases", () => {
     expect(report.content).toContain("0.0000");
   });
 
-  it("formatForCLI handles report with null goal_id gracefully", () => {
-    const report = engine.generateNotification("completed", {
+  it("formatForCLI handles report with null goal_id gracefully", async () => {
+    const report = await engine.generateNotification("completed", {
       goalId: "goal-001",
       message: "Done",
     });
@@ -559,7 +559,7 @@ describe("edge cases", () => {
       "capability_insufficient",
     ];
     for (const t of types) {
-      const report = engine.generateNotification(t, {
+      const report = await engine.generateNotification(t, {
         goalId: "goal-round-trip",
         message: `Test ${t}`,
       });
@@ -718,7 +718,7 @@ describe("CharacterConfig — proactivity_level (execution summary verbosity)", 
 });
 
 describe("CharacterConfig — communication_directness (notification suggestions)", () => {
-  it("directness=1: escalation notification includes suggestions section", () => {
+  it("directness=1: escalation notification includes suggestions section", async () => {
     const config: CharacterConfig = {
       caution_level: 2,
       stall_flexibility: 1,
@@ -726,14 +726,14 @@ describe("CharacterConfig — communication_directness (notification suggestions
       proactivity_level: 2,
     };
     const eng = new ReportingEngine(stateManager, undefined, config);
-    const report = eng.generateNotification("stall_escalation", {
+    const report = await eng.generateNotification("stall_escalation", {
       goalId: "goal-001",
       message: "Stalled for 5 loops",
     });
     expect(report.content).toContain("Suggested next actions:");
   });
 
-  it("directness=2: stall notification includes suggestions section", () => {
+  it("directness=2: stall notification includes suggestions section", async () => {
     const config: CharacterConfig = {
       caution_level: 2,
       stall_flexibility: 1,
@@ -741,14 +741,14 @@ describe("CharacterConfig — communication_directness (notification suggestions
       proactivity_level: 2,
     };
     const eng = new ReportingEngine(stateManager, undefined, config);
-    const report = eng.generateNotification("stall_escalation", {
+    const report = await eng.generateNotification("stall_escalation", {
       goalId: "goal-001",
       message: "Stalled",
     });
     expect(report.content).toContain("Suggested next actions:");
   });
 
-  it("directness=1: capability_insufficient notification includes suggestions section", () => {
+  it("directness=1: capability_insufficient notification includes suggestions section", async () => {
     const config: CharacterConfig = {
       caution_level: 2,
       stall_flexibility: 1,
@@ -756,14 +756,14 @@ describe("CharacterConfig — communication_directness (notification suggestions
       proactivity_level: 2,
     };
     const eng = new ReportingEngine(stateManager, undefined, config);
-    const report = eng.generateNotification("capability_insufficient", {
+    const report = await eng.generateNotification("capability_insufficient", {
       goalId: "goal-001",
       message: "Cannot execute",
     });
     expect(report.content).toContain("Suggested next actions:");
   });
 
-  it("directness=5: notifications have no suggestions section", () => {
+  it("directness=5: notifications have no suggestions section", async () => {
     const config: CharacterConfig = {
       caution_level: 2,
       stall_flexibility: 1,
@@ -771,11 +771,11 @@ describe("CharacterConfig — communication_directness (notification suggestions
       proactivity_level: 2,
     };
     const eng = new ReportingEngine(stateManager, undefined, config);
-    const escalation = eng.generateNotification("stall_escalation", {
+    const escalation = await eng.generateNotification("stall_escalation", {
       goalId: "goal-001",
       message: "Stalled",
     });
-    const stall = eng.generateNotification("capability_insufficient", {
+    const stall = await eng.generateNotification("capability_insufficient", {
       goalId: "goal-001",
       message: "Cannot execute",
     });
@@ -783,7 +783,7 @@ describe("CharacterConfig — communication_directness (notification suggestions
     expect(stall.content).not.toContain("Suggested next actions:");
   });
 
-  it("directness=4: notifications have no suggestions section", () => {
+  it("directness=4: notifications have no suggestions section", async () => {
     const config: CharacterConfig = {
       caution_level: 2,
       stall_flexibility: 1,
@@ -791,14 +791,14 @@ describe("CharacterConfig — communication_directness (notification suggestions
       proactivity_level: 2,
     };
     const eng = new ReportingEngine(stateManager, undefined, config);
-    const report = eng.generateNotification("stall_escalation", {
+    const report = await eng.generateNotification("stall_escalation", {
       goalId: "goal-001",
       message: "Stalled",
     });
     expect(report.content).not.toContain("Suggested next actions:");
   });
 
-  it("directness=3 (balanced): stall_escalation includes suggestions section", () => {
+  it("directness=3 (balanced): stall_escalation includes suggestions section", async () => {
     const config: CharacterConfig = {
       caution_level: 2,
       stall_flexibility: 1,
@@ -806,14 +806,14 @@ describe("CharacterConfig — communication_directness (notification suggestions
       proactivity_level: 2,
     };
     const eng = new ReportingEngine(stateManager, undefined, config);
-    const report = eng.generateNotification("stall_escalation", {
+    const report = await eng.generateNotification("stall_escalation", {
       goalId: "goal-001",
       message: "Stalled",
     });
     expect(report.content).not.toContain("Suggested next actions:");
   });
 
-  it("directness=3 (balanced): capability_insufficient notification includes suggestions", () => {
+  it("directness=3 (balanced): capability_insufficient notification includes suggestions", async () => {
     const config: CharacterConfig = {
       caution_level: 2,
       stall_flexibility: 1,
@@ -821,14 +821,14 @@ describe("CharacterConfig — communication_directness (notification suggestions
       proactivity_level: 2,
     };
     const eng = new ReportingEngine(stateManager, undefined, config);
-    const report = eng.generateNotification("capability_insufficient", {
+    const report = await eng.generateNotification("capability_insufficient", {
       goalId: "goal-001",
       message: "Cannot execute",
     });
     expect(report.content).toContain("Suggested next actions:");
   });
 
-  it("directness=3 (balanced): urgent notification has no suggestions section", () => {
+  it("directness=3 (balanced): urgent notification has no suggestions section", async () => {
     const config: CharacterConfig = {
       caution_level: 2,
       stall_flexibility: 1,
@@ -836,20 +836,20 @@ describe("CharacterConfig — communication_directness (notification suggestions
       proactivity_level: 2,
     };
     const eng = new ReportingEngine(stateManager, undefined, config);
-    const report = eng.generateNotification("urgent", {
+    const report = await eng.generateNotification("urgent", {
       goalId: "goal-001",
       message: "Urgent issue",
     });
     expect(report.content).not.toContain("Suggested next actions:");
   });
 
-  it("default config (directness=3): escalation has suggestions, stall does not", () => {
+  it("default config (directness=3): escalation has suggestions, stall does not", async () => {
     const eng = new ReportingEngine(stateManager);
-    const escalation = eng.generateNotification("capability_insufficient", {
+    const escalation = await eng.generateNotification("capability_insufficient", {
       goalId: "goal-001",
       message: "Cannot execute",
     });
-    const stall = eng.generateNotification("stall_escalation", {
+    const stall = await eng.generateNotification("stall_escalation", {
       goalId: "goal-001",
       message: "Stalled",
     });

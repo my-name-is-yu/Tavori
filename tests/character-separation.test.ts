@@ -228,7 +228,7 @@ describe("communication_directness does not affect approval flow", () => {
     removeDir(tmpDir);
   });
 
-  it("directness=5 does not suppress stall_escalation notification content", () => {
+  it("directness=5 does not suppress stall_escalation notification content", async () => {
     // communication_directness=5 suppresses the suggestions section in notifications,
     // but the core stall escalation data (goalId, message, report_type) must still be present.
     const stateManager = new StateManager(tmpDir);
@@ -237,7 +237,7 @@ describe("communication_directness does not affect approval flow", () => {
       communication_directness: 5,
     });
 
-    const notification = engine.generateNotification("stall_escalation", {
+    const notification = await engine.generateNotification("stall_escalation", {
       goalId: "goal-abc",
       message: "Stall detected on dimension test_coverage",
       details: "No improvement in 5 loops",
@@ -251,7 +251,7 @@ describe("communication_directness does not affect approval flow", () => {
     expect(notification.content).toContain("No improvement in 5 loops");
   });
 
-  it("directness=1 and directness=5 both emit stall_escalation with full goal and message data", () => {
+  it("directness=1 and directness=5 both emit stall_escalation with full goal and message data", async () => {
     const stateManager = new StateManager(tmpDir);
 
     const engineLow = new ReportingEngine(stateManager, undefined, {
@@ -274,8 +274,8 @@ describe("communication_directness does not affect approval flow", () => {
       details: "3 failures in a row on dimension coverage",
     };
 
-    const notifLow = engineLow.generateNotification("stall_escalation", contextLow);
-    const notifHigh = engineHigh.generateNotification("stall_escalation", contextHigh);
+    const notifLow = await engineLow.generateNotification("stall_escalation", contextLow);
+    const notifHigh = await engineHigh.generateNotification("stall_escalation", contextHigh);
 
     // Both must contain the core message
     expect(notifLow.content).toContain("Consecutive failure threshold reached");
@@ -403,14 +403,14 @@ describe("proactivity_level preserves critical event reporting", () => {
     expect(report.content).not.toContain("## Execution Summary");
   });
 
-  it("proactivity=1 stall notifications contain full details", () => {
+  it("proactivity=1 stall notifications contain full details", async () => {
     const stateManager = new StateManager(tmpDir);
     const engine = new ReportingEngine(stateManager, undefined, {
       ...DEFAULT_CHARACTER_CONFIG,
       proactivity_level: 1,
     });
 
-    const notification = engine.generateNotification("stall_escalation", {
+    const notification = await engine.generateNotification("stall_escalation", {
       goalId: "goal-stall-notif",
       message: "Escalation level 2 reached",
       details: "Dimension coverage has not improved in 10 loops",
@@ -421,14 +421,14 @@ describe("proactivity_level preserves critical event reporting", () => {
     expect(notification.content).toContain("Dimension coverage has not improved in 10 loops");
   });
 
-  it("proactivity=1 escalation notifications contain full details", () => {
+  it("proactivity=1 escalation notifications contain full details", async () => {
     const stateManager = new StateManager(tmpDir);
     const engine = new ReportingEngine(stateManager, undefined, {
       ...DEFAULT_CHARACTER_CONFIG,
       proactivity_level: 1,
     });
 
-    const notification = engine.generateNotification("capability_insufficient", {
+    const notification = await engine.generateNotification("capability_insufficient", {
       goalId: "goal-cap",
       message: "Agent cannot execute task",
       details: "Required tool unavailable",

@@ -456,10 +456,10 @@ export class ReportingEngine {
 
   // ─── generateNotification ───
 
-  generateNotification(
+  async generateNotification(
     type: NotificationType,
     context: NotificationContext
-  ): Report {
+  ): Promise<Report> {
     const now = new Date().toISOString();
     const { goalId, message, details } = context;
 
@@ -527,7 +527,7 @@ export class ReportingEngine {
       read: false,
     });
 
-    this.saveReport(report);
+    await this.saveReport(report);
 
     // Push notification (non-blocking)
     this.deliverReport(report).catch((err) => {

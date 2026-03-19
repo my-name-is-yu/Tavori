@@ -197,17 +197,15 @@ export async function escalateToUser(
     `**Impact If Unavailable**: ${gap.impact_description}` +
     (gap.related_task_id ? `\n\n**Related Task**: ${gap.related_task_id}` : "");
 
-  const notification = deps.reportingEngine.generateNotification(
-    "capability_insufficient",
-    {
-      goalId,
-      message: `Missing ${capabilityType}: ${capabilityName}`,
-      details,
-    }
-  );
-
   try {
-    await deps.reportingEngine.saveReport(notification);
+    await deps.reportingEngine.generateNotification(
+      "capability_insufficient",
+      {
+        goalId,
+        message: `Missing ${capabilityType}: ${capabilityName}`,
+        details,
+      }
+    );
   } catch (err) {
     logger?.error(
       "[CapabilityDetector] escalateToUser: failed to save report — " +
