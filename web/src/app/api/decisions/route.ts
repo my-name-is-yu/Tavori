@@ -39,7 +39,7 @@ export async function GET() {
           let goalName: string | undefined;
           try {
             const goal = await sm.loadGoal(record.goal_id);
-            goalName = goal?.name;
+            goalName = (goal as Record<string, unknown>)?.name as string | undefined;
           } catch { /* ignore */ }
 
           decisions.push({

@@ -1,15 +1,20 @@
+'use client';
+
+import { useMotivaStore } from '../../lib/store';
+import { GoalTable, type GoalRow } from '../../components/dashboard/goal-table';
+
 export default function GoalsPage() {
+  const goals = useMotivaStore((state) => state.goals) as GoalRow[];
+
   return (
     <div>
       <h1
-        className="text-xl font-semibold mb-6"
-        style={{ color: 'var(--text-primary)' }}
+        className="font-[family-name:var(--font-geist-sans)]"
+        style={{ fontSize: '20px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '24px' }}
       >
         Goals
       </h1>
-      <p style={{ color: 'var(--text-secondary)' }}>
-        Goal detail view coming in 18.3.
-      </p>
+      <GoalTable goals={goals} loading={false} />
     </div>
   );
 }
