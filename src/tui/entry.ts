@@ -6,9 +6,12 @@
 
 import { render } from "ink";
 import React from "react";
+import os from "os";
+import { execFileSync } from "child_process";
 
 import { StateManager } from "../state-manager.js";
 import { buildLLMClient, buildAdapterRegistry } from "../llm/provider-factory.js";
+import { loadProviderConfig } from "../llm/provider-config.js";
 import { createWorkspaceContextProvider } from "../observation/workspace-context.js";
 import { TrustManager } from "../traits/trust-manager.js";
 import { DriveSystem } from "../drive/drive-system.js";
@@ -185,6 +188,22 @@ async function buildDeps() {
   return { stateManager, llmClient, trustManager, coreLoop, goalNegotiator, reportingEngine, setRequestApproval };
 }
 
+// ─── Breadcrumb helpers ───
+
+function getCwd(): string {
+  const raw = process.cwd();
+  const home = os.homedir();
+  return raw.startsWith(home) ? "~" + raw.slice(home.length) : raw;
+}
+
+function getGitBranch(): string {
+  try {
+    return execFileSync("git", ["branch", "--show-current"], { encoding: "utf-8" }).trim();
+  } catch {
+    return "";
+  }
+}
+
 // ─── TUI Entry ───
 
 export async function startTUI(): Promise<void> {
@@ -231,7 +250,15 @@ export async function startTUI(): Promise<void> {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  // 5. Render Ink app — loop deps passed directly; App calls useLoop() internally
+  // 5. Compute breadcrumb context for the header
+  const providerConfig = await loadProviderConfig();
+  const breadcrumb = {
+    cwd: getCwd(),
+    gitBranch: getGitBranch(),
+    providerName: providerConfig.llm_provider,
+  };
+
+  // 6. Render Ink app — loop deps passed directly; App calls useLoop() internally
   const { waitUntilExit } = render(
     React.createElement(App, {
       coreLoop,
@@ -240,6 +267,7 @@ export async function startTUI(): Promise<void> {
       actionHandler,
       intentRecognizer,
       onApprovalReady: setRequestApproval,
+      ...breadcrumb,
     })
   );
 

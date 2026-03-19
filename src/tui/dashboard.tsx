@@ -16,6 +16,19 @@ function renderBar(progress: number): string {
   return "█".repeat(filled) + "░".repeat(empty);
 }
 
+export function statusLabel(status: string): string {
+  switch (status) {
+    case "idle":          return "待機中";
+    case "running":       return "実行中";
+    case "completed":     return "完了";
+    case "stalled":       return "停滞";
+    case "max_iterations": return "最大回数到達";
+    case "error":         return "エラー";
+    case "stopped":       return "停止";
+    default:              return status;
+  }
+}
+
 function statusColor(status: string): string {
   switch (status) {
     case "running":
@@ -115,10 +128,10 @@ export function Dashboard({ state }: DashboardProps) {
         {state.status === "running" ? (
           <Text color="green">
             <Spinner type="dots" />
-            {" running"}
+            {" " + statusLabel("running")}
           </Text>
         ) : (
-          <Text color={statusColor(state.status)}>{state.status}</Text>
+          <Text color={statusColor(state.status)}>{statusLabel(state.status)}</Text>
         )}
       </Box>
 
@@ -139,7 +152,7 @@ export function Dashboard({ state }: DashboardProps) {
           {state.lastResult && (
             <>
               <Text dimColor>{" │ Last: "}</Text>
-              <Text>{state.lastResult.finalStatus}</Text>
+              <Text>{statusLabel(state.lastResult.finalStatus)}</Text>
             </>
           )}
         </Box>

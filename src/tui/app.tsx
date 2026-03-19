@@ -7,7 +7,7 @@
 
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { Box, Text, useInput, useStdout } from "ink";
-import { Dashboard } from "./dashboard.js";
+import { Dashboard, statusLabel } from "./dashboard.js";
 import { Chat, type ChatMessage } from "./chat.js";
 import { HelpOverlay } from "./help-overlay.js";
 import { ApprovalOverlay } from "./approval-overlay.js";
@@ -35,6 +35,9 @@ interface AppProps {
   actionHandler: ActionHandler;
   intentRecognizer: IntentRecognizer;
   onApprovalReady?: (requestFn: (req: ApprovalRequest) => void) => void;
+  cwd?: string;
+  gitBranch?: string;
+  providerName?: string;
 }
 
 const StatusBar: React.FC<{
@@ -51,7 +54,7 @@ const StatusBar: React.FC<{
   >
     <Text dimColor>
       Active: {goalCount}  Trust: {trustScore >= 0 ? "+" : ""}
-      {trustScore}  Status: {status}  Iter: {iteration}
+      {trustScore}  Status: {statusLabel(status)}  Iter: {iteration}
     </Text>
     <Text dimColor>?:help  Ctrl-C:quit</Text>
   </Box>
@@ -64,6 +67,9 @@ export function App({
   actionHandler,
   intentRecognizer,
   onApprovalReady,
+  cwd,
+  gitBranch,
+  providerName,
 }: AppProps) {
   // ── Terminal dimensions ──
   const { stdout } = useStdout();
@@ -200,9 +206,17 @@ export function App({
   return (
     <Box flexDirection="column" height={termRows}>
       {/* App header */}
-      <Text bold color="blue">
-        [ MOTIVA ]
-      </Text>
+      <Box>
+        <Text bold color="blue">[ MOTIVA ]</Text>
+        {(cwd || gitBranch || providerName) && (
+          <Text dimColor>
+            {"  "}
+            {cwd ?? ""}
+            {gitBranch ? ` (${gitBranch})` : ""}
+            {providerName ? `  ${providerName}` : ""}
+          </Text>
+        )}
+      </Box>
 
       {/* Main content: sidebar + chat */}
       <Box flexDirection="row" flexGrow={1}>
