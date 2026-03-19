@@ -1,5 +1,6 @@
 import React from "react";
 import { Box, Text } from "ink";
+import Spinner from "ink-spinner";
 import type { LoopState, DimensionProgress } from "./use-loop.js";
 
 interface DashboardProps {
@@ -35,6 +36,13 @@ function progressColor(progress: number): string {
   if (progress >= 80) return "green";
   if (progress >= 40) return "yellow";
   return "red";
+}
+
+function formatElapsed(startedAt: string): string {
+  const secs = Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000);
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
 function DimensionRow({ dim }: { dim: DimensionProgress }) {
@@ -104,11 +112,38 @@ export function Dashboard({ state }: DashboardProps) {
         <Text>{"  goal: "}</Text>
         <Text bold>{goalLabel}</Text>
         <Text>{"  "}</Text>
-        <Text color={statusColor(state.status)}>{state.status}</Text>
+        {state.status === "running" ? (
+          <Text color="green">
+            <Spinner type="dots" />
+            {" running"}
+          </Text>
+        ) : (
+          <Text color={statusColor(state.status)}>{state.status}</Text>
+        )}
       </Box>
 
       {/* Separator */}
       <Text color="gray">{"─".repeat(Math.min(process.stdout.columns || 60, 60) - 4)}</Text>
+
+      {/* Stats row: iter, elapsed, last result */}
+      {(state.running || state.iteration > 0) && (
+        <Box>
+          <Text dimColor>{"Iter: "}</Text>
+          <Text>{state.iteration}</Text>
+          {state.startedAt && (
+            <>
+              <Text dimColor>{" │ Elapsed: "}</Text>
+              <Text>{formatElapsed(state.startedAt)}</Text>
+            </>
+          )}
+          {state.lastResult && (
+            <>
+              <Text dimColor>{" │ Last: "}</Text>
+              <Text>{state.lastResult.finalStatus}</Text>
+            </>
+          )}
+        </Box>
+      )}
 
       {/* Dimension progress bars */}
       {state.dimensions.length === 0 ? (
