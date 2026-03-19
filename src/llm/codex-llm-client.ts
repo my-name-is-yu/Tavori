@@ -1,4 +1,3 @@
-import * as fs from "node:fs";
 import * as fsp from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -123,11 +122,12 @@ export class CodexLLMClient implements ILLMClient {
    * Spawn `codex exec --ephemeral --full-auto [-o <tmpfile>] [--model <model>] "PROMPT"`
    * and return the response content read from the temp output file.
    */
-  private _spawnCodex(prompt: string, model?: string): Promise<string> {
+  private async _spawnCodex(prompt: string, model?: string): Promise<string> {
+    // Create a temporary directory asynchronously to avoid blocking the event loop
+    const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "motiva-codex-"));
+    const tmpFile = path.join(tmpDir, "response.txt");
+
     return new Promise((resolve, reject) => {
-      // Create a temporary file for the response output
-      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "motiva-codex-"));
-      const tmpFile = path.join(tmpDir, "response.txt");
 
       // Build spawn args: exec --ephemeral --full-auto -o <tmpfile> [--model <model>] -
       // Prompt is sent via stdin (using "-" as positional arg) to avoid arg length limits.

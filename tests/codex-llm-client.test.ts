@@ -32,6 +32,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
   return {
     ...actual,
+    mkdtemp: vi.fn((_prefix: string) => Promise.resolve("/tmp/motiva-codex-test123")),
     readFile: vi.fn((_path: string, _encoding: string) => Promise.resolve(mockTmpContents.value)),
     access: vi.fn(() => Promise.resolve()),
     unlink: vi.fn(() => Promise.resolve()),
@@ -60,6 +61,9 @@ function makeFakeChild(): FakeChildProcess {
   return child;
 }
 
+/** Flush microtask queue so that async operations (e.g. fsp.mkdtemp) resolve before we emit child events */
+const flushMicrotasks = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
+
 // ─── Tests ───
 
 describe("CodexLLMClient", () => {
@@ -82,6 +86,7 @@ describe("CodexLLMClient", () => {
       mockTmpContents.value = "response";
 
       const promise = client.sendMessage([{ role: "user", content: "hi" }]);
+      await flushMicrotasks();
       child.emit("close", 0);
       await promise;
 
@@ -94,6 +99,7 @@ describe("CodexLLMClient", () => {
       const child = makeFakeChild();
 
       const promise = client.sendMessage([{ role: "user", content: "hi" }]);
+      await flushMicrotasks();
       child.emit("close", 0);
       await promise;
 
@@ -110,6 +116,7 @@ describe("CodexLLMClient", () => {
       const child = makeFakeChild();
 
       const promise = client.sendMessage([{ role: "user", content: "do the task" }]);
+      await flushMicrotasks();
       child.emit("close", 0);
       await promise;
 
@@ -132,6 +139,7 @@ describe("CodexLLMClient", () => {
       const child = makeFakeChild();
 
       const promise = client.sendMessage([{ role: "user", content: "hi" }]);
+      await flushMicrotasks();
       child.emit("close", 0);
       await promise;
 
@@ -147,6 +155,7 @@ describe("CodexLLMClient", () => {
       const child = makeFakeChild();
 
       const promise = client.sendMessage([{ role: "user", content: "hi" }]);
+      await flushMicrotasks();
       child.emit("close", 0);
       await promise;
 
@@ -162,6 +171,7 @@ describe("CodexLLMClient", () => {
         [{ role: "user", content: "hi" }],
         { model: "o3" }
       );
+      await flushMicrotasks();
       child.emit("close", 0);
       await promise;
 
@@ -182,6 +192,7 @@ describe("CodexLLMClient", () => {
       const promise = client.sendMessage([
         { role: "user", content: "hello world" },
       ]);
+      await flushMicrotasks();
       child.emit("close", 0);
       await promise;
 
@@ -198,6 +209,7 @@ describe("CodexLLMClient", () => {
         [{ role: "user", content: "question" }],
         { system: "You are a helpful assistant." }
       );
+      await flushMicrotasks();
       child.emit("close", 0);
       await promise;
 
@@ -217,6 +229,7 @@ describe("CodexLLMClient", () => {
         { role: "assistant", content: "reply" },
         { role: "user", content: "second" },
       ]);
+      await flushMicrotasks();
       child.emit("close", 0);
       await promise;
 
@@ -238,6 +251,7 @@ describe("CodexLLMClient", () => {
       mockTmpContents.value = '{"result": "done"}';
 
       const promise = client.sendMessage([{ role: "user", content: "go" }]);
+      await flushMicrotasks();
       child.emit("close", 0);
       const result = await promise;
 
@@ -250,6 +264,7 @@ describe("CodexLLMClient", () => {
       mockTmpContents.value = "ok";
 
       const promise = client.sendMessage([{ role: "user", content: "go" }]);
+      await flushMicrotasks();
       child.emit("close", 0);
       const result = await promise;
 
@@ -262,6 +277,7 @@ describe("CodexLLMClient", () => {
       mockTmpContents.value = "response";
 
       const promise = client.sendMessage([{ role: "user", content: "go" }]);
+      await flushMicrotasks();
       child.emit("close", 0);
       const result = await promise;
 
@@ -287,6 +303,8 @@ describe("CodexLLMClient", () => {
 
       const promise = client.sendMessage([{ role: "user", content: "hi" }]).catch((e) => e);
 
+      // Flush microtasks so mkdtemp resolves and spawn is called before emitting error
+      await vi.advanceTimersByTimeAsync(0);
       // Immediately emit error on first child
       children[0]!.emit("error", new Error("spawn ENOENT"));
       // Advance timers to trigger retry delays, emit error on subsequent children
@@ -315,6 +333,8 @@ describe("CodexLLMClient", () => {
 
       const promise = client.sendMessage([{ role: "user", content: "hi" }]).catch((e) => e);
 
+      // Flush microtasks so mkdtemp resolves and spawn is called before emitting close
+      await vi.advanceTimersByTimeAsync(0);
       children[0]!.emit("close", 1);
       await vi.advanceTimersByTimeAsync(1001);
       children[1]!.emit("close", 1);
