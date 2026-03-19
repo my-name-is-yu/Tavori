@@ -58,7 +58,7 @@ function resolveProvider(
   if (envProvider === "anthropic" || envProvider === "openai" || envProvider === "ollama" || envProvider === "codex") {
     return envProvider;
   }
-  return fileProvider ?? "anthropic";
+  return fileProvider ?? "codex";
 }
 
 /**
@@ -76,7 +76,7 @@ function resolveAdapter(
   ) {
     return envAdapter;
   }
-  return fileAdapter ?? "claude_api";
+  return fileAdapter ?? "openai_codex_cli";
 }
 
 // ─── Public API ───
@@ -87,7 +87,7 @@ function resolveAdapter(
  * Priority (highest to lowest):
  *   1. Environment variables (MOTIVA_LLM_PROVIDER, MOTIVA_DEFAULT_ADAPTER, etc.)
  *   2. ~/.motiva/provider.json
- *   3. Defaults (anthropic + claude_api)
+ *   3. Defaults (codex + openai_codex_cli)
  *
  * If no provider.json exists, falls back to env vars and defaults (current behavior).
  */
