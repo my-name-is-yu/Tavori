@@ -497,22 +497,8 @@ export class GoalTreeManager {
       await this.stateManager.saveGoal(child);
       childIds.push(child.id);
 
-      // Register parent->child dependency in GoalDependencyGraph
-      try {
-        await this.goalDependencyGraph.addEdge({
-          from_goal_id: goal.id,
-          to_goal_id: child.id,
-          type: "parent_child" as unknown as "prerequisite", // type extended in 14A
-          status: "active",
-          condition: null,
-          affected_dimensions: child.dimensions.map((d) => d.name),
-          mitigation: null,
-          detection_confidence: 1.0,
-          reasoning: `Parent-child relationship from goal decomposition`,
-        });
-      } catch {
-        // Dependency graph may not support parent_child type -- skip silently
-      }
+      // Parent-child relationships are tracked via children_ids on the parent goal.
+      // No need to register in GoalDependencyGraph; cycle detection uses detectCycle() directly.
     }
 
     // Update parent goal's children_ids
