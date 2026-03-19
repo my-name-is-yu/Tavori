@@ -22,6 +22,8 @@
 | モチベーション駆動システム | src/drive/drive-system.ts | tests/drive-system.test.ts |
 | ストール検出 | src/drive/stall-detector.ts | tests/stall-detector.test.ts |
 | 満足化判定 | src/drive/satisficing-judge.ts | tests/satisficing-judge.test.ts, tests/satisficing-judge-undershoot.test.ts |
+| チェックポイント保存・復元 | src/execution/checkpoint-manager.ts | tests/checkpoint-manager.test.ts |
+| コンテキストバジェット | src/execution/context-budget.ts | tests/context-budget.test.ts |
 | タスク実行ライフサイクル | src/execution/task-lifecycle.ts | tests/task-lifecycle.test.ts, tests/task-lifecycle-healthcheck.test.ts |
 | タスク検証・判定・失敗処理 | src/execution/task-verifier.ts | tests/task-lifecycle.test.ts |
 | タスクプロンプト生成 | src/execution/task-prompt-builder.ts | tests/task-lifecycle.test.ts |
@@ -62,6 +64,7 @@
 | 知識検索・ドメイン知識ロード | src/knowledge/knowledge-search.ts | tests/knowledge-manager.test.ts, tests/knowledge-manager-phase2.test.ts |
 | 知識再検証・陳腐化タスク生成 | src/knowledge/knowledge-revalidation.ts | tests/knowledge-manager.test.ts, tests/knowledge-manager-phase2.test.ts |
 | 知識グラフ | src/knowledge/knowledge-graph.ts | tests/knowledge-graph.test.ts |
+| 転移信頼スコア | src/knowledge/transfer-trust.ts | tests/transfer-trust.test.ts |
 | 知識転送 | src/knowledge/knowledge-transfer.ts | tests/knowledge-transfer.test.ts |
 | 学習パイプライン | src/knowledge/learning-pipeline.ts | tests/learning-pipeline.test.ts, tests/learning-pipeline-phase2.test.ts, tests/learning-cross-goal.test.ts |
 | 学習フィードバック・自動チューニング | src/knowledge/learning-feedback.ts | tests/learning-pipeline.test.ts, tests/learning-pipeline-phase2.test.ts |
@@ -144,6 +147,8 @@
 | task-verifier.ts | タスク検証・判定処理・失敗ハンドリング | `ExecutorReport`, `VerdictResult`, `FailureResult`, `VerifierDeps`, `verifyTask`, `handleVerdict`, `handleFailure` | state-manager, llm/llm-client, traits/trust-manager, types/task |
 | task-prompt-builder.ts | タスク生成プロンプトの構築 | `buildTaskGenerationPrompt` | types/task, types/drive, types/gap |
 | task-health-check.ts | タスク実行後ヘルスチェック | `runShellCommand` (内部利用) | (Node.js child_process) |
+| checkpoint-manager.ts | セッションまたぎチェックポイント管理 | `CheckpointManager` | state-manager, types/checkpoint |
+| context-budget.ts | コンテキストバジェット割り当て・選択 | `allocateBudget`, `selectWithinBudget`, `trimToBudget` | (none) |
 
 ### src/observation/ — 観測
 
@@ -197,6 +202,7 @@
 | knowledge-search.ts | 知識検索・ドメイン知識ロード・埋め込み検索 | `SearchDeps`, `loadSharedEntries`, `loadDomainKnowledge`, `searchKnowledge`, `searchAcrossGoals`, `querySharedKnowledge`, `searchByEmbedding` | state-manager, knowledge/embedding-client, knowledge/vector-index, types/knowledge |
 | knowledge-revalidation.ts | 知識再検証・陳腐化検出・再検証タスク生成 | `RevalidationDeps`, `classifyDomainStability`, `getStaleEntries`, `generateRevalidationTasks`, `computeRevalidationDue` | state-manager, llm/llm-client, types/knowledge |
 | knowledge-graph.ts | ゴール/タスク/知識間のグラフ構造管理 | `KnowledgeGraph` | types/knowledge |
+| transfer-trust.ts | 転移信頼スコア学習・無効化判定 | `TransferTrustManager` | state-manager, types/cross-portfolio |
 | knowledge-transfer.ts | ゴール間知識転送・類似ゴール検索 | `KnowledgeTransfer` | knowledge/embedding-client, knowledge/vector-index, types/knowledge, types/learning |
 | learning-pipeline.ts | 実行結果から教訓抽出の統合エントリポイント | `LearningPipeline` | llm/llm-client, knowledge/memory-lifecycle, knowledge/knowledge-transfer, knowledge/learning-feedback, knowledge/learning-cross-goal, types/learning |
 | learning-feedback.ts | 構造的フィードバック記録・集計・パラメータ自動チューニング | `FeedbackDeps`, `getStructuralFeedback`, `recordStructuralFeedback`, `aggregateFeedback`, `autoTuneParameters` | types/learning |
@@ -326,6 +332,7 @@
 | types/negotiation.ts | NegotiationResult |
 | types/suggest.ts | SuggestOutput |
 | types/plugin.ts | PluginManifest, INotifier, NotificationEvent, NotificationEventType |
+| types/checkpoint.ts | CheckpointSchema, CheckpointIndexSchema |
 | types/index.ts | 全型の再エクスポート |
 
 ---

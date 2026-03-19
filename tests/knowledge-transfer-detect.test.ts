@@ -338,14 +338,15 @@ describe("KnowledgeTransfer", async () => {
       expect(result[0]!.similarity_score).toBe(0.7);
     });
 
-    it("rank score is product of similarity, confidence, and effectiveness", async () => {
+    it("rank score is product of similarity, confidence, trust_score plus domain_tag bonus", async () => {
       const pat = makePattern({ confidence: 0.8, source_goal_ids: ["goal_b"] });
       const kt = await createKT({
         goalIds: ["goal_a", "goal_b"],
         patternsPerGoal: { goal_b: [pat] },
       });
       const result = await kt.detectTransferOpportunities("goal_a");
-      expect(result[0]!.estimated_benefit).toContain("0.280");
+      // similarity=0.7 * confidence=0.8 * trust_score=0.5 + domain_tag_bonus=0.1 = 0.380
+      expect(result[0]!.estimated_benefit).toContain("0.380");
     });
 
     it("returns empty when only goal in system is the target", async () => {

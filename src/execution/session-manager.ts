@@ -4,6 +4,9 @@ import type { StateManager } from "../state-manager.js";
 import type { KnowledgeEntry } from "../types/knowledge.js";
 import type { VectorIndex } from "../knowledge/vector-index.js";
 import type { GoalDependencyGraph } from "../goal/goal-dependency-graph.js";
+import { allocateBudget, selectWithinBudget } from "./context-budget.js";
+import { CheckpointManager } from './checkpoint-manager.js';
+import type { Checkpoint } from '../types/checkpoint.js';
 
 // ─── Constants ───
 
@@ -34,10 +37,15 @@ export interface ContextBudget {
 export class SessionManager {
   private readonly stateManager: StateManager;
   private readonly dependencyGraph?: GoalDependencyGraph;
+  private checkpointManager?: CheckpointManager;
 
   constructor(stateManager: StateManager, dependencyGraph?: GoalDependencyGraph) {
     this.stateManager = stateManager;
     this.dependencyGraph = dependencyGraph;
+  }
+
+  setCheckpointManager(cm: CheckpointManager): void {
+    this.checkpointManager = cm;
   }
 
   // ─── Token Estimation ───
@@ -366,27 +374,48 @@ export class SessionManager {
   }
 
   /**
-   * Phase 2: Inject knowledge context using semantic search.
+   * Phase 2 (Progressive Disclosure): Inject knowledge context using semantic search.
+   * 1. searchMetadata() — fetch id+score for up to 20 candidates (no full text)
+   * 2. selectWithinBudget() — pick candidates that fit the knowledge budget
+   * 3. getEntryById() — load full text only for selected candidates
+   *
    * Falls back to empty if no vectorIndex available.
    */
   async injectSemanticKnowledgeContext(
     slots: ContextSlot[],
     query: string,
     vectorIndex: VectorIndex | undefined,
-    topK: number = 3
+    contextBudget: number = DEFAULT_CONTEXT_BUDGET
   ): Promise<ContextSlot[]> {
     if (!vectorIndex) return slots;
 
     try {
-      const results = await vectorIndex.search(query, topK, 0.5);
-      if (results.length === 0) return slots;
+      // Step 1: lightweight metadata scan (no full text)
+      const candidates = await vectorIndex.searchMetadata(query, 20, 0.5);
+      if (candidates.length === 0) return slots;
+
+      // Step 2: allocate the knowledge portion of the total budget
+      const allocation = allocateBudget(contextBudget);
+      const knowledgeBudget = allocation.knowledge;
+
+      // Build lightweight objects with text for budget selection
+      const withText = candidates
+        .map((c) => {
+          const entry = vectorIndex.getEntryById(c.id);
+          return entry ? { ...c, text: entry.text } : null;
+        })
+        .filter((c): c is NonNullable<typeof c> => c !== null);
+
+      // Step 3: select within budget, then build slots from full entries
+      const selected = selectWithinBudget(withText, knowledgeBudget);
+      if (selected.length === 0) return slots;
 
       const maxPriority = slots.reduce(
         (max, s) => (s.priority > max ? s.priority : max),
         0
       );
 
-      const knowledgeSlots: ContextSlot[] = results.map((result, i) => ({
+      const knowledgeSlots: ContextSlot[] = selected.map((result, i) => ({
         priority: maxPriority + 1 + i,
         label: `semantic_knowledge_${i}`,
         content: result.text,
@@ -528,6 +557,34 @@ export class SessionManager {
       return this.filterSlotsByBudget(slots, options.tokenBudget);
     }
     return slots;
+  }
+
+  // ─── Checkpoint Delegation ───
+
+  async saveCheckpoint(params: {
+    goalId: string;
+    taskId: string;
+    agentId: string;
+    sessionContextSnapshot: string;
+    intermediateResults?: string[];
+    metadata?: Record<string, unknown>;
+  }): Promise<Checkpoint | null> {
+    if (!this.checkpointManager) return null;
+    return this.checkpointManager.saveCheckpoint(params);
+  }
+
+  async loadCheckpoint(goalId: string, currentAgentId: string, taskId?: string): Promise<{
+    checkpoint: Checkpoint;
+    adaptedContext: string;
+    wasAdapted: boolean;
+  } | null> {
+    if (!this.checkpointManager) return null;
+    return this.checkpointManager.loadAndAdaptCheckpoint(goalId, currentAgentId, taskId);
+  }
+
+  async gcCheckpoints(goalId: string, maxAgeDays?: number): Promise<number> {
+    if (!this.checkpointManager) return 0;
+    return this.checkpointManager.garbageCollect(goalId, maxAgeDays);
   }
 
   // ─── Private Helpers ───

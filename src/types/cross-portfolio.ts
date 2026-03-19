@@ -82,6 +82,16 @@ export const TransferCandidateSchema = z.object({
   source_item_id: z.string(),
   similarity_score: z.number().min(0).max(1),
   estimated_benefit: z.string(),
+  state: z
+    .enum(["pending", "proposed", "applied", "rejected", "invalidated"])
+    .default("pending"),
+  domain_tag_match: z.boolean().default(false),
+  adapted_content: z.string().nullable().default(null),
+  effectiveness_score: z.number().nullable().default(null),
+  proposed_at: z.string().nullable().default(null),
+  applied_at: z.string().nullable().default(null),
+  invalidated_at: z.string().nullable().default(null),
+  discovery_tokens: z.number().optional(),
 });
 export type TransferCandidate = z.infer<typeof TransferCandidateSchema>;
 
@@ -190,3 +200,15 @@ export const HybridRecommendationSchema = z.object({
   combinedScore: z.number().min(0).max(1),
 });
 export type HybridRecommendation = z.infer<typeof HybridRecommendationSchema>;
+
+// --- Transfer Trust Score (M16.2) ---
+
+export const TransferTrustScoreSchema = z.object({
+  domain_pair: z.string(),
+  success_count: z.number().int().default(0),
+  failure_count: z.number().int().default(0),
+  neutral_count: z.number().int().default(0),
+  trust_score: z.number().min(0).max(1).default(0.5),
+  last_updated: z.string().datetime(),
+});
+export type TransferTrustScore = z.infer<typeof TransferTrustScoreSchema>;

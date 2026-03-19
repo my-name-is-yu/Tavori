@@ -162,6 +162,7 @@ Return ONLY the JSON object, no other text.`;
  */
 export class LearningPipeline {
   private readonly config: LearningPipelineConfig;
+  private knowledgeTransfer?: { updateMetaPatternsIncremental(): Promise<number> };
 
   constructor(
     private readonly llmClient: ILLMClient,
@@ -170,6 +171,10 @@ export class LearningPipeline {
     config?: LearningPipelineConfig
   ) {
     this.config = config ?? LearningPipelineConfigSchema.parse({});
+  }
+
+  setKnowledgeTransfer(kt: { updateMetaPatternsIncremental(): Promise<number> }): void {
+    this.knowledgeTransfer = kt;
   }
 
   // ─── Trigger Handlers ───
@@ -385,6 +390,14 @@ export class LearningPipeline {
           // non-fatal: embedding failure should not block pattern registration
         }
       }
+    }
+
+    // Trigger incremental meta-pattern update after new patterns are learned
+    if (this.knowledgeTransfer && newPatterns.length > 0) {
+      await this.knowledgeTransfer.updateMetaPatternsIncremental().catch(e => {
+        // non-fatal: meta-pattern update failure should not block pattern registration
+        void e;
+      });
     }
 
     return newPatterns;

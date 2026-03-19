@@ -20,6 +20,7 @@ import type {
 } from "../types/cross-portfolio.js";
 import type { LearnedPattern, CrossGoalPattern, StructuralFeedbackType } from "../types/learning.js";
 import { CrossGoalPatternSchema } from "../types/learning.js";
+import { TransferTrustManager } from "./transfer-trust.js";
 
 // ─── LLM Response Schemas ───
 
@@ -74,6 +75,8 @@ export class KnowledgeTransfer {
     stateManager: StateManager;
   };
 
+  private readonly transferTrust: TransferTrustManager;
+
   /** In-memory candidate store: candidate_id → TransferCandidate */
   private readonly candidates: Map<string, TransferCandidate> = new Map();
 
@@ -98,6 +101,9 @@ export class KnowledgeTransfer {
   /** Cross-goal pattern store: pattern id → CrossGoalPattern */
   private readonly crossGoalPatterns: Map<string, CrossGoalPattern> = new Map();
 
+  /** Timestamp of last incremental meta-pattern aggregation (ISO string) */
+  private lastAggregatedAt: string | null = null;
+
   constructor(deps: {
     llmClient: ILLMClient;
     knowledgeManager: KnowledgeManager;
@@ -105,8 +111,12 @@ export class KnowledgeTransfer {
     learningPipeline: LearningPipeline;
     ethicsGate: EthicsGate;
     stateManager: StateManager;
+    transferTrust?: TransferTrustManager;
   }) {
     this.deps = deps;
+    this.transferTrust =
+      deps.transferTrust ??
+      new TransferTrustManager({ stateManager: deps.stateManager });
   }
 
   // ─── detectTransferOpportunities ───
@@ -154,6 +164,7 @@ export class KnowledgeTransfer {
       sourceGoalId: string;
       similarityScore: number;
       rankScore: number;
+      domainTagMatch: boolean;
     }> = [];
 
     for (const { pattern, sourceGoalId } of allPatterns) {
@@ -208,13 +219,41 @@ export class KnowledgeTransfer {
         continue;
       }
 
-      // effectiveness_score: use 0.5 as neutral default
-      const effectivenessScore = 0.5;
+      // Build domain pair key from pattern's applicable_domains (sorted for consistency)
+      const domainPair =
+        pattern.applicable_domains.length > 0
+          ? [...pattern.applicable_domains].sort().join("::")
+          : `${sourceGoalId}::${goalId}`;
 
-      const rankScore =
-        similarityScore * pattern.confidence * effectivenessScore;
+      // Get trust score for this domain pair
+      let trustScore = 0.5;
+      try {
+        const trustRecord = await this.transferTrust.getTrustScore(domainPair);
+        trustScore = trustRecord.trust_score;
+      } catch {
+        // non-fatal: use default
+      }
 
-      scored.push({ pattern, sourceGoalId, similarityScore, rankScore });
+      // Check if this domain pair should be skipped due to invalidation
+      try {
+        const shouldSkip = await this.transferTrust.shouldInvalidate(domainPair);
+        if (shouldSkip) {
+          continue;
+        }
+      } catch {
+        // non-fatal: proceed
+      }
+
+      // domain_tag_match: true if pattern has at least one applicable domain
+      const domainTagMatch = pattern.applicable_domains.length > 0;
+
+      // Scoring: similarity * confidence * trust_score + domain_tag bonus
+      const baseScore = similarityScore * pattern.confidence * trustScore;
+      const rankScore = domainTagMatch
+        ? Math.min(1.0, baseScore + 0.1)
+        : baseScore;
+
+      scored.push({ pattern, sourceGoalId, similarityScore, rankScore, domainTagMatch });
     }
 
     // Sort by rank score descending
@@ -223,7 +262,7 @@ export class KnowledgeTransfer {
     const newCandidates: TransferCandidate[] = [];
     const seenPatternIds = new Set<string>();
 
-    for (const { pattern, sourceGoalId, similarityScore, rankScore } of scored) {
+    for (const { pattern, sourceGoalId, similarityScore, rankScore, domainTagMatch } of scored) {
       // Deduplicate: same pattern from multiple source goals → keep highest-ranked
       if (seenPatternIds.has(pattern.pattern_id)) {
         continue;
@@ -237,6 +276,7 @@ export class KnowledgeTransfer {
         source_item_id: pattern.pattern_id,
         similarity_score: similarityScore,
         estimated_benefit: `Pattern "${pattern.description.slice(0, 80)}" (confidence: ${pattern.confidence.toFixed(2)}, rank: ${rankScore.toFixed(3)})`,
+        domain_tag_match: domainTagMatch,
       });
 
       this.candidates.set(candidate.candidate_id, candidate);
@@ -440,6 +480,33 @@ export class KnowledgeTransfer {
       this.patternTrackers.set(patternId, tracker);
     }
 
+    // Update transfer trust score for the domain pair
+    const domainPair =
+      context.source_pattern !== null &&
+      context.source_pattern.applicable_domains.length > 0
+        ? [...context.source_pattern.applicable_domains].sort().join("::")
+        : `${context.candidate.source_goal_id}::${context.candidate.target_goal_id}`;
+
+    try {
+      await this.transferTrust.updateTrust(domainPair, effectiveness);
+
+      // If this domain pair should now be invalidated, mark the candidate
+      const shouldInvalidate = await this.transferTrust.shouldInvalidate(domainPair);
+      if (shouldInvalidate) {
+        const candidate = this.candidates.get(context.candidate.candidate_id);
+        if (candidate) {
+          const updated = TransferCandidateSchema.parse({
+            ...candidate,
+            state: "invalidated",
+            invalidated_at: new Date().toISOString(),
+          });
+          this.candidates.set(candidate.candidate_id, updated);
+        }
+      }
+    } catch {
+      // non-fatal: trust update failure should not block effectiveness record
+    }
+
     return record;
   }
 
@@ -500,6 +567,182 @@ export class KnowledgeTransfer {
     }
   }
 
+  // ─── updateMetaPatternsIncremental ───
+
+  /**
+   * Incremental meta-pattern update — processes only patterns created since last aggregation.
+   * Called by LearningPipeline after analyzeLogs() produces new patterns.
+   */
+  async updateMetaPatternsIncremental(): Promise<number> {
+    const lastTs = this.lastAggregatedAt ?? await this.loadLastAggregatedAt();
+    const now = new Date().toISOString();
+
+    // Collect all patterns across all goals
+    const allGoalIds = await this.deps.stateManager.listGoalIds();
+    const allPatterns: LearnedPattern[] = [];
+    for (const goalId of allGoalIds) {
+      const patterns = await this.deps.learningPipeline.getPatterns(goalId);
+      for (const pattern of patterns) {
+        allPatterns.push(pattern);
+      }
+    }
+
+    // Filter to new ones since last aggregation
+    const newPatterns = lastTs
+      ? allPatterns.filter(p => p.created_at > lastTs)
+      : allPatterns;
+
+    // Only high-confidence patterns
+    const highConfidence = newPatterns.filter(p => p.confidence >= 0.6);
+
+    if (highConfidence.length === 0) {
+      await this.saveLastAggregatedAt(now);
+      return 0;
+    }
+
+    // Call LLM to extract meta-patterns from new patterns only
+    const patternDescriptions = highConfidence
+      .map(p => `[${p.type}] ${p.description} (confidence: ${p.confidence}, domains: ${p.applicable_domains.join(',')})`)
+      .join('\n');
+
+    const prompt = `Given these newly learned patterns, extract 1-3 cross-domain meta-patterns that could apply to other goals:\n\n${patternDescriptions}\n\nReturn JSON object: { "meta_patterns": [{ "description": string, "applicable_domains": string[], "source_pattern_ids": string[] }] }`;
+
+    try {
+      const response = await this.deps.llmClient.sendMessage(
+        [{ role: 'user', content: prompt }],
+        { max_tokens: 1024 }
+      );
+      const metaJson = extractJSON(response.content);
+      const metaRaw = JSON.parse(metaJson) as unknown;
+      const metaParsed = MetaPatternsResponseSchema.parse(metaRaw);
+
+      // Register in VectorIndex (if available)
+      let registered = 0;
+      if (this.deps.vectorIndex !== null) {
+        for (const mp of metaParsed.meta_patterns) {
+          if (!mp.description) continue;
+          const metaId = `meta_${randomUUID()}`;
+          try {
+            await this.deps.vectorIndex.add(metaId, mp.description, {
+              type: 'meta_pattern',
+              applicable_domains: mp.applicable_domains ?? [],
+              source_pattern_ids: mp.source_pattern_ids ?? [],
+              created_at: now,
+            });
+          } catch {
+            // non-fatal: embedding failure should not block
+          }
+          registered++;
+        }
+      }
+
+      await this.saveLastAggregatedAt(now);
+      return registered;
+    } catch {
+      // non-fatal: LLM failure or parse failure
+      await this.saveLastAggregatedAt(now);
+      return 0;
+    }
+  }
+
+  // ─── autoApplyHighConfidenceTransfers ───
+
+  /**
+   * Phase 2: Automatically apply high-confidence transfer candidates.
+   *
+   * Candidates with confidence >= 0.85 AND trust_score >= 0.7 are applied
+   * automatically (after ethics-gate check). Others remain as proposals.
+   *
+   * Returns all processed candidates (applied/proposed/rejected mixed).
+   */
+  async autoApplyHighConfidenceTransfers(goalId: string): Promise<TransferCandidate[]> {
+    const candidates = await this.detectTransferOpportunities(goalId);
+    const processed: TransferCandidate[] = [];
+
+    for (const candidate of candidates) {
+      // Get trust score for the candidate's domain pair
+      const pattern = await this._findSourcePattern(candidate);
+      const domainPair = pattern && pattern.applicable_domains.length > 0
+        ? [...pattern.applicable_domains].sort().join("::")
+        : `${candidate.source_goal_id}::${candidate.target_goal_id}`;
+
+      let trustScore = 0.5;
+      try {
+        const trustRecord = await this.transferTrust.getTrustScore(domainPair);
+        trustScore = trustRecord.trust_score;
+      } catch {
+        // non-fatal: use default
+      }
+
+      const confidence = pattern?.confidence ?? 0;
+
+      if (confidence >= 0.85 && trustScore >= 0.7) {
+        // Auto-apply path: ethics gate check first
+        const description = `Auto-apply transfer of pattern "${candidate.source_item_id}" to goal "${goalId}". ${candidate.estimated_benefit}`;
+        let verdict: Awaited<ReturnType<EthicsGate["check"]>>;
+        try {
+          verdict = await this.deps.ethicsGate.check("transfer", candidate.candidate_id, description);
+        } catch {
+          const rejected = TransferCandidateSchema.parse({ ...candidate, state: "rejected" });
+          this.candidates.set(candidate.candidate_id, rejected);
+          processed.push(rejected);
+          continue;
+        }
+
+        if (verdict.verdict === "reject" || verdict.verdict === "flag") {
+          const rejected = TransferCandidateSchema.parse({ ...candidate, state: "rejected" });
+          this.candidates.set(candidate.candidate_id, rejected);
+          processed.push(rejected);
+        } else {
+          // Apply the transfer
+          try {
+            await this.applyTransfer(candidate.candidate_id, goalId);
+            const applied = TransferCandidateSchema.parse({ ...candidate, state: "applied", applied_at: new Date().toISOString() });
+            this.candidates.set(candidate.candidate_id, applied);
+            processed.push(applied);
+          } catch {
+            // non-fatal: fall back to proposed
+            const proposed = TransferCandidateSchema.parse({ ...candidate, state: "proposed", proposed_at: new Date().toISOString() });
+            this.candidates.set(candidate.candidate_id, proposed);
+            processed.push(proposed);
+          }
+        }
+      } else {
+        // Below threshold: keep as proposed
+        const proposed = TransferCandidateSchema.parse({ ...candidate, state: "proposed", proposed_at: new Date().toISOString() });
+        this.candidates.set(candidate.candidate_id, proposed);
+        processed.push(proposed);
+      }
+    }
+
+    return processed;
+  }
+
+  // ─── detectCandidatesRealtime ───
+
+  /**
+   * Phase 2: Realtime detection of transfer candidates for task generation.
+   *
+   * Returns high-score candidates and their adapted_content as contextSnippets
+   * for injection into task generation context.
+   */
+  async detectCandidatesRealtime(goalId: string): Promise<{ candidates: TransferCandidate[]; contextSnippets: string[] }> {
+    const candidates = await this.detectTransferOpportunities(goalId);
+    const contextSnippets: string[] = [];
+
+    for (const candidate of candidates) {
+      // Use similarity_score as proxy rank — include snippets for score >= 0.7
+      if (candidate.similarity_score >= 0.7 && candidate.adapted_content !== null) {
+        contextSnippets.push(candidate.adapted_content);
+      } else if (candidate.similarity_score >= 0.7) {
+        // Fall back to estimated_benefit as snippet
+        contextSnippets.push(candidate.estimated_benefit);
+      }
+    }
+
+    return { candidates, contextSnippets };
+  }
+
   // ─── Accessors ───
 
   /** Return all detected transfer candidates */
@@ -510,6 +753,26 @@ export class KnowledgeTransfer {
   /** Return all transfer results */
   getTransferResults(): TransferResult[] {
     return Array.from(this.results.values());
+  }
+
+  // ─── Accessors for Reporting ───
+
+  getEffectivenessRecords(): TransferEffectivenessRecord[] {
+    return Array.from(this.effectivenessRecords.values());
+  }
+
+  getAppliedTransferCount(): number {
+    return Array.from(this.candidates.values()).filter(c => c.state === 'applied').length;
+  }
+
+  getTransferSuccessRate(): { total: number; positive: number; negative: number; neutral: number; rate: number } {
+    const records = this.getEffectivenessRecords();
+    const total = records.length;
+    if (total === 0) return { total: 0, positive: 0, negative: 0, neutral: 0, rate: 0 };
+    const positive = records.filter(r => r.effectiveness === 'positive').length;
+    const negative = records.filter(r => r.effectiveness === 'negative').length;
+    const neutral = records.filter(r => r.effectiveness === 'neutral').length;
+    return { total, positive, negative, neutral, rate: positive / total };
   }
 
   // ─── Cross-Goal Pattern Storage ───
@@ -557,7 +820,43 @@ export class KnowledgeTransfer {
     return results;
   }
 
+  // ─── Private Persistence Helpers ───
+
+  private async loadLastAggregatedAt(): Promise<string | null> {
+    try {
+      const data = await this.deps.stateManager.readRaw('meta-patterns/last_aggregated_at.json');
+      if (data && typeof data === 'object' && 'ts' in (data as Record<string, unknown>)) {
+        return (data as Record<string, string>).ts;
+      }
+    } catch {
+      // non-fatal
+    }
+    return null;
+  }
+
+  private async saveLastAggregatedAt(ts: string): Promise<void> {
+    try {
+      await this.deps.stateManager.writeRaw('meta-patterns/last_aggregated_at.json', { ts });
+    } catch {
+      // non-fatal
+    }
+    this.lastAggregatedAt = ts;
+  }
+
   // ─── Private Helpers ───
+
+  /**
+   * Look up the source LearnedPattern for a candidate.
+   * Returns null if not found.
+   */
+  private async _findSourcePattern(candidate: TransferCandidate): Promise<import("../types/learning.js").LearnedPattern | null> {
+    try {
+      const patterns = await this.deps.learningPipeline.getPatterns(candidate.source_goal_id);
+      return patterns.find((p) => p.pattern_id === candidate.source_item_id) ?? null;
+    } catch {
+      return null;
+    }
+  }
 
   /**
    * Estimate the current gap for a goal.

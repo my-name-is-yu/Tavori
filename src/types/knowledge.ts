@@ -144,5 +144,8 @@ export const DecisionRecordSchema = z.object({
   context: DecisionContextSchema,
   outcome: z.enum(["success", "failure", "pending"]),
   timestamp: z.string(),
+  what_worked: z.array(z.string()).default([]),
+  what_failed: z.array(z.string()).default([]),
+  suggested_next: z.array(z.string()).default([]),
 });
 export type DecisionRecord = z.infer<typeof DecisionRecordSchema>;

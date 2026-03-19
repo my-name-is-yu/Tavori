@@ -1,10 +1,10 @@
 # Implementation Status
 
-Current repository state as of 2026-03-17.
+Current repository state as of 2026-03-19.
 
-- Implementation scope: source modules for Stage 1-14 and Milestone 1-12 are present in `src/`; Phase 3 refactoring complete
+- Implementation scope: source modules for Stage 1-14 and Milestone 1-16 are present in `src/`; Phase 3 refactoring complete
 - Source inventory: 132 `.ts` / `.tsx` implementation files under `src/`
-- Test inventory: 109 test files
+- Test inventory: 115 test files
 - Current test result: 3461 tests passing (excludes e2e tests)
 
 ## Stage 1 (complete)
@@ -177,6 +177,41 @@ Phase 3 は実装機能追加ではなく、コードベースの品質・保守
 - Dedicated validation: 4 test files, 74 explicit `it()` / `test()` blocks
 - Dedicated tests: `tests/plugin-loader.test.ts`, `tests/notifier-registry.test.ts`, `tests/plugin-slack-notifier.test.ts`, `tests/notification-dispatcher-plugin.test.ts`
 - Status: complete; all planned M12 components implemented and tests passing
+
+---
+
+## Milestone 13: プラグイン自律選択 + セマンティック知識共有（complete）
+- Status: complete (see roadmap.md for detail)
+
+## Milestone 14: 仮説検証メカニズム（PIVOT/REFINE + 学習ループ）（complete）
+- Status: complete (see roadmap.md for detail)
+
+## Milestone 15: マルチエージェント委譲（complete）
+- Status: complete (see roadmap.md for detail)
+
+## Milestone 16: 長期記憶・知識共有の高度化（complete）
+
+**テーマ**: ゴール横断の知識転移を実用レベルに引き上げ
+
+### 実装モジュール
+- `src/types/cross-portfolio.ts` — TransferCandidate/DecisionRecord スキーマ拡張
+- `src/types/knowledge.ts` — DecisionRecord what_worked/what_failed/suggested_next
+- `src/types/checkpoint.ts` — CheckpointSchema（新規）
+- `src/knowledge/transfer-trust.ts` — 転移信頼スコア学習（新規）
+- `src/knowledge/knowledge-transfer.ts` — Phase 2 自動適用 + 増分メタパターン
+- `src/knowledge/knowledge-search.ts` — searchMetadata 追加
+- `src/knowledge/vector-index.ts` — searchMetadata 追加
+- `src/knowledge/learning-pipeline.ts` — KnowledgeTransfer トリガー連携
+- `src/execution/context-budget.ts` — 動的バジェット割り当て（新規）
+- `src/execution/checkpoint-manager.ts` — チェックポイント管理（新規）
+- `src/execution/session-manager.ts` — チェックポイント委譲 + バジェット統合
+- `src/execution/task-lifecycle.ts` — チェックポイント自動保存 + リアルタイム転移
+- `src/reporting-engine.ts` — 転移効果レポート
+- `src/state-manager.ts` — checkpoints/ dir 追加
+
+### テスト検証
+- 新規テスト: tests/transfer-trust.test.ts, tests/knowledge-transfer-auto-apply.test.ts, tests/context-budget.test.ts, tests/checkpoint-manager.test.ts, tests/knowledge-transfer-incremental.test.ts, tests/m16-integration.test.ts
+- Status: complete; all M16 components implemented and tests passing
 
 ---
 

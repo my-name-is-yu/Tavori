@@ -56,6 +56,12 @@ export async function loadDomainKnowledge(
 
 // ─── Search functions ───
 
+export type MetadataSearchResult = {
+  id: string;
+  similarity: number;
+  metadata: Record<string, unknown>;
+};
+
 /**
  * Semantic search within a single goal's knowledge entries via VectorIndex.
  * Falls back to an empty array when no VectorIndex is configured.
@@ -84,6 +90,23 @@ export async function searchKnowledge(
   }
 
   return entries;
+}
+
+/**
+ * Lightweight variant: returns id + similarity + metadata only (no full text).
+ * Useful for Progressive Disclosure — fetch metadata first, then load full text
+ * only for budget-selected candidates via `vectorIndex.getEntryById()`.
+ * Falls back to an empty array when no VectorIndex is configured.
+ */
+export async function searchKnowledgeMetadata(
+  deps: SearchDeps,
+  query: string,
+  topK: number = 20
+): Promise<MetadataSearchResult[]> {
+  if (!deps.vectorIndex) {
+    return [];
+  }
+  return deps.vectorIndex.searchMetadata(query, topK);
 }
 
 /**

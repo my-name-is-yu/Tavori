@@ -50,6 +50,8 @@ export { LLMGeneratedTaskSchema } from "./task-generation.js";
 import { generateTask as _generateTask } from "./task-generation.js";
 import { executeTask as _executeTask, reloadTaskFromDisk, durationToMs } from "./task-executor.js";
 import { runPreExecutionChecks } from "./task-approval.js";
+import type { KnowledgeTransfer } from "../knowledge/knowledge-transfer.js";
+import type { CheckpointManager } from './checkpoint-manager.js';
 
 // ─── Internal types ───
 
@@ -81,6 +83,7 @@ export class TaskLifecycle {
   private readonly healthCheckEnabled: boolean;
   private readonly execFileSyncFn: (cmd: string, args: string[], opts: { cwd: string; encoding: "utf-8" }) => string;
   private readonly completionJudgerConfig?: CompletionJudgerConfig;
+  private readonly knowledgeTransfer?: KnowledgeTransfer;
   private onTaskComplete?: (strategyId: string) => void;
 
   constructor(
@@ -103,6 +106,8 @@ export class TaskLifecycle {
       execFileSyncFn?: (cmd: string, args: string[], opts: { cwd: string; encoding: "utf-8" }) => string;
       /** Timeout + retry config for the completion judgment LLM call */
       completionJudgerConfig?: CompletionJudgerConfig;
+      /** Optional KnowledgeTransfer for realtime candidate detection before task generation */
+      knowledgeTransfer?: KnowledgeTransfer;
     }
   ) {
     this.stateManager = stateManager;
@@ -119,6 +124,7 @@ export class TaskLifecycle {
     this.healthCheckEnabled = options?.healthCheckEnabled ?? false;
     this.execFileSyncFn = options?.execFileSyncFn ?? _execFileSync;
     this.completionJudgerConfig = options?.completionJudgerConfig;
+    this.knowledgeTransfer = options?.knowledgeTransfer;
   }
 
   // ─── setOnTaskComplete ───
@@ -343,10 +349,24 @@ export class TaskLifecycle {
     }
     const targetDimension = this.selectTargetDimension(gapVector, driveContext, goalDimensions);
 
-    // 2. Generate task (optionally with injected knowledge context)
-    const task = await this.generateTask(goalId, targetDimension, undefined, knowledgeContext, adapter.adapterType, existingTasks, workspaceContext);
+    // 2. Realtime transfer candidate detection (optional enrichment)
+    let enrichedKnowledgeContext = knowledgeContext;
+    if (this.knowledgeTransfer) {
+      try {
+        const { contextSnippets } = await this.knowledgeTransfer.detectCandidatesRealtime(goalId);
+        if (contextSnippets.length > 0) {
+          const snippetText = contextSnippets.join("\n");
+          enrichedKnowledgeContext = knowledgeContext ? `${knowledgeContext}\n${snippetText}` : snippetText;
+        }
+      } catch {
+        // non-fatal: proceed without enrichment
+      }
+    }
 
-    // 3. Pre-execution checks: ethics, capability, irreversible approval
+    // 3. Generate task (optionally with injected knowledge context)
+    const task = await this.generateTask(goalId, targetDimension, undefined, enrichedKnowledgeContext, adapter.adapterType, existingTasks, workspaceContext);
+
+    // 4. Pre-execution checks: ethics, capability, irreversible approval
     const preCheckResult = await runPreExecutionChecks(
       {
         ethicsGate: this.ethicsGate,
@@ -383,6 +403,27 @@ export class TaskLifecycle {
 
     // 6. Handle verdict
     const verdictResult = await this.handleVerdict(taskForVerification, verificationResult);
+
+    // Save checkpoint on task completion/interruption
+    const adapterType = adapter?.adapterType ?? 'unknown';
+    const contextSnapshot = [
+      `goal: ${goalId}`,
+      `dimension: ${targetDimension}`,
+      `strategy: ${task.strategy_id ?? 'none'}`,
+      `action: ${verdictResult.action}`,
+    ].join('\n');
+    const intermediateResults: string[] = [];
+    if (executionResult?.output) intermediateResults.push(typeof executionResult.output === 'string' ? executionResult.output.slice(0, 2000) : JSON.stringify(executionResult.output).slice(0, 2000));
+    const gapValue = gapVector?.gaps?.[0]?.normalized_gap;
+
+    await this.sessionManager.saveCheckpoint({
+      goalId,
+      taskId: task.id,
+      agentId: typeof adapterType === 'string' ? adapterType : 'unknown',
+      sessionContextSnapshot: contextSnapshot,
+      intermediateResults,
+      metadata: { strategy_id: task.strategy_id, gap_value: gapValue },
+    }).catch(e => this.logger?.warn?.('checkpoint save failed', { error: String(e) }));
 
     return {
       task: verdictResult.task,
@@ -514,6 +555,27 @@ export class TaskLifecycle {
       confidence: avgConfidence,
       timestamp: new Date().toISOString(),
     };
+
+    // Save checkpoint on pipeline task completion
+    const pipelineAdapterType = adapter?.adapterType ?? 'unknown';
+    const pipelineContextSnapshot = [
+      `goal: ${goalId}`,
+      `dimension: ${targetDimension}`,
+      `strategy: ${pipeline.strategy_id ?? 'none'}`,
+      `action: ${action}`,
+    ].join('\n');
+    const pipelineIntermediateResults: string[] = pipelineResult.stage_results.map(
+      s => `Stage ${s.stage_index} (${s.role}): ${s.verdict}`
+    );
+
+    await this.sessionManager.saveCheckpoint({
+      goalId,
+      taskId: task.id,
+      agentId: typeof pipelineAdapterType === 'string' ? pipelineAdapterType : 'unknown',
+      sessionContextSnapshot: pipelineContextSnapshot,
+      intermediateResults: pipelineIntermediateResults,
+      metadata: { strategy_id: pipeline.strategy_id, final_verdict: pipelineResult.final_verdict },
+    }).catch(e => this.logger?.warn?.('checkpoint save failed', { error: String(e) }));
 
     return { task, verificationResult, action };
   }

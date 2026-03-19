@@ -41,6 +41,16 @@ export class ReportingEngine {
   private notificationDispatcher: INotificationDispatcher | null;
   private readonly characterConfig: CharacterConfig;
 
+  private knowledgeTransfer?: {
+    getAppliedTransferCount(): number;
+    getTransferSuccessRate(): { total: number; positive: number; negative: number; neutral: number; rate: number };
+    getEffectivenessRecords(): Array<{ transfer_id: string; gap_delta_before: number; gap_delta_after: number; effectiveness: string; evaluated_at: string }>;
+  };
+
+  private transferTrust?: {
+    getAllScores(): Promise<Array<{ domain_pair: string; trust_score: number; success_count: number; failure_count: number; neutral_count: number }>>;
+  };
+
   constructor(
     stateManager: StateManager,
     notificationDispatcher?: INotificationDispatcher,
@@ -49,6 +59,14 @@ export class ReportingEngine {
     this.stateManager = stateManager;
     this.notificationDispatcher = notificationDispatcher ?? null;
     this.characterConfig = characterConfig ?? DEFAULT_CHARACTER_CONFIG;
+  }
+
+  setKnowledgeTransfer(kt: typeof this.knowledgeTransfer): void {
+    this.knowledgeTransfer = kt;
+  }
+
+  setTransferTrust(tt: typeof this.transferTrust): void {
+    this.transferTrust = tt;
   }
 
   // ─── getVerbosityLevel ───
@@ -578,6 +596,69 @@ export class ReportingEngine {
     });
 
     return report;
+  }
+
+  // ─── Transfer Effect Report ───
+
+  async generateTransferEffectReport(): Promise<Report> {
+    const sections: string[] = [];
+    sections.push('# Transfer Effect Summary\n');
+
+    // Applied transfers count + success rate
+    if (this.knowledgeTransfer) {
+      const count = this.knowledgeTransfer.getAppliedTransferCount();
+      const stats = this.knowledgeTransfer.getTransferSuccessRate();
+      sections.push('## Transfer Statistics');
+      sections.push(`- Applied transfers: ${count}`);
+      sections.push(`- Evaluated: ${stats.total} (positive: ${stats.positive}, negative: ${stats.negative}, neutral: ${stats.neutral})`);
+      sections.push(`- Success rate: ${(stats.rate * 100).toFixed(1)}%`);
+      sections.push('');
+
+      // Estimated time saved from gap reduction
+      const records = this.knowledgeTransfer.getEffectivenessRecords();
+      if (records.length > 0) {
+        const avgGapDelta = records.reduce((sum, r) => sum + (r.gap_delta_before - r.gap_delta_after), 0) / records.length;
+        sections.push('## Gap Reduction from Transfers');
+        sections.push(`- Average gap reduction per transfer: ${avgGapDelta.toFixed(3)}`);
+        sections.push(`- Total evaluated transfers: ${records.length}`);
+        if (avgGapDelta > 0) {
+          sections.push(`- Estimated acceleration: transfers are reducing gaps by ${(avgGapDelta * 100).toFixed(1)}% on average`);
+        }
+        sections.push('');
+      }
+    } else {
+      sections.push('No transfer data available.\n');
+    }
+
+    // Domain-pair trust scores
+    if (this.transferTrust) {
+      try {
+        const scores = await this.transferTrust.getAllScores();
+        if (scores.length > 0) {
+          sections.push('## Domain Pair Trust Scores');
+          for (const s of scores) {
+            sections.push(`- ${s.domain_pair}: trust=${s.trust_score.toFixed(2)} (success: ${s.success_count}, fail: ${s.failure_count}, neutral: ${s.neutral_count})`);
+          }
+          sections.push('');
+        }
+      } catch {
+        // Trust scores unavailable — skip section
+      }
+    }
+
+    const content = sections.join('\n');
+
+    return ReportSchema.parse({
+      id: `report_transfer_${crypto.randomUUID()}`,
+      report_type: 'execution_summary',
+      goal_id: 'cross-goal',
+      title: 'Transfer Effect Summary',
+      content,
+      verbosity: 'standard',
+      generated_at: new Date().toISOString(),
+      delivered_at: null,
+      read: false,
+    });
   }
 
   // ─── deliverReport ───

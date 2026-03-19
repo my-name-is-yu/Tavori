@@ -47,6 +47,7 @@ export class StateManager {
       path.join(this.baseDir, "reports", "daily"),
       path.join(this.baseDir, "reports", "weekly"),
       path.join(this.baseDir, "reports", "notifications"),
+      path.join(this.baseDir, "checkpoints"),
     ];
     for (const dir of dirs) {
       await fsp.mkdir(dir, { recursive: true });

@@ -603,14 +603,54 @@ Determine if there is a factual contradiction. Respond with JSON:
 
   /**
    * Save a DecisionRecord to ~/.motiva/decisions/<goalId>-<timestamp>.json
+   * For completed records (outcome !== "pending"), enriches with LLM-extracted
+   * what_worked/what_failed/suggested_next before saving.
    */
   async recordDecision(record: DecisionRecord): Promise<void> {
-    const parsed = DecisionRecordSchema.parse(record);
+    let toSave = DecisionRecordSchema.parse(record);
+    if (toSave.outcome !== "pending") {
+      toSave = await this.enrichDecisionRecord(toSave);
+    }
     const decisionsDir = path.join(this.stateManager.getBaseDir(), "decisions");
     await fsp.mkdir(decisionsDir, { recursive: true });
-    const filename = `${parsed.goal_id}-${parsed.timestamp.replace(/[:.]/g, "-")}.json`;
+    const filename = `${toSave.goal_id}-${toSave.timestamp.replace(/[:.]/g, "-")}.json`;
     const filePath = path.join(decisionsDir, filename);
-    await fsp.writeFile(filePath, JSON.stringify(parsed, null, 2), "utf-8");
+    await fsp.writeFile(filePath, JSON.stringify(toSave, null, 2), "utf-8");
+  }
+
+  /**
+   * Enrich a completed DecisionRecord by extracting what_worked/what_failed/suggested_next via LLM.
+   * Falls back to default empty arrays on LLM failure.
+   */
+  async enrichDecisionRecord(record: DecisionRecord): Promise<DecisionRecord> {
+    const EnrichmentSchema = z.object({
+      what_worked: z.array(z.string()).default([]),
+      what_failed: z.array(z.string()).default([]),
+      suggested_next: z.array(z.string()).default([]),
+    });
+
+    const prompt = `From the following task decision record, extract:
+- what_worked: things that contributed to a positive outcome
+- what_failed: things that caused problems or failures
+- suggested_next: actions to try next based on this result
+
+Decision: ${record.decision}, Outcome: ${record.outcome}
+Strategy: ${record.strategy_id}
+Context: ${JSON.stringify(record.context).slice(0, 500)}
+
+Respond with JSON only: { "what_worked": [...], "what_failed": [...], "suggested_next": [...] }`;
+
+    try {
+      const response = await this.llmClient.sendMessage(
+        [{ role: "user", content: prompt }],
+        { max_tokens: 512 }
+      );
+      const enriched = this.llmClient.parseJSON(response.content, EnrichmentSchema);
+      return DecisionRecordSchema.parse({ ...record, ...enriched });
+    } catch (err) {
+      console.error("[KnowledgeManager] enrichDecisionRecord LLM failed:", err);
+      return record;
+    }
   }
 
   /**

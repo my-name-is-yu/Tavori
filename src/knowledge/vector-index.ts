@@ -115,6 +115,46 @@ export class VectorIndex {
   }
 
   /**
+   * Alias for getEntry — returns a single entry by id.
+   */
+  getEntryById(id: string): EmbeddingEntry | undefined {
+    return this.entries.get(id);
+  }
+
+  /**
+   * Embed a query string and return id + similarity + metadata only (no text).
+   * Useful for Progressive Disclosure: fetch metadata first, then load full text
+   * only for selected candidates.
+   */
+  async searchMetadata(
+    query: string,
+    topK: number = 20,
+    threshold: number = 0.0
+  ): Promise<Array<{ id: string; similarity: number; metadata: Record<string, unknown> }>> {
+    const queryVector = await this.embeddingClient.embed(query);
+    return this.searchMetadataByVector(queryVector, topK, threshold);
+  }
+
+  /**
+   * Search using a pre-computed vector; returns id + similarity + metadata only.
+   */
+  searchMetadataByVector(
+    queryVector: number[],
+    topK: number = 20,
+    threshold: number = 0.0
+  ): Array<{ id: string; similarity: number; metadata: Record<string, unknown> }> {
+    const results: Array<{ id: string; similarity: number; metadata: Record<string, unknown> }> = [];
+    for (const entry of this.entries.values()) {
+      const similarity = cosineSimilarity(queryVector, entry.vector);
+      if (similarity >= threshold) {
+        results.push({ id: entry.id, similarity, metadata: entry.metadata ?? {} });
+      }
+    }
+    results.sort((a, b) => b.similarity - a.similarity);
+    return results.slice(0, topK);
+  }
+
+  /**
    * Remove all entries from the index and persist.
    */
   async clear(): Promise<void> {
