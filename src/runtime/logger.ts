@@ -40,6 +40,8 @@ export class Logger {
   private rotationQueue: string[] = [];
   // Promise that resolves once the current rotation + queue drain is complete
   private rotationDone: Promise<void> | null = null;
+  // True once a stream error has occurred — stops reopening to prevent infinite loop
+  private streamErrored = false;
 
   constructor(config: LoggerConfig) {
     this.dir = config.dir;
@@ -108,14 +110,19 @@ export class Logger {
 
   private openStream(): fs.WriteStream {
     const stream = fs.createWriteStream(this.currentFile, { flags: "a" });
-    stream.on("error", () => {
-      // Silently drop stream errors — don't crash the daemon for logging issues
+    stream.on("error", (err) => {
+      if (!this.streamErrored) {
+        // Log first error via console.error so it's visible; suppress subsequent ones
+        console.error("[Logger] stream error — file logging disabled:", err.message);
+        this.streamErrored = true;
+      }
       this.stream = null;
     });
     return stream;
   }
 
-  private getStream(): fs.WriteStream {
+  private getStream(): fs.WriteStream | null {
+    if (this.streamErrored) return null;
     if (!this.stream) {
       this.stream = this.openStream();
     }
@@ -168,6 +175,7 @@ export class Logger {
 
       // Normal write — non-blocking via stream buffer
       const stream = this.getStream();
+      if (!stream) return; // stream errored previously — silently drop
       stream.write(line, "utf-8");
       const bytes = Buffer.byteLength(line, "utf-8");
       this.streamSize += bytes;

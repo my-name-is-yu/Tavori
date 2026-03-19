@@ -441,6 +441,54 @@ describe("date-based rotation", () => {
 });
 
 // ═══════════════════════════════════════════════════════
+// Stream error handling
+// ═══════════════════════════════════════════════════════
+
+describe("stream error handling", () => {
+  it("logs the first stream error via console.error and subsequent log calls are no-ops", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    // Create logger pointing at a non-writable path to force a stream error.
+    // We make the log directory read-only after the logger is constructed
+    // so mkdirSync succeeds but createWriteStream fails on first write.
+    const logger = new Logger({ dir: tmpDir, consoleOutput: false });
+
+    // Make the log file unwritable so that writing triggers an error
+    const logFile = path.join(tmpDir, "motiva.log");
+    // Write once to open + create the file
+    logger.info("before error");
+    // Flush and close to ensure file exists on disk
+    await logger.close();
+
+    // Now make the file read-only so the next open attempt fails
+    fs.chmodSync(logFile, 0o444);
+
+    // Create a fresh logger that will fail to open the read-only file
+    const logger2 = new Logger({ dir: tmpDir, consoleOutput: false });
+    logger2.info("write 1 — should trigger stream error");
+
+    // Wait a tick for the stream error event to propagate
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(errorSpy).toHaveBeenCalledOnce();
+    expect(errorSpy.mock.calls[0]![0]).toContain("[Logger] stream error");
+
+    // Reset spy call count to verify subsequent writes don't trigger more errors
+    errorSpy.mockClear();
+    logger2.info("write 2 — should be silent no-op");
+    logger2.info("write 3 — should be silent no-op");
+    await new Promise((r) => setTimeout(r, 50));
+
+    // No additional console.error calls — infinite loop is prevented
+    expect(errorSpy).not.toHaveBeenCalled();
+
+    // Cleanup: restore permissions
+    fs.chmodSync(logFile, 0o644);
+    await logger2.close();
+  });
+});
+
+// ═══════════════════════════════════════════════════════
 // close() method
 // ═══════════════════════════════════════════════════════
 
