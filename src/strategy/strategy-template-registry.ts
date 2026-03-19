@@ -103,11 +103,6 @@ export class StrategyTemplateRegistry {
       GeneralizeHypothesisResponseSchema
     );
 
-    // Generate embedding from the generalized hypothesis_pattern
-    const vector = await this.embeddingClient.embed(
-      generalized.hypothesis_pattern
-    );
-
     // Create a VectorIndex entry for semantic search
     const embeddingId = `tmpl-emb-${crypto.randomUUID()}`;
     await this.vectorIndex.add(embeddingId, generalized.hypothesis_pattern, {
