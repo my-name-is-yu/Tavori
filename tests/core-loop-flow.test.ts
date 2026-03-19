@@ -454,7 +454,8 @@ describe("CoreLoop", async () => {
 
       expect(mocks.strategyManager.onStallDetected).toHaveBeenCalledWith(
         "goal-1",
-        expect.any(Number)
+        expect.any(Number),
+        expect.any(String)
       );
     });
 

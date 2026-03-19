@@ -152,7 +152,7 @@ export async function detectStallsAndRebalance(
             goalId,
             evidence: analysis.evidence,
           });
-          await ctx.deps.strategyManager.onStallDetected(goalId, 3);
+          await ctx.deps.strategyManager.onStallDetected(goalId, 3, goal.origin ?? "general");
           result.pivotOccurred = true;
         } else {
           // PIVOT: switch strategy, but check pivot count limit first
@@ -168,12 +168,13 @@ export async function detectStallsAndRebalance(
               pivotCount,
               maxPivotCount,
             });
-            await ctx.deps.strategyManager.onStallDetected(goalId, 3);
+            await ctx.deps.strategyManager.onStallDetected(goalId, 3, goal.origin ?? "general");
             result.pivotOccurred = true;
           } else {
             const newStrategy = await ctx.deps.strategyManager.onStallDetected(
               goalId,
-              escalationLevel + 1
+              escalationLevel + 1,
+              goal.origin ?? "general"
             );
             if (newStrategy) {
               result.pivotOccurred = true;
@@ -266,7 +267,7 @@ export async function detectStallsAndRebalance(
             goalId,
             evidence: globalAnalysis.evidence,
           });
-          await ctx.deps.strategyManager.onStallDetected(goalId, 3);
+          await ctx.deps.strategyManager.onStallDetected(goalId, 3, goal.origin ?? "general");
           result.pivotOccurred = true;
         } else {
           // PIVOT: switch strategy, but check pivot count limit first
@@ -282,10 +283,10 @@ export async function detectStallsAndRebalance(
               pivotCount: globalPivotCount,
               maxPivotCount: globalMaxPivotCount,
             });
-            await ctx.deps.strategyManager.onStallDetected(goalId, 3);
+            await ctx.deps.strategyManager.onStallDetected(goalId, 3, goal.origin ?? "general");
             result.pivotOccurred = true;
           } else {
-            const newStrategy = await ctx.deps.strategyManager.onStallDetected(goalId, 2);
+            const newStrategy = await ctx.deps.strategyManager.onStallDetected(goalId, 2, goal.origin ?? "general");
             if (newStrategy) {
               result.pivotOccurred = true;
               if (globalActiveStrategy?.id) {
@@ -338,7 +339,7 @@ export async function detectStallsAndRebalance(
         if (rebalanceTrigger) {
           const rebalanceResult = await ctx.deps.portfolioManager.rebalance(goalId, rebalanceTrigger);
           if (rebalanceResult.new_generation_needed) {
-            await ctx.deps.strategyManager.onStallDetected(goalId, 3);
+            await ctx.deps.strategyManager.onStallDetected(goalId, 3, goal.origin ?? "general");
           }
         }
       } catch {

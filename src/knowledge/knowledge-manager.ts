@@ -653,6 +653,53 @@ Determine if there is a factual contradiction. Respond with JSON:
   }
 
   /**
+   * Update the outcome of a DecisionRecord identified by strategy_id.
+   * Finds the most recent pending record for the given strategy and rewrites it.
+   * No-op when no matching pending record is found.
+   */
+  async updateDecisionOutcome(
+    strategyId: string,
+    outcome: "success" | "failure"
+  ): Promise<void> {
+    const decisionsDir = path.join(this.stateManager.getBaseDir(), "decisions");
+    let files: string[];
+    try {
+      files = await fsp.readdir(decisionsDir);
+    } catch {
+      return;
+    }
+
+    // Collect all pending records for this strategy_id
+    const matches: Array<{ filePath: string; record: DecisionRecord }> = [];
+    for (const file of files) {
+      if (!file.endsWith(".json")) continue;
+      const filePath = path.join(decisionsDir, file);
+      try {
+        const content = await fsp.readFile(filePath, "utf-8");
+        const raw = JSON.parse(content) as unknown;
+        const record = DecisionRecordSchema.parse(raw);
+        if (record.strategy_id === strategyId && record.outcome === "pending") {
+          matches.push({ filePath, record });
+        }
+      } catch {
+        // Skip invalid files
+      }
+    }
+
+    if (matches.length === 0) return;
+
+    // Update the most recent matching record
+    matches.sort(
+      (a, b) =>
+        new Date(b.record.timestamp).getTime() -
+        new Date(a.record.timestamp).getTime()
+    );
+    const { filePath, record } = matches[0]!;
+    const updated = DecisionRecordSchema.parse({ ...record, outcome });
+    await fsp.writeFile(filePath, JSON.stringify(updated, null, 2), "utf-8");
+  }
+
+  /**
    * Remove decision records older than 90 days.
    * Returns the count of purged records.
    */

@@ -196,6 +196,16 @@ export class StrategyManagerBase {
     // Archive terminated/completed strategies to history
     if (newState === "terminated" || newState === "completed") {
       await this.appendToHistory(goalId, updated);
+
+      // Update the corresponding DecisionRecord outcome (non-fatal)
+      if (this.knowledgeManager) {
+        try {
+          const outcome = newState === "completed" ? "success" : "failure";
+          await this.knowledgeManager.updateDecisionOutcome(strategyId, outcome);
+        } catch (e) {
+          console.warn(`[StrategyManager] updateDecisionOutcome failed for ${strategyId}:`, e);
+        }
+      }
     }
   }
 

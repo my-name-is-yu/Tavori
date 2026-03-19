@@ -752,7 +752,7 @@ describe("CoreLoop", async () => {
       const loop = new CoreLoop(depsWithPM, { delayBetweenLoopsMs: 0 });
       await loop.runOneIteration("goal-1", 0);
 
-      expect(mocks.strategyManager.onStallDetected).toHaveBeenCalledWith("goal-1", 3);
+      expect(mocks.strategyManager.onStallDetected).toHaveBeenCalledWith("goal-1", 3, expect.any(String));
     });
 
     it("handles WaitStrategy expiry check — calls rebalance when handleWaitStrategyExpiry returns a trigger", async () => {
