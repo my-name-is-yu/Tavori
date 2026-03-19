@@ -396,9 +396,10 @@ export class StateManager {
     const elapsed = now.getTime() - createdAt;
     const elapsedRatio = Math.min(elapsed / totalDuration, 1);
 
+    const ONE_SECOND_MS = 1000;
     let paceRatio: number;
-    if (elapsedRatio === 0) {
-      // No time elapsed yet — treat as on_track
+    if (elapsed < ONE_SECOND_MS) {
+      // Sub-second elapsed — treat as on_track to avoid flaky timing issues
       paceRatio = 1;
     } else {
       paceRatio = currentAchievement / elapsedRatio;

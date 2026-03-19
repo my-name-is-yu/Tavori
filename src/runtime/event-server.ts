@@ -106,9 +106,27 @@ export class EventServer {
     try {
       let stat;
       try {
-        stat = await fsp.stat(filePath);
+        // Retry on ENOENT: on macOS, fs.watch fires 'rename' before the file
+        // is visible to fsp.stat, so retry up to 3 times with 20ms delay.
+        let lastErr: unknown;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            stat = await fsp.stat(filePath);
+            break;
+          } catch (err) {
+            const code = (err as NodeJS.ErrnoException).code;
+            if (code !== "ENOENT") throw err;
+            lastErr = err;
+            await new Promise((r) => setTimeout(r, 20));
+          }
+        }
+        if (!stat) {
+          // File never appeared — already removed
+          void lastErr; // suppress unused warning
+          return;
+        }
       } catch {
-        return; // file already removed
+        return; // non-ENOENT error — file already removed or inaccessible
       }
       if (!stat.isFile()) return;
 

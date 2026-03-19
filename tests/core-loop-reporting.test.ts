@@ -667,11 +667,17 @@ describe("CoreLoop", async () => {
 
       const loop = new CoreLoop(deps, {
         maxIterations: 100,
-        delayBetweenLoopsMs: 10,
+        delayBetweenLoopsMs: 0,
       });
 
-      // Stop after a short delay
-      setTimeout(() => loop.stop(), 5);
+      let callCount = 0;
+      mocks.taskLifecycle.runTaskCycle.mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) {
+          loop.stop();
+        }
+        return makeTaskCycleResult();
+      });
 
       const result = await loop.run("goal-1");
       expect(result.finalStatus).toBe("stopped");
