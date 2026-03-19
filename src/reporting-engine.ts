@@ -163,6 +163,15 @@ export class ReportingEngine {
       generated_at: now,
       delivered_at: null,
       read: false,
+      metadata: {
+        loop_index: loopIndex,
+        gap_aggregate: gapAggregate,
+        stall_detected: stallDetected,
+        pivot_occurred: pivotOccurred,
+        elapsed_ms: elapsedMs,
+        task_id: taskResult?.taskId ?? null,
+        task_action: taskResult?.action ?? null,
+      },
     });
 
     return report;
@@ -194,13 +203,14 @@ export class ReportingEngine {
     } else if (loopsRun === 1) {
       progressChange = "Single loop (no change to compute)";
     } else {
-      // Parse gap aggregate from content — look for "**Score**: <number>"
-      const parseGap = (content: string): number | null => {
-        const match = content.match(/\*\*Score\*\*:\s*([\d.]+)/);
+      const getGap = (r: (typeof todayReports)[0]): number | null => {
+        if (r.metadata?.gap_aggregate !== undefined) return r.metadata.gap_aggregate;
+        // Fallback: parse from Markdown for reports generated before metadata was added
+        const match = r.content.match(/\*\*Score\*\*:\s*([\d.]+)/);
         return match ? parseFloat(match[1]) : null;
       };
-      const firstGap = parseGap(todayReports[0].content);
-      const lastGap = parseGap(todayReports[loopsRun - 1].content);
+      const firstGap = getGap(todayReports[0]);
+      const lastGap = getGap(todayReports[loopsRun - 1]);
       if (firstGap !== null && lastGap !== null) {
         const delta = firstGap - lastGap;
         progressChange =
@@ -213,13 +223,15 @@ export class ReportingEngine {
     }
 
     // Count stalls and pivots
-    const stallCount = todayReports.filter((r) =>
-      r.content.includes("**Stall detected**: Yes")
-    ).length;
+    const stallCount = todayReports.filter((r) => {
+      if (r.metadata?.stall_detected !== undefined) return r.metadata.stall_detected;
+      return r.content.includes("**Stall detected**: Yes");
+    }).length;
 
-    const pivotCount = todayReports.filter((r) =>
-      r.content.includes("**Strategy pivot**: Yes")
-    ).length;
+    const pivotCount = todayReports.filter((r) => {
+      if (r.metadata?.pivot_occurred !== undefined) return r.metadata.pivot_occurred;
+      return r.content.includes("**Strategy pivot**: Yes");
+    }).length;
 
     const reportNow = now.toISOString();
 
@@ -244,6 +256,12 @@ export class ReportingEngine {
       generated_at: reportNow,
       delivered_at: null,
       read: false,
+      metadata: {
+        loops_run: loopsRun,
+        stall_count: stallCount,
+        pivot_count: pivotCount,
+        progress_change: progressChange,
+      },
     });
 
     return report;
@@ -269,22 +287,23 @@ export class ReportingEngine {
     const daysWithActivity = dailySummaries.length;
 
     // Sum up total loops from daily summaries
-    const parseLoops = (content: string): number => {
-      const match = content.match(/\*\*Loops run\*\*:\s*(\d+)/);
+    const getLoopsFromDaily = (r: (typeof dailySummaries)[0]): number => {
+      if (r.metadata?.loops_run !== undefined) return r.metadata.loops_run;
+      // Fallback for reports without metadata
+      const match = r.content.match(/\*\*Loops run\*\*:\s*(\d+)/);
       return match ? parseInt(match[1], 10) : 0;
     };
 
-    const totalLoops = dailySummaries.reduce(
-      (acc, r) => acc + parseLoops(r.content),
-      0
-    );
+    const totalLoops = dailySummaries.reduce((acc, r) => acc + getLoopsFromDaily(r), 0);
 
     const totalStalls = dailySummaries.reduce((acc, r) => {
+      if (r.metadata?.stall_count !== undefined) return acc + r.metadata.stall_count;
       const match = r.content.match(/\*\*Stalls detected\*\*:\s*(\d+)/);
       return acc + (match ? parseInt(match[1], 10) : 0);
     }, 0);
 
     const totalPivots = dailySummaries.reduce((acc, r) => {
+      if (r.metadata?.pivot_count !== undefined) return acc + r.metadata.pivot_count;
       const match = r.content.match(/\*\*Strategy pivots\*\*:\s*(\d+)/);
       return acc + (match ? parseInt(match[1], 10) : 0);
     }, 0);
@@ -297,11 +316,13 @@ export class ReportingEngine {
       );
       const trendLines = sortedSummaries.map((r) => {
         const date = r.generated_at.slice(0, 10);
-        const loops = parseLoops(r.content);
-        const progressMatch = r.content.match(
-          /\*\*Overall gap change\*\*:\s*(.+)/
-        );
-        const progress = progressMatch ? progressMatch[1].trim() : "N/A";
+        const loops = getLoopsFromDaily(r);
+        const progress =
+          r.metadata?.progress_change ??
+          (() => {
+            const m = r.content.match(/\*\*Overall gap change\*\*:\s*(.+)/);
+            return m ? m[1].trim() : "N/A";
+          })();
         return `- **${date}**: ${loops} loops | Gap change: ${progress}`;
       });
       trendSection = trendLines.join("\n");
@@ -329,6 +350,11 @@ export class ReportingEngine {
       generated_at: reportNow,
       delivered_at: null,
       read: false,
+      metadata: {
+        total_loops: totalLoops,
+        total_stalls: totalStalls,
+        total_pivots: totalPivots,
+      },
     });
 
     return report;
@@ -406,35 +432,46 @@ export class ReportingEngine {
 
   formatForCLI(report: Report): string {
     if (report.report_type === "execution_summary") {
-      // Parse loop index from title
-      const loopMatch = report.title.match(/Loop (\d+)/);
-      const loopNum = loopMatch ? loopMatch[1] : "?";
-
-      // Parse gap from content
-      const gapMatch = report.content.match(/\*\*Score\*\*:\s*([\d.]+)/);
-      const gap = gapMatch ? parseFloat(gapMatch[1]).toFixed(2) : "?.??";
-
-      // Parse task from content
-      const taskIdMatch = report.content.match(/\*\*Task ID\*\*:\s*(.+)/);
-      const actionMatch = report.content.match(/\*\*Action\*\*:\s*(.+)/);
-      const taskPart =
-        taskIdMatch && actionMatch
-          ? `task: ${taskIdMatch[1].trim()} (${actionMatch[1].trim()})`
-          : "no task";
-
-      // Parse elapsed from content
-      const elapsedMatch = report.content.match(/^([\d.]+)s$/m);
-      const elapsed = elapsedMatch ? `${elapsedMatch[1]}s` : "?s";
-
+      const m = report.metadata;
+      const loopNum = m?.loop_index ?? (() => {
+        const match = report.title.match(/Loop (\d+)/);
+        return match ? parseInt(match[1], 10) : null;
+      })();
+      const gap = m?.gap_aggregate !== undefined
+        ? m.gap_aggregate.toFixed(2)
+        : (() => {
+            const match = report.content.match(/\*\*Score\*\*:\s*([\d.]+)/);
+            return match ? parseFloat(match[1]).toFixed(2) : "?.??";
+          })();
+      const taskPart = m
+        ? (m.task_id != null && m.task_action != null
+            ? `task: ${m.task_id} (${m.task_action})`
+            : "no task")
+        : (() => {
+            const taskIdMatch = report.content.match(/\*\*Task ID\*\*:\s*(.+)/);
+            const actionMatch = report.content.match(/\*\*Action\*\*:\s*(.+)/);
+            return taskIdMatch && actionMatch
+              ? `task: ${taskIdMatch[1].trim()} (${actionMatch[1].trim()})`
+              : "no task";
+          })();
+      const elapsed = m?.elapsed_ms !== undefined
+        ? `${(m.elapsed_ms / 1000).toFixed(1)}s`
+        : (() => {
+            const match = report.content.match(/^([\d.]+)s$/m);
+            return match ? `${match[1]}s` : "?s";
+          })();
       const goalId = report.goal_id ?? "(no goal)";
-      return `[Loop ${loopNum}] ${goalId} | gap: ${gap} | ${taskPart} | ${elapsed}`;
+      return `[Loop ${loopNum ?? "?"}] ${goalId} | gap: ${gap} | ${taskPart} | ${elapsed}`;
     }
 
     if (report.report_type === "daily_summary") {
       const dateMatch = report.title.match(/(\d{4}-\d{2}-\d{2})/);
       const date = dateMatch ? dateMatch[1] : "?";
-      const loopsMatch = report.content.match(/\*\*Loops run\*\*:\s*(\d+)/);
-      const loops = loopsMatch ? loopsMatch[1] : "?";
+      const loops = report.metadata?.loops_run
+        ?? (() => {
+            const m = report.content.match(/\*\*Loops run\*\*:\s*(\d+)/);
+            return m ? m[1] : "?";
+          })();
       const goalId = report.goal_id ?? "(no goal)";
       return `[Daily ${date}] ${goalId} | ${loops} loops`;
     }
@@ -442,10 +479,11 @@ export class ReportingEngine {
     if (report.report_type === "weekly_report") {
       const dateMatch = report.title.match(/(\d{4}-\d{2}-\d{2})/);
       const date = dateMatch ? dateMatch[1] : "?";
-      const totalLoopsMatch = report.content.match(
-        /\*\*Total loops run\*\*:\s*(\d+)/
-      );
-      const totalLoops = totalLoopsMatch ? totalLoopsMatch[1] : "?";
+      const totalLoops = report.metadata?.total_loops
+        ?? (() => {
+            const m = report.content.match(/\*\*Total loops run\*\*:\s*(\d+)/);
+            return m ? m[1] : "?";
+          })();
       const goalId = report.goal_id ?? "(no goal)";
       return `[Weekly ${date}] ${goalId} | ${totalLoops} total loops`;
     }
