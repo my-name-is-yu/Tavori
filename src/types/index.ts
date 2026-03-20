@@ -27,3 +27,4 @@ export * from "./suggest.js";
 export * from "./plugin.js";
 export * from "./pipeline.js";
 export * from "./task-group.js";
+export * from "./reflection.js";

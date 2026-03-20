@@ -1,7 +1,11 @@
 import type { Logger } from "../runtime/logger.js";
 import type { StateManager } from "../state-manager.js";
+import type { SessionManager } from "./session-manager.js";
+import type { ILLMClient } from "../llm/llm-client.js";
+import type { KnowledgeManager } from "../knowledge/knowledge-manager.js";
 import type { EthicsGate } from "../traits/ethics-gate.js";
 import type { CapabilityDetector } from "../observation/capability-detector.js";
+import { TaskSchema, VerificationResultSchema } from "../types/task.js";
 import type { Task, VerificationResult } from "../types/task.js";
 import type { GapVector } from "../types/gap.js";
 import type { DriveContext } from "../types/drive.js";
@@ -14,16 +18,20 @@ import type { TaskCycleResult } from "./task-lifecycle.js";
 import { PipelineExecutor } from "./pipeline-executor.js";
 import { runPreExecutionChecks } from "./task-approval.js";
 import { durationToMs } from "./task-executor.js";
+import { generateReflection, saveReflectionAsKnowledge } from "./reflection-generator.js";
 
 // ─── PipelineCycleDeps ───
 
 export interface PipelineCycleDeps {
   stateManager: StateManager;
+  sessionManager: SessionManager;
+  llmClient: ILLMClient;
   ethicsGate?: EthicsGate;
   capabilityDetector?: CapabilityDetector;
   approvalFn: (task: Task) => Promise<boolean>;
   adapterRegistry?: AdapterRegistry;
   logger?: Logger;
+  knowledgeManager?: KnowledgeManager;
   checkIrreversibleApproval: (task: Task) => Promise<boolean>;
   selectTargetDimension: (gapVector: GapVector, driveContext: DriveContext, dimensions?: Dimension[]) => string;
   generateTask: (
@@ -34,7 +42,7 @@ export interface PipelineCycleDeps {
     adapterType?: string,
     existingTasks?: string[],
     workspaceContext?: string
-  ) => Promise<Task>;
+  ) => Promise<Task | null>;
 }
 
 // ─── runPipelineTaskCycle ───
@@ -81,6 +89,12 @@ export async function runPipelineTaskCycle(
     options?.existingTasks,
     options?.workspaceContext
   );
+  if (task === null) {
+    deps.logger?.warn("TaskLifecycle: task generation returned null (duplicate detected), skipping pipeline cycle");
+    const skippedTask = TaskSchema.parse({ id: "skipped", goal_id: goalId, target_dimensions: [], primary_dimension: targetDimension, work_description: "skipped (duplicate)", rationale: "", approach: "", success_criteria: [], scope_boundary: { in_scope: [], out_of_scope: [], blast_radius: "" }, constraints: [], created_at: new Date().toISOString() });
+    const skippedVerification = VerificationResultSchema.parse({ task_id: "skipped", verdict: "fail", confidence: 0, evidence: [], dimension_updates: [], timestamp: new Date().toISOString() });
+    return { task: skippedTask, verificationResult: skippedVerification, action: "discard" };
+  }
 
   // 3. Build AgentTask from Task (needed for observation and pipeline execution)
   const timeoutMs = task.estimated_duration ? durationToMs(task.estimated_duration) : 30 * 60 * 1000;
@@ -161,6 +175,46 @@ export async function runPipelineTaskCycle(
     confidence: avgConfidence,
     timestamp: new Date().toISOString(),
   };
+
+  // 10. Save checkpoint on pipeline task completion
+  const pipelineAdapterType = adapter?.adapterType ?? 'unknown';
+  const pipelineContextSnapshot = [
+    `goal: ${goalId}`,
+    `dimension: ${targetDimension}`,
+    `strategy: ${pipeline.strategy_id ?? 'none'}`,
+    `action: ${action}`,
+  ].join('\n');
+  const pipelineIntermediateResults: string[] = pipelineResult.stage_results.map(
+    s => `Stage ${s.stage_index} (${s.role}): ${s.verdict}`
+  );
+  await deps.sessionManager.saveCheckpoint({
+    goalId,
+    taskId: task.id,
+    agentId: typeof pipelineAdapterType === 'string' ? pipelineAdapterType : 'unknown',
+    sessionContextSnapshot: pipelineContextSnapshot,
+    intermediateResults: pipelineIntermediateResults,
+    metadata: { strategy_id: pipeline.strategy_id, final_verdict: pipelineResult.final_verdict },
+  }).catch(e => deps.logger?.warn?.('checkpoint save failed', { error: String(e) }));
+
+  // 11. Generate and save reflection (non-fatal)
+  try {
+    const reflection = await generateReflection({
+      task,
+      verificationResult,
+      goalId,
+      strategyId: pipeline.strategy_id ?? undefined,
+      llmClient: deps.llmClient,
+      logger: deps.logger,
+    });
+    if (deps.knowledgeManager) {
+      await saveReflectionAsKnowledge(
+        deps.knowledgeManager, goalId, reflection,
+        task.work_description,
+      );
+    }
+  } catch (e) {
+    deps.logger?.warn?.("Reflection generation failed (non-fatal)", { error: String(e) });
+  }
 
   return { task, verificationResult, action };
 }

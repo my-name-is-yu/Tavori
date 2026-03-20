@@ -32,6 +32,10 @@ export type { OllamaClientConfig } from "./llm/ollama-client.js";
 export { OpenAILLMClient } from "./llm/openai-client.js";
 export type { OpenAIClientConfig } from "./llm/openai-client.js";
 export { EthicsGate } from "./traits/ethics-gate.js";
+export * from "./types/guardrail.js";
+export { GuardrailRunner } from "./guardrail-runner.js";
+export { generateReflection, saveReflectionAsKnowledge, getReflectionsForGoal, formatReflectionsForPrompt } from "./execution/reflection-generator.js";
+export * from "./types/reflection.js";
 export { SessionManager } from "./execution/session-manager.js";
 export { StrategyManager } from "./strategy/strategy-manager.js";
 export { GoalNegotiator, EthicsRejectedError } from "./goal/goal-negotiator.js";
@@ -117,6 +121,35 @@ export { CrossGoalPortfolio } from "./strategy/cross-goal-portfolio.js";
 export { StrategyTemplateRegistry } from "./strategy/strategy-template-registry.js";
 export { LearningPipeline } from "./knowledge/learning-pipeline.js";
 export { KnowledgeTransfer } from "./knowledge/knowledge-transfer.js";
+
+// --- A2A Protocol adapter ---
+export { A2AAdapter } from "./adapters/a2a-adapter.js";
+export type { A2AAdapterConfig } from "./adapters/a2a-adapter.js";
+export { A2AClient } from "./adapters/a2a-client.js";
+export type { A2AClientConfig } from "./adapters/a2a-client.js";
+export {
+  A2AAgentCardSchema,
+  A2ATaskSchema,
+  A2AMessageSchema,
+  A2ATaskStateSchema,
+  A2ATaskStatusSchema,
+  A2AArtifactSchema,
+  A2ASkillSchema,
+  A2APartSchema,
+  A2AJsonRpcResponseSchema,
+  A2A_TERMINAL_STATES,
+} from "./types/a2a.js";
+export type {
+  A2AAgentCard,
+  A2ATask,
+  A2AMessage,
+  A2ATaskState,
+  A2ATaskStatus,
+  A2AArtifact,
+  A2ASkill,
+  A2APart,
+  A2AJsonRpcResponse,
+} from "./types/a2a.js";
 
 // --- Plugin architecture (M12) ---
 export { NotifierRegistry } from "./runtime/notifier-registry.js";

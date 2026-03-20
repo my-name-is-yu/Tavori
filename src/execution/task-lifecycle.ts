@@ -1,13 +1,16 @@
 import { execFileSync as _execFileSync } from "node:child_process";
 import type { Logger } from "../runtime/logger.js";
-import { runShellCommand as _runShellCommand } from "./task-health-check.js";
+import {
+  runShellCommand as _runShellCommand,
+  runPostExecutionHealthCheck as _runPostExecutionHealthCheck,
+} from "./task-health-check.js";
 import { StateManager } from "../state-manager.js";
 import type { ILLMClient } from "../llm/llm-client.js";
 import { SessionManager } from "./session-manager.js";
 import { TrustManager } from "../traits/trust-manager.js";
 import { StrategyManager } from "../strategy/strategy-manager.js";
 import { StallDetector } from "../drive/stall-detector.js";
-import { scoreAllDimensions, rankDimensions } from "../drive/drive-scorer.js";
+import { selectTargetDimension as _selectTargetDimension } from "./dimension-selector.js";
 import { TaskSchema, VerificationResultSchema } from "../types/task.js";
 import type { Task, VerificationResult } from "../types/task.js";
 import type { GapVector } from "../types/gap.js";
@@ -15,7 +18,6 @@ import type { DriveContext } from "../types/drive.js";
 import type { Dimension } from "../types/goal.js";
 import type { EthicsGate } from "../traits/ethics-gate.js";
 import type { CapabilityDetector } from "../observation/capability-detector.js";
-import type { CapabilityAcquisitionTask } from "../types/capability.js";
 import {
   verifyTask as _verifyTask,
   handleVerdict as _handleVerdict,
@@ -31,30 +33,24 @@ export type {
   FailureResult,
 } from "./task-verifier.js";
 
-// ─── Adapter types (re-exported from adapter-layer) ───
-
 import type { AgentTask, AgentResult, IAdapter } from "./adapter-layer.js";
 import { AdapterRegistry } from "./adapter-layer.js";
 export type { AgentTask, AgentResult, IAdapter };
 export { AdapterRegistry };
 
-// ─── Pipeline types ───
-
-import { PipelineExecutor } from "./pipeline-executor.js";
 import type { TaskPipeline, TaskDomain } from "../types/pipeline.js";
-import type { TaskObservationContext } from "../observation/observation-engine.js";
 import type { ObservationEngine } from "../observation/observation-engine.js";
-
-// ─── Re-exports from extracted modules ───
 
 export { LLMGeneratedTaskSchema } from "./task-generation.js";
 import { generateTask as _generateTask } from "./task-generation.js";
 import { executeTask as _executeTask, reloadTaskFromDisk, durationToMs } from "./task-executor.js";
 import { runPreExecutionChecks } from "./task-approval.js";
+import { checkIrreversibleApproval as _checkIrreversibleApproval } from "./task-approval-check.js";
+import { runPipelineTaskCycle as runPipelineTaskCycleFn } from "./task-pipeline-cycle.js";
 import type { KnowledgeTransfer } from "../knowledge/knowledge-transfer.js";
-import type { CheckpointManager } from './checkpoint-manager.js';
-
-// ─── Internal types ───
+import type { KnowledgeManager } from "../knowledge/knowledge-manager.js";
+import { generateReflection, saveReflectionAsKnowledge, getReflectionsForGoal, formatReflectionsForPrompt } from "./reflection-generator.js";
+import { GuardrailRunner } from "../guardrail-runner.js";
 
 export type { TaskCycleResult } from "./task-execution-types.js";
 import type { TaskCycleResult } from "./task-execution-types.js";
@@ -81,6 +77,8 @@ export class TaskLifecycle {
   private readonly execFileSyncFn: (cmd: string, args: string[], opts: { cwd: string; encoding: "utf-8" }) => string;
   private readonly completionJudgerConfig?: CompletionJudgerConfig;
   private readonly knowledgeTransfer?: KnowledgeTransfer;
+  private readonly knowledgeManager?: KnowledgeManager;
+  private readonly guardrailRunner?: GuardrailRunner;
   private onTaskComplete?: (strategyId: string) => void;
 
   constructor(
@@ -105,6 +103,10 @@ export class TaskLifecycle {
       completionJudgerConfig?: CompletionJudgerConfig;
       /** Optional KnowledgeTransfer for realtime candidate detection before task generation */
       knowledgeTransfer?: KnowledgeTransfer;
+      /** Optional KnowledgeManager for reflection generation and retrieval */
+      knowledgeManager?: KnowledgeManager;
+      /** Optional guardrail runner for before_tool/after_tool hooks */
+      guardrailRunner?: GuardrailRunner;
     }
   ) {
     this.stateManager = stateManager;
@@ -122,90 +124,21 @@ export class TaskLifecycle {
     this.execFileSyncFn = options?.execFileSyncFn ?? _execFileSync;
     this.completionJudgerConfig = options?.completionJudgerConfig;
     this.knowledgeTransfer = options?.knowledgeTransfer;
+    this.knowledgeManager = options?.knowledgeManager;
+    this.guardrailRunner = options?.guardrailRunner;
   }
 
-  // ─── setOnTaskComplete ───
-
-  /**
-   * Register a callback to be invoked when a task completes successfully.
-   * Used by PortfolioManager to track task completion times per strategy.
-   */
+  /** Register a callback invoked when a task completes successfully (used by PortfolioManager). */
   setOnTaskComplete(callback: (strategyId: string) => void): void {
     this.onTaskComplete = callback;
   }
 
-  // ─── selectTargetDimension ───
-
-  /**
-   * Confidence-tier weights for dimension selection.
-   * Mechanically-observable dimensions are prioritized over LLM-only ones.
-   */
-  private static readonly CONFIDENCE_WEIGHTS: Record<string, number> = {
-    mechanical: 1.0,
-    verified: 0.9,
-    independent_review: 0.7,
-    self_report: 0.3,
-  };
-
-  private static getConfidenceWeight(dim: Dimension): number {
-    const tier = dim.observation_method.confidence_tier;
-    return TaskLifecycle.CONFIDENCE_WEIGHTS[tier] ?? 0.3;
-  }
-
-  /**
-   * Select the highest-priority dimension to work on based on drive scoring,
-   * weighted by observation confidence tier so that mechanically-observable
-   * dimensions are preferred over LLM-only ones at equal gap severity.
-   *
-   * @param gapVector - current gap state for the goal
-   * @param driveContext - per-dimension timing/deadline/opportunity context
-   * @param dimensions - optional goal dimensions used to apply confidence-tier weighting
-   * @returns the name of the top-ranked dimension
-   * @throws if gapVector has no gaps (empty)
-   */
+  /** Select highest-priority dimension to work on, weighted by confidence tier. */
   selectTargetDimension(gapVector: GapVector, driveContext: DriveContext, dimensions?: Dimension[]): string {
-    if (gapVector.gaps.length === 0) {
-      throw new Error("selectTargetDimension: gapVector has no gaps (empty gap vector)");
-    }
-
-    const scores = scoreAllDimensions(gapVector, driveContext);
-    const ranked = rankDimensions(scores);
-
-    if (!dimensions || dimensions.length === 0) {
-      // No dimension metadata available — fall back to drive-score ranking only
-      // ranked is non-empty: gapVector.gaps.length === 0 guard above ensures at least one gap
-      return ranked[0]?.dimension_name ?? gapVector.gaps[0]?.dimension_name ?? "";
-    }
-
-    // Build a lookup from dimension name → confidence weight
-    const weightByName = new Map<string, number>();
-    for (const dim of dimensions) {
-      weightByName.set(dim.name, TaskLifecycle.getConfidenceWeight(dim));
-    }
-
-    // Apply confidence-tier weighting to final_score for selection only
-    const weighted = ranked.map((score) => ({
-      dimension_name: score.dimension_name,
-      weighted_score: score.final_score * (weightByName.get(score.dimension_name) ?? 0.3),
-    }));
-
-    weighted.sort((a, b) => {
-      const scoreDiff = b.weighted_score - a.weighted_score;
-      if (scoreDiff !== 0) return scoreDiff;
-      return a.dimension_name < b.dimension_name ? -1 : a.dimension_name > b.dimension_name ? 1 : 0;
-    });
-
-    // weighted is non-empty: ranked is non-empty (gapVector guard above), weighted maps ranked 1:1
-    return weighted[0]?.dimension_name ?? gapVector.gaps[0]?.dimension_name ?? "";
+    return _selectTargetDimension(gapVector, driveContext, dimensions);
   }
 
-  // ─── generateTask ───
-
-  /**
-   * Generate a task for the given goal and target dimension via LLM.
-   *
-   * Delegates to task-generation.ts#generateTask.
-   */
+  /** Generate a task for the given goal and target dimension via LLM. */
   async generateTask(
     goalId: string,
     targetDimension: string,
@@ -232,41 +165,33 @@ export class TaskLifecycle {
     );
   }
 
-  // ─── checkIrreversibleApproval ───
-
-  /**
-   * Check whether the task requires human approval and, if so, request it.
-   *
-   * @param task - the task to check
-   * @param confidence - observation confidence for the approval check (default 0.5)
-   * @returns true if approved or approval not needed; false if approval was denied
-   */
+  /** Check whether the task requires human approval and request it if so. */
   async checkIrreversibleApproval(task: Task, confidence: number = 0.5): Promise<boolean> {
-    const domain = task.task_category;
-    const needsApproval = await this.trustManager.requiresApproval(
-      task.reversibility,
-      domain,
-      confidence,
-      task.task_category
-    );
-
-    if (!needsApproval) {
-      return true;
-    }
-
-    const approved = await this.approvalFn(task);
-    return approved;
+    return _checkIrreversibleApproval(this.trustManager, this.approvalFn, task, confidence);
   }
 
-  // ─── executeTask ───
-
-  /**
-   * Execute a task via the given adapter.
-   *
-   * Delegates to task-executor.ts#executeTask.
-   */
+  /** Execute a task via the given adapter. */
   async executeTask(task: Task, adapter: IAdapter, workspaceContext?: string): Promise<AgentResult> {
-    return _executeTask(
+    if (this.guardrailRunner) {
+      const beforeResult = await this.guardrailRunner.run("before_tool", {
+        checkpoint: "before_tool",
+        goal_id: task.goal_id,
+        task_id: task.id,
+        input: { task, adapter_type: adapter.adapterType },
+      });
+      if (!beforeResult.allowed) {
+        return {
+          success: false,
+          output: `Guardrail rejected: ${beforeResult.results.map(r => r.reason).filter(Boolean).join("; ")}`,
+          error: "guardrail_rejected",
+          exit_code: null,
+          elapsed_ms: 0,
+          stopped_reason: "error",
+        };
+      }
+    }
+
+    const result = await _executeTask(
       {
         stateManager: this.stateManager,
         sessionManager: this.sessionManager,
@@ -277,15 +202,30 @@ export class TaskLifecycle {
       adapter,
       workspaceContext
     );
+
+    if (this.guardrailRunner) {
+      const afterResult = await this.guardrailRunner.run("after_tool", {
+        checkpoint: "after_tool",
+        goal_id: task.goal_id,
+        task_id: task.id,
+        input: { task, result, adapter_type: adapter.adapterType },
+      });
+      if (!afterResult.allowed) {
+        return {
+          success: false,
+          output: `Guardrail rejected result: ${afterResult.results.map(r => r.reason).filter(Boolean).join("; ")}`,
+          error: "guardrail_rejected",
+          exit_code: null,
+          elapsed_ms: result.elapsed_ms,
+          stopped_reason: "error",
+        };
+      }
+    }
+
+    return result;
   }
 
-  // ─── verifyTask ───
-
-  /**
-   * Verify task execution results using 3-layer verification.
-   *
-   * Delegation: logic lives in task-verifier.ts#verifyTask.
-   */
+  /** Verify task execution results using 3-layer verification. */
   async verifyTask(
     task: Task,
     executionResult: AgentResult
@@ -293,13 +233,7 @@ export class TaskLifecycle {
     return _verifyTask(this.verifierDeps(), task, executionResult);
   }
 
-  // ─── handleVerdict ───
-
-  /**
-   * Handle a verification verdict (pass/partial/fail).
-   *
-   * Delegation: logic lives in task-verifier.ts#handleVerdict.
-   */
+  /** Handle a verification verdict (pass/partial/fail). */
   async handleVerdict(
     task: Task,
     verificationResult: VerificationResult
@@ -307,14 +241,7 @@ export class TaskLifecycle {
     return _handleVerdict(this.verifierDeps(), task, verificationResult);
   }
 
-  // ─── handleFailure ───
-
-  /**
-   * Handle a task failure: increment failure count, record failure,
-   * decide keep/discard/escalate.
-   *
-   * Delegation: logic lives in task-verifier.ts#handleFailure.
-   */
+  /** Handle a task failure: increment failure count, record failure, decide keep/discard/escalate. */
   async handleFailure(
     task: Task,
     verificationResult: VerificationResult
@@ -322,11 +249,7 @@ export class TaskLifecycle {
     return _handleFailure(this.verifierDeps(), task, verificationResult);
   }
 
-  // ─── runTaskCycle ───
-
-  /**
-   * Run a full task cycle: select → generate → approve → execute → verify → verdict.
-   */
+  /** Run a full task cycle: select → generate → approve → execute → verify → verdict. */
   async runTaskCycle(
     goalId: string,
     gapVector: GapVector,
@@ -357,6 +280,21 @@ export class TaskLifecycle {
         }
       } catch {
         // non-fatal: proceed without enrichment
+      }
+    }
+
+    // Inject past reflections
+    if (this.knowledgeManager) {
+      try {
+        const pastReflections = await getReflectionsForGoal(this.knowledgeManager, goalId, 5);
+        if (pastReflections.length > 0) {
+          const reflectionText = formatReflectionsForPrompt(pastReflections);
+          enrichedKnowledgeContext = enrichedKnowledgeContext
+            ? `${enrichedKnowledgeContext}\n${reflectionText}`
+            : reflectionText;
+        }
+      } catch {
+        // non-fatal: proceed without reflections
       }
     }
 
@@ -428,6 +366,26 @@ export class TaskLifecycle {
       metadata: { strategy_id: task.strategy_id, gap_value: gapValue },
     }).catch(e => this.logger?.warn?.('checkpoint save failed', { error: String(e) }));
 
+    // Generate and save reflection (non-fatal, only when knowledgeManager is available)
+    if (this.knowledgeManager) {
+      try {
+        const reflection = await generateReflection({
+          task: verdictResult.task,
+          verificationResult,
+          goalId,
+          strategyId: verdictResult.task.strategy_id ?? undefined,
+          llmClient: this.llmClient,
+          logger: this.logger,
+        });
+        await saveReflectionAsKnowledge(
+          this.knowledgeManager, goalId, reflection,
+          verdictResult.task.work_description,
+        );
+      } catch (e) {
+        this.logger?.warn?.("Reflection generation failed (non-fatal)", { error: String(e) });
+      }
+    }
+
     return {
       task: verdictResult.task,
       verificationResult,
@@ -435,13 +393,9 @@ export class TaskLifecycle {
     };
   }
 
-  // ─── runPipelineTaskCycle ───
-
   /**
    * Run a pipeline-based task cycle: select → generate → observe → approve → pipeline execute → map verdict.
-   *
    * Uses PipelineExecutor to orchestrate multi-role sequential execution.
-   * Falls back to wrapping the provided adapter in a new AdapterRegistry if none is supplied.
    */
   async runPipelineTaskCycle(
     goalId: string,
@@ -458,142 +412,31 @@ export class TaskLifecycle {
       adapterRegistry?: AdapterRegistry;
     }
   ): Promise<TaskCycleResult> {
-    // 1. Select target dimension
-    let goalDimensions: Dimension[] | undefined;
-    try {
-      const goal = await this.stateManager.loadGoal(goalId);
-      goalDimensions = goal?.dimensions ?? undefined;
-    } catch {
-      // Fall back to unweighted selection
-    }
-    const targetDimension = this.selectTargetDimension(gapVector, driveContext, goalDimensions);
-
-    // 2. Generate task
-    const task = await this.generateTask(
-      goalId,
-      targetDimension,
-      pipeline.strategy_id,
-      options?.knowledgeContext,
-      adapter.adapterType,
-      options?.existingTasks,
-      options?.workspaceContext
-    );
-    if (task === null) {
-      this.logger?.warn("TaskLifecycle: task generation returned null (duplicate detected), skipping pipeline cycle");
-      const skippedTask = TaskSchema.parse({ id: "skipped", goal_id: goalId, target_dimensions: [], primary_dimension: targetDimension, work_description: "skipped (duplicate)", rationale: "", approach: "", success_criteria: [], scope_boundary: { in_scope: [], out_of_scope: [], blast_radius: "" }, constraints: [], created_at: new Date().toISOString() });
-      const skippedVerification = VerificationResultSchema.parse({ task_id: "skipped", verdict: "fail", confidence: 0, evidence: [], dimension_updates: [], timestamp: new Date().toISOString() });
-      return { task: skippedTask, verificationResult: skippedVerification, action: "discard" };
-    }
-
-    // 3. Build AgentTask from Task (needed for observation and pipeline execution)
-    const timeoutMs = task.estimated_duration ? durationToMs(task.estimated_duration) : 30 * 60 * 1000;
-    const agentTask: AgentTask = {
-      prompt: `${task.work_description}\n\nApproach: ${task.approach}\n\nSuccess Criteria:\n${task.success_criteria.map((c) => `- ${c.description}`).join("\n")}`,
-      timeout_ms: timeoutMs,
-      adapter_type: adapter.adapterType,
-    };
-
-    // 4. Optionally gather pre-execution observation context
-    let observationContext: TaskObservationContext | undefined;
-    if (options?.observationEngine && options?.domain) {
-      try {
-        observationContext = await options.observationEngine.observeForTask(agentTask, options.domain);
-      } catch {
-        // Non-fatal: proceed without observation context
-      }
-    }
-
-    // 5. Pre-execution checks: ethics, capability, irreversible approval
-    const preCheckResult = await runPreExecutionChecks(
+    return runPipelineTaskCycleFn(
       {
+        stateManager: this.stateManager,
+        sessionManager: this.sessionManager,
+        llmClient: this.llmClient,
         ethicsGate: this.ethicsGate,
         capabilityDetector: this.capabilityDetector,
         approvalFn: this.approvalFn,
+        adapterRegistry: this.adapterRegistry,
+        logger: this.logger,
+        knowledgeManager: this.knowledgeManager,
         checkIrreversibleApproval: (t) => this.checkIrreversibleApproval(t),
+        selectTargetDimension: (gv, dc, dims) => this.selectTargetDimension(gv, dc, dims),
+        generateTask: (gid, dim, sid, kc, at, et, wc) => this.generateTask(gid, dim, sid, kc, at, et, wc),
       },
-      task
-    );
-    if (preCheckResult !== null) return preCheckResult;
-
-    // 6. Build AdapterRegistry: prefer explicit registry, then class-level, then wrap adapter
-    const registry =
-      options?.adapterRegistry ??
-      this.adapterRegistry ??
-      (() => {
-        const r = new AdapterRegistry();
-        r.register(adapter);
-        return r;
-      })();
-
-    // 7. Run pipeline via PipelineExecutor
-    const pipelineExecutor = new PipelineExecutor({
-      stateManager: this.stateManager,
-      adapterRegistry: registry,
-      logger: this.logger,
-    });
-    const pipelineResult = await pipelineExecutor.run(
-      task.id,
-      agentTask,
-      pipeline,
-      observationContext?.context
-    );
-
-    // 8. Map final_verdict to action
-    const actionMap: Record<string, TaskCycleResult["action"]> = {
-      pass: "completed",
-      partial: "keep",
-      fail: "discard",
-    };
-    const action: TaskCycleResult["action"] = actionMap[pipelineResult.final_verdict] ?? "discard";
-
-    // 9. Build a synthetic VerificationResult from the pipeline outcome
-    const avgConfidence =
-      pipelineResult.stage_results.length > 0
-        ? pipelineResult.stage_results.reduce((sum, s) => sum + s.confidence, 0) /
-          pipelineResult.stage_results.length
-        : 0;
-    const verificationResult: VerificationResult = {
-      task_id: task.id,
-      verdict: pipelineResult.final_verdict,
-      evidence: pipelineResult.stage_results.map((s) => ({
-        layer: "self_report" as const,
-        description: `Stage ${s.stage_index} (${s.role}): ${s.verdict}`,
-        confidence: s.confidence,
-      })),
-      dimension_updates: [],
-      confidence: avgConfidence,
-      timestamp: new Date().toISOString(),
-    };
-
-    // Save checkpoint on pipeline task completion
-    const pipelineAdapterType = adapter?.adapterType ?? 'unknown';
-    const pipelineContextSnapshot = [
-      `goal: ${goalId}`,
-      `dimension: ${targetDimension}`,
-      `strategy: ${pipeline.strategy_id ?? 'none'}`,
-      `action: ${action}`,
-    ].join('\n');
-    const pipelineIntermediateResults: string[] = pipelineResult.stage_results.map(
-      s => `Stage ${s.stage_index} (${s.role}): ${s.verdict}`
-    );
-
-    await this.sessionManager.saveCheckpoint({
       goalId,
-      taskId: task.id,
-      agentId: typeof pipelineAdapterType === 'string' ? pipelineAdapterType : 'unknown',
-      sessionContextSnapshot: pipelineContextSnapshot,
-      intermediateResults: pipelineIntermediateResults,
-      metadata: { strategy_id: pipeline.strategy_id, final_verdict: pipelineResult.final_verdict },
-    }).catch(e => this.logger?.warn?.('checkpoint save failed', { error: String(e) }));
-
-    return { task, verificationResult, action };
+      gapVector,
+      driveContext,
+      adapter,
+      pipeline,
+      options
+    );
   }
 
-  // ─── Private Helpers ───
-
-  /**
-   * Build the VerifierDeps object passed to task-verifier.ts functions.
-   */
+  /** Build the VerifierDeps object passed to task-verifier.ts functions. */
   private verifierDeps() {
     return {
       stateManager: this.stateManager,
@@ -609,56 +452,19 @@ export class TaskLifecycle {
     };
   }
 
-  // ─── Post-Execution Health Check ───
-
-  /**
-   * Run build and test checks after successful task execution to verify
-   * the codebase remains healthy. Opt-in via healthCheckEnabled constructor option.
-   */
+  /** Run build and test checks after successful task execution. Opt-in via healthCheckEnabled. */
   async runPostExecutionHealthCheck(
-    _adapter: IAdapter,
-    _task: Task,
+    adapter: IAdapter,
+    task: Task,
   ): Promise<{ healthy: boolean; output: string }> {
-    // Run build check
-    try {
-      const buildResult = await this.runShellCommand(["npm", "run", "build"], {
-        timeout: 60000,
-        cwd: process.cwd(),
-      });
-      if (!buildResult.success) {
-        return {
-          healthy: false,
-          output: `Build failed: ${buildResult.stderr || buildResult.stdout}`,
-        };
-      }
-    } catch (err) {
-      return { healthy: false, output: `Build check error: ${err}` };
-    }
-
-    // Run quick test check (just verify tests still pass)
-    try {
-      const testResult = await this.runShellCommand(
-        ["npx", "vitest", "run", "--reporter=dot"],
-        { timeout: 120000, cwd: process.cwd() }
-      );
-      if (!testResult.success) {
-        return {
-          healthy: false,
-          output: `Tests failed: ${testResult.stderr || testResult.stdout}`,
-        };
-      }
-    } catch (err) {
-      return { healthy: false, output: `Test check error: ${err}` };
-    }
-
-    return { healthy: true, output: "Build and tests passed" };
+    return _runPostExecutionHealthCheck(
+      adapter,
+      task,
+      this.runShellCommand.bind(this),
+    );
   }
 
-  /**
-   * Run a shell command safely using execFile (not exec) to avoid shell injection.
-   *
-   * Delegates to task-health-check.ts.
-   */
+  /** Run a shell command safely using execFile (not exec) to avoid shell injection. */
   async runShellCommand(
     argv: string[],
     options: { timeout: number; cwd: string }
