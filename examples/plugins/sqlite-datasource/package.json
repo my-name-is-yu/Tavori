@@ -1,0 +1,11 @@
+{
+  "name": "@motiva-plugins/sqlite-datasource",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "better-sqlite3": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.0.0"
+  }
+}

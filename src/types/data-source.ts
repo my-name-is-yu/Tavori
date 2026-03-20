@@ -2,7 +2,7 @@ import { z } from "zod";
 
 // --- DataSourceType ---
 
-export const DataSourceTypeEnum = z.enum(["file", "http_api", "database", "custom", "github_issue", "file_existence", "shell"]);
+export const DataSourceTypeEnum = z.enum(["file", "http_api", "database", "custom", "github_issue", "file_existence", "shell", "websocket", "sse"]);
 export type DataSourceType = z.infer<typeof DataSourceTypeEnum>;
 
 // --- PollingConfig ---
@@ -38,6 +38,7 @@ export const DataSourceConfigSchema = z.object({
   created_at: z.string(),
   dimension_mapping: z.record(z.string(), z.string()).optional(),
   scope_goal_id: z.string().optional(),
+  connection_string: z.string().optional(),
 });
 export type DataSourceConfig = z.infer<typeof DataSourceConfigSchema>;
 

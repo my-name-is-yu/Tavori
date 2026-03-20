@@ -1,0 +1,11 @@
+{
+  "name": "@motiva-plugins/postgres-datasource",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "pg": "^8.0.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.0.0"
+  }
+}

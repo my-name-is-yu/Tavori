@@ -1,0 +1,24 @@
+{
+  "name": "@motiva-plugins/pagerduty-notifier",
+  "version": "1.0.0",
+  "description": "Send Motiva events to PagerDuty via Events API v2",
+  "type": "module",
+  "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json"
+  },
+  "keywords": ["motiva", "plugin", "pagerduty", "notifier"],
+  "license": "MIT",
+  "peerDependencies": {
+    "motiva": ">=0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

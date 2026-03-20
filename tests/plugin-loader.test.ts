@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as path from "node:path";
-import { PluginLoader } from "../src/runtime/plugin-loader.js";
+import { PluginLoader, parseSemver, compareSemver, satisfiesRange } from "../src/runtime/plugin-loader.js";
 import { NotifierRegistry } from "../src/runtime/notifier-registry.js";
 import { PluginManifestSchema, PluginStateSchema } from "../src/types/plugin.js";
 import type { INotifier, NotificationEvent, NotificationEventType, PluginManifest } from "../src/types/plugin.js";
@@ -158,6 +158,102 @@ describe("PluginManifestSchema", () => {
     expect(result.success).toBe(true);
     if (!result.success) return;
     expect(result.data.permissions.network).toBe(true);
+  });
+});
+
+// ─── Semver utilities ───
+
+describe("parseSemver", () => {
+  it("parses a valid semver string", () => {
+    expect(parseSemver("1.2.3")).toEqual({ major: 1, minor: 2, patch: 3 });
+  });
+
+  it("throws on invalid semver", () => {
+    expect(() => parseSemver("not-a-version")).toThrow(/Invalid semver/);
+  });
+});
+
+describe("compareSemver", () => {
+  it("returns 0 for equal versions", () => {
+    expect(compareSemver(parseSemver("1.0.0"), parseSemver("1.0.0"))).toBe(0);
+  });
+
+  it("returns 1 when a is greater", () => {
+    expect(compareSemver(parseSemver("2.0.0"), parseSemver("1.9.9"))).toBe(1);
+  });
+
+  it("returns -1 when a is lesser", () => {
+    expect(compareSemver(parseSemver("0.9.9"), parseSemver("1.0.0"))).toBe(-1);
+  });
+});
+
+describe("satisfiesRange", () => {
+  it("returns true when no min/max are given", () => {
+    expect(satisfiesRange("1.0.0")).toBe(true);
+  });
+
+  it("returns true when version equals min", () => {
+    expect(satisfiesRange("1.0.0", "1.0.0")).toBe(true);
+  });
+
+  it("returns false when version is below min", () => {
+    expect(satisfiesRange("0.9.0", "1.0.0")).toBe(false);
+  });
+
+  it("returns true when version equals max", () => {
+    expect(satisfiesRange("2.0.0", undefined, "2.0.0")).toBe(true);
+  });
+
+  it("returns false when version exceeds max", () => {
+    expect(satisfiesRange("3.0.0", undefined, "2.0.0")).toBe(false);
+  });
+
+  it("returns true when version is within min and max range", () => {
+    expect(satisfiesRange("1.5.0", "1.0.0", "2.0.0")).toBe(true);
+  });
+});
+
+// ─── Version compatibility check in loadOne ───
+
+describe("PluginLoader version compatibility", () => {
+  let loader: PluginLoader;
+
+  beforeEach(() => {
+    loader = new PluginLoader(
+      makeAdapterRegistry(),
+      makeDataSourceRegistry(),
+      makeNotifierRegistry(),
+      "/tmp/plugins"
+    );
+  });
+
+  it("returns incompatible state when plugin requires a higher min version", async () => {
+    const manifest = makeValidManifest({ min_motiva_version: "999.0.0" });
+    vi.spyOn(loader, "loadManifest").mockResolvedValue(manifest);
+
+    const state = await loader.loadOne("/tmp/plugins/test-plugin");
+    expect(state.status).toBe("incompatible");
+    expect(state.error_message).toMatch(/999\.0\.0/);
+  });
+
+  it("returns incompatible state when plugin requires a lower max version", async () => {
+    const manifest = makeValidManifest({ max_motiva_version: "0.0.1" });
+    vi.spyOn(loader, "loadManifest").mockResolvedValue(manifest);
+
+    const state = await loader.loadOne("/tmp/plugins/test-plugin");
+    expect(state.status).toBe("incompatible");
+    expect(state.error_message).toMatch(/0\.0\.1/);
+  });
+
+  it("proceeds normally when no version constraints are specified", async () => {
+    const manifest = makeValidManifest({ name: "compat-plugin" });
+    vi.spyOn(loader, "loadManifest").mockResolvedValue(manifest);
+
+    const notifierImpl = makeNotifierImpl();
+    vi.spyOn(loader, "loadOne").mockResolvedValueOnce(loader.buildSuccessState(manifest));
+
+    const state = await loader.loadOne("/tmp/plugins/compat-plugin");
+    expect(state.status).toBe("loaded");
   });
 });
 

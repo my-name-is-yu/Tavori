@@ -1,5 +1,7 @@
 import * as path from "node:path";
 import * as fs from "node:fs/promises";
+import * as fsSync from "node:fs";
+import * as url from "node:url";
 import yaml from "js-yaml";
 import { getPluginsDir } from "../utils/paths.js";
 import { writeJsonFileAtomic } from "../utils/json-io.js";
@@ -78,6 +80,21 @@ export class PluginLoader {
   async loadOne(pluginDir: string): Promise<PluginState> {
     // 1. Read and validate manifest
     const manifest = await this.loadManifest(pluginDir);
+
+    // 1b. Semver compatibility check
+    const motivaVersion = getMotivaVersion();
+    if (!satisfiesRange(motivaVersion, manifest.min_motiva_version, manifest.max_motiva_version)) {
+      const range = [
+        manifest.min_motiva_version ? `>=${manifest.min_motiva_version}` : "",
+        manifest.max_motiva_version ? `<=${manifest.max_motiva_version}` : "",
+      ]
+        .filter(Boolean)
+        .join(", ");
+      this.logger?.warn(
+        `[PluginLoader] Skipping incompatible plugin "${manifest.name}": requires Motiva ${range}, got ${motivaVersion}`
+      );
+      return this.buildIncompatibleState(manifest, motivaVersion, range);
+    }
 
     // 2. Dynamically import the entry point
     const entryPath = path.resolve(pluginDir, manifest.entry_point);
@@ -247,6 +264,22 @@ export class PluginLoader {
     return state;
   }
 
+  buildIncompatibleState(manifest: PluginManifest, motivaVersion: string, range: string): PluginState {
+    const state = PluginStateSchema.parse({
+      name: manifest.name,
+      manifest,
+      status: "incompatible",
+      error_message: `Requires Motiva ${range}, got ${motivaVersion}`,
+      loaded_at: new Date().toISOString(),
+      trust_score: 0,
+      usage_count: 0,
+      success_count: 0,
+      failure_count: 0,
+    });
+    this.pluginStates.set(manifest.name, state);
+    return state;
+  }
+
   buildErrorState(pluginDir: string, reason: unknown): PluginState {
     const errorMessage =
       reason instanceof Error ? reason.message : String(reason);
@@ -318,6 +351,50 @@ export class PluginLoader {
 }
 
 // ─── Module-level helpers ───
+
+// ─── Motiva version (read once from package.json) ───
+
+let _motivaVersion: string | undefined;
+
+function getMotivaVersion(): string {
+  if (_motivaVersion !== undefined) return _motivaVersion;
+  try {
+    const pkgPath = path.resolve(
+      path.dirname(url.fileURLToPath(import.meta.url)),
+      "../../package.json"
+    );
+    const pkg = JSON.parse(fsSync.readFileSync(pkgPath, "utf-8")) as { version: string };
+    _motivaVersion = pkg.version;
+  } catch {
+    _motivaVersion = "0.0.0";
+  }
+  return _motivaVersion;
+}
+
+// ─── Semver utilities (no external deps) ───
+
+export function parseSemver(version: string): { major: number; minor: number; patch: number } {
+  const match = version.match(/^(\d+)\.(\d+)\.(\d+)/);
+  if (!match) throw new Error(`Invalid semver: ${version}`);
+  return { major: Number(match[1]), minor: Number(match[2]), patch: Number(match[3]) };
+}
+
+export function compareSemver(
+  a: { major: number; minor: number; patch: number },
+  b: { major: number; minor: number; patch: number }
+): -1 | 0 | 1 {
+  if (a.major !== b.major) return a.major > b.major ? 1 : -1;
+  if (a.minor !== b.minor) return a.minor > b.minor ? 1 : -1;
+  if (a.patch !== b.patch) return a.patch > b.patch ? 1 : -1;
+  return 0;
+}
+
+export function satisfiesRange(version: string, min?: string, max?: string): boolean {
+  const v = parseSemver(version);
+  if (min !== undefined && compareSemver(v, parseSemver(min)) < 0) return false;
+  if (max !== undefined && compareSemver(v, parseSemver(max)) > 0) return false;
+  return true;
+}
 
 /** Read a file and return its content, or null if it doesn't exist. */
 async function readFileSafe(filePath: string): Promise<string | null> {

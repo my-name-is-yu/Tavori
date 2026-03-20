@@ -215,8 +215,24 @@ Phase 3 は実装機能追加ではなく、コードベースの品質・保守
 
 ---
 
+## Milestone 17: 外部連携プラグイン拡充（complete）
+
+**テーマ**: データソース・通知プラグインの参照実装と開発者ガイド
+
+### 実装モジュール
+- `examples/plugins/jira-datasource/` — Jira REST API IDataSourceAdapter（fetchのみ、外部依存なし）
+- `examples/plugins/pagerduty-notifier/` — PagerDuty Events API v2 INotifier（fetchのみ、外部依存なし）
+- `docs/design/plugin-development-guide.md` — プラグイン開発ガイド（data_source/notifier種類・plugin.yaml全フィールド・テスト方法・npm公開手順・既存プラグイン一覧）
+
+### テスト検証
+- `tests/jira-datasource-plugin.test.ts` — 19テスト（connect/query/healthCheck/disconnect）
+- `tests/pagerduty-notifier-plugin.test.ts` — 24テスト（INotifier準拠・supports・notify requestコンテンツ）
+- Status: complete; 全43テスト通過
+
+---
+
 ## Notes
 - Counts above are based on the current checked-in `src/` and `tests/` directories.
 - Source inventory includes both `.ts` and `.tsx` files under `src/`.
-- The latest `vitest run` executes 3461 tests (excluding e2e suite); the runner count is authoritative for the top-level inventory.
+- The latest `vitest run` executes 3504 tests (excluding e2e suite); the runner count is authoritative for the top-level inventory.
 - "Dedicated validation" counts are based on explicit `it()` / `test()` blocks in the test files mapped to each stage or milestone; they are not additive across the whole document because some areas intentionally overlap.

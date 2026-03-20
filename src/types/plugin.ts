@@ -39,6 +39,7 @@ export const PluginManifestSchema = z.object({
 
   // 必要なMotivaのバージョン（semver range）
   min_motiva_version: z.string().optional(),
+  max_motiva_version: z.string().optional(),
 
   // 宣言するリソースアクセス（セキュリティ審査用）
   permissions: z
@@ -60,7 +61,7 @@ export type PluginType = PluginManifest["type"];
 export const PluginStateSchema = z.object({
   name: z.string(),
   manifest: PluginManifestSchema,
-  status: z.enum(["loaded", "error", "disabled"]),
+  status: z.enum(["loaded", "error", "disabled", "incompatible"]),
   error_message: z.string().optional(),
   loaded_at: z.string(), // ISO 8601
   // 信頼スコア（trust-and-safety.md §2 と同じ非対称設計）

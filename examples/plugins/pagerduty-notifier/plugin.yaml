@@ -1,0 +1,30 @@
+name: pagerduty-notifier
+version: "1.0.0"
+type: notifier
+capabilities:
+  - pagerduty_notification
+  - incident_management
+supported_events:
+  - goal_complete
+  - task_blocked
+  - approval_needed
+  - stall_detected
+  - trust_change
+description: "Send Motiva events to PagerDuty via Events API v2"
+config_schema:
+  routing_key:
+    type: string
+    required: true
+    description: "PagerDuty Events API v2 integration key (routing key)"
+  source:
+    type: string
+    required: false
+    description: "Event source identifier (defaults to 'motiva')"
+  component:
+    type: string
+    required: false
+    description: "Component name to include in the event"
+entry_point: "src/index.ts"
+min_motiva_version: "0.1.0"
+permissions:
+  network: true

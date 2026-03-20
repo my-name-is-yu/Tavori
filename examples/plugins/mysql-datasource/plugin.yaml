@@ -1,0 +1,12 @@
+name: mysql-datasource
+version: "1.0.0"
+type: data_source
+description: "MySQL database observation source"
+entry_point: src/index.ts
+min_motiva_version: "0.1.0"
+capabilities:
+  - database_query
+dimensions:
+  - "*"
+permissions:
+  network: true

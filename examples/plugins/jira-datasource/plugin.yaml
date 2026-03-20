@@ -1,0 +1,26 @@
+name: jira-datasource
+version: "1.0.0"
+type: data_source
+description: "Jira REST API issue count observation source"
+entry_point: src/index.ts
+min_motiva_version: "0.1.0"
+capabilities:
+  - http_api
+  - issue_tracking
+dimensions:
+  - "*"
+config_schema:
+  base_url:
+    type: string
+    required: true
+    description: "Jira instance base URL (e.g. https://yourorg.atlassian.net)"
+  email:
+    type: string
+    required: true
+    description: "Atlassian account email for Basic Auth"
+  api_token:
+    type: string
+    required: true
+    description: "Atlassian API token for Basic Auth"
+permissions:
+  network: true

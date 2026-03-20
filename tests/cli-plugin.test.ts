@@ -101,7 +101,7 @@ vi.mock("../src/llm/provider-factory.js", async (importOriginal) => {
 
 // ─── Imports after mocks ─────────────────────────────────────────────────────
 
-import { cmdPluginList, cmdPluginInstall, cmdPluginRemove } from "../src/cli/commands/plugin.js";
+import { cmdPluginList, cmdPluginInstall, cmdPluginRemove, cmdPluginUpdate, cmdPluginSearch } from "../src/cli/commands/plugin.js";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -272,6 +272,240 @@ describe("cmdPluginRemove", () => {
 
   it("returns 1 when name argument is missing", async () => {
     const exitCode = await cmdPluginRemove(pluginsDir, []);
+
+    expect(exitCode).toBe(1);
+  });
+});
+
+// ─── Path detection helpers ────────────────────────────────────────────────────
+
+describe("cmdPluginInstall — path detection", () => {
+  it("treats absolute path as local install", async () => {
+    const sourceDir = path.join(tmpDir, "source", "abs-plugin");
+    writePluginManifest(sourceDir, { name: "abs-plugin", version: "1.0.0" });
+
+    const exitCode = await cmdPluginInstall(pluginsDir, [sourceDir]);
+
+    expect(exitCode).toBe(0);
+    expect(fs.existsSync(path.join(pluginsDir, "abs-plugin"))).toBe(true);
+  });
+
+  it("treats ./ relative path as local install", async () => {
+    // Create a plugin dir and simulate the install errors (path does not exist)
+    const exitCode = await cmdPluginInstall(pluginsDir, ["./nonexistent-plugin"]);
+
+    // Should fail with "does not exist" for local path, not npm install
+    expect(exitCode).toBe(1);
+    const allOutput = [...consoleLogs, ...consoleErrors].join("\n");
+    expect(allOutput).toMatch(/does not exist/i);
+  });
+
+  it("treats @scope/package as npm install", async () => {
+    const mockExecFile = vi.fn().mockResolvedValue({ stdout: "", stderr: "" });
+
+    // npm install will succeed but manifest won't be found (no actual package installed)
+    const exitCode = await cmdPluginInstall(pluginsDir, ["@motiva-plugins/test"], undefined, mockExecFile as never);
+
+    expect(mockExecFile).toHaveBeenCalledWith(
+      "npm",
+      expect.arrayContaining(["install", "--prefix", expect.any(String), "@motiva-plugins/test"])
+    );
+    // fails at manifest read since nothing was actually installed
+    expect(exitCode).toBe(1);
+  });
+
+  it("treats bare package name as npm install", async () => {
+    const mockExecFile = vi.fn().mockResolvedValue({ stdout: "", stderr: "" });
+
+    const exitCode = await cmdPluginInstall(pluginsDir, ["my-motiva-plugin"], undefined, mockExecFile as never);
+
+    expect(mockExecFile).toHaveBeenCalledWith(
+      "npm",
+      expect.arrayContaining(["install", "--prefix", expect.any(String), "my-motiva-plugin"])
+    );
+    expect(exitCode).toBe(1);
+  });
+});
+
+describe("cmdPluginInstall — npm flow", () => {
+  it("returns 1 when npm install fails", async () => {
+    const mockExecFile = vi.fn().mockRejectedValue(new Error("npm install failed"));
+
+    const exitCode = await cmdPluginInstall(pluginsDir, ["some-package"], undefined, mockExecFile as never);
+
+    expect(exitCode).toBe(1);
+    const allOutput = [...consoleLogs, ...consoleErrors].join("\n");
+    expect(allOutput).toMatch(/npm install/i);
+  });
+
+  it("returns 1 when already installed without --force", async () => {
+    // Pre-create the plugin dir to simulate already installed
+    const pluginDir = path.join(pluginsDir, "some-package");
+    fs.mkdirSync(pluginDir, { recursive: true });
+
+    const mockExecFile = vi.fn().mockResolvedValue({ stdout: "", stderr: "" });
+    const exitCode = await cmdPluginInstall(pluginsDir, ["some-package"], undefined, mockExecFile as never);
+
+    expect(exitCode).toBe(1);
+    expect(mockExecFile).not.toHaveBeenCalled();
+  });
+
+  it("installs successfully with manifest in node_modules", async () => {
+    const mockExecFile = vi.fn().mockImplementation(async (_cmd: string, args: string[]) => {
+      // Simulate npm install creating node_modules/<pkgname>/plugin.yaml
+      const prefixIndex = args.indexOf("--prefix");
+      if (prefixIndex !== -1) {
+        const prefixDir = args[prefixIndex + 1];
+        const pkgName = args[args.length - 1];
+        const nodeModulesDir = path.join(prefixDir, "node_modules", pkgName);
+        fs.mkdirSync(nodeModulesDir, { recursive: true });
+        writePluginManifest(nodeModulesDir, { name: "mock-npm-plugin", version: "1.2.3" });
+      }
+      return { stdout: "", stderr: "" };
+    });
+
+    const exitCode = await cmdPluginInstall(
+      pluginsDir,
+      ["mock-npm-plugin"],
+      () => "0.1.0",
+      mockExecFile as never
+    );
+
+    expect(exitCode).toBe(0);
+    const allOutput = consoleLogs.join("\n");
+    expect(allOutput).toMatch(/installed from npm/i);
+    expect(allOutput).toContain("mock-npm-plugin");
+  });
+
+  it("returns 1 when plugin requires higher Motiva version", async () => {
+    const mockExecFile = vi.fn().mockImplementation(async (_cmd: string, args: string[]) => {
+      const prefixIndex = args.indexOf("--prefix");
+      if (prefixIndex !== -1) {
+        const prefixDir = args[prefixIndex + 1];
+        const pkgName = args[args.length - 1];
+        const nodeModulesDir = path.join(prefixDir, "node_modules", pkgName);
+        fs.mkdirSync(nodeModulesDir, { recursive: true });
+        const manifest = {
+          name: "future-plugin",
+          version: "1.0.0",
+          type: "notifier",
+          capabilities: ["notify"],
+          description: "Requires future Motiva",
+          permissions: {},
+          min_motiva_version: "99.0.0",
+        };
+        fs.writeFileSync(path.join(nodeModulesDir, "plugin.yaml"), yaml.dump(manifest), "utf-8");
+      }
+      return { stdout: "", stderr: "" };
+    });
+
+    const exitCode = await cmdPluginInstall(
+      pluginsDir,
+      ["future-plugin"],
+      () => "0.1.0",
+      mockExecFile as never
+    );
+
+    expect(exitCode).toBe(1);
+  });
+});
+
+// ─── cmdPluginUpdate ──────────────────────────────────────────────────────────
+
+describe("cmdPluginUpdate", () => {
+  it("returns 1 when name argument is missing", async () => {
+    const exitCode = await cmdPluginUpdate(pluginsDir, []);
+    expect(exitCode).toBe(1);
+  });
+
+  it("returns 1 when plugin directory does not exist", async () => {
+    const exitCode = await cmdPluginUpdate(pluginsDir, ["nonexistent-plugin"]);
+    expect(exitCode).toBe(1);
+  });
+
+  it("runs npm update --prefix <dir> and returns 0", async () => {
+    const pluginDir = path.join(pluginsDir, "my-npm-plugin");
+    fs.mkdirSync(pluginDir, { recursive: true });
+
+    let capturedArgs: string[] = [];
+    const mockExecFile = vi.fn().mockImplementation(async (_cmd: string, args: string[]) => {
+      capturedArgs = args;
+      return { stdout: "", stderr: "" };
+    });
+
+    const exitCode = await cmdPluginUpdate(pluginsDir, ["my-npm-plugin"], mockExecFile as never);
+
+    expect(exitCode).toBe(0);
+    expect(mockExecFile).toHaveBeenCalledWith("npm", expect.arrayContaining(["update", "--prefix"]));
+    expect(capturedArgs).toContain("--prefix");
+    expect(capturedArgs).toContain(pluginDir);
+    const allOutput = consoleLogs.join("\n");
+    expect(allOutput).toContain("my-npm-plugin");
+    expect(allOutput).toMatch(/updated/i);
+  });
+
+  it("returns 1 when npm update fails", async () => {
+    const pluginDir = path.join(pluginsDir, "broken-plugin");
+    fs.mkdirSync(pluginDir, { recursive: true });
+
+    const mockExecFile = vi.fn().mockRejectedValue(new Error("npm update failed"));
+
+    const exitCode = await cmdPluginUpdate(pluginsDir, ["broken-plugin"], mockExecFile as never);
+
+    expect(exitCode).toBe(1);
+  });
+});
+
+// ─── cmdPluginSearch ──────────────────────────────────────────────────────────
+
+describe("cmdPluginSearch", () => {
+  it("returns 1 when keyword argument is missing", async () => {
+    const exitCode = await cmdPluginSearch(pluginsDir, []);
+    expect(exitCode).toBe(1);
+  });
+
+  it("runs npm search and displays results in table format", async () => {
+    const mockResults = [
+      { name: "@motiva-plugins/slack", version: "1.0.0", description: "Slack notifications" },
+      { name: "@motiva-plugins/discord", version: "2.1.0", description: "Discord notifications" },
+    ];
+    const mockExecFile = vi.fn().mockResolvedValue({
+      stdout: JSON.stringify(mockResults),
+      stderr: "",
+    });
+
+    const exitCode = await cmdPluginSearch(pluginsDir, ["slack"], mockExecFile as never);
+
+    expect(exitCode).toBe(0);
+    expect(mockExecFile).toHaveBeenCalledWith("npm", ["search", "@motiva-plugins/slack", "--json"]);
+    const allOutput = consoleLogs.join("\n");
+    expect(allOutput).toContain("@motiva-plugins/slack");
+    expect(allOutput).toContain("@motiva-plugins/discord");
+    expect(allOutput).toContain("1.0.0");
+  });
+
+  it("returns 0 and shows no results message when search is empty", async () => {
+    const mockExecFile = vi.fn().mockResolvedValue({ stdout: "[]", stderr: "" });
+
+    const exitCode = await cmdPluginSearch(pluginsDir, ["unknown-keyword"], mockExecFile as never);
+
+    expect(exitCode).toBe(0);
+    const allOutput = consoleLogs.join("\n");
+    expect(allOutput).toMatch(/no plugins found/i);
+  });
+
+  it("returns 1 when npm search fails", async () => {
+    const mockExecFile = vi.fn().mockRejectedValue(new Error("network error"));
+
+    const exitCode = await cmdPluginSearch(pluginsDir, ["test"], mockExecFile as never);
+
+    expect(exitCode).toBe(1);
+  });
+
+  it("returns 1 when npm search returns invalid JSON", async () => {
+    const mockExecFile = vi.fn().mockResolvedValue({ stdout: "not-json", stderr: "" });
+
+    const exitCode = await cmdPluginSearch(pluginsDir, ["test"], mockExecFile as never);
 
     expect(exitCode).toBe(1);
   });

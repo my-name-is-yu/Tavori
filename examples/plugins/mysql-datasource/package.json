@@ -1,0 +1,8 @@
+{
+  "name": "@motiva-plugins/mysql-datasource",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "mysql2": "^3.0.0"
+  }
+}

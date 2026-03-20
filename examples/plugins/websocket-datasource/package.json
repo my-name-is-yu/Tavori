@@ -1,0 +1,11 @@
+{
+  "name": "@motiva-plugins/websocket-datasource",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "ws": "^8.0.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.0.0"
+  }
+}
