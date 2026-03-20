@@ -76,7 +76,7 @@ export class CodexLLMClient extends BaseLLMClient implements ILLMClient {
   constructor(config: CodexLLMClientConfig = {}) {
     super();
     this.cliPath = config.cliPath ?? "codex";
-    this.model = config.model ?? process.env["OPENAI_MODEL"];
+    this.model = config.model;
     this.repoPath = config.repoPath?.trim() || ".";
     this.timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }

@@ -72,14 +72,12 @@ describe("OpenAILLMClient", () => {
       expect(() => new OpenAILLMClient({ apiKey: "sk-test" })).not.toThrow();
     });
 
-    it("uses OPENAI_API_KEY env var as fallback when apiKey not passed", () => {
-      process.env["OPENAI_API_KEY"] = "sk-from-env";
-      expect(() => new OpenAILLMClient()).not.toThrow();
+    it("does not throw when apiKey is provided in config", () => {
+      expect(() => new OpenAILLMClient({ apiKey: "sk-from-config" })).not.toThrow();
     });
 
     it("default model is 'gpt-4o'", async () => {
-      process.env["OPENAI_API_KEY"] = "sk-test";
-      const client = new OpenAILLMClient();
+      const client = new OpenAILLMClient({ apiKey: "sk-test" });
       mockCreate.mockResolvedValueOnce(makeCompletionResponse("hello"));
 
       await client.sendMessage([{ role: "user", content: "hi" }]);

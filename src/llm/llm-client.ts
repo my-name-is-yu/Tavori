@@ -54,20 +54,19 @@ export { extractJSON, DEFAULT_MAX_TOKENS };
  * Thin wrapper around the Anthropic SDK.
  * Provides retry logic and JSON extraction/validation.
  *
- * Constructor throws if no API key is available (no param, no env var).
+ * Constructor throws if no API key is provided.
  */
 export class LLMClient extends BaseLLMClient implements ILLMClient {
   private readonly client: Anthropic;
 
-  constructor(apiKey?: string) {
+  constructor(apiKey: string) {
     super();
-    const key = apiKey ?? process.env["ANTHROPIC_API_KEY"];
-    if (!key) {
+    if (!apiKey) {
       throw new Error(
-        "LLMClient: no API key provided. Pass apiKey to constructor or set ANTHROPIC_API_KEY env var."
+        "LLMClient: no API key provided. Pass apiKey to constructor."
       );
     }
-    this.client = new Anthropic({ apiKey: key });
+    this.client = new Anthropic({ apiKey });
   }
 
   /**

@@ -38,6 +38,7 @@ import type { GapCalculatorModule, DriveScorerModule } from "../core-loop.js";
 
 import { App, type ApprovalRequest } from "./app.js";
 import { getCliLogger } from "../cli/cli-logger.js";
+import { ensureProviderConfig } from "../cli/ensure-api-key.js";
 import { ActionHandler } from "./actions.js";
 import { IntentRecognizer } from "./intent-recognizer.js";
 import type { Task } from "../types/task.js";
@@ -207,15 +208,11 @@ function getGitBranch(): string {
 // ─── TUI Entry ───
 
 export async function startTUI(): Promise<void> {
-  // 1. Check API key requirements (deferred to buildLLMClient via provider-factory)
-  const provider = process.env.MOTIVA_LLM_PROVIDER;
-  if (!process.env.ANTHROPIC_API_KEY && provider !== "ollama" && provider !== "openai" && provider !== "codex") {
-    getCliLogger().error(
-      "Error: ANTHROPIC_API_KEY environment variable is not set.\n" +
-        "Set it with: export ANTHROPIC_API_KEY=<your-key>\n" +
-        "Or use OpenAI: export MOTIVA_LLM_PROVIDER=openai\n" +
-        "Or use Ollama: export MOTIVA_LLM_PROVIDER=ollama"
-    );
+  // 1. Check API key requirements
+  try {
+    await ensureProviderConfig();
+  } catch (err) {
+    getCliLogger().error(err instanceof Error ? err.message : String(err));
     process.exit(1);
   }
 

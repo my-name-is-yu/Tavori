@@ -4,7 +4,7 @@ import { parseArgs } from "node:util";
 
 import { StateManager } from "../../state-manager.js";
 import { CharacterConfigManager } from "../../traits/character-config.js";
-import { loadProviderConfig } from "../../llm/provider-config.js";
+import { ensureProviderConfig } from "../ensure-api-key.js";
 import { buildLLMClient } from "../../llm/provider-factory.js";
 import { ReportingEngine } from "../../reporting-engine.js";
 import { CapabilityDetector } from "../../observation/capability-detector.js";
@@ -434,23 +434,16 @@ export async function cmdSuggest(
     return 1;
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  const providerConfig = await loadProviderConfig();
-  const provider = providerConfig.llm_provider;
-  if (!apiKey && provider !== "ollama" && provider !== "openai" && provider !== "codex") {
-    logger.error(
-      "Error: ANTHROPIC_API_KEY environment variable is not set.\n" +
-        "Set it with: export ANTHROPIC_API_KEY=<your-key>\n" +
-        "Or use OpenAI: export MOTIVA_LLM_PROVIDER=openai\n" +
-        "Or use Ollama: export MOTIVA_LLM_PROVIDER=ollama\n" +
-        "Or use Codex: export MOTIVA_LLM_PROVIDER=codex"
-    );
+  try {
+    await ensureProviderConfig();
+  } catch (err) {
+    logger.error(err instanceof Error ? err.message : String(err));
     return 1;
   }
 
   let deps: Awaited<ReturnType<typeof buildDeps>>;
   try {
-    deps = await buildDeps(stateManager, characterConfigManager, apiKey);
+    deps = await buildDeps(stateManager, characterConfigManager);
   } catch (err) {
     logger.error(formatOperationError("initialise suggest dependencies", err));
     return 1;
@@ -538,23 +531,16 @@ export async function cmdImprove(
   const targetPath = positionals[0] || ".";
   console.log(`\n[Motiva Improve] Analyzing ${targetPath}...\n`);
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  const providerConfig = await loadProviderConfig();
-  const provider = providerConfig.llm_provider;
-  if (!apiKey && provider !== "ollama" && provider !== "openai" && provider !== "codex") {
-    logger.error(
-      "Error: ANTHROPIC_API_KEY environment variable is not set.\n" +
-        "Set it with: export ANTHROPIC_API_KEY=<your-key>\n" +
-        "Or use OpenAI: export MOTIVA_LLM_PROVIDER=openai\n" +
-        "Or use Ollama: export MOTIVA_LLM_PROVIDER=ollama\n" +
-        "Or use Codex: export MOTIVA_LLM_PROVIDER=codex"
-    );
+  try {
+    await ensureProviderConfig();
+  } catch (err) {
+    logger.error(err instanceof Error ? err.message : String(err));
     return 1;
   }
 
   let deps: Awaited<ReturnType<typeof buildDeps>>;
   try {
-    deps = await buildDeps(stateManager, characterConfigManager, apiKey);
+    deps = await buildDeps(stateManager, characterConfigManager);
   } catch (err) {
     logger.error(formatOperationError("initialise improve dependencies", err));
     return 1;

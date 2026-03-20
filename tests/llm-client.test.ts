@@ -201,19 +201,8 @@ describe("LLMClient", () => {
       expect(() => new LLMClient("test-api-key")).not.toThrow();
     });
 
-    it("does not throw when ANTHROPIC_API_KEY env var is set", () => {
-      const original = process.env["ANTHROPIC_API_KEY"];
-      process.env["ANTHROPIC_API_KEY"] = "env-key";
-
-      try {
-        expect(() => new LLMClient()).not.toThrow();
-      } finally {
-        if (original !== undefined) {
-          process.env["ANTHROPIC_API_KEY"] = original;
-        } else {
-          delete process.env["ANTHROPIC_API_KEY"];
-        }
-      }
+    it("does not throw when API key is passed via config", () => {
+      expect(() => new LLMClient("config-api-key")).not.toThrow();
     });
   });
 

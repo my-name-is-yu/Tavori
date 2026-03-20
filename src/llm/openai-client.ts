@@ -22,7 +22,7 @@ function isReasoningModel(model: string): boolean {
 // ─── OpenAILLMClient ───
 
 export interface OpenAIClientConfig {
-  /** Falls back to OPENAI_API_KEY env var if not provided */
+  /** API key for OpenAI. Required. */
   apiKey?: string;
   /** Default: "gpt-4o" */
   model?: string;
@@ -46,15 +46,14 @@ export class OpenAILLMClient extends BaseLLMClient implements ILLMClient {
 
   constructor(config: OpenAIClientConfig = {}) {
     super();
-    const apiKey = config.apiKey ?? process.env["OPENAI_API_KEY"];
-    if (!apiKey) {
+    if (!config.apiKey) {
       throw new Error(
-        "OpenAILLMClient: no API key provided. Pass apiKey to constructor or set OPENAI_API_KEY env var."
+        "OpenAILLMClient: no API key provided. Pass apiKey to constructor."
       );
     }
     this.model = config.model ?? DEFAULT_MODEL;
     this.client = new OpenAI({
-      apiKey,
+      apiKey: config.apiKey,
       ...(config.baseURL ? { baseURL: config.baseURL } : {}),
     });
   }

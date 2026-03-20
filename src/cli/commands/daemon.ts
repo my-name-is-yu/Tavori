@@ -33,7 +33,6 @@ export async function cmdStart(
     values = {};
   }
 
-  const apiKey = (values["api-key"] as string) || process.env.ANTHROPIC_API_KEY || "";
   const goalIds = (values.goal as string[]) || [];
 
   if (goalIds.length === 0) {
@@ -41,7 +40,7 @@ export async function cmdStart(
     process.exit(1);
   }
 
-  const deps = await buildDeps(stateManager, characterConfigManager, apiKey);
+  const deps = await buildDeps(stateManager, characterConfigManager);
 
   const pidManager = new PIDManager(deps.stateManager.getBaseDir());
   const logger = new Logger({

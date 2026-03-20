@@ -38,7 +38,7 @@ describe.skipIf(!API_KEY_SET)("OpenAI E2E — real API calls", () => {
   it(
     "OpenAILLMClient.sendMessage() returns a valid LLMResponse",
     async () => {
-      const client = new OpenAILLMClient();
+      const client = new OpenAILLMClient({ apiKey: process.env["OPENAI_API_KEY"]! });
 
       const res = await client.sendMessage([
         { role: "user", content: "Reply with just the word 'hello'" },
@@ -84,7 +84,7 @@ describe.skipIf(!API_KEY_SET)("OpenAI E2E — real API calls", () => {
   it(
     "OpenAILLMClient.parseJSON() validates structured JSON response",
     async () => {
-      const client = new OpenAILLMClient();
+      const client = new OpenAILLMClient({ apiKey: process.env["OPENAI_API_KEY"]! });
 
       const GreetingSchema = z.object({
         greeting: z.string(),

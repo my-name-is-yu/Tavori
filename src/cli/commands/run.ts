@@ -5,7 +5,7 @@ import { getLogsDir } from "../../utils/paths.js";
 
 import { StateManager } from "../../state-manager.js";
 import { CharacterConfigManager } from "../../traits/character-config.js";
-import { loadProviderConfig } from "../../llm/provider-config.js";
+import { ensureProviderConfig } from "../ensure-api-key.js";
 import { Logger } from "../../runtime/logger.js";
 import type { LoopConfig } from "../../core-loop.js";
 import type { ProgressEvent } from "../../core-loop.js";
@@ -40,17 +40,10 @@ export async function cmdRun(
   verbose?: boolean,
   activeCoreLoopRef?: { value: import("../../core-loop.js").CoreLoop | null }
 ): Promise<number> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  const providerConfig = await loadProviderConfig();
-  const provider = providerConfig.llm_provider;
-  if (!apiKey && provider !== "ollama" && provider !== "openai" && provider !== "codex") {
-    getCliLogger().error(
-      "Error: ANTHROPIC_API_KEY environment variable is not set.\n" +
-        "Set it with: export ANTHROPIC_API_KEY=<your-key>\n" +
-        "Or use OpenAI: export MOTIVA_LLM_PROVIDER=openai\n" +
-        "Or use Ollama: export MOTIVA_LLM_PROVIDER=ollama\n" +
-        "Or use Codex: export MOTIVA_LLM_PROVIDER=codex"
-    );
+  try {
+    await ensureProviderConfig();
+  } catch (err) {
+    getCliLogger().error(err instanceof Error ? err.message : String(err));
     return 1;
   }
 
@@ -106,7 +99,7 @@ export async function cmdRun(
 
   let deps: Awaited<ReturnType<typeof buildDeps>>;
   try {
-    deps = await buildDeps(stateManager, characterConfigManager, apiKey, loopConfig, approvalFn, logger, onProgress);
+    deps = await buildDeps(stateManager, characterConfigManager, loopConfig, approvalFn, logger, onProgress);
   } catch (err) {
     rl?.close();
     logger.error(formatOperationError("initialise dependencies", err));

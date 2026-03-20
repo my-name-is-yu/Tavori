@@ -46,7 +46,6 @@ import { formatOperationError } from "./utils.js";
 export async function buildDeps(
   stateManager: StateManager,
   characterConfigManager: CharacterConfigManager,
-  _apiKey: string | undefined,
   config?: LoopConfig,
   approvalFn?: (task: Task) => Promise<boolean>,
   logger?: Logger,
