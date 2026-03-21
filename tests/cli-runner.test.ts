@@ -37,6 +37,18 @@ import * as path from "node:path";
 // StateManager is NOT mocked — we use real instances pointing to tmpDir.
 // CLIRunner(tmpDir) creates a real StateManager(tmpDir) internally.
 
+vi.mock("../src/llm/provider-factory.js", () => ({
+  buildLLMClient: vi.fn().mockResolvedValue({
+    sendMessage: vi.fn().mockResolvedValue({ content: "mock" }),
+    parseJSON: vi.fn().mockResolvedValue({}),
+  }),
+  buildAdapterRegistry: vi.fn().mockResolvedValue({
+    register: vi.fn(),
+    getAdapterCapabilities: vi.fn().mockReturnValue([]),
+    resolve: vi.fn(),
+  }),
+}));
+
 vi.mock("../src/core-loop.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/core-loop.js")>();
   return {
