@@ -32,7 +32,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  fs.rmSync(tmpDir, { recursive: true, force: true });
+  try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore cleanup race */ }
 });
 
 // ═══════════════════════════════════════════════════════

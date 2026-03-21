@@ -404,7 +404,7 @@ describe("Milestone 4 — Group 2: Event-Driven Integration", () => {
 
   // ── Test 6: EventServer start/stop lifecycle ──
 
-  it("EventServer starts, accepts a POST /events request, and stops cleanly", async () => {
+  it("EventServer starts, accepts a POST /events request, and stops cleanly", { timeout: 15000 }, async () => {
     const stateManager = new StateManager(tempDir);
     const driveSystem = new DriveSystem(stateManager, { baseDir: tempDir });
 

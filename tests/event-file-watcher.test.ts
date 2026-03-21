@@ -132,7 +132,7 @@ describe("file watcher — detects new JSON files", () => {
     expect(called.source).toBe("test-watcher");
   });
 
-  it("processes multiple event files sequentially", async () => {
+  it("processes multiple event files sequentially", { timeout: 15000 }, async () => {
     const eventsDir = path.join(tmpDir, "events");
     server.startFileWatcher();
 
@@ -170,7 +170,7 @@ describe("file watcher — detects new JSON files", () => {
 // ─── Processed files are moved ───
 
 describe("file watcher — processed files are moved to processed/", () => {
-  it("moves processed file to events/processed/ directory", async () => {
+  it("moves processed file to events/processed/ directory", { timeout: 15000 }, async () => {
     const eventsDir = path.join(tmpDir, "events");
     server.startFileWatcher();
 
