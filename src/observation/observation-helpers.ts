@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { ObservationLogEntrySchema, ObservationLogSchema } from "../types/state.js";
 import type { ObservationLogEntry, ObservationLog } from "../types/state.js";
@@ -108,7 +109,7 @@ export function createObservationEntry(params: {
   const clampedConfidence = Math.min(maxConf, Math.max(minConf, params.confidence));
 
   const entry = ObservationLogEntrySchema.parse({
-    observation_id: crypto.randomUUID(),
+    observation_id: randomUUID(),
     timestamp: new Date().toISOString(),
     trigger: params.trigger,
     goal_id: params.goalId,

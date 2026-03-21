@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
 import { z } from "zod";
@@ -105,7 +106,7 @@ export class StrategyTemplateRegistry {
     );
 
     // Create a VectorIndex entry for semantic search
-    const embeddingId = `tmpl-emb-${crypto.randomUUID()}`;
+    const embeddingId = `tmpl-emb-${randomUUID()}`;
     await this.vectorIndex.add(embeddingId, generalized.hypothesis_pattern, {
       template_type: "strategy-template",
       domain_tags: generalized.domain_tags,
@@ -116,7 +117,7 @@ export class StrategyTemplateRegistry {
 
     // Create the StrategyTemplate object
     const template: StrategyTemplate = StrategyTemplateSchema.parse({
-      template_id: `tmpl-${crypto.randomUUID()}`,
+      template_id: `tmpl-${randomUUID()}`,
       source_goal_id: goalId,
       source_strategy_id: strategy.id,
       hypothesis_pattern: generalized.hypothesis_pattern,
@@ -218,7 +219,7 @@ export class StrategyTemplateRegistry {
     // Create a new Strategy object
     const now = new Date().toISOString();
     const strategy: Strategy = StrategySchema.parse({
-      id: `strat-${crypto.randomUUID()}`,
+      id: `strat-${randomUUID()}`,
       goal_id: goalId,
       target_dimensions: adapted.target_dimensions,
       primary_dimension: adapted.target_dimensions[0] ?? "default",

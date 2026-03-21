@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { ObservationLogEntrySchema } from "../types/state.js";
 import type { ObservationLogEntry } from "../types/state.js";
 import type { ObservationLayer } from "../types/core.js";
@@ -153,7 +154,7 @@ export async function observeFromDataSource(
   }
 
   const entry = ObservationLogEntrySchema.parse({
-    observation_id: crypto.randomUUID(),
+    observation_id: randomUUID(),
     timestamp: result.timestamp,
     trigger: "periodic",
     goal_id: goalId,

@@ -4,6 +4,7 @@
 // Wraps A2AClient for network I/O and maps between Motiva's AgentTask/AgentResult
 // and A2A's Message/Task types. Supports both polling and SSE streaming.
 
+import { randomUUID } from "node:crypto";
 import type {
   IAdapter,
   AgentTask,
@@ -94,7 +95,7 @@ export class A2AAdapter implements IAdapter {
     const message: A2AMessage = {
       role: "user",
       parts: [{ kind: "text", text: task.prompt }],
-      messageId: crypto.randomUUID(),
+      messageId: randomUUID(),
       ...(this.contextId ? { contextId: this.contextId } : {}),
     };
 

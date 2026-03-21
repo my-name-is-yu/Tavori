@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { ReflectionNoteSchema, type ReflectionNote } from "../types/reflection.js";
 import type { ILLMClient } from "../llm/llm-client.js";
@@ -68,7 +69,7 @@ Respond with JSON only:
     const parsed = LLMReflectionSchema.parse(raw);
 
     return ReflectionNoteSchema.parse({
-      reflection_id: crypto.randomUUID(),
+      reflection_id: randomUUID(),
       goal_id: goalId,
       strategy_id: strategyId ?? null,
       task_id: task.id,
@@ -81,7 +82,7 @@ Respond with JSON only:
   } catch (err) {
     logger?.warn?.("generateReflection: LLM parse failed, using fallback", { error: String(err) });
     return ReflectionNoteSchema.parse({
-      reflection_id: crypto.randomUUID(),
+      reflection_id: randomUUID(),
       goal_id: goalId,
       strategy_id: strategyId ?? null,
       task_id: task.id,
@@ -108,7 +109,7 @@ export async function saveReflectionAsKnowledge(
   }
 
   const entry: KnowledgeEntry = {
-    entry_id: crypto.randomUUID(),
+    entry_id: randomUUID(),
     question: `Reflection: ${taskDescription}`,
     answer: JSON.stringify({
       what_was_attempted: reflection.what_was_attempted,

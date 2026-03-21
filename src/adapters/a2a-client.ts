@@ -3,6 +3,7 @@
 // HTTP/SSE client for A2A (Agent-to-Agent) Protocol v0.3 JSON-RPC calls.
 // Uses Node.js built-in fetch (Node 18+) to avoid external HTTP dependencies.
 
+import { randomUUID } from "node:crypto";
 import type {
   A2AAgentCard,
   A2ATask,
@@ -58,7 +59,7 @@ export class A2AClient {
   async sendMessage(message: A2AMessage): Promise<A2ATask> {
     const body = {
       jsonrpc: "2.0",
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       method: "message/send",
       params: { message },
     };
@@ -71,7 +72,7 @@ export class A2AClient {
   async getTask(taskId: string): Promise<A2ATask> {
     const body = {
       jsonrpc: "2.0",
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       method: "tasks/get",
       params: { id: taskId },
     };
@@ -84,7 +85,7 @@ export class A2AClient {
   async cancelTask(taskId: string): Promise<void> {
     const body = {
       jsonrpc: "2.0",
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       method: "tasks/cancel",
       params: { id: taskId },
     };
@@ -132,7 +133,7 @@ export class A2AClient {
   ): Promise<A2ATask> {
     const body = {
       jsonrpc: "2.0",
-      id: crypto.randomUUID(),
+      id: randomUUID(),
       method: "message/stream",
       params: { message },
     };

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { execFile as execFileCb } from "child_process";
 import { promisify } from "util";
 import { ObservationLogEntrySchema } from "../types/state.js";
@@ -192,7 +193,7 @@ export async function observeWithLLM(
   } catch { /* keep original score if threshold parsing fails */ }
 
   const entry = ObservationLogEntrySchema.parse({
-    observation_id: crypto.randomUUID(),
+    observation_id: randomUUID(),
     timestamp: new Date().toISOString(),
     trigger: "periodic",
     goal_id: goalId,

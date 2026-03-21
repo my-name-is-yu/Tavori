@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { SessionSchema, ContextSlotSchema } from "../types/session.js";
 import { AdapterError } from "../utils/errors.js";
 import type { Session, SessionType, ContextSlot } from "../types/session.js";
@@ -96,7 +97,7 @@ export class SessionManager {
     taskId: string | null,
     contextBudget: number = DEFAULT_CONTEXT_BUDGET
   ): Promise<Session> {
-    const sessionId = globalThis.crypto.randomUUID();
+    const sessionId = randomUUID();
     const now = new Date().toISOString();
 
     const contextSlots = this.dependencyGraph
