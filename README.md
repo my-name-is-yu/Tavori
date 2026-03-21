@@ -6,7 +6,7 @@ AI agent orchestrator that gives existing agents "motivation" — goal-driven ta
 
 ## What is Motiva?
 
-Motiva is a **task discovery engine**. You give it a long-term goal — "double revenue in 6 months," "keep my dog healthy and happy" — and it pursues that goal autonomously, indefinitely. It observes the real world, calculates the gap between the goal and current reality, generates the next task to close that gap, delegates it to an AI agent (CLI-type, API-type, or a custom adapter — e.g., Claude Code, OpenAI Codex CLI), and verifies the result. Then it loops.
+Motiva is a **task discovery engine**. You give it a long-term goal — "double revenue in 6 months," "keep my dog healthy and happy" — and it pursues that goal autonomously, indefinitely. It observes the real world, calculates the gap between the goal and current reality, generates the next task to close that gap, delegates it to an AI agent (CLI-type, API-type, or a custom adapter — e.g., Claude Code, OpenAI Codex CLI, Browser Use), and verifies the result. Then it loops.
 
 The key distinction from existing tools: Motiva doesn't execute. It orchestrates. It makes agents think, then verifies that their thinking produced real progress. Every action is delegated; Motiva's direct operations are limited to LLM calls (for reasoning) and state file read/write.
 
@@ -146,10 +146,13 @@ await loop.runOnce();
 ┌───────────────────────────────────────────────────────────────────────┐
 │                     Execution Layer (existing systems)                │
 │                                                                       │
-│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌────────────────────┐ │
-│  │ CLI Agent  │ │ LLM API    │ │ Custom     │ │ Human              │ │
-│  │ (implement) │ │ (analysis) │ │ Agents     │ │ (approve/decide)   │ │
-│  └────────────┘ └────────────┘ └────────────┘ └────────────────────┘ │
+│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌──────────────┐     │
+│  │ CLI Agent  │ │ LLM API    │ │ Browser Use│ │ Custom       │     │
+│  │ (implement)│ │ (analysis) │ │ (web auto) │ │ Agents       │     │
+│  └────────────┘ └────────────┘ └────────────┘ └──────────────┘     │
+│  ┌────────────────────────────┐ ┌────────────────────────────────┐  │
+│  │ A2A Protocol (remote)      │ │ Human (approve/decide)         │  │
+│  └────────────────────────────┘ └────────────────────────────────┘  │
 │                                                                       │
 │  ┌────────────────────────────────────────────────────────────────┐  │
 │  │ Data Sources: sensors, DB, analytics, CRM, external APIs, IoT  │  │
@@ -227,7 +230,7 @@ Exit codes: `0` normal completion, `1` error, `2` stall escalation requiring hum
 ```bash
 npm install
 npm run build           # TypeScript → dist/
-npm test                # Run all tests (3308 tests, 91 files)
+npm test                # Run all tests (4332 tests, 197 files)
 npm run typecheck       # Type check without emit
 npm run test:watch      # Watch mode
 ```
@@ -238,13 +241,13 @@ State files: `~/.motiva/`. Reports: `~/.motiva/reports/`. Ethics logs: `~/.motiv
 
 ## Project Status
 
-**Stage 1-14 + Milestone 1-7 complete. 3308 tests passing across 91 test files.**
+**Stage 1-14 + Milestone 1-18 complete. 4332 tests passing across 197 test files.**
 
 | Stage / Milestone | What was built |
 |---|---|
 | Stage 1-2 | Type system, state persistence, gap calculation, drive scoring, observation, stall detection, satisficing |
 | Stage 3 | LLM client, ethics gate, session management, strategy management, goal negotiation |
-| Stage 4 | Adapter layer (CLI agents, LLM APIs, custom adapters), task lifecycle |
+| Stage 4 | Adapter layer (CLI agents, LLM APIs, Browser Use, A2A Protocol, custom adapters), task lifecycle |
 | Stage 5-6 | Core loop, reporting engine, CLI runner |
 | Stage 7 | TUI — Ink/React terminal dashboard, approval UI, chat interface |
 | Stage 8-10 | Knowledge manager, portfolio manager, daemon runtime, event server, notifications, memory lifecycle |
@@ -254,7 +257,8 @@ State files: `~/.motiva/`. Reports: `~/.motiva/reports/`. Ethics logs: `~/.motiv
 | Stage 14 | Goal tree (recursive decomposition), cross-goal portfolio, strategy templates, learning pipeline, knowledge transfer |
 | Milestone 1 | LLM-powered 3-layer observation with 3-stage fallback (mechanical → LLM → self-report) |
 | Milestone 2-3 | Dogfooding verification — README quality, E2E loop automation, npm publish readiness |
-| Milestone 4-7 | Persistent runtime Phase 2, semantic knowledge base, observation accuracy improvements, task selection enhancements |
+| Milestone 4-7 | Persistent runtime Phase 2, semantic knowledge base, observation accuracy, task selection |
+| Milestone 8-18 | Safety (EthicsGate L1), observation accuracy (ShellDataSource), goal suggestion, autonomous strategy, plugin architecture, semantic knowledge, capability detection, goal tree, TUI, Web UI, external plugins, hierarchical memory, Browser Use CLI adapter |
 
 ---
 
