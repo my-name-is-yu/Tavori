@@ -23,7 +23,7 @@ describe("createWorkspaceContextProvider — external file reading", () => {
   let workDir: string;
 
   beforeEach(() => {
-    workDir = fs.mkdtempSync(path.join(os.tmpdir(), "motiva-test-ext-"));
+    workDir = fs.mkdtempSync(path.join(os.tmpdir(), "conatus-test-ext-"));
   });
 
   afterEach(() => {
@@ -31,7 +31,7 @@ describe("createWorkspaceContextProvider — external file reading", () => {
   });
 
   it("reads a /tmp/ file mentioned in goal description", async () => {
-    const tmpPath = path.join("/tmp", `motiva-test-${Date.now()}.txt`);
+    const tmpPath = path.join("/tmp", `conatus-test-${Date.now()}.txt`);
     writeTmpFile(tmpPath, "hello from tmp file");
 
     const provider = createWorkspaceContextProvider(
@@ -45,7 +45,7 @@ describe("createWorkspaceContextProvider — external file reading", () => {
   });
 
   it("reads a file under home directory mentioned in goal description", async () => {
-    const homePath = path.join(os.homedir(), `.motiva-test-${Date.now()}.txt`);
+    const homePath = path.join(os.homedir(), `.conatus-test-${Date.now()}.txt`);
     writeTmpFile(homePath, "home dir file content");
 
     const provider = createWorkspaceContextProvider(
@@ -71,7 +71,7 @@ describe("createWorkspaceContextProvider — external file reading", () => {
   });
 
   it("skips a /tmp/ path that does not exist", async () => {
-    const missingPath = "/tmp/motiva-nonexistent-file-xyz-9999.txt";
+    const missingPath = "/tmp/conatus-nonexistent-file-xyz-9999.txt";
 
     const provider = createWorkspaceContextProvider(
       { workDir },
@@ -83,7 +83,7 @@ describe("createWorkspaceContextProvider — external file reading", () => {
   });
 
   it("skips a file that exceeds externalFileMaxBytes", async () => {
-    const largePath = path.join("/tmp", `motiva-large-${Date.now()}.txt`);
+    const largePath = path.join("/tmp", `conatus-large-${Date.now()}.txt`);
     writeTmpFile(largePath, "x".repeat(100));
 
     const provider = createWorkspaceContextProvider(
@@ -140,7 +140,7 @@ describe("createWorkspaceContextProvider — external file reading", () => {
   });
 
   it("deduplicates the same path mentioned multiple times", async () => {
-    const tmpPath = path.join("/tmp", `motiva-dedup-${Date.now()}.txt`);
+    const tmpPath = path.join("/tmp", `conatus-dedup-${Date.now()}.txt`);
     writeTmpFile(tmpPath, "dedup content");
 
     const provider = createWorkspaceContextProvider(
@@ -159,7 +159,7 @@ describe("createWorkspaceContextProvider — relative path exact match", () => {
   let tmpWorkDir: string;
 
   beforeEach(() => {
-    tmpWorkDir = fs.mkdtempSync(path.join(os.tmpdir(), "motiva-ws-relpath-"));
+    tmpWorkDir = fs.mkdtempSync(path.join(os.tmpdir(), "conatus-ws-relpath-"));
     fs.writeFileSync(path.join(tmpWorkDir, "README.md"), "# Test Project", "utf-8");
     fs.writeFileSync(path.join(tmpWorkDir, "package.json"), '{"name":"test"}', "utf-8");
     // Create src/ subdirectory with files
@@ -225,7 +225,7 @@ describe("createWorkspaceContextProvider — existing workspace behavior unchang
   let tmpWorkDir: string;
 
   beforeEach(() => {
-    tmpWorkDir = fs.mkdtempSync(path.join(os.tmpdir(), "motiva-ws-test-"));
+    tmpWorkDir = fs.mkdtempSync(path.join(os.tmpdir(), "conatus-ws-test-"));
     fs.writeFileSync(path.join(tmpWorkDir, "README.md"), "# Test Project", "utf-8");
     fs.writeFileSync(path.join(tmpWorkDir, "package.json"), '{"name":"test"}', "utf-8");
   });

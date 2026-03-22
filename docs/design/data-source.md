@@ -1,10 +1,10 @@
-# Motiva --- 外部データソース統合設計
+# Conatus --- 外部データソース統合設計
 
 ---
 
 ## 1. 概要
 
-Motivaの観測システム（`observation.md` §2 Layer 1）は、機械的観測の手段としてファイルおよびHTTP APIからデータを取得できる。本ドキュメントは外部データソースの抽象化レイヤーを設計する。
+Conatusの観測システム（`observation.md` §2 Layer 1）は、機械的観測の手段としてファイルおよびHTTP APIからデータを取得できる。本ドキュメントは外部データソースの抽象化レイヤーを設計する。
 
 **MVPスコープ**: `file` および `http_api` のみ。`database`・IoTは将来フェーズ。
 
@@ -66,7 +66,7 @@ DataSourceConfig {
   polling?: PollingConfig
   auth?: {
     type: "none" | "api_key" | "basic" | "bearer"
-    secret_ref?: string             // ~/.motiva/secrets/<source_id>.json のキー名
+    secret_ref?: string             // ~/.conatus/secrets/<source_id>.json のキー名
   }
   enabled: boolean                  // デフォルト true
   created_at: string                // ISO 8601
@@ -153,10 +153,10 @@ DataSourceResult {
 
 ## 9. 認証モデル
 
-秘密情報はソース設定ファイルに含めない。`~/.motiva/secrets/<source_id>.json` に分離して保存する。
+秘密情報はソース設定ファイルに含めない。`~/.conatus/secrets/<source_id>.json` に分離して保存する。
 
 ```
-~/.motiva/secrets/fitbit_steps.json
+~/.conatus/secrets/fitbit_steps.json
 {
   "api_key": "Bearer <token>"
 }
@@ -174,16 +174,16 @@ DataSourceRegistry {
 }
 ```
 
-永続化先: `~/.motiva/data-sources.json`
+永続化先: `~/.conatus/data-sources.json`
 
 ---
 
 ## 11. CLI サブコマンド
 
 ```
-motiva datasource add    # インタラクティブ設定（接続テスト付き）
-motiva datasource list   # 登録済みソース一覧
-motiva datasource remove <id>
+conatus datasource add    # インタラクティブ設定（接続テスト付き）
+conatus datasource list   # 登録済みソース一覧
+conatus datasource remove <id>
 ```
 
 `add` 実行時に `adapter.connect()` と `adapter.healthCheck()` を順に呼び、成功した場合のみRegistryに登録する。
@@ -212,7 +212,7 @@ motiva datasource remove <id>
 
 **なぜ読み取り専用か**
 
-Motivaの実行境界原則（`execution-boundary.md` §1）により、Motivaは観察・判断のみを行う。外部サービスへの書き込みはエージェントへの委譲タスクとして実行する。
+Conatusの実行境界原則（`execution-boundary.md` §1）により、Conatusは観察・判断のみを行う。外部サービスへの書き込みはエージェントへの委譲タスクとして実行する。
 
 **なぜ secrets を分離するか**
 

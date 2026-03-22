@@ -61,12 +61,12 @@ describe("ActionHandler — handle()", () => {
       const handler = new ActionHandler(makeDeps());
       const result = await handler.handle({
         intent: "chat",
-        response: "Motiva manages goals with measurable dimensions.",
-        params: { response: "Motiva manages goals with measurable dimensions." },
-        raw: "What can Motiva do?",
+        response: "Conatus manages goals with measurable dimensions.",
+        params: { response: "Conatus manages goals with measurable dimensions." },
+        raw: "What can Conatus do?",
       });
       expect(result.messages).toEqual([
-        "Motiva manages goals with measurable dimensions.",
+        "Conatus manages goals with measurable dimensions.",
       ]);
     });
 

@@ -1,7 +1,7 @@
 {
-  "name": "motiva",
+  "name": "conatus",
   "version": "0.1.0",
-  "description": "AI agent orchestrator that gives existing agents motivation — set a goal, and Motiva observes, delegates, verifies, and loops until done.",
+  "description": "AI agent orchestrator that gives existing agents the drive to persist — set a goal, and Conatus observes, delegates, verifies, and loops until done.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -13,12 +13,12 @@
   },
   "license": "MIT",
   "author": "yuyoshimuta",
-  "homepage": "https://github.com/my-name-is-yu/Motiva#readme",
+  "homepage": "https://github.com/my-name-is-yu/Conatus#readme",
   "bugs": {
-    "url": "https://github.com/my-name-is-yu/Motiva/issues"
+    "url": "https://github.com/my-name-is-yu/Conatus/issues"
   },
   "bin": {
-    "motiva": "dist/cli-runner.js"
+    "conatus": "dist/cli-runner.js"
   },
   "keywords": [
     "ai",
@@ -36,7 +36,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/my-name-is-yu/Motiva.git"
+    "url": "https://github.com/my-name-is-yu/Conatus.git"
   },
   "files": [
     "dist",

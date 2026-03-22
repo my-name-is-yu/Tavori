@@ -189,7 +189,7 @@ beforeEach(() => {
   // Provide a dummy API key so requireApiKey() passes by default.
   origApiKey = process.env.ANTHROPIC_API_KEY;
   process.env.ANTHROPIC_API_KEY = "test-api-key";
-  process.env.MOTIVA_LLM_PROVIDER = "anthropic";
+  process.env.CONATUS_LLM_PROVIDER = "anthropic";
 });
 
 afterEach(() => {
@@ -198,7 +198,7 @@ afterEach(() => {
   } else {
     process.env.ANTHROPIC_API_KEY = origApiKey;
   }
-  delete process.env.MOTIVA_LLM_PROVIDER;
+  delete process.env.CONATUS_LLM_PROVIDER;
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
   vi.clearAllMocks();
@@ -986,7 +986,7 @@ describe("report subcommand", async () => {
 describe("ANTHROPIC_API_KEY", async () => {
   it("exits with code 1 and prints error when key is missing for run", async () => {
     delete process.env.ANTHROPIC_API_KEY;
-    process.env.MOTIVA_LLM_PROVIDER = "anthropic";
+    process.env.CONATUS_LLM_PROVIDER = "anthropic";
     await stateManager.saveGoal(makeGoal({ id: "g-nokey2" }));
 
     const code = await runCLI("run", "--goal", "g-nokey2");
@@ -995,7 +995,7 @@ describe("ANTHROPIC_API_KEY", async () => {
 
   it("exits with code 1 and prints error when key is missing for goal add", async () => {
     delete process.env.ANTHROPIC_API_KEY;
-    process.env.MOTIVA_LLM_PROVIDER = "anthropic";
+    process.env.CONATUS_LLM_PROVIDER = "anthropic";
 
     const code = await runCLI("goal", "add", "Some goal");
     expect(code).toBe(1);

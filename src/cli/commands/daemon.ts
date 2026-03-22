@@ -1,4 +1,4 @@
-// ─── motiva daemon commands (start, stop, cron) ───
+// ─── conatus daemon commands (start, stop, cron) ───
 
 import { parseArgs } from "node:util";
 
@@ -61,7 +61,7 @@ export async function cmdStart(
     logger,
   });
 
-  logger.info(`Starting Motiva daemon for goals: ${goalIds.join(", ")}`);
+  logger.info(`Starting Conatus daemon for goals: ${goalIds.join(", ")}`);
   await daemon.start(goalIds);
 }
 
@@ -110,7 +110,7 @@ export async function cmdCron(args: string[]): Promise<void> {
     process.exit(1);
   }
 
-  console.log("# Motiva crontab entries");
+  console.log("# Conatus crontab entries");
   console.log("# Add these to your crontab with: crontab -e");
   for (const goalId of goalIds) {
     console.log(DaemonRunner.generateCronEntry(goalId, intervalMinutes));

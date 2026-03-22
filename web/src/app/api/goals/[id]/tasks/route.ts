@@ -9,7 +9,7 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const tasksDir = join(homedir(), '.motiva', 'tasks', id);
+    const tasksDir = join(homedir(), '.conatus', 'tasks', id);
 
     let files: string[];
     try {

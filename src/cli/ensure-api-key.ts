@@ -25,7 +25,7 @@ export async function ensureProviderConfig(): Promise<ProviderConfig> {
   if (provider === "anthropic" && !config.anthropic?.api_key) {
     throw new Error(
       "No API key configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable, " +
-        "or run: motiva config --provider <anthropic|openai>"
+        "or run: conatus config --provider <anthropic|openai>"
     );
   }
 

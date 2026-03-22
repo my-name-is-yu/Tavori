@@ -6,7 +6,7 @@ import { makeTempDir } from "./helpers/temp-dir.js";
 
 // ─── Helpers ───
 
-async function readLogFile(logger: Logger, dir: string, filename = "motiva.log"): Promise<string> {
+async function readLogFile(logger: Logger, dir: string, filename = "conatus.log"): Promise<string> {
   await logger.close();
   const filePath = path.join(dir, filename);
   return fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf-8") : "";
@@ -53,7 +53,7 @@ describe("constructor", () => {
 // ═══════════════════════════════════════════════════════
 
 describe("log levels — file output", () => {
-  it("writes info messages to motiva.log", async () => {
+  it("writes info messages to conatus.log", async () => {
     const logger = new Logger({ dir: tmpDir, consoleOutput: false });
     logger.info("hello from info");
 
@@ -234,7 +234,7 @@ describe("console output", () => {
 // ═══════════════════════════════════════════════════════
 
 describe("log rotation", () => {
-  it("rotates when file exceeds maxSizeMB — creates motiva.1.log", async () => {
+  it("rotates when file exceeds maxSizeMB — creates conatus.1.log", async () => {
     const logger = new Logger({
       dir: tmpDir,
       maxSizeMB: 0.001, // ~1 KB
@@ -250,10 +250,10 @@ describe("log rotation", () => {
     await logger.close();
     const files = logFiles(tmpDir);
     expect(files.length).toBeGreaterThan(1);
-    expect(files).toContain("motiva.1.log");
+    expect(files).toContain("conatus.1.log");
   });
 
-  it("keeps writing to motiva.log after rotation", async () => {
+  it("keeps writing to conatus.log after rotation", async () => {
     const logger = new Logger({
       dir: tmpDir,
       maxSizeMB: 0.001,
@@ -266,8 +266,8 @@ describe("log rotation", () => {
     }
 
     await logger.close();
-    // motiva.log should still exist with new data after rotation
-    expect(fs.existsSync(path.join(tmpDir, "motiva.log"))).toBe(true);
+    // conatus.log should still exist with new data after rotation
+    expect(fs.existsSync(path.join(tmpDir, "conatus.log"))).toBe(true);
   });
 
   it("does not exceed maxFiles rotated files", async () => {
@@ -285,9 +285,9 @@ describe("log rotation", () => {
     }
 
     await logger.close();
-    const rotatedFiles = logFiles(tmpDir).filter((f) => f !== "motiva.log");
+    const rotatedFiles = logFiles(tmpDir).filter((f) => f !== "conatus.log");
     // Rotation shifts up to motiva.maxFiles.log, then deletes it on the next cycle.
-    // Total rotated files can be at most maxFiles (motiva.1.log … motiva.maxFiles.log).
+    // Total rotated files can be at most maxFiles (conatus.1.log … conatus.maxFiles.log).
     expect(rotatedFiles.length).toBeLessThanOrEqual(maxFiles);
   });
 
@@ -306,8 +306,8 @@ describe("log rotation", () => {
     }
 
     await logger.close();
-    // Files beyond maxFiles should not exist — motiva.(maxFiles+1).log must be absent
-    const tooOld = path.join(tmpDir, `motiva.${maxFiles + 1}.log`);
+    // Files beyond maxFiles should not exist — conatus.(maxFiles+1).log must be absent
+    const tooOld = path.join(tmpDir, `conatus.${maxFiles + 1}.log`);
     expect(fs.existsSync(tooOld)).toBe(false);
   });
 
@@ -325,7 +325,7 @@ describe("log rotation", () => {
     await logger.close();
     const files = logFiles(tmpDir);
     expect(files).toHaveLength(1);
-    expect(files[0]).toBe("motiva.log");
+    expect(files[0]).toBe("conatus.log");
   });
 });
 
@@ -349,10 +349,10 @@ describe("date-based rotation", () => {
     logger.info("first write");
 
     await logger.close();
-    // Only motiva.log should exist; no date-suffixed file
+    // Only conatus.log should exist; no date-suffixed file
     const files = logFiles(tmpDir);
     expect(files).toHaveLength(1);
-    expect(files[0]).toBe("motiva.log");
+    expect(files[0]).toBe("conatus.log");
   });
 
   it("should rotate log file when date changes", async () => {
@@ -367,13 +367,13 @@ describe("date-based rotation", () => {
 
     await logger.close();
     const files = logFiles(tmpDir);
-    // Both motiva.log (new day) and a rotated file should exist
-    expect(files).toContain("motiva.log");
+    // Both conatus.log (new day) and a rotated file should exist
+    expect(files).toContain("conatus.log");
     // At least one rotated file
     expect(files.length).toBeGreaterThan(1);
   });
 
-  it("should name rotated file with date suffix (motiva.YYYY-MM-DD.log)", async () => {
+  it("should name rotated file with date suffix (conatus.YYYY-MM-DD.log)", async () => {
     vi.setSystemTime(new Date("2026-03-16T10:00:00Z"));
     const logger = new Logger({ dir: tmpDir, consoleOutput: false });
 
@@ -385,7 +385,7 @@ describe("date-based rotation", () => {
 
     await logger.close();
     const files = logFiles(tmpDir);
-    expect(files).toContain("motiva.2026-03-16.log");
+    expect(files).toContain("conatus.2026-03-16.log");
   });
 
   it("should work together with size-based rotation", async () => {
@@ -407,9 +407,9 @@ describe("date-based rotation", () => {
 
     await logger.close();
     const files = logFiles(tmpDir);
-    // Size-based rotated files (motiva.1.log, ...) and date-rotated file should all exist
-    const hasDateRotated = files.some((f) => /motiva\.\d{4}-\d{2}-\d{2}\.log/.test(f));
-    const hasSizeRotated = files.some((f) => /motiva\.\d+\.log/.test(f));
+    // Size-based rotated files (conatus.1.log, ...) and date-rotated file should all exist
+    const hasDateRotated = files.some((f) => /conatus\.\d{4}-\d{2}-\d{2}\.log/.test(f));
+    const hasSizeRotated = files.some((f) => /conatus\.\d+\.log/.test(f));
     expect(hasDateRotated).toBe(true);
     expect(hasSizeRotated).toBe(true);
   });
@@ -432,11 +432,11 @@ describe("date-based rotation", () => {
     await logger.close();
     const files = logFiles(tmpDir);
     // No date-suffixed file should exist
-    const hasDateRotated = files.some((f) => /motiva\.\d{4}-\d{2}-\d{2}\.log/.test(f));
+    const hasDateRotated = files.some((f) => /conatus\.\d{4}-\d{2}-\d{2}\.log/.test(f));
     expect(hasDateRotated).toBe(false);
-    // Only motiva.log
+    // Only conatus.log
     expect(files).toHaveLength(1);
-    expect(files[0]).toBe("motiva.log");
+    expect(files[0]).toBe("conatus.log");
   });
 });
 
@@ -454,7 +454,7 @@ describe("stream error handling", () => {
     const logger = new Logger({ dir: tmpDir, consoleOutput: false });
 
     // Make the log file unwritable so that writing triggers an error
-    const logFile = path.join(tmpDir, "motiva.log");
+    const logFile = path.join(tmpDir, "conatus.log");
     // Write once to open + create the file
     logger.info("before error");
     // Flush and close to ensure file exists on disk
@@ -498,7 +498,7 @@ describe("close()", () => {
     logger.info("before close");
     await logger.close();
 
-    const content = fs.readFileSync(path.join(tmpDir, "motiva.log"), "utf-8");
+    const content = fs.readFileSync(path.join(tmpDir, "conatus.log"), "utf-8");
     expect(content).toContain("before close");
   });
 

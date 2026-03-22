@@ -47,7 +47,7 @@ export async function cmdPluginList(pluginsDir?: string): Promise<number> {
   const dir = pluginsDir ?? defaultPluginsDir();
 
   if (!(await pathExists(dir))) {
-    console.log("No plugins installed. Use `motiva plugin install <path>` to install one.");
+    console.log("No plugins installed. Use `conatus plugin install <path>` to install one.");
     return 0;
   }
 
@@ -84,7 +84,7 @@ export async function cmdPluginList(pluginsDir?: string): Promise<number> {
   }
 
   if (rows.length === 0) {
-    console.log("No plugins installed. Use `motiva plugin install <path>` to install one.");
+    console.log("No plugins installed. Use `conatus plugin install <path>` to install one.");
     return 0;
   }
 
@@ -143,7 +143,7 @@ function satisfiesRange(version: string, min?: string, max?: string): boolean {
   return true;
 }
 
-/** Check Motiva version compatibility, log a warning if incompatible, return false to abort. */
+/** Check Conatus version compatibility, log a warning if incompatible, return false to abort. */
 function checkVersionCompat(
   manifest: { name: string; version: string; min_motiva_version?: string; max_motiva_version?: string },
   motivaVersion: string
@@ -156,7 +156,7 @@ function checkVersionCompat(
       .filter(Boolean)
       .join(", ");
     getCliLogger().warn(
-      `Plugin "${manifest.name}" requires Motiva ${range}, but current version is ${motivaVersion}. Aborting install.`
+      `Plugin "${manifest.name}" requires Conatus ${range}, but current version is ${motivaVersion}. Aborting install.`
     );
     return false;
   }
@@ -185,7 +185,7 @@ export async function cmdPluginInstall(
   const force = argv.includes("--force");
 
   if (!source) {
-    logger.error("Error: source path or package name is required. Usage: motiva plugin install <path|package> [--force]");
+    logger.error("Error: source path or package name is required. Usage: conatus plugin install <path|package> [--force]");
     return 1;
   }
 
@@ -298,7 +298,7 @@ export async function cmdPluginUpdate(
   const name = argv[0];
 
   if (!name) {
-    logger.error("Error: plugin name is required. Usage: motiva plugin update <name>");
+    logger.error("Error: plugin name is required. Usage: conatus plugin update <name>");
     return 1;
   }
 
@@ -329,14 +329,14 @@ export async function cmdPluginSearch(
   const keyword = argv[0];
 
   if (!keyword) {
-    logger.error("Error: keyword is required. Usage: motiva plugin search <keyword>");
+    logger.error("Error: keyword is required. Usage: conatus plugin search <keyword>");
     return 1;
   }
 
   const execFn = _execFileFn ?? execFile;
   let stdout: string;
   try {
-    const result = await execFn("npm", ["search", `@motiva-plugins/${keyword}`, "--json"]);
+    const result = await execFn("npm", ["search", `@conatus-plugins/${keyword}`, "--json"]);
     stdout = result.stdout;
   } catch (err) {
     logger.error(formatOperationError("npm search", err));
@@ -373,7 +373,7 @@ export async function cmdPluginRemove(pluginsDir: string | undefined, argv: stri
   const name = argv[0];
 
   if (!name) {
-    logger.error("Error: plugin name is required. Usage: motiva plugin remove <name>");
+    logger.error("Error: plugin name is required. Usage: conatus plugin remove <name>");
     return 1;
   }
 

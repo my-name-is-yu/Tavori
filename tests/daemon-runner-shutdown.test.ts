@@ -13,7 +13,7 @@ import type { DaemonDeps } from "../src/runtime/daemon-runner.js";
 // ─── Helpers ───
 
 function makeTempDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), "motiva-shutdown-test-"));
+  return fs.mkdtempSync(path.join(os.tmpdir(), "conatus-shutdown-test-"));
 }
 
 function makeLoopResult(overrides: Partial<LoopResult> = {}): LoopResult {
@@ -375,7 +375,7 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
     it("should not rotate when log file is below the size threshold", async () => {
       const logDir = path.join(tmpDir, "logs");
       fs.mkdirSync(logDir, { recursive: true });
-      const logPath = path.join(logDir, "motiva.log");
+      const logPath = path.join(logDir, "conatus.log");
       // Write a small file (1KB)
       fs.writeFileSync(logPath, "x".repeat(1024), "utf-8");
 
@@ -388,18 +388,18 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
       const daemon = new DaemonRunner(deps);
       await daemon.rotateLog();
 
-      // motiva.log should still exist (not rotated)
+      // conatus.log should still exist (not rotated)
       expect(fs.existsSync(logPath)).toBe(true);
       // No rotated files should exist
       const entries = fs.readdirSync(logDir);
-      const rotated = entries.filter((f) => f !== "motiva.log");
+      const rotated = entries.filter((f) => f !== "conatus.log");
       expect(rotated.length).toBe(0);
     });
 
     it("should rotate when log file exceeds the size threshold", async () => {
       const logDir = path.join(tmpDir, "logs");
       fs.mkdirSync(logDir, { recursive: true });
-      const logPath = path.join(logDir, "motiva.log");
+      const logPath = path.join(logDir, "conatus.log");
       // Create a 2MB file (exceeds 1MB threshold)
       fs.writeFileSync(logPath, "x".repeat(2 * 1024 * 1024), "utf-8");
 
@@ -412,11 +412,11 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
       const daemon = new DaemonRunner(deps);
       await daemon.rotateLog();
 
-      // motiva.log should no longer exist (was renamed)
+      // conatus.log should no longer exist (was renamed)
       expect(fs.existsSync(logPath)).toBe(false);
       // At least one rotated file should exist
       const entries = fs.readdirSync(logDir);
-      const rotated = entries.filter((f) => /^motiva\..+\.log$/.test(f) && f !== "motiva.log");
+      const rotated = entries.filter((f) => /^conatus\..+\.log$/.test(f) && f !== "conatus.log");
       expect(rotated.length).toBeGreaterThanOrEqual(1);
     });
 
@@ -428,13 +428,13 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
       // Pre-create 5 rotated log files (older ones)
       for (let i = 0; i < 5; i++) {
         const ts = new Date(Date.now() - (5 - i) * 1000).toISOString().replace(/[:.]/g, "-");
-        fs.writeFileSync(path.join(logDir, `motiva.${ts}.log`), "old log", "utf-8");
+        fs.writeFileSync(path.join(logDir, `conatus.${ts}.log`), "old log", "utf-8");
         // Small delay to ensure distinct timestamps in names
         await new Promise((r) => setTimeout(r, 5));
       }
 
       // Create current log that exceeds threshold
-      const logPath = path.join(logDir, "motiva.log");
+      const logPath = path.join(logDir, "conatus.log");
       fs.writeFileSync(logPath, "x".repeat(2 * 1024 * 1024), "utf-8");
 
       const deps = makeDeps(tmpDir, {
@@ -448,7 +448,7 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
 
       // Should have at most maxFiles rotated files
       const entries = fs.readdirSync(logDir);
-      const rotated = entries.filter((f) => /^motiva\..+\.log$/.test(f) && f !== "motiva.log");
+      const rotated = entries.filter((f) => /^conatus\..+\.log$/.test(f) && f !== "conatus.log");
       expect(rotated.length).toBeLessThanOrEqual(maxFiles);
     });
 
@@ -467,7 +467,7 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
     it("should name rotated file with a timestamp suffix", async () => {
       const logDir = path.join(tmpDir, "logs");
       fs.mkdirSync(logDir, { recursive: true });
-      const logPath = path.join(logDir, "motiva.log");
+      const logPath = path.join(logDir, "conatus.log");
       fs.writeFileSync(logPath, "x".repeat(2 * 1024 * 1024), "utf-8");
 
       const deps = makeDeps(tmpDir, {
@@ -480,10 +480,10 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
       await daemon.rotateLog();
 
       const entries = fs.readdirSync(logDir);
-      const rotated = entries.filter((f) => /^motiva\..+\.log$/.test(f) && f !== "motiva.log");
+      const rotated = entries.filter((f) => /^conatus\..+\.log$/.test(f) && f !== "conatus.log");
       expect(rotated.length).toBe(1);
-      // Name should match motiva.<timestamp>.log pattern
-      expect(rotated[0]).toMatch(/^motiva\..+\.log$/);
+      // Name should match conatus.<timestamp>.log pattern
+      expect(rotated[0]).toMatch(/^conatus\..+\.log$/);
     });
   });
 });

@@ -175,7 +175,7 @@ beforeEach(() => {
 
   origApiKey = process.env.ANTHROPIC_API_KEY;
   process.env.ANTHROPIC_API_KEY = "test-api-key";
-  process.env.MOTIVA_LLM_PROVIDER = "anthropic";
+  process.env.CONATUS_LLM_PROVIDER = "anthropic";
 });
 
 afterEach(() => {
@@ -184,7 +184,7 @@ afterEach(() => {
   } else {
     process.env.ANTHROPIC_API_KEY = origApiKey;
   }
-  delete process.env.MOTIVA_LLM_PROVIDER;
+  delete process.env.CONATUS_LLM_PROVIDER;
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
   vi.clearAllMocks();
@@ -222,7 +222,7 @@ describe("improve subcommand — basic routing", () => {
 
   it("exits with code 1 when ANTHROPIC_API_KEY is not set (and no alternative provider)", async () => {
     delete process.env.ANTHROPIC_API_KEY;
-    process.env.MOTIVA_LLM_PROVIDER = "anthropic";
+    process.env.CONATUS_LLM_PROVIDER = "anthropic";
 
     const code = await runCLI("improve", ".");
     expect(code).toBe(1);

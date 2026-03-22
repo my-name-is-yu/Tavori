@@ -24,7 +24,7 @@ export interface ActionResult {
 // ─── ActionHandler ───
 
 /**
- * Executes recognized intents against Motiva modules.
+ * Executes recognized intents against Conatus modules.
  * Each handler maps an IntentType to a concrete operation.
  */
 export class ActionHandler {

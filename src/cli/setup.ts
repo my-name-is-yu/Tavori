@@ -1,6 +1,6 @@
 // ─── CLI Dependency Setup ───
 //
-// buildDeps() wires all Motiva dependencies for CLI subcommands.
+// buildDeps() wires all Conatus dependencies for CLI subcommands.
 
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
@@ -56,7 +56,7 @@ export async function buildDeps(
   const trustManager = new TrustManager(stateManager);
   const driveSystem = new DriveSystem(stateManager);
 
-  // Read datasource configs from ~/.motiva/datasources/
+  // Read datasource configs from ~/.conatus/datasources/
   const dsDir = getDatasourcesDir();
   const dataSources: IDataSourceAdapter[] = [];
   try {
@@ -148,7 +148,7 @@ export async function buildDeps(
     );
     memoryLifecycleManager.initializeDirectories();
   } catch (err) {
-    getCliLogger().warn(`[motiva] MemoryLifecycleManager init failed — memory features disabled: ${err instanceof Error ? err.message : String(err)}`);
+    getCliLogger().warn(`[conatus] MemoryLifecycleManager init failed — memory features disabled: ${err instanceof Error ? err.message : String(err)}`);
     memoryLifecycleManager = undefined;
     driveScoreAdapter = undefined;
   }

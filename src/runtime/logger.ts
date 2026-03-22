@@ -50,7 +50,7 @@ export class Logger {
     this.level = LOG_LEVELS[config.level ?? "info"];
     this.consoleOutput = config.consoleOutput ?? true;
     this.rotateByDate = config.rotateByDate ?? true;
-    this.currentFile = path.join(this.dir, "motiva.log");
+    this.currentFile = path.join(this.dir, "conatus.log");
 
     // Ensure log directory exists (one-time init, sync is acceptable here)
     fs.mkdirSync(this.dir, { recursive: true });
@@ -236,15 +236,15 @@ export class Logger {
     const doRotate = async (): Promise<void> => {
       try {
         if (rotation.type === "date") {
-          const dest = path.join(this.dir, `motiva.${rotation.date}.log`);
+          const dest = path.join(this.dir, `conatus.${rotation.date}.log`);
           await fsp.rename(this.currentFile, dest).catch(() => {
             // File may not exist — ignore
           });
         } else {
           // Size-based: shift existing rotated files up, then rename current
           for (let i = this.maxFiles - 1; i >= 1; i--) {
-            const older = path.join(this.dir, `motiva.${i + 1}.log`);
-            const newer = path.join(this.dir, `motiva.${i}.log`);
+            const older = path.join(this.dir, `conatus.${i + 1}.log`);
+            const newer = path.join(this.dir, `conatus.${i}.log`);
             if (i === this.maxFiles - 1) {
               await fsp.unlink(older).catch(() => {
                 // File may not exist — ignore
@@ -254,7 +254,7 @@ export class Logger {
               // File may not exist — ignore
             });
           }
-          await fsp.rename(this.currentFile, path.join(this.dir, "motiva.1.log")).catch(() => {
+          await fsp.rename(this.currentFile, path.join(this.dir, "conatus.1.log")).catch(() => {
             // File may not exist — ignore
           });
         }

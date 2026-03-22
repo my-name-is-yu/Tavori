@@ -22,10 +22,10 @@ import type { NotifierRegistry } from "./notifier-registry.js";
 // ─── PluginLoader ───
 
 /**
- * Discovers, loads, validates, and registers plugins from ~/.motiva/plugins/.
+ * Discovers, loads, validates, and registers plugins from ~/.conatus/plugins/.
  *
  * Design principles:
- *  - Plugin load failures never crash Motiva. Every error is caught, logged,
+ *  - Plugin load failures never crash Conatus. Every error is caught, logged,
  *    and returned as an error-state PluginState.
  *  - Supports both plugin.yaml and plugin.json manifest formats.
  *  - Routes each plugin to the correct registry based on manifest.type.
@@ -91,7 +91,7 @@ export class PluginLoader {
         .filter(Boolean)
         .join(", ");
       this.logger?.warn(
-        `[PluginLoader] Skipping incompatible plugin "${manifest.name}": requires Motiva ${range}, got ${motivaVersion}`
+        `[PluginLoader] Skipping incompatible plugin "${manifest.name}": requires Conatus ${range}, got ${motivaVersion}`
       );
       return this.buildIncompatibleState(manifest, motivaVersion, range);
     }
@@ -269,7 +269,7 @@ export class PluginLoader {
       name: manifest.name,
       manifest,
       status: "incompatible",
-      error_message: `Requires Motiva ${range}, got ${motivaVersion}`,
+      error_message: `Requires Conatus ${range}, got ${motivaVersion}`,
       loaded_at: new Date().toISOString(),
       trust_score: 0,
       usage_count: 0,
@@ -330,7 +330,7 @@ export class PluginLoader {
     const updated = PluginStateSchema.parse({ ...existing, ...updates });
     this.pluginStates.set(pluginName, updated);
 
-    // Persist to disk: ~/.motiva/plugins/<name>/state.json
+    // Persist to disk: ~/.conatus/plugins/<name>/state.json
     const statePath = path.join(this.pluginsDir, pluginName, "state.json");
     await writeJsonFileAtomic(statePath, updated);
   }
@@ -352,7 +352,7 @@ export class PluginLoader {
 
 // ─── Module-level helpers ───
 
-// ─── Motiva version (read once from package.json) ───
+// ─── Conatus version (read once from package.json) ───
 
 let _motivaVersion: string | undefined;
 

@@ -1,6 +1,6 @@
 # 階層型コンテキストメモリ設計
 
-> MemGPT/Lettaが示した階層型メモリモデル（core/recall/archival）をMotiva のContextProvider + MemoryLifecycleに適用し、コンテキスト選択の質を向上させる。
+> MemGPT/Lettaが示した階層型メモリモデル（core/recall/archival）をConatus のContextProvider + MemoryLifecycleに適用し、コンテキスト選択の質を向上させる。
 
 > 関連: `memory-lifecycle.md`, `session-and-context.md`, `knowledge-acquisition.md`
 
@@ -14,7 +14,7 @@
 - 完了済みゴールの知識が常にコンテキストを圧迫する
 - コンテキストバジェットの使い方が非効率になる
 
-MemGPT/Lettaのアプローチは「LLMが自律的にコンテキストウィンドウへのページイン/アウトを決定する」3層モデルだ。Motivaのスコープでは、MVPはルールベース分類で実装し、LLM自律判断はPhase 2とする。
+MemGPT/Lettaのアプローチは「LLMが自律的にコンテキストウィンドウへのページイン/アウトを決定する」3層モデルだ。Conatusのスコープでは、MVPはルールベース分類で実装し、LLM自律判断はPhase 2とする。
 
 ---
 

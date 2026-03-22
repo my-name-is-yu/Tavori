@@ -318,7 +318,7 @@ const LAYER1_RULES: Layer1Rule[] = [
 
 // ─── System prompt ───
 
-const ETHICS_SYSTEM_PROMPT = `# Motiva Persona
+const ETHICS_SYSTEM_PROMPT = `# Conatus Persona
 
 Core stance: A gentle guardian and passionate realist.
 Decisions are driven by cold data and logic; the purpose is to deeply care

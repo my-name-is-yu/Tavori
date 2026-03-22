@@ -1,8 +1,8 @@
 /**
  * CLIRunner — plugin subcommand tests
  *
- * Verifies that `motiva plugin list`, `motiva plugin install`, and
- * `motiva plugin remove` work correctly.
+ * Verifies that `conatus plugin list`, `conatus plugin install`, and
+ * `conatus plugin remove` work correctly.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -135,7 +135,7 @@ let consoleLogs: string[];
 let consoleErrors: string[];
 
 beforeEach(() => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "motiva-plugin-test-"));
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "conatus-plugin-test-"));
   pluginsDir = path.join(tmpDir, "plugins");
   fs.mkdirSync(pluginsDir, { recursive: true });
   consoleLogs = [];
@@ -304,11 +304,11 @@ describe("cmdPluginInstall — path detection", () => {
     const mockExecFile = vi.fn().mockResolvedValue({ stdout: "", stderr: "" });
 
     // npm install will succeed but manifest won't be found (no actual package installed)
-    const exitCode = await cmdPluginInstall(pluginsDir, ["@motiva-plugins/test"], undefined, mockExecFile as never);
+    const exitCode = await cmdPluginInstall(pluginsDir, ["@conatus-plugins/test"], undefined, mockExecFile as never);
 
     expect(mockExecFile).toHaveBeenCalledWith(
       "npm",
-      expect.arrayContaining(["install", "--prefix", expect.any(String), "@motiva-plugins/test"])
+      expect.arrayContaining(["install", "--prefix", expect.any(String), "@conatus-plugins/test"])
     );
     // fails at manifest read since nothing was actually installed
     expect(exitCode).toBe(1);
@@ -317,11 +317,11 @@ describe("cmdPluginInstall — path detection", () => {
   it("treats bare package name as npm install", async () => {
     const mockExecFile = vi.fn().mockResolvedValue({ stdout: "", stderr: "" });
 
-    const exitCode = await cmdPluginInstall(pluginsDir, ["my-motiva-plugin"], undefined, mockExecFile as never);
+    const exitCode = await cmdPluginInstall(pluginsDir, ["my-conatus-plugin"], undefined, mockExecFile as never);
 
     expect(mockExecFile).toHaveBeenCalledWith(
       "npm",
-      expect.arrayContaining(["install", "--prefix", expect.any(String), "my-motiva-plugin"])
+      expect.arrayContaining(["install", "--prefix", expect.any(String), "my-conatus-plugin"])
     );
     expect(exitCode).toBe(1);
   });
@@ -390,7 +390,7 @@ describe("cmdPluginInstall — npm flow", () => {
           version: "1.0.0",
           type: "notifier",
           capabilities: ["notify"],
-          description: "Requires future Motiva",
+          description: "Requires future Conatus",
           permissions: {},
           min_motiva_version: "99.0.0",
         };
@@ -466,8 +466,8 @@ describe("cmdPluginSearch", () => {
 
   it("runs npm search and displays results in table format", async () => {
     const mockResults = [
-      { name: "@motiva-plugins/slack", version: "1.0.0", description: "Slack notifications" },
-      { name: "@motiva-plugins/discord", version: "2.1.0", description: "Discord notifications" },
+      { name: "@conatus-plugins/slack", version: "1.0.0", description: "Slack notifications" },
+      { name: "@conatus-plugins/discord", version: "2.1.0", description: "Discord notifications" },
     ];
     const mockExecFile = vi.fn().mockResolvedValue({
       stdout: JSON.stringify(mockResults),
@@ -477,10 +477,10 @@ describe("cmdPluginSearch", () => {
     const exitCode = await cmdPluginSearch(pluginsDir, ["slack"], mockExecFile as never);
 
     expect(exitCode).toBe(0);
-    expect(mockExecFile).toHaveBeenCalledWith("npm", ["search", "@motiva-plugins/slack", "--json"]);
+    expect(mockExecFile).toHaveBeenCalledWith("npm", ["search", "@conatus-plugins/slack", "--json"]);
     const allOutput = consoleLogs.join("\n");
-    expect(allOutput).toContain("@motiva-plugins/slack");
-    expect(allOutput).toContain("@motiva-plugins/discord");
+    expect(allOutput).toContain("@conatus-plugins/slack");
+    expect(allOutput).toContain("@conatus-plugins/discord");
     expect(allOutput).toContain("1.0.0");
   });
 

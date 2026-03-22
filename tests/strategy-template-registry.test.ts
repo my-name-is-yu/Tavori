@@ -76,7 +76,7 @@ describe("StrategyTemplateRegistry", () => {
   let vectorIndex: VectorIndex;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "motiva-str-test-"));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "conatus-str-test-"));
     embeddingClient = new MockEmbeddingClient(64);
     vectorIndex = new VectorIndex(
       path.join(tmpDir, "vector-index.json"),

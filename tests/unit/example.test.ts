@@ -86,7 +86,7 @@ function makeGoal(id: string, dimensions: Dimension[], overrides: Partial<Goal> 
 }
 
 function makeTempStateManager(): { stateManager: StateManager; baseDir: string } {
-  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), "motiva-example-test-"));
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), "conatus-example-test-"));
   return { stateManager: new StateManager(baseDir), baseDir };
 }
 

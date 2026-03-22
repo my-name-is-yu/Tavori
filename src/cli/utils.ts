@@ -9,64 +9,64 @@ export function formatOperationError(operation: string, err: unknown): string {
 
 export function printUsage(): void {
   console.log(`
-Motiva — AI agent orchestrator
+Conatus — AI agent orchestrator
 
 Usage:
-  motiva run --goal <id>              Run CoreLoop for a goal
-  motiva improve [path]               Analyze path, suggest goals, and optionally run improvement loop
-  motiva suggest "<context>"          Suggest improvement goals for a project context
-  motiva goal add --title "<t>" --dim "name:type:val"  Register a goal (raw mode, no LLM)
-  motiva goal add "<description>" --negotiate          Register a goal via LLM negotiation
-  motiva goal list                    List all registered goals
-  motiva goal list --archived         Also list archived goals
-  motiva goal archive <id>            Archive a completed goal (moves state to ~/.motiva/archive/)
-  motiva goal remove <id>             Remove a goal by ID
-  motiva goal show <id>               Show goal details (dimensions, constraints, deadline)
-  motiva goal reset <id>              Reset goal state for re-running
-  motiva cleanup                      Archive all completed goals and remove stale data
-  motiva status --goal <id>           Show current status and progress
-  motiva report --goal <id>           Show latest report
-  motiva log --goal <id>              View observation and gap history log
-  motiva tui                          Launch the interactive TUI
-  motiva start --goal <id>            Start daemon mode for one or more goals
-  motiva stop                         Stop the running daemon
-  motiva cron --goal <id>             Print crontab entry for a goal
-  motiva config character             Show or update character configuration
-  motiva datasource add <type>        Register a new data source (file | http_api)
-  motiva datasource list              List all registered data sources
-  motiva datasource remove <id>       Remove a data source by ID
-  motiva capability list              List all registered capabilities
-  motiva capability remove <name>     Remove a capability by name
-  motiva plugin list                  List installed plugins
-  motiva plugin install <path>        Install a plugin from a local directory
-  motiva plugin remove <name>         Remove an installed plugin
-  motiva provider show                Show current provider config
-  motiva provider set                 Set LLM provider and/or default adapter
+  conatus run --goal <id>              Run CoreLoop for a goal
+  conatus improve [path]               Analyze path, suggest goals, and optionally run improvement loop
+  conatus suggest "<context>"          Suggest improvement goals for a project context
+  conatus goal add --title "<t>" --dim "name:type:val"  Register a goal (raw mode, no LLM)
+  conatus goal add "<description>" --negotiate          Register a goal via LLM negotiation
+  conatus goal list                    List all registered goals
+  conatus goal list --archived         Also list archived goals
+  conatus goal archive <id>            Archive a completed goal (moves state to ~/.conatus/archive/)
+  conatus goal remove <id>             Remove a goal by ID
+  conatus goal show <id>               Show goal details (dimensions, constraints, deadline)
+  conatus goal reset <id>              Reset goal state for re-running
+  conatus cleanup                      Archive all completed goals and remove stale data
+  conatus status --goal <id>           Show current status and progress
+  conatus report --goal <id>           Show latest report
+  conatus log --goal <id>              View observation and gap history log
+  conatus tui                          Launch the interactive TUI
+  conatus start --goal <id>            Start daemon mode for one or more goals
+  conatus stop                         Stop the running daemon
+  conatus cron --goal <id>             Print crontab entry for a goal
+  conatus config character             Show or update character configuration
+  conatus datasource add <type>        Register a new data source (file | http_api)
+  conatus datasource list              List all registered data sources
+  conatus datasource remove <id>       Remove a data source by ID
+  conatus capability list              List all registered capabilities
+  conatus capability remove <name>     Remove a capability by name
+  conatus plugin list                  List installed plugins
+  conatus plugin install <path>        Install a plugin from a local directory
+  conatus plugin remove <name>         Remove an installed plugin
+  conatus provider show                Show current provider config
+  conatus provider set                 Set LLM provider and/or default adapter
 
-Options (motiva run):
+Options (conatus run):
   --goal <id>                         Goal ID to run (required)
   --max-iterations <n>               Override max iterations (default: 100)
   --adapter <type>                    Adapter: claude_api | claude_code_cli | github_issue (default: claude_api)
   --tree                              Enable tree mode (iterate across all tree nodes)
   --yes, -y                           Auto-approve all tasks (skip approval prompts)
 
-Options (motiva improve):
+Options (conatus improve):
   --auto                              Full auto mode (select best suggestion, run loop)
   --yes                               Auto-approve (select first suggestion, run loop)
   --max, -n <n>                       Max suggestions (default: 3)
 
-Options (motiva suggest):
+Options (conatus suggest):
   --max, -n <n>                       Max number of suggestions (default: 5)
   --path, -p <dir>                    Repo path to scan for additional context
 
-Options (motiva goal add):
+Options (conatus goal add):
   --title <title>                     Goal title (raw mode)
   --dim <name:type:value>             Dimension spec, repeatable (raw mode, e.g. "tsc_error_count:min:0")
   --negotiate                         Use LLM negotiation instead of raw mode
   --deadline <ISO-date>               Optional deadline (e.g. 2026-06-01)
   --constraint <text>                 Optional constraint (repeatable)
 
-Options (motiva config character):
+Options (conatus config character):
   --show                              Show current character config
   --reset                             Reset to defaults
   --caution-level <1-5>               Feasibility threshold (1=conservative, 5=ambitious)
@@ -74,36 +74,36 @@ Options (motiva config character):
   --communication-directness <1-5>    Output style (1=considerate, 5=direct)
   --proactivity-level <1-5>           Report verbosity (1=events-only, 5=always-detailed)
 
-Options (motiva datasource add):
+Options (conatus datasource add):
   --name <name>                       Human-readable name for the data source
   --path <path>                       File path (required for type=file)
   --url <url>                         HTTP URL (required for type=http_api)
 
-Options (motiva provider set):
+Options (conatus provider set):
   --llm <provider>                    LLM provider: anthropic | openai | ollama | codex
   --adapter <type>                    Default adapter: claude_code_cli | claude_api | openai_codex_cli | openai_api | github_issue
 
 Environment:
   ANTHROPIC_API_KEY                   Required for LLM-powered commands
-  MOTIVA_LLM_PROVIDER                 Override LLM provider (anthropic|openai|ollama|codex)
+  CONATUS_LLM_PROVIDER                 Override LLM provider (anthropic|openai|ollama|codex)
 
 Examples:
-  motiva goal add --title "tsc zero" --dim "tsc_error_count:min:0"
-  motiva goal add --title "clean code" --dim "todo_count:max:0" --dim "fixme_count:max:0"
-  motiva goal add "Increase test coverage to 90%" --negotiate
-  motiva goal list
-  motiva goal show <id>
-  motiva goal reset <id>
-  motiva run --goal <id>
-  motiva status --goal <id>
-  motiva report --goal <id>
-  motiva log --goal <id>
-  motiva config character --show
-  motiva config character --caution-level 3
-  motiva datasource add file --path /path/to/metrics.json --name "My Metrics"
-  motiva datasource add http_api --url https://api.example.com/metrics --name "API"
-  motiva datasource list
-  motiva datasource remove ds_1234567890
+  conatus goal add --title "tsc zero" --dim "tsc_error_count:min:0"
+  conatus goal add --title "clean code" --dim "todo_count:max:0" --dim "fixme_count:max:0"
+  conatus goal add "Increase test coverage to 90%" --negotiate
+  conatus goal list
+  conatus goal show <id>
+  conatus goal reset <id>
+  conatus run --goal <id>
+  conatus status --goal <id>
+  conatus report --goal <id>
+  conatus log --goal <id>
+  conatus config character --show
+  conatus config character --caution-level 3
+  conatus datasource add file --path /path/to/metrics.json --name "My Metrics"
+  conatus datasource add http_api --url https://api.example.com/metrics --name "API"
+  conatus datasource list
+  conatus datasource remove ds_1234567890
 `.trim());
 }
 

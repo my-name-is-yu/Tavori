@@ -1,7 +1,7 @@
 // ─── Provider Configuration ───
 //
-// Pluggable provider configuration system for Motiva.
-// Reads/writes ~/.motiva/provider.json to configure which LLM provider
+// Pluggable provider configuration system for Conatus.
+// Reads/writes ~/.conatus/provider.json to configure which LLM provider
 // and default adapter to use. Env vars always take precedence over config file.
 
 import * as fsp from "node:fs/promises";
@@ -68,7 +68,7 @@ const DEFAULT_PROVIDER_CONFIG: ProviderConfig = {
 function resolveProvider(
   fileProvider: ProviderConfig["llm_provider"] | undefined
 ): ProviderConfig["llm_provider"] {
-  const envProvider = process.env["MOTIVA_LLM_PROVIDER"];
+  const envProvider = process.env["CONATUS_LLM_PROVIDER"];
   if (envProvider === "anthropic" || envProvider === "openai" || envProvider === "ollama" || envProvider === "codex") {
     return envProvider;
   }
@@ -81,7 +81,7 @@ function resolveProvider(
 function resolveAdapter(
   fileAdapter: ProviderConfig["default_adapter"] | undefined
 ): ProviderConfig["default_adapter"] {
-  const envAdapter = process.env["MOTIVA_DEFAULT_ADAPTER"];
+  const envAdapter = process.env["CONATUS_DEFAULT_ADAPTER"];
   if (
     envAdapter === "claude_code_cli" ||
     envAdapter === "claude_api" ||
@@ -99,8 +99,8 @@ function resolveAdapter(
  * Load provider configuration.
  *
  * Priority (highest to lowest):
- *   1. Environment variables (MOTIVA_LLM_PROVIDER, MOTIVA_DEFAULT_ADAPTER, etc.)
- *   2. ~/.motiva/provider.json
+ *   1. Environment variables (CONATUS_LLM_PROVIDER, CONATUS_DEFAULT_ADAPTER, etc.)
+ *   2. ~/.conatus/provider.json
  *   3. Defaults (codex + openai_codex_cli)
  *
  * If no provider.json exists, falls back to env vars and defaults (current behavior).
@@ -186,8 +186,8 @@ export async function loadProviderConfig(): Promise<ProviderConfig> {
 }
 
 /**
- * Save provider configuration to ~/.motiva/provider.json.
- * Creates the ~/.motiva directory if it does not exist.
+ * Save provider configuration to ~/.conatus/provider.json.
+ * Creates the ~/.conatus directory if it does not exist.
  */
 export async function saveProviderConfig(config: ProviderConfig): Promise<void> {
   await writeJsonFileAtomic(PROVIDER_CONFIG_PATH, config);

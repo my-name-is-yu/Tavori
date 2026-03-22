@@ -22,8 +22,8 @@ import type { ProviderConfig } from "./provider-config.js";
  * Build an LLM client based on provider configuration.
  *
  * Configuration priority (highest to lowest):
- *   1. MOTIVA_LLM_PROVIDER environment variable
- *   2. ~/.motiva/provider.json llm_provider field
+ *   1. CONATUS_LLM_PROVIDER environment variable
+ *   2. ~/.conatus/provider.json llm_provider field
  *   3. Default: OpenAI
  *
  * Providers:
@@ -121,11 +121,11 @@ export async function buildAdapterRegistry(
   }
 
   // Single-agent env var shortcut
-  const envBaseUrl = process.env["MOTIVA_A2A_BASE_URL"];
+  const envBaseUrl = process.env["CONATUS_A2A_BASE_URL"];
   if (envBaseUrl && !config.a2a?.agents) {
     registry.register(new A2AAdapter({
       baseUrl: envBaseUrl,
-      authToken: process.env["MOTIVA_A2A_AUTH_TOKEN"],
+      authToken: process.env["CONATUS_A2A_AUTH_TOKEN"],
     }));
   }
 

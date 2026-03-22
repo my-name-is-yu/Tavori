@@ -256,7 +256,7 @@ MetaPattern として CrossGoalKnowledgeBase に登録
 
 ## 外部参考: claude-mem
 
-> 参照元: [claude-mem](https://github.com/thedotmack/claude-mem) — セッション間記憶注入ライブラリ。以下の知見をMotiva M16設計に反映する。
+> 参照元: [claude-mem](https://github.com/thedotmack/claude-mem) — セッション間記憶注入ライブラリ。以下の知見をConatus M16設計に反映する。
 
 ### A. session_summaries の構造化フィールド設計（データ構造パターン）
 
@@ -309,12 +309,12 @@ claude-mem は `search → timeline → get_observations` の3段階フェッチ
 | `concepts` JSON配列 | スキーマ非依存の概念タグ | LearnedPattern の `domain_tags` を拡張し、ゴール横断マッチングの精度向上に活用 |
 | `timeline` パターン | アンカーID周辺の時系列取得 | 戦略変更前後に何が起きたか（stall検知 → 戦略切替 → 回復）を効率的に取得 |
 
-### D. claude-mem にない部分（Motiva独自設計が必要な領域）
+### D. claude-mem にない部分（Conatus独自設計が必要な領域）
 
-claude-mem はシングルセッション間の記憶注入に特化しており、以下はMotiva独自に設計が必要だ。
+claude-mem はシングルセッション間の記憶注入に特化しており、以下はConatus独自に設計が必要だ。
 
 | 機能 | 理由 |
 |------|------|
-| ゴール横断知識転移 | claude-mem は単一セッション間の注入のみ。Motivaは並列・直列に複数ゴールが走る |
-| 転移信頼スコア学習 | 転移の効果をフィードバックして信頼度を更新する仕組み（§6.2）はMotiva独自 |
-| 動的バジェット強制 | claude-mem の TokenCalculator はコスト計算のみでバジェット強制なし。Motivaはバジェット超過時の優先度ベース削減が必要 |
+| ゴール横断知識転移 | claude-mem は単一セッション間の注入のみ。Conatusは並列・直列に複数ゴールが走る |
+| 転移信頼スコア学習 | 転移の効果をフィードバックして信頼度を更新する仕組み（§6.2）はConatus独自 |
+| 動的バジェット強制 | claude-mem の TokenCalculator はコスト計算のみでバジェット強制なし。Conatusはバジェット超過時の優先度ベース削減が必要 |

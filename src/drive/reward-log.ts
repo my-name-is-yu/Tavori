@@ -2,10 +2,10 @@
  * reward-log.ts
  *
  * Consolidated JSON log output for the reward (drive score) computation.
- * Controlled by the MOTIVA_REWARD_LOG environment variable.
+ * Controlled by the CONATUS_REWARD_LOG environment variable.
  *
  * Usage:
- *   MOTIVA_REWARD_LOG=1 motiva run <goal>
+ *   CONATUS_REWARD_LOG=1 motiva run <goal>
  *
  * Each log line is a single JSON object written to stderr so it does not
  * pollute stdout / TUI output. Default: OFF.
@@ -35,15 +35,15 @@ export interface RewardLogEntry {
 }
 
 /**
- * Returns true when MOTIVA_REWARD_LOG=1 is set in the environment.
+ * Returns true when CONATUS_REWARD_LOG=1 is set in the environment.
  */
 export function isRewardLogEnabled(): boolean {
-  return process.env["MOTIVA_REWARD_LOG"] === "1";
+  return process.env["CONATUS_REWARD_LOG"] === "1";
 }
 
 /**
  * Emit a single JSON line to stderr with all major reward computation inputs/outputs.
- * No-op when MOTIVA_REWARD_LOG is not set to "1".
+ * No-op when CONATUS_REWARD_LOG is not set to "1".
  */
 export function logRewardComputation(params: {
   goalId: string;

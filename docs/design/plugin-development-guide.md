@@ -1,17 +1,17 @@
 # プラグイン開発ガイド
 
-このガイドでは、Motivaプラグインの開発方法を説明する。
+このガイドでは、Conatusプラグインの開発方法を説明する。
 
 ---
 
 ## プラグインの種類
 
-Motivaは3種類のプラグインをサポートする。
+Conatusは3種類のプラグインをサポートする。
 
 | 種類 | インターフェース | 用途 |
 |------|----------------|------|
 | `data_source` | `IDataSourceAdapter` | 外部APIやDBから状態を観測する |
-| `notifier` | `INotifier` | Motivaイベントを外部サービスに送信する |
+| `notifier` | `INotifier` | Conatusイベントを外部サービスに送信する |
 | `adapter` | `IAdapter` | エージェントアダプタ（Claude Code CLI等） |
 
 ---
@@ -46,9 +46,9 @@ supported_events:
 # プラグインのエントリポイント（plugin directoryからの相対パス）
 entry_point: "src/index.ts" # デフォルト: "dist/index.js"
 
-# Motivaの対応バージョン範囲（semver）
-min_motiva_version: "0.1.0"
-max_motiva_version: "2.0.0" # 省略可
+# Conatusの対応バージョン範囲（semver）
+min_conatus_version: "0.1.0"
+max_conatus_version: "2.0.0" # 省略可
 
 # 設定スキーマ（config_schema は PluginLoader が検証に使用）
 config_schema:
@@ -331,16 +331,16 @@ import { MyDbAdapter } from "../examples/plugins/my-db-datasource/src/index.js";
 
 ### ローカルインストール
 
-プラグインディレクトリを `~/.motiva/plugins/` に配置する。
+プラグインディレクトリを `~/.conatus/plugins/` に配置する。
 
 ```bash
-cp -r my-plugin ~/.motiva/plugins/my-plugin
+cp -r my-plugin ~/.conatus/plugins/my-plugin
 ```
 
 ディレクトリ構造:
 
 ```
-~/.motiva/plugins/
+~/.conatus/plugins/
 └── my-plugin/
     ├── plugin.yaml
     ├── src/
@@ -353,29 +353,29 @@ cp -r my-plugin ~/.motiva/plugins/my-plugin
 
 ```bash
 # npmパッケージとしてインストール
-npm install -g @motiva-plugins/pagerduty-notifier
+npm install -g @conatus-plugins/pagerduty-notifier
 
-# symlink で~/.motiva/plugins/に配置
-ln -s $(npm root -g)/@motiva-plugins/pagerduty-notifier ~/.motiva/plugins/pagerduty-notifier
+# symlink で~/.conatus/plugins/に配置
+ln -s $(npm root -g)/@conatus-plugins/pagerduty-notifier ~/.conatus/plugins/pagerduty-notifier
 ```
 
 ---
 
-## `@motiva-plugins/` スコープでの npm 公開手順
+## `@conatus-plugins/` スコープでの npm 公開手順
 
-1. `package.json` の `name` を `@motiva-plugins/<plugin-name>` に設定する。
+1. `package.json` の `name` を `@conatus-plugins/<plugin-name>` に設定する。
 
-2. `peerDependencies` に `"motiva": ">=0.1.0"` を追加する。
+2. `peerDependencies` に `"conatus": ">=0.1.0"` を追加する。
 
 3. `exports` フィールドでエントリポイントを公開する。
 
 ```json
 {
-  "name": "@motiva-plugins/my-notifier",
+  "name": "@conatus-plugins/my-notifier",
   "version": "1.0.0",
   "type": "module",
   "exports": { ".": "./dist/index.js" },
-  "peerDependencies": { "motiva": ">=0.1.0" }
+  "peerDependencies": { "conatus": ">=0.1.0" }
 }
 ```
 

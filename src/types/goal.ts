@@ -46,7 +46,7 @@ export const DimensionSchema = z.object({
   /** Per-dimension uncertainty_weight override (null = use global) */
   uncertainty_weight: z.number().nullable().default(null),
   /**
-   * Integrity flag: set to "uncertain" when a revert fails so Motiva stops
+   * Integrity flag: set to "uncertain" when a revert fails so Conatus stops
    * autonomous task selection for this dimension until a human resets it.
    * See task-lifecycle.md §6.
    */

@@ -66,7 +66,7 @@ const DEFAULT_CONFIG: Required<LoopConfig> = {
 // ─── CoreLoop ───
 
 /**
- * CoreLoop is the heart of Motiva — it orchestrates one full iteration of the
+ * CoreLoop is the heart of Conatus — it orchestrates one full iteration of the
  * task discovery loop: observe → gap → score → completion check → stall check → task → report.
  *
  * It runs multiple iterations until the goal is complete (SatisficingJudge),

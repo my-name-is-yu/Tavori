@@ -1,4 +1,4 @@
-// ─── motiva goal subcommands ───
+// ─── conatus goal subcommands ───
 
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
@@ -120,7 +120,7 @@ export async function cmdGoalAdd(
       }
     }
 
-    console.log(`\nTo run the loop: motiva run --goal ${goal.id}`);
+    console.log(`\nTo run the loop: conatus run --goal ${goal.id}`);
     return 0;
   } catch (err) {
     if (err instanceof EthicsRejectedError) {
@@ -146,7 +146,7 @@ export async function cmdGoalList(
   } catch { /* dir doesn't exist or unreadable */ }
 
   if (goalsDirEntries.length === 0) {
-    console.log("No goals registered. Use `motiva goal add` to create one.");
+    console.log("No goals registered. Use `conatus goal add` to create one.");
   } else {
     const goalDirs: string[] = [];
     for (const e of goalsDirEntries) {
@@ -159,7 +159,7 @@ export async function cmdGoalList(
     }
 
     if (goalDirs.length === 0) {
-      console.log("No goals registered. Use `motiva goal add` to create one.");
+      console.log("No goals registered. Use `conatus goal add` to create one.");
     } else {
       console.log(`Found ${goalDirs.length} goal(s):\n`);
       for (const goalId of goalDirs) {
@@ -204,7 +204,7 @@ export async function cmdGoalList(
       console.log(`[${goalId}] status: ${status} — ${title} (dimensions: ${dimCount})`);
     }
   } else {
-    console.log(`\nArchived goals: ${archivedIds.length} (use \`motiva goal list --archived\` to show)`);
+    console.log(`\nArchived goals: ${archivedIds.length} (use \`conatus goal list --archived\` to show)`);
   }
 
   return 0;
@@ -249,7 +249,7 @@ export async function cmdStatus(stateManager: StateManager, goalId: string): Pro
     console.log(`\n## Latest Execution Summary\n`);
     console.log(latest.content);
   } else {
-    console.log(`\n_No execution reports yet. Run \`motiva run --goal ${goalId}\` to start._`);
+    console.log(`\n_No execution reports yet. Run \`conatus run --goal ${goalId}\` to start._`);
   }
 
   return 0;
@@ -321,7 +321,7 @@ export async function cmdGoalReset(stateManager: StateManager, goalId: string): 
   console.log(`Goal "${goalId}" reset to active.`);
   console.log(`  Status:      active`);
   console.log(`  Dimensions:  ${resetDimensions.length} dimension(s) cleared`);
-  console.log(`\nRun \`motiva run --goal ${goalId}\` to restart the loop.`);
+  console.log(`\nRun \`conatus run --goal ${goalId}\` to restart the loop.`);
 
   return 0;
 }
@@ -451,7 +451,7 @@ export async function cmdCleanup(stateManager: StateManager): Promise<number> {
     for (const f of staleReports) {
       console.log(`  ${f}`);
     }
-    console.log("(These can be removed manually from ~/.motiva/reports/)");
+    console.log("(These can be removed manually from ~/.conatus/reports/)");
   }
 
   return 0;

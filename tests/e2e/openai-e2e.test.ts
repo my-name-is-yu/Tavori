@@ -53,10 +53,10 @@ describe.skipIf(!API_KEY_SET)("OpenAI E2E — real API calls", () => {
   // ── Test 2: buildLLMClient('openai') creates an OpenAILLMClient ──────────
 
   it(
-    "buildLLMClient() with MOTIVA_LLM_PROVIDER=openai creates an OpenAILLMClient",
+    "buildLLMClient() with CONATUS_LLM_PROVIDER=openai creates an OpenAILLMClient",
     async () => {
-      const originalProvider = process.env["MOTIVA_LLM_PROVIDER"];
-      process.env["MOTIVA_LLM_PROVIDER"] = "openai";
+      const originalProvider = process.env["CONATUS_LLM_PROVIDER"];
+      process.env["CONATUS_LLM_PROVIDER"] = "openai";
 
       try {
         const client = await buildLLMClient();
@@ -70,9 +70,9 @@ describe.skipIf(!API_KEY_SET)("OpenAI E2E — real API calls", () => {
         expect(res.content.length).toBeGreaterThan(0);
       } finally {
         if (originalProvider === undefined) {
-          delete process.env["MOTIVA_LLM_PROVIDER"];
+          delete process.env["CONATUS_LLM_PROVIDER"];
         } else {
-          process.env["MOTIVA_LLM_PROVIDER"] = originalProvider;
+          process.env["CONATUS_LLM_PROVIDER"] = originalProvider;
         }
       }
     },

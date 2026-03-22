@@ -37,7 +37,7 @@ export const PluginManifestSchema = z.object({
   // プラグインのエントリポイント（plugin directoryからの相対パス）
   entry_point: z.string().default("dist/index.js"),
 
-  // 必要なMotivaのバージョン（semver range）
+  // 必要なConautsのバージョン（semver range）
   min_motiva_version: z.string().optional(),
   max_motiva_version: z.string().optional(),
 

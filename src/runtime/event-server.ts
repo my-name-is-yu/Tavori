@@ -10,7 +10,7 @@ import type { Logger } from "./logger.js";
 export interface EventServerConfig {
   host?: string; // default: "127.0.0.1" (localhost only!)
   port?: number; // default: 41700
-  eventsDir?: string; // default: ~/.motiva/events/
+  eventsDir?: string; // default: ~/.conatus/events/
 }
 
 export class EventServer {
@@ -26,7 +26,7 @@ export class EventServer {
     this.driveSystem = driveSystem;
     this.host = config?.host ?? "127.0.0.1";
     this.port = config?.port ?? 41700;
-    // Default events directory: ~/.motiva/events/
+    // Default events directory: ~/.conatus/events/
     this.eventsDir = config?.eventsDir ?? getEventsDir();
     this.logger = logger;
   }

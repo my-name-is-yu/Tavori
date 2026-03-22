@@ -67,7 +67,7 @@ let tmpDir: string;
 let memoryDir: string;
 
 beforeEach(() => {
-  tmpDir = makeTempDir("motiva-sel-test-");
+  tmpDir = makeTempDir("conatus-sel-test-");
   memoryDir = path.join(tmpDir, "memory");
 });
 

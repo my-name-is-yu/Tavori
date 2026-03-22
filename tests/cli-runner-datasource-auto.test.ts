@@ -132,7 +132,7 @@ beforeEach(() => {
   tmpDir = makeTempDir();
   origApiKey = process.env.ANTHROPIC_API_KEY;
   process.env.ANTHROPIC_API_KEY = "test-api-key";
-  process.env.MOTIVA_LLM_PROVIDER = "anthropic";
+  process.env.CONATUS_LLM_PROVIDER = "anthropic";
 });
 
 afterEach(() => {
@@ -141,7 +141,7 @@ afterEach(() => {
   } else {
     process.env.ANTHROPIC_API_KEY = origApiKey;
   }
-  delete process.env.MOTIVA_LLM_PROVIDER;
+  delete process.env.CONATUS_LLM_PROVIDER;
   fs.rmSync(tmpDir, { recursive: true, force: true });
   vi.clearAllMocks();
 });

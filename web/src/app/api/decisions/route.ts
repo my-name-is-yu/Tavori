@@ -18,11 +18,11 @@ interface DecisionEntry {
 
 export async function GET() {
   try {
-    const decisionsDir = join(homedir(), '.motiva', 'decisions');
+    const decisionsDir = join(homedir(), '.conatus', 'decisions');
     const sm = getStateManager();
     const decisions: DecisionEntry[] = [];
 
-    // Try reading from ~/.motiva/decisions/ directory
+    // Try reading from ~/.conatus/decisions/ directory
     let files: string[];
     try {
       files = await readdir(decisionsDir);

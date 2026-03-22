@@ -5,7 +5,7 @@ import { homedir } from 'os';
 
 export async function GET() {
   try {
-    const sessionsDir = join(homedir(), '.motiva', 'sessions');
+    const sessionsDir = join(homedir(), '.conatus', 'sessions');
 
     let files: string[];
     try {

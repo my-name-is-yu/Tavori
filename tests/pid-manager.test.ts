@@ -22,8 +22,8 @@ describe("PIDManager", () => {
   // ─── constructor / getPath ───
 
   describe("constructor and getPath", () => {
-    it("should use default PID filename 'motiva.pid'", () => {
-      expect(pidManager.getPath()).toBe(path.join(tmpDir, "motiva.pid"));
+    it("should use default PID filename 'conatus.pid'", () => {
+      expect(pidManager.getPath()).toBe(path.join(tmpDir, "conatus.pid"));
     });
 
     it("should support a custom PID filename", () => {

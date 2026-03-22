@@ -18,7 +18,7 @@
 
 ## 2. 設計思想: "Calm Control Room"
 
-Motivaは「エージェントの管制室」だ。コックピットのように多くの情報が整理された位置に配置され、異常時だけ注意を引く。
+Conatusは「エージェントの管制室」だ。コックピットのように多くの情報が整理された位置に配置され、異常時だけ注意を引く。
 
 | 回避すべきパターン | 対策 |
 |------------------|------|
@@ -60,14 +60,14 @@ web/
 │       ├── goals/, sessions/, strategies/, knowledge/, reports/
 │       └── events/route.ts  # SSE proxy
 ├── components/  (ui/, dashboard/, goal/, session/, knowledge/, layout/)
-├── lib/  (motiva-client.ts, store.ts, sse.ts)
+├── lib/  (conatus-client.ts, store.ts, sse.ts)
 ├── styles/tokens.css
 └── package.json, next.config.ts, tailwind.config.ts
 ```
 
 ### データ層とAPI
 
-Route HandlersはNode.jsプロセス内で直接motiva-coreモジュールをimportする（同一プロセス、RPC不要）。
+Route HandlersはNode.jsプロセス内で直接conatus-coreモジュールをimportする（同一プロセス、RPC不要）。
 
 | Endpoint | Method | 対応モジュール |
 |----------|--------|---------------|
@@ -126,7 +126,7 @@ Route HandlersはNode.jsプロセス内で直接motiva-coreモジュールをimp
 
 ### 5.5 Settings & Users
 
-プロバイダー設定（`~/.motiva/provider.json`）、プラグイン管理（有効/無効）、システムヘルス（CoreLoop状態、EventServer接続数）
+プロバイダー設定（`~/.conatus/provider.json`）、プラグイン管理（有効/無効）、システムヘルス（CoreLoop状態、EventServer接続数）
 
 ---
 
@@ -155,7 +155,7 @@ Route HandlersはNode.jsプロセス内で直接motiva-coreモジュールをimp
 - [ ] Goal DetailでGap/Trust推移チャートが30日分表示される
 - [ ] Agent Sessionsでセッション出力がSSE経由でストリーミングされる
 - [ ] localhostアクセスで認証なしに全機能利用できる
-- [ ] TUIとWeb UIが同一Motivaプロセスに対して並行動作できる
+- [ ] TUIとWeb UIが同一Conatusプロセスに対して並行動作できる
 - [ ] 初期ロード < 1.5秒（SSR）、SSEイベント反映 < 500ms
 - [ ] Dogfoodingで2時間以上Web UI監視が異常なく動作する
 

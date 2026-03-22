@@ -66,7 +66,7 @@ function makeRequest(id: string) {
 
 describe('GET /api/goals', () => {
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'motiva-web-goals-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'conatus-web-goals-'));
     mockSm = {
       listGoalIds: async () => ['goal-1'],
       loadGoal: async (id: string) => (id === 'goal-1' ? sampleGoal : null),
@@ -105,7 +105,7 @@ describe('GET /api/goals', () => {
 
 describe('GET /api/goals/:id', () => {
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'motiva-web-goals-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'conatus-web-goals-'));
     mockSm = {
       listGoalIds: async () => ['goal-1'],
       loadGoal: async (id: string) => (id === 'goal-1' ? sampleGoal : null),
@@ -134,7 +134,7 @@ describe('GET /api/goals/:id', () => {
 
 describe('GET /api/goals/:id/gap-history', () => {
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'motiva-web-goals-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'conatus-web-goals-'));
     mockSm = {
       listGoalIds: async () => ['goal-1'],
       loadGoal: async () => sampleGoal,
@@ -157,7 +157,7 @@ describe('GET /api/goals/:id/gap-history', () => {
 
 describe('GET /api/goals/:id/tasks', () => {
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'motiva-web-goals-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'conatus-web-goals-'));
   });
 
   afterEach(() => {
@@ -171,7 +171,7 @@ describe('GET /api/goals/:id/tasks', () => {
   });
 
   it('returns tasks from JSON files sorted by created_at desc', async () => {
-    const tasksDir = path.join(tmpDir, '.motiva', 'tasks', 'goal-1');
+    const tasksDir = path.join(tmpDir, '.conatus', 'tasks', 'goal-1');
     fs.mkdirSync(tasksDir, { recursive: true });
     const task1 = { id: 't1', created_at: '2026-01-01T00:00:00Z', description: 'older' };
     const task2 = { id: 't2', created_at: '2026-01-03T00:00:00Z', description: 'newer' };

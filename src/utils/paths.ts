@@ -1,17 +1,17 @@
-// ─── Motiva Path Utilities ───
+// ─── Conatus Path Utilities ───
 //
-// Centralizes ~/.motiva path construction.
-// MOTIVA_HOME env var overrides the default ~/.motiva location.
+// Centralizes ~/.conatus path construction.
+// CONATUS_HOME env var overrides the default ~/.conatus location.
 
 import * as os from "node:os";
 import * as path from "node:path";
 
 /**
- * Returns the Motiva base directory.
- * Defaults to ~/.motiva; can be overridden via MOTIVA_HOME env var.
+ * Returns the Conatus base directory.
+ * Defaults to ~/.conatus; can be overridden via CONATUS_HOME env var.
  */
 export function getMotivaDirPath(): string {
-  return process.env["MOTIVA_HOME"] ?? path.join(os.homedir(), ".motiva");
+  return process.env["CONATUS_HOME"] ?? path.join(os.homedir(), ".conatus");
 }
 
 export function getGoalsDir(base?: string): string {

@@ -3,7 +3,7 @@ import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
-const PROVIDER_CONFIG_PATH = path.join(os.homedir(), '.motiva', 'provider.json');
+const PROVIDER_CONFIG_PATH = path.join(os.homedir(), '.conatus', 'provider.json');
 
 function maskApiKey(key: string | undefined): string | undefined {
   if (!key) return undefined;

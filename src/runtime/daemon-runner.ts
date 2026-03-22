@@ -29,13 +29,13 @@ export interface ShutdownMarker {
 
 // ─── DaemonRunner ───
 //
-// Runs the Motiva CoreLoop continuously as a long-lived daemon process.
+// Runs the Conatus CoreLoop continuously as a long-lived daemon process.
 // Responsibilities:
 //   - PID file management (prevent duplicate daemons)
 //   - Signal handling (SIGINT/SIGTERM → graceful stop)
 //   - Multi-goal scheduling (DriveSystem.shouldActivate per goal)
 //   - Crash recovery (configurable max_retries before hard stop)
-//   - Daemon state persistence (~/.motiva/daemon-state.json)
+//   - Daemon state persistence (~/.conatus/daemon-state.json)
 //
 // The daemon loop:
 //   1. Determine which goals need activation (shouldActivate)
@@ -575,7 +575,7 @@ export class DaemonRunner {
    */
   async rotateLog(): Promise<void> {
     const logDir = path.join(this.baseDir, this.config.log_dir);
-    const logPath = path.join(logDir, "motiva.log");
+    const logPath = path.join(logDir, "conatus.log");
     const maxSizeBytes = this.config.log_rotation.max_size_mb * 1024 * 1024;
     const maxFiles = this.config.log_rotation.max_files;
 
@@ -593,7 +593,7 @@ export class DaemonRunner {
 
       // Rotate: rename current log with timestamp suffix
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const rotatedName = `motiva.${timestamp}.log`;
+      const rotatedName = `conatus.${timestamp}.log`;
       const rotatedPath = path.join(logDir, rotatedName);
       await fsp.rename(logPath, rotatedPath);
 
@@ -617,7 +617,7 @@ export class DaemonRunner {
       const entries = await fsp.readdir(logDir);
       // Rotated files match: motiva.<timestamp>.log (not motiva.log itself)
       const rotated = entries
-        .filter((f) => /^motiva\..+\.log$/.test(f) && f !== "motiva.log")
+        .filter((f) => /^conatus\..+\.log$/.test(f) && f !== "conatus.log")
         .sort(); // ISO timestamps sort lexicographically = chronologically
 
       // Remove oldest files beyond maxFiles
@@ -650,14 +650,14 @@ export class DaemonRunner {
     if (intervalMinutes <= 0) intervalMinutes = 60;
 
     if (intervalMinutes < 60) {
-      return `*/${intervalMinutes} * * * * /usr/bin/env motiva run --goal ${goalId}`;
+      return `*/${intervalMinutes} * * * * /usr/bin/env conatus run --goal ${goalId}`;
     }
 
     const hours = Math.floor(intervalMinutes / 60);
     if (hours < 24) {
-      return `0 */${hours} * * * /usr/bin/env motiva run --goal ${goalId}`;
+      return `0 */${hours} * * * /usr/bin/env conatus run --goal ${goalId}`;
     }
 
-    return `0 0 * * * /usr/bin/env motiva run --goal ${goalId}`;
+    return `0 0 * * * /usr/bin/env conatus run --goal ${goalId}`;
   }
 }
