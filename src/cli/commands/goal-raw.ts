@@ -12,7 +12,7 @@ import {
 
 export async function cmdGoalAddRaw(
   stateManager: StateManager,
-  opts: { title?: string; description?: string; rawDimensions: string[] }
+  opts: { title?: string; description?: string; rawDimensions: string[]; parent_id?: string }
 ): Promise<number> {
   const title = opts.title || opts.description;
   if (!title) {
@@ -65,7 +65,7 @@ export async function cmdGoalAddRaw(
 
   const goal = {
     id: goalId,
-    parent_id: null,
+    parent_id: opts.parent_id ?? null,
     node_type: "goal" as const,
     title,
     description: opts.description || title,
@@ -91,6 +91,19 @@ export async function cmdGoalAddRaw(
   };
 
   await stateManager.saveGoal(goal);
+
+  if (opts.parent_id) {
+    const parent = await stateManager.loadGoal(opts.parent_id);
+    if (parent) {
+      await stateManager.saveGoal({
+        ...parent,
+        children_ids: [...parent.children_ids, goalId],
+        updated_at: now,
+      });
+    } else {
+      getCliLogger().warn(`Warning: parent goal not found: ${opts.parent_id}. Goal saved without parent link.`);
+    }
+  }
 
   await autoRegisterFileExistenceDataSources(stateManager, dimensions, title, goalId);
   await autoRegisterShellDataSources(stateManager, dimensions, goalId);

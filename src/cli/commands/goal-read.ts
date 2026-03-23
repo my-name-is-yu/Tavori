@@ -201,8 +201,14 @@ export async function cmdGoalShow(stateManager: StateManager, goalId: string): P
     console.log(`Children:    ${goal.children_ids.length} subgoal(s)`);
     for (const childId of goal.children_ids) {
       const shortId = childId.substring(0, 8);
-      const childGoal = await stateManager.loadGoal(childId);
-      const childTitle = childGoal ? childGoal.title : "(unknown)";
+      let childTitle = "(error reading goal)";
+      try {
+        const childGoal = await stateManager.loadGoal(childId);
+        if (childGoal) childTitle = childGoal.title;
+        else childTitle = "(unknown)";
+      } catch {
+        // keep fallback title
+      }
       console.log(`  - ${shortId}... — ${childTitle}`);
     }
   }

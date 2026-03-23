@@ -654,5 +654,73 @@ describe("StateManager", async () => {
     it("loadGoal returns null for a goal that was never saved nor archived", async () => {
       expect(await manager.loadGoal("never-existed")).toBeNull();
     });
+
+    it("archiveGoal cascades to children — both parent and child appear in archive", async () => {
+      const child = makeGoal({ id: "arc-child", parent_id: "arc-parent" });
+      const parent = makeGoal({ id: "arc-parent", children_ids: ["arc-child"] });
+      await manager.saveGoal(child);
+      await manager.saveGoal(parent);
+
+      const result = await manager.archiveGoal("arc-parent");
+      expect(result).toBe(true);
+
+      // Both parent and child directories should be in the archive
+      expect(fs.existsSync(path.join(tmpDir, "archive", "arc-parent", "goal", "goal.json"))).toBe(true);
+      expect(fs.existsSync(path.join(tmpDir, "archive", "arc-child", "goal", "goal.json"))).toBe(true);
+
+      // Both should have status "archived"
+      const parentArchived = await manager.loadGoal("arc-parent");
+      expect(parentArchived?.status).toBe("archived");
+      const childArchived = await manager.loadGoal("arc-child");
+      expect(childArchived?.status).toBe("archived");
+    });
+
+    it("archiveGoal tolerates corrupt child — succeeds without throwing", async () => {
+      const child = makeGoal({ id: "arc-corrupt-child", parent_id: "arc-corrupt-parent" });
+      const parent = makeGoal({ id: "arc-corrupt-parent", children_ids: ["arc-corrupt-child"] });
+      await manager.saveGoal(child);
+      await manager.saveGoal(parent);
+
+      // Corrupt the child's goal.json with invalid JSON
+      const childGoalPath = path.join(tmpDir, "goals", "arc-corrupt-child", "goal.json");
+      fs.writeFileSync(childGoalPath, "{ not valid json ~~~");
+
+      // archiveGoal on the parent should succeed despite the corrupt child
+      await expect(manager.archiveGoal("arc-corrupt-parent")).resolves.toBe(true);
+
+      // Parent archive should exist
+      expect(fs.existsSync(path.join(tmpDir, "archive", "arc-corrupt-parent", "goal", "goal.json"))).toBe(true);
+    });
+  });
+
+  describe("deleteGoal cascade", async () => {
+    it("deleteGoal cascades to children — both parent and child directories removed", async () => {
+      const child = makeGoal({ id: "del-child", parent_id: "del-parent" });
+      const parent = makeGoal({ id: "del-parent", children_ids: ["del-child"] });
+      await manager.saveGoal(child);
+      await manager.saveGoal(parent);
+
+      const result = await manager.deleteGoal("del-parent");
+      expect(result).toBe(true);
+
+      expect(await manager.goalExists("del-parent")).toBe(false);
+      expect(await manager.goalExists("del-child")).toBe(false);
+    });
+
+    it("deleteGoal tolerates corrupt child — succeeds without throwing", async () => {
+      const child = makeGoal({ id: "del-corrupt-child", parent_id: "del-corrupt-parent" });
+      const parent = makeGoal({ id: "del-corrupt-parent", children_ids: ["del-corrupt-child"] });
+      await manager.saveGoal(child);
+      await manager.saveGoal(parent);
+
+      // Corrupt the child's goal.json with invalid JSON
+      const childGoalPath = path.join(tmpDir, "goals", "del-corrupt-child", "goal.json");
+      fs.writeFileSync(childGoalPath, "{ not valid json ~~~");
+
+      // deleteGoal on the parent should succeed despite the corrupt child
+      await expect(manager.deleteGoal("del-corrupt-parent")).resolves.toBe(true);
+
+      expect(await manager.goalExists("del-corrupt-parent")).toBe(false);
+    });
   });
 });

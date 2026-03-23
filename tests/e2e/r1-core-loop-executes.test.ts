@@ -494,6 +494,6 @@ describe("R1-3 E2E: loadGoal() returns archived goals via archive fallback path"
     expect(loaded!.dimensions).toHaveLength(1);
     expect(loaded!.dimensions[0]!.name).toBe("quality");
     expect(loaded!.dimensions[0]!.current_value).toBe(0.0);
-    expect(loaded!.status).toBe("active");
+    expect(loaded!.status).toBe("archived");
   });
 });

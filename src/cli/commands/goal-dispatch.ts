@@ -53,6 +53,7 @@ export async function dispatchGoalCommand(
       deadline?: string;
       constraint?: string[];
       yes?: boolean;
+      parent?: string;
     } = {};
     try {
       const parsed = parseArgs({
@@ -65,6 +66,7 @@ export async function dispatchGoalCommand(
           deadline: { type: "string" },
           constraint: { type: "string", multiple: true },
           yes: { type: "boolean", short: "y" },
+          parent: { type: "string" },
         },
         allowPositionals: true,
         strict: false,
@@ -89,7 +91,7 @@ export async function dispatchGoalCommand(
         );
         return 1;
       }
-      return await cmdGoalAddRaw(stateManager, { title, description, rawDimensions });
+      return await cmdGoalAddRaw(stateManager, { title, description, rawDimensions, parent_id: addValues.parent });
     }
 
     // Refine/negotiate mode: requires description

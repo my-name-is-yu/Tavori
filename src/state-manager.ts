@@ -129,13 +129,30 @@ export class StateManager {
     return GoalSchema.parse(archiveRaw);
   }
 
-  async deleteGoal(goalId: string): Promise<boolean> {
+  async deleteGoal(goalId: string, _visited = new Set<string>()): Promise<boolean> {
+    if (_visited.has(goalId)) return false;
+    _visited.add(goalId);
+
     const dir = path.join(this.baseDir, "goals", goalId);
     try {
       await fsp.access(dir);
     } catch {
       return false;
     }
+
+    // Recursively delete children first (depth-first)
+    let goal: Goal | null = null;
+    try {
+      goal = await this.loadGoal(goalId);
+    } catch {
+      this.logger?.warn(`[StateManager] Skipping children of "${goalId}": goal.json unreadable`);
+    }
+    if (goal !== null) {
+      for (const childId of goal.children_ids) {
+        await this.deleteGoal(childId, _visited);
+      }
+    }
+
     await fsp.rm(dir, { recursive: true, force: true });
     return true;
   }
@@ -153,12 +170,28 @@ export class StateManager {
    *
    * Returns true if the goal was archived, false if the goal was not found.
    */
-  async archiveGoal(goalId: string): Promise<boolean> {
+  async archiveGoal(goalId: string, _visited = new Set<string>()): Promise<boolean> {
+    if (_visited.has(goalId)) return false;
+    _visited.add(goalId);
+
     const goalDir = path.join(this.baseDir, "goals", goalId);
     try {
       await fsp.access(goalDir);
     } catch {
       return false;
+    }
+
+    // Recursively archive children first (depth-first)
+    let goal: Goal | null = null;
+    try {
+      goal = await this.loadGoal(goalId);
+    } catch {
+      this.logger?.warn(`[StateManager] Skipping children of "${goalId}": goal.json unreadable`);
+    }
+    if (goal !== null) {
+      for (const childId of goal.children_ids) {
+        await this.archiveGoal(childId, _visited);
+      }
     }
 
     const archiveBase = path.join(this.baseDir, "archive", goalId);
@@ -168,6 +201,18 @@ export class StateManager {
     const archiveGoalDir = path.join(archiveBase, "goal");
     await fsp.cp(goalDir, archiveGoalDir, { recursive: true });
     await fsp.rm(goalDir, { recursive: true, force: true });
+
+    // Update status to "archived" in the archived goal.json (Bug 5)
+    const archivedGoalJsonPath = path.join(archiveGoalDir, "goal.json");
+    try {
+      const archivedRaw = await this.atomicRead<unknown>(archivedGoalJsonPath);
+      if (archivedRaw !== null) {
+        const archivedGoal = GoalSchema.parse(archivedRaw);
+        await this.atomicWrite(archivedGoalJsonPath, { ...archivedGoal, status: "archived" });
+      }
+    } catch {
+      this.logger?.warn(`[StateManager] Could not update status to "archived" for "${goalId}": goal.json unreadable`);
+    }
 
     // Move tasks/<goalId>/ → archive/<goalId>/tasks/ (if exists)
     const tasksDir = path.join(this.baseDir, "tasks", goalId);
