@@ -8,6 +8,7 @@ import type { GoalTreeManager } from "../src/goal/goal-tree-manager.js";
 import type { EthicsGate } from "../src/traits/ethics-gate.js";
 import { createMockLLMClient } from "./helpers/mock-llm.js";
 import { makeGoal, makeDimension } from "./helpers/fixtures.js";
+import { ZodError } from "zod";
 
 const measurableResponses = {
   shell: JSON.stringify({
@@ -24,7 +25,7 @@ const measurableResponses = {
     ],
     reason: "Coverage is directly measurable with a shell command",
   }),
-  fileExistence: JSON.stringify({
+  file_existence: JSON.stringify({
     is_measurable: true,
     dimensions: [
       {
@@ -54,35 +55,41 @@ const measurableResponses = {
   }),
 } as const;
 
-const normalizedGoalExpectations = {
+const expectedNormalizedDimensions = {
   shell: {
-    reason: "Coverage is directly measurable with a shell command",
+    name: "test_coverage",
+    label: "Test Coverage %",
     threshold: { type: "min", value: 80 },
     observation_method: {
       type: "mechanical",
       source: "shell",
       endpoint: "npm test -- --coverage | grep Statements",
       confidence_tier: "mechanical",
+      schedule: null,
     },
   },
   file_existence: {
-    reason: "Release readiness is represented by a file marker",
+    name: "release_ready",
+    label: "Release Ready",
     threshold: { type: "present" },
     observation_method: {
       type: "file_check",
       source: "file_existence",
       endpoint: "test -f RELEASE_READY",
       confidence_tier: "mechanical",
+      schedule: null,
     },
   },
   api: {
-    reason: "The API exposes a health endpoint that can be queried",
+    name: "api_online",
+    label: "API Online",
     threshold: { type: "match", value: "ok" },
     observation_method: {
       type: "api_query",
       source: "api",
       endpoint: "curl -fsS https://example.com/health",
       confidence_tier: "self_report",
+      schedule: null,
     },
   },
 } as const;
@@ -131,7 +138,7 @@ function makeEthicsGate(): EthicsGate {
   return {} as unknown as EthicsGate;
 }
 
-describe("GoalRefiner.refine()", () => {
+describe("refine()", () => {
   let goalId: string;
   let goal: ReturnType<typeof makeGoal>;
 
@@ -150,19 +157,25 @@ describe("GoalRefiner.refine()", () => {
     {
       name: "shell",
       response: measurableResponses.shell,
-      expected: normalizedGoalExpectations.shell,
+      expected: expectedNormalizedDimensions.shell,
+      reason: "Coverage is directly measurable with a shell command",
+      feasibilityDimension: "test_coverage",
     },
     {
       name: "file_existence",
-      response: measurableResponses.fileExistence,
-      expected: normalizedGoalExpectations.file_existence,
+      response: measurableResponses.file_existence,
+      expected: expectedNormalizedDimensions.file_existence,
+      reason: "Release readiness is represented by a file marker",
+      feasibilityDimension: "release_ready",
     },
     {
       name: "api",
       response: measurableResponses.api,
-      expected: normalizedGoalExpectations.api,
+      expected: expectedNormalizedDimensions.api,
+      reason: "The API exposes a health endpoint that can be queried",
+      feasibilityDimension: "api_online",
     },
-  ])("normalizes $name input through refine()", async ({ response, expected }) => {
+  ])("normalizes valid $name payloads", async ({ response, expected, reason, feasibilityDimension }) => {
     const llmClient = createMockLLMClient([response, feasibilityResponse]);
     const stateManager = makeStateManager({ [goalId]: goal });
     const refiner = new GoalRefiner(
@@ -177,35 +190,61 @@ describe("GoalRefiner.refine()", () => {
     const result = await refiner.refine(goalId);
 
     expect(result).toMatchObject({
+      goal: {
+        id: goalId,
+        parent_id: null,
+        node_type: "leaf",
+        title: "Test Goal",
+        description: "Achieve 80% test coverage",
+        status: "active",
+        dimensions: [
+          {
+            name: expected.name,
+            label: expected.label,
+            current_value: null,
+            threshold: expected.threshold,
+            confidence: 0.5,
+            observation_method: expected.observation_method,
+            history: [],
+            weight: 1,
+            uncertainty_weight: null,
+            state_integrity: "ok",
+            dimension_mapping: null,
+          },
+        ],
+        gap_aggregation: "max",
+        dimension_mapping: null,
+        constraints: [],
+        children_ids: [],
+        target_date: null,
+        origin: null,
+        pace_snapshot: null,
+        deadline: null,
+        confidence_flag: null,
+        user_override: false,
+        feasibility_note: null,
+        uncertainty_weight: 1,
+        decomposition_depth: 0,
+        specificity_score: null,
+        loop_status: "idle",
+        created_at: expect.any(String),
+        updated_at: expect.any(String),
+      },
       leaf: true,
       children: null,
       feasibility: [
-        expect.objectContaining({
+        {
+          dimension: feasibilityDimension,
+          path: "qualitative",
           assessment: "realistic",
           confidence: "high",
           reasoning: "Target is achievable",
           key_assumptions: ["Tests exist"],
           main_risks: [],
-        }),
+        },
       ],
       tokensUsed: expect.any(Number),
-      reason: expected.reason,
-    });
-    expect(result.goal).toMatchObject({
-      id: goalId,
-      description: "Achieve 80% test coverage",
-      node_type: "leaf",
-      children_ids: [],
-      dimensions: [
-        expect.objectContaining({
-          threshold: expected.threshold,
-          observation_method: expect.objectContaining(expected.observation_method),
-        }),
-      ],
-    });
-    expect(result.goal.dimensions[0]).toMatchObject({
-      threshold: expected.threshold,
-      observation_method: expected.observation_method,
+      reason,
     });
   });
 
@@ -231,7 +270,7 @@ describe("GoalRefiner.refine()", () => {
       response: "this is not json at all",
       expectedReason: "LLM call failed",
     },
-  ])("normalizes malformed payloads from $name", async ({ response, expectedReason }) => {
+  ])("normalizes malformed payloads from $name into the same failure shape", async ({ response, expectedReason }) => {
     const childId = randomUUID();
     const childGoal = makeGoal({
       id: childId,
@@ -242,7 +281,9 @@ describe("GoalRefiner.refine()", () => {
       dimensions: [makeDimension()],
     });
 
-    const llmClient = createMockLLMClient([response]);
+    const llmClient = createMockLLMClient([
+      response,
+    ]);
     const stateManager = makeStateManager({ [goalId]: goal, [childId]: childGoal });
     const treeManager = makeTreeManager();
     (treeManager.decomposeGoal as ReturnType<typeof vi.fn>).mockImplementationOnce(
@@ -254,7 +295,7 @@ describe("GoalRefiner.refine()", () => {
           children: [childGoal],
           depth: 1,
           specificity_scores: {},
-          reasoning: `Decomposed after ${expectedReason}`,
+          reasoning: "Decomposed after parse failure",
         };
       }
     );
@@ -270,50 +311,50 @@ describe("GoalRefiner.refine()", () => {
 
     const result = await refiner.refine(goalId);
 
-    expect(result.leaf).toBe(false);
-    expect(result.children).toHaveLength(1);
-    expect(result.children?.[0]).toMatchObject({
-      leaf: true,
-      children: null,
+    expect(result).toMatchObject({
+      goal: {
+        ...goal,
+        children_ids: [childId],
+      },
+      leaf: false,
+      children: [
+        {
+          goal: childGoal,
+          leaf: true,
+          children: null,
+          feasibility: null,
+          tokensUsed: expect.any(Number),
+          reason: "already has validated dimensions",
+        },
+      ],
       feasibility: null,
-      reason: "already has validated dimensions",
-      goal: expect.objectContaining({
-        id: childId,
-        parent_id: goalId,
-        node_type: "goal",
-        user_override: true,
-        children_ids: [],
-      }),
+      tokensUsed: expect.any(Number),
+      reason: expectedReason,
     });
-    expect(result.feasibility).toBeNull();
+    expect(result.goal.children_ids).toEqual([childId]);
+    expect(result.children).toHaveLength(1);
+    expect(result.children?.[0]?.reason).toBe("already has validated dimensions");
     expect(result.reason).toBe(expectedReason);
-    expect(result.tokensUsed).toEqual(expect.any(Number));
-    expect(result.goal).toMatchObject({
-      id: goalId,
-      node_type: "goal",
-      children_ids: [childId],
-    });
     expect(stateManager.saveGoal).toHaveBeenCalledTimes(1);
   });
 
-  it.each([
-    {
-      name: "sync throw",
-      setup(treeManager: GoalTreeManager, rejection: Error) {
-        (treeManager.decomposeGoal as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
-          throw rejection;
-        });
-      },
-    },
-    {
-      name: "async rejection",
-      setup(treeManager: GoalTreeManager, rejection: Error) {
-        (treeManager.decomposeGoal as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
-          rejection
-        );
-      },
-    },
-  ])("preserves downstream $name failures", async ({ setup }) => {
+  it("rejects invalid refine config with the underlying schema error", async () => {
+    const llmClient = createMockLLMClient([measurableResponses.shell, feasibilityResponse]);
+    const stateManager = makeStateManager({ [goalId]: goal });
+    const refiner = new GoalRefiner(
+      stateManager,
+      llmClient,
+      makeObservationEngine(),
+      makeNegotiator(),
+      makeTreeManager(),
+      makeEthicsGate()
+    );
+
+    await expect(refiner.refine(goalId, { maxDepth: 0 })).rejects.toBeInstanceOf(ZodError);
+    expect(stateManager.saveGoal).not.toHaveBeenCalled();
+  });
+
+  it("propagates downstream decomposition errors unchanged", async () => {
     const llmClient = createMockLLMClient([
       JSON.stringify({
         is_measurable: false,
@@ -324,7 +365,9 @@ describe("GoalRefiner.refine()", () => {
     const stateManager = makeStateManager({ [goalId]: goal });
     const treeManager = makeTreeManager();
     const rejection = new Error("tree manager unavailable");
-    setup(treeManager, rejection);
+    (treeManager.decomposeGoal as ReturnType<typeof vi.fn>).mockImplementationOnce(() => {
+      throw rejection;
+    });
 
     const refiner = new GoalRefiner(
       stateManager,
@@ -337,5 +380,23 @@ describe("GoalRefiner.refine()", () => {
 
     await expect(refiner.refine(goalId)).rejects.toBe(rejection);
     expect(stateManager.saveGoal).not.toHaveBeenCalled();
+  });
+
+  it("propagates saveGoal failures unchanged on measurable refinement", async () => {
+    const llmClient = createMockLLMClient([measurableResponses.shell, feasibilityResponse]);
+    const stateManager = makeStateManager({ [goalId]: goal });
+    const rejection = new Error("state manager write failed");
+    (stateManager.saveGoal as ReturnType<typeof vi.fn>).mockRejectedValueOnce(rejection);
+
+    const refiner = new GoalRefiner(
+      stateManager,
+      llmClient,
+      makeObservationEngine(),
+      makeNegotiator(),
+      makeTreeManager(),
+      makeEthicsGate()
+    );
+
+    await expect(refiner.refine(goalId)).rejects.toBe(rejection);
   });
 });

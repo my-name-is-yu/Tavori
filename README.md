@@ -10,10 +10,7 @@
 
 Set a goal. Tavori observes the world, finds the gap, generates the next task, delegates it to any AI agent, verifies the result, and loops — until done.
 
-<!-- TODO: Replace with actual demo recording -->
-<br/>
-
-*Demo video coming soon*
+The project is documented for local use; follow the Quick Start steps to run Tavori from source or as an installed CLI.
 
 <br/>
 </div>
@@ -202,6 +199,15 @@ npm test
 ```
 
 State: `~/.tavori/` · Reports: `~/.tavori/reports/` · Ethics logs: `~/.tavori/ethics/`
+
+`tests/refine.test.ts` is the canonical refine regression suite and the source of truth for `GoalRefiner.refine()` behavior.
+It covers normalized success cases for `shell`, `file_existence`, and `api`, malformed payload handling for schema-invalid JSON and non-JSON text, invalid config rejection, plus downstream failure propagation when decomposition or state writes throw.
+
+Run the focused verification command:
+
+```bash
+npx vitest run tests/refine.test.ts
+```
 
 ## Contributing
 
