@@ -34,6 +34,10 @@ import { StateAggregator } from "../goal/state-aggregator.js";
 import { GoalDependencyGraph } from "../goal/goal-dependency-graph.js";
 import { GoalRefiner } from "../goal/goal-refiner.js";
 import { MemoryLifecycleManager, DriveScoreAdapter } from "../knowledge/memory-lifecycle.js";
+import { KnowledgeManager } from "../knowledge/knowledge-manager.js";
+import { VectorIndex } from "../knowledge/vector-index.js";
+import { OpenAIEmbeddingClient, MockEmbeddingClient } from "../knowledge/embedding-client.js";
+import type { IEmbeddingClient } from "../knowledge/embedding-client.js";
 import { CharacterConfigManager } from "../traits/character-config.js";
 import * as GapCalculator from "../drive/gap-calculator.js";
 import * as DriveScorer from "../drive/drive-scorer.js";
@@ -139,6 +143,23 @@ export async function buildDeps(
 
   // MemoryLifecycleManager — wires 3-tier memory model into CoreLoop.
   const tavoriBaseDir = getTavoriDirPath();
+
+  // --- Embedding + Vector infrastructure ---
+  const embeddingClient: IEmbeddingClient = process.env["OPENAI_API_KEY"]
+    ? new OpenAIEmbeddingClient(process.env["OPENAI_API_KEY"])
+    : new MockEmbeddingClient();
+
+  let vectorIndex: VectorIndex | undefined;
+  try {
+    const vectorDir = path.join(tavoriBaseDir, "memory");
+    await fsp.mkdir(vectorDir, { recursive: true });
+    const vectorIndexPath = path.join(vectorDir, "vector-index.json");
+    vectorIndex = await VectorIndex.create(vectorIndexPath, embeddingClient);
+  } catch (err) {
+    // Non-fatal: semantic search disabled if vector index init fails
+    console.warn(`[tavori] VectorIndex init failed — semantic search disabled: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
   let memoryLifecycleManager: MemoryLifecycleManager | undefined;
   let driveScoreAdapter: DriveScoreAdapter | undefined;
   try {
@@ -147,8 +168,8 @@ export async function buildDeps(
       tavoriBaseDir,
       llmClient,
       undefined,
-      undefined,
-      undefined,
+      embeddingClient,
+      vectorIndex,
       driveScoreAdapter
     );
     memoryLifecycleManager.initializeDirectories();
@@ -157,6 +178,13 @@ export async function buildDeps(
     memoryLifecycleManager = undefined;
     driveScoreAdapter = undefined;
   }
+
+  const knowledgeManager = new KnowledgeManager(
+    stateManager,
+    llmClient,
+    vectorIndex,
+    embeddingClient,
+  );
 
   const gapCalculator: GapCalculatorModule = {
     calculateGapVector: GapCalculator.calculateGapVector,
@@ -187,6 +215,7 @@ export async function buildDeps(
     goalDependencyGraph,
     memoryLifecycleManager,
     driveScoreAdapter,
+    knowledgeManager,
     logger,
     contextProvider,
     onProgress,

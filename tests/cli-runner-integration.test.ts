@@ -267,11 +267,17 @@ describe("run subcommand with real CoreLoop (max_iterations=1)", () => {
       criteria_total: 1,
     });
 
+    // KnowledgeManager.detectKnowledgeGap() makes an LLM call when confidence >= 0.3
+    // and strategies is not an empty array. The response must have has_gap=false to
+    // skip the acquisition task path.
+    const knowledgeGapResponse = JSON.stringify({ has_gap: false });
+
     const { LLMClient } = await import("../src/llm/llm-client.js");
     // Provide many responses since CoreLoop may make multiple LLM calls
     const mockLLM = createMockLLMClient([
       observationResponse,
       observationResponse,
+      knowledgeGapResponse,
       taskResponse,
       llmReviewResponse,
       llmReviewResponse,

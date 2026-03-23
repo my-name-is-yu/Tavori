@@ -24,7 +24,11 @@ export class VectorIndex {
     embeddingClient: IEmbeddingClient
   ): Promise<VectorIndex> {
     const index = new VectorIndex(indexPath, embeddingClient);
-    await index._load();
+    const fileExisted = await index._load();
+    if (!fileExisted) {
+      // Persist empty index on first run so the file exists for next time
+      await index._save();
+    }
     return index;
   }
 
@@ -162,11 +166,11 @@ export class VectorIndex {
     await this._save();
   }
 
-  async _load(): Promise<void> {
+  async _load(): Promise<boolean> {
     try {
       await fsp.access(this.indexPath);
     } catch {
-      return;
+      return false;
     }
     try {
       const raw = await fsp.readFile(this.indexPath, "utf-8");
@@ -178,6 +182,7 @@ export class VectorIndex {
     } catch {
       // Corrupt or empty file — start fresh
     }
+    return true;
   }
 
   private async _save(): Promise<void> {

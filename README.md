@@ -200,13 +200,20 @@ npm test
 
 State: `~/.tavori/` · Reports: `~/.tavori/reports/` · Ethics logs: `~/.tavori/ethics/`
 
-`tests/refine.test.ts` is the canonical refine regression suite and the source of truth for `GoalRefiner.refine()` behavior.
-It covers normalized success cases for `shell`, `file_existence`, and `api`, malformed payload handling for schema-invalid JSON and non-JSON text, invalid config rejection, plus downstream failure propagation when decomposition or state writes throw.
+Regression note: `tests/refine.test.ts` now covers `refine()` normalization for supported inputs, malformed payload handling, and propagated refinement failures.
+Verify it with:
+
+```bash
+npx vitest run tests/refine.test.ts
+```
+
+Regression note: `tests/unit/goalNegotiator.test.ts` covers the `gatherNegotiationContext` workspace fixture cleanup path.
+Use it to verify the workspace scan fixture remains visible during cleanup-path changes.
 
 Run the focused verification command:
 
 ```bash
-npx vitest run tests/refine.test.ts
+npx vitest run tests/unit/goalNegotiator.test.ts
 ```
 
 ## Contributing

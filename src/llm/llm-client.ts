@@ -135,7 +135,13 @@ export class LLMClient extends BaseLLMClient implements ILLMClient {
         };
         break;
       } catch (err) {
-        if (err instanceof Error && 'status' in err && (err as any).status >= 400 && (err as any).status < 500) {
+        if (
+          err instanceof Error &&
+          "status" in err &&
+          typeof err.status === "number" &&
+          err.status >= 400 &&
+          err.status < 500
+        ) {
           throw err; // client error, no retry
         }
         lastError = err;

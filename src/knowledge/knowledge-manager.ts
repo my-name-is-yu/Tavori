@@ -344,6 +344,16 @@ Respond with JSON:
     const parsed = KnowledgeEntrySchema.parse(entry);
     const domainKnowledge = await this._loadDomainKnowledge(goalId);
 
+    // Phase 2: attempt vector indexing first — if the embedding API fails,
+    // we avoid writing a stale disk state that is out of sync with the index.
+    if (this.vectorIndex) {
+      await this.vectorIndex.add(
+        parsed.entry_id,
+        `${parsed.question} ${parsed.answer}`,
+        { goal_id: goalId, tags: parsed.tags }
+      );
+    }
+
     domainKnowledge.entries.push(parsed);
     domainKnowledge.last_updated = new Date().toISOString();
 
@@ -352,15 +362,6 @@ Respond with JSON:
       `goals/${goalId}/domain_knowledge.json`,
       validated
     );
-
-    // Phase 2: also index in VectorIndex when available
-    if (this.vectorIndex) {
-      await this.vectorIndex.add(
-        parsed.entry_id,
-        `${parsed.question} ${parsed.answer}`,
-        { goal_id: goalId, tags: parsed.tags }
-      );
-    }
   }
 
   // ─── loadKnowledge ───
