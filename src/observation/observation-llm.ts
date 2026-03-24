@@ -194,14 +194,14 @@ export async function observeWithLLM(
       logger?.warn(`[ObservationEngine] PromptGateway failed for "${dimensionLabel}", falling back to direct LLM: ${String(err)}`);
       const response = await llmClient.sendMessage(
         [{ role: "user", content: prompt }],
-        { system: OBSERVATION_SYSTEM_PROMPT, max_tokens: 512, temperature: 0 }
+        { system: OBSERVATION_SYSTEM_PROMPT, max_tokens: 512, temperature: 0, model_tier: 'light' }
       );
       parsed = llmClient.parseJSON(response.content, LLMObservationResponseSchema);
     }
   } else {
     const response = await llmClient.sendMessage(
       [{ role: "user", content: prompt }],
-      { system: OBSERVATION_SYSTEM_PROMPT, max_tokens: 512, temperature: 0 }
+      { system: OBSERVATION_SYSTEM_PROMPT, max_tokens: 512, temperature: 0, model_tier: 'light' }
     );
     parsed = llmClient.parseJSON(response.content, LLMObservationResponseSchema);
   }

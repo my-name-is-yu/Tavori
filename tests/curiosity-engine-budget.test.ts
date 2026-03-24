@@ -436,7 +436,7 @@ describe("CuriosityEngine — learning feedback", async () => {
     );
 
     const sendMessageArgs = (deps.llmClient.sendMessage as ReturnType<typeof vi.fn>).mock.calls[0]!;
-    expect(sendMessageArgs[1]).toEqual({ temperature: 0.3 });
+    expect(sendMessageArgs[1]).toEqual({ temperature: 0.3, model_tier: 'light' });
   });
 
   it("passes proposal description to ethics gate for evaluation", async () => {

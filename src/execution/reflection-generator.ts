@@ -74,7 +74,7 @@ Respond with JSON only:
     } else {
       const response = await llmClient.sendMessage(
         [{ role: "user", content: prompt }],
-        { max_tokens: 512 }
+        { max_tokens: 512, model_tier: 'light' }
       );
       const jsonText = extractJSON(response.content);
       const raw = JSON.parse(jsonText) as unknown;

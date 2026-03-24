@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { ZodSchema } from "zod";
 import { sleep } from "../utils/sleep.js";
 import { BaseLLMClient, DEFAULT_MAX_TOKENS, DEFAULT_LLM_TIMEOUT_MS, MAX_RETRY_ATTEMPTS, RETRY_DELAYS_MS, extractJSON } from "./base-llm-client.js";
+import type { ModelTier } from "./base-llm-client.js";
 import { LLMError } from "../utils/errors.js";
 import { GuardrailRunner } from "../guardrail-runner.js";
 
@@ -12,11 +13,15 @@ export interface LLMMessage {
   content: string;
 }
 
+export type { ModelTier };
+
 export interface LLMRequestOptions {
   model?: string;
   max_tokens?: number;
   system?: string;
   temperature?: number;
+  /** Route to light model when configured. Defaults to 'main' for backward compat. */
+  model_tier?: ModelTier;
 }
 
 export interface LLMResponse {
@@ -58,7 +63,7 @@ export class LLMClient extends BaseLLMClient implements ILLMClient {
   private readonly client: Anthropic;
   private guardrailRunner?: GuardrailRunner;
 
-  constructor(apiKey: string, guardrailRunner?: GuardrailRunner) {
+  constructor(apiKey: string, guardrailRunner?: GuardrailRunner, lightModel?: string) {
     super();
     if (!apiKey) {
       throw new LLMError(
@@ -67,6 +72,7 @@ export class LLMClient extends BaseLLMClient implements ILLMClient {
     }
     this.client = new Anthropic({ apiKey });
     this.guardrailRunner = guardrailRunner;
+    this.lightModel = lightModel;
   }
 
   /**
@@ -77,7 +83,7 @@ export class LLMClient extends BaseLLMClient implements ILLMClient {
     messages: LLMMessage[],
     options?: LLMRequestOptions
   ): Promise<LLMResponse> {
-    const model = options?.model ?? DEFAULT_MODEL;
+    const model = this.resolveEffectiveModel(options?.model ?? DEFAULT_MODEL, options?.model_tier);
     const max_tokens = options?.max_tokens ?? DEFAULT_MAX_TOKENS;
     const temperature = options?.temperature ?? DEFAULT_TEMPERATURE;
     let system = options?.system;

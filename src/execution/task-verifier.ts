@@ -200,7 +200,7 @@ export async function verifyTask(
       confidence = 0.7;
     } else if (l1Result.passed && !l2Result.passed && !l2Result.partial) {
       // L1 pass + L2 fail → re-review
-      l2Retry = await runLLMReview(deps, task, executionResult, knowledgeBlock, stateBlock);
+      l2Retry = await runLLMReview(deps, task, executionResult, knowledgeBlock, stateBlock, 'main');
       if (l2Retry.passed) {
         verdict = "pass";
         confidence = 0.75;
@@ -747,7 +747,8 @@ async function runLLMReview(
   task: Task,
   executionResult: AgentResult,
   knowledgeBlock = "",
-  stateBlock = ""
+  stateBlock = "",
+  modelTier: 'main' | 'light' = 'light'
 ): Promise<{ passed: boolean; partial: boolean; description: string; confidence: number; criteria_met?: number; criteria_total?: number }> {
   const timeoutMs = deps.completionJudgerConfig?.timeoutMs ?? 30_000;
   const maxRetries = deps.completionJudgerConfig?.maxRetries ?? 2;
@@ -846,6 +847,7 @@ Return JSON:
           {
             system: "Review task results objectively against criteria. Ignore executor self-assessment.",
             max_tokens: 1024,
+            model_tier: modelTier,
           }
         ),
         timeoutMs
@@ -937,7 +939,7 @@ Return JSON: {"success": true|false, "reason": "..."}`;
 
     const response = await deps.llmClient.sendMessage(
       [{ role: "user", content: revertPrompt }],
-      { system: "Revert failed task changes. Respond with JSON only.", max_tokens: 512 }
+      { system: "Revert failed task changes. Respond with JSON only.", max_tokens: 512, model_tier: "main" }
     );
 
     await deps.sessionManager.endSession(revertSession.id, response.content);

@@ -208,7 +208,7 @@ export async function generateProposals(
       } else {
         const response = await deps.llmClient.sendMessage(
           [{ role: "user", content: prompt }],
-          { temperature: 0.3 }
+          { temperature: 0.3, model_tier: 'light' }
         );
         llmItems = deps.llmClient.parseJSON(
           response.content,

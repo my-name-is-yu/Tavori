@@ -25,6 +25,8 @@ export interface OpenAIClientConfig {
   model?: string;
   /** Optional base URL for Azure OpenAI or proxy endpoints */
   baseURL?: string;
+  /** Optional lighter model for routine tasks (observation, verification, etc.) */
+  lightModel?: string;
 }
 
 /**
@@ -53,6 +55,7 @@ export class OpenAILLMClient extends BaseLLMClient implements ILLMClient {
       apiKey: config.apiKey,
       ...(config.baseURL ? { baseURL: config.baseURL } : {}),
     });
+    this.lightModel = config.lightModel;
   }
 
   /**
@@ -66,7 +69,7 @@ export class OpenAILLMClient extends BaseLLMClient implements ILLMClient {
     messages: LLMMessage[],
     options?: LLMRequestOptions
   ): Promise<LLMResponse> {
-    const model = options?.model ?? this.model;
+    const model = this.resolveEffectiveModel(options?.model ?? this.model, options?.model_tier);
     const max_tokens = options?.max_tokens ?? DEFAULT_MAX_TOKENS;
     const temperature = options?.temperature ?? DEFAULT_TEMPERATURE;
     const system = options?.system;

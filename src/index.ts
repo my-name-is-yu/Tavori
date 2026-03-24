@@ -25,7 +25,7 @@ export {
 export { ObservationEngine } from "./observation/observation-engine.js";
 export { StallDetector } from "./drive/stall-detector.js";
 export { SatisficingJudge, aggregateValues } from "./drive/satisficing-judge.js";
-export type { ILLMClient, LLMMessage, LLMRequestOptions, LLMResponse } from "./llm/llm-client.js";
+export type { ILLMClient, LLMMessage, LLMRequestOptions, LLMResponse, ModelTier } from "./llm/llm-client.js";
 export { LLMClient, MockLLMClient, extractJSON } from "./llm/llm-client.js";
 export { BaseLLMClient, DEFAULT_MAX_TOKENS } from "./llm/base-llm-client.js";
 export { OllamaLLMClient } from "./llm/ollama-client.js";

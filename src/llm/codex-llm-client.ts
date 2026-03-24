@@ -47,6 +47,8 @@ export interface CodexLLMClientConfig {
   cliPath?: string;
   /** Model to pass via --model flag. Default: uses codex's default (OPENAI_MODEL env or codex config) */
   model?: string;
+  /** Light model for routine/cheap calls (model_tier: 'light'). Optional. */
+  lightModel?: string;
   /** Repository path passed to Codex for workspace-aware execution. Default: "." */
   repoPath?: string;
   /** Timeout per call in milliseconds. Default: 120000 (2 minutes) */
@@ -74,6 +76,7 @@ export class CodexLLMClient extends BaseLLMClient implements ILLMClient {
     super();
     this.cliPath = config.cliPath ?? "codex";
     this.model = config.model;
+    this.lightModel = config.lightModel;
     this.repoPath = config.repoPath?.trim() || ".";
     this.timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
@@ -86,7 +89,7 @@ export class CodexLLMClient extends BaseLLMClient implements ILLMClient {
     messages: LLMMessage[],
     options?: LLMRequestOptions
   ): Promise<LLMResponse> {
-    const model = options?.model ?? this.model;
+    const model = this.resolveEffectiveModel(options?.model ?? this.model ?? "", options?.model_tier) || undefined;
     const system = options?.system;
 
     const prompt = buildPrompt(messages, system);

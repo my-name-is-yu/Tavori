@@ -1,6 +1,11 @@
 import type { ZodSchema } from "zod";
 import { LLMError } from "../utils/errors.js";
 
+// ─── Model tier type ───
+
+/** Selects which model to use for a given LLM call. Defaults to 'main'. */
+export type ModelTier = "main" | "light";
+
 // ─── Shared constants ───
 
 export const DEFAULT_MAX_TOKENS = 4096;
@@ -36,9 +41,26 @@ export function extractJSON(text: string): string {
 
 /**
  * Abstract base for all LLM clients.
- * Provides a shared parseJSON() implementation with safeParse-based validation.
+ * Provides a shared parseJSON() implementation with safeParse-based validation,
+ * and model-tier routing (main vs light model selection).
  */
 export abstract class BaseLLMClient {
+  /** Optional light model for routine tasks. Set by subclasses via constructor. */
+  protected lightModel?: string;
+
+  /**
+   * Resolve the effective model name based on model_tier and configured light_model.
+   * When model_tier is 'light' and lightModel is set, returns lightModel.
+   * Otherwise returns the default model passed in. Ensures backward compatibility
+   * when light_model is not configured.
+   */
+  protected resolveEffectiveModel(defaultModel: string, tier?: ModelTier): string {
+    const effectiveModel = (tier === "light" && this.lightModel)
+      ? this.lightModel
+      : defaultModel;
+    return effectiveModel;
+  }
+
   /**
   * Extract JSON from LLM response text (handles markdown code blocks)
   * and validate against the given Zod schema.

@@ -91,6 +91,7 @@ export class StrategyManagerBase {
           system:
             "You are a strategic planning assistant. Generate concrete, actionable strategies to close the goal gap. Respond with a JSON array of 1–2 strategies.",
           max_tokens: 2048,
+          model_tier: 'main',
         }
       );
       // Parse and validate the LLM response

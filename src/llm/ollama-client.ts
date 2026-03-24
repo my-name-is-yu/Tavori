@@ -13,6 +13,8 @@ const DEFAULT_TEMPERATURE = 0;
 export interface OllamaClientConfig {
   baseUrl: string;
   model?: string;
+  /** Optional lighter model for routine tasks */
+  lightModel?: string;
 }
 
 /**
@@ -30,6 +32,7 @@ export class OllamaLLMClient extends BaseLLMClient implements ILLMClient {
     super();
     this.baseUrl = config.baseUrl.replace(/\/$/, ""); // strip trailing slash
     this.model = config.model ?? DEFAULT_MODEL;
+    this.lightModel = config.lightModel;
   }
 
   /**
@@ -40,7 +43,7 @@ export class OllamaLLMClient extends BaseLLMClient implements ILLMClient {
     messages: LLMMessage[],
     options?: LLMRequestOptions
   ): Promise<LLMResponse> {
-    const model = options?.model ?? this.model;
+    const model = this.resolveEffectiveModel(options?.model ?? this.model, options?.model_tier);
     const max_tokens = options?.max_tokens ?? DEFAULT_MAX_TOKENS;
     const temperature = options?.temperature ?? DEFAULT_TEMPERATURE;
     const system = options?.system;

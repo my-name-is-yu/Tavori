@@ -33,6 +33,10 @@ export interface ProviderConfig {
   /** Which model to use */
   model: string;
 
+  /** Optional lighter model for routine tasks (observation, verification, reflection).
+   *  When not set, all calls use `model`. */
+  light_model?: string;
+
   /** Which adapter to use by default for task execution */
   adapter: "claude_code_cli" | "claude_api" | "openai_codex_cli" | "openai_api";
 
@@ -313,6 +317,7 @@ export async function loadProviderConfig(): Promise<ProviderConfig> {
   if (base_url !== undefined) config.base_url = base_url;
   if (fileConfig.codex_cli_path !== undefined) config.codex_cli_path = fileConfig.codex_cli_path;
   if (fileConfig.a2a !== undefined) config.a2a = fileConfig.a2a;
+  if (fileConfig.light_model !== undefined) config.light_model = fileConfig.light_model;
 
   // Validate and log warnings (only once per process)
   const validation = validateProviderConfig(config);

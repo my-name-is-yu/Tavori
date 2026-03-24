@@ -85,7 +85,7 @@ export async function runDecompositionStep(
   } else {
     const decompositionResponse = await llmClient.sendMessage(
       [{ role: "user", content: decompositionPrompt }],
-      { temperature: 0 }
+      { temperature: 0, model_tier: 'main' }
     );
     const sanitized = sanitizeThresholdValues(sanitizeThresholdTypes(decompositionResponse.content));
     dimensions = llmClient.parseJSON(
@@ -199,7 +199,7 @@ export async function evaluateQualitatively(
     } else {
       const response = await llmClient.sendMessage(
         [{ role: "user", content: prompt }],
-        { temperature: 0 }
+        { temperature: 0, model_tier: 'main' }
       );
       parsed = llmClient.parseJSON(response.content, QualitativeFeasibilitySchema);
     }
@@ -260,7 +260,7 @@ export async function runCapabilityCheckStep(
     } else {
       const capCheckResponse = await llmClient.sendMessage(
         [{ role: "user", content: capCheckPrompt }],
-        { temperature: 0 }
+        { temperature: 0, model_tier: 'main' }
       );
       capCheckResult = llmClient.parseJSON(
         capCheckResponse.content,
@@ -403,7 +403,7 @@ export async function buildNegotiationResponse(
   } else {
     const responseMessage = await llmClient.sendMessage(
       [{ role: "user", content: responsePrompt }],
-      { temperature: 0 }
+      { temperature: 0, model_tier: 'main' }
     );
     messageContent = responseMessage.content.trim();
   }

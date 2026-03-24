@@ -46,6 +46,7 @@ export async function buildLLMClient(): Promise<ILLMClient> {
         return new CodexLLMClient({
           cliPath: config.codex_cli_path,
           model: config.model,
+          lightModel: config.light_model,
         });
       }
       // Otherwise use OpenAILLMClient
@@ -58,6 +59,7 @@ export async function buildLLMClient(): Promise<ILLMClient> {
         apiKey: config.api_key,
         model: config.model,
         baseURL: config.base_url,
+        lightModel: config.light_model,
       });
     }
 
@@ -65,6 +67,7 @@ export async function buildLLMClient(): Promise<ILLMClient> {
       return new OllamaLLMClient({
         baseUrl: config.base_url ?? "http://localhost:11434",
         model: config.model ?? "qwen3:4b",
+        lightModel: config.light_model,
       });
 
     case "anthropic":
@@ -73,7 +76,7 @@ export async function buildLLMClient(): Promise<ILLMClient> {
           "ANTHROPIC_API_KEY is not set.\nSet it via: export ANTHROPIC_API_KEY=sk-ant-..."
         );
       }
-      return new LLMClient(config.api_key);
+      return new LLMClient(config.api_key, undefined, config.light_model);
 
     default:
       // Unknown provider falls back to OpenAI
@@ -86,6 +89,7 @@ export async function buildLLMClient(): Promise<ILLMClient> {
         apiKey: config.api_key,
         model: config.model,
         baseURL: config.base_url,
+        lightModel: config.light_model,
       });
   }
 }

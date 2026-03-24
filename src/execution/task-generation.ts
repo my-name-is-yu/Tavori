@@ -306,6 +306,7 @@ export async function generateTask(
         system:
           "You are a task generation assistant. Given a goal and target dimension, generate a concrete, actionable task. Respond with a JSON object inside a markdown code block.",
         max_tokens: 2048,
+        model_tier: 'main',
       }
     );
     try {
@@ -472,6 +473,7 @@ export async function generateTaskGroup(
         {
           system: "You are a task decomposition assistant. Respond with valid JSON only.",
           max_tokens: 4096,
+          model_tier: 'main',
         }
       );
     } catch (err) {
