@@ -155,3 +155,7 @@ export type {
 // --- Plugin architecture (M12) ---
 export { NotifierRegistry } from "./runtime/notifier-registry.js";
 export { PluginLoader } from "./runtime/plugin-loader.js";
+
+// --- Iteration budget ---
+export { IterationBudget } from "./loop/iteration-budget.js";
+export type { IterationBudgetData } from "./loop/iteration-budget.js";

@@ -96,6 +96,8 @@ export async function cmdRun(
       } else {
         process.stdout.write(`${prefix} Verifying result...\n`);
       }
+    } else if (event.phase === "Skipped (no state change)") {
+      process.stdout.write(`${prefix} Skipped (no state change detected)\n`);
     }
   };
   let deps: Awaited<ReturnType<typeof buildDeps>>;

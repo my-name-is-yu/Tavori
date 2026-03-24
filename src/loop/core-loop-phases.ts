@@ -15,7 +15,7 @@ import type { DriveScore } from "../types/drive.js";
 import {
   buildDriveContext,
   type CoreLoopDeps,
-  type LoopConfig,
+  type ResolvedLoopConfig,
   type LoopIterationResult,
 } from "./core-loop-types.js";
 import { logRewardComputation } from "../drive/reward-log.js";
@@ -23,7 +23,7 @@ import { logRewardComputation } from "../drive/reward-log.js";
 /** Minimal context passed to every phase function. */
 export interface PhaseCtx {
   deps: CoreLoopDeps;
-  config: Required<LoopConfig>;
+  config: ResolvedLoopConfig;
   logger: Logger | undefined;
 }
 

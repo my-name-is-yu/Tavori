@@ -35,9 +35,18 @@ export class ClaudeCodeCLIAdapter implements IAdapter {
 
     // --print (-p): verified non-interactive flag; prints response and exits.
     // Prompt is written to stdin; the CLI reads it when running in pipe mode.
+    const spawnArgs: string[] = ["--print"];
+
+    // Pass allowed_tools via --allowedTools flag if specified.
+    // This preserves prompt cache integrity by ensuring tool list is immutable
+    // per session (toolset immutability constraint).
+    if (task.allowed_tools && task.allowed_tools.length > 0) {
+      spawnArgs.push("--allowedTools", task.allowed_tools.join(","));
+    }
+
     const result = await spawnWithTimeout(
       this.cliPath,
-      ["--print"],
+      spawnArgs,
       { cwd: this.workDir, stdinData: task.prompt },
       task.timeout_ms
     );

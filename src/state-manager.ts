@@ -203,15 +203,18 @@ export class StateManager {
     await fsp.rm(goalDir, { recursive: true, force: true });
 
     // Update status to "archived" in the archived goal.json (Bug 5)
+    // Use direct JSON merge instead of GoalSchema.parse() to avoid silent failure
+    // when unrelated fields fail Zod validation, which would leave status as "active".
     const archivedGoalJsonPath = path.join(archiveGoalDir, "goal.json");
     try {
       const archivedRaw = await this.atomicRead<unknown>(archivedGoalJsonPath);
-      if (archivedRaw !== null) {
-        const archivedGoal = GoalSchema.parse(archivedRaw);
-        await this.atomicWrite(archivedGoalJsonPath, { ...archivedGoal, status: "archived" });
+      if (archivedRaw !== null && typeof archivedRaw === "object") {
+        await this.atomicWrite(archivedGoalJsonPath, { ...(archivedRaw as Record<string, unknown>), status: "archived" });
+      } else {
+        this.logger?.warn(`[StateManager] Could not update status to "archived" for "${goalId}": goal.json missing or not an object`);
       }
-    } catch {
-      this.logger?.warn(`[StateManager] Could not update status to "archived" for "${goalId}": goal.json unreadable`);
+    } catch (err) {
+      this.logger?.warn(`[StateManager] Could not update status to "archived" for "${goalId}": ${String(err)}`);
     }
 
     // Move tasks/<goalId>/ → archive/<goalId>/tasks/ (if exists)

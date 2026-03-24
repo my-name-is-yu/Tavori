@@ -4,7 +4,7 @@ import { SessionManager } from "./session-manager.js";
 import type { AgentTask, AgentResult, IAdapter } from "./adapter-layer.js";
 import type { Task } from "../types/task.js";
 import { TaskSchema } from "../types/task.js";
-
+import type { Strategy } from "../types/strategy.js";
 const DEBUG = process.env.TAVORI_DEBUG === "true";
 
 // ─── Deps interface ───
@@ -40,7 +40,8 @@ export async function executeTask(
   deps: TaskExecutorDeps,
   task: Task,
   adapter: IAdapter,
-  workspaceContext?: string
+  workspaceContext?: string,
+  activeStrategy?: Strategy
 ): Promise<AgentResult> {
   const { stateManager, sessionManager, logger, execFileSyncFn } = deps;
 
@@ -95,10 +96,20 @@ export async function executeTask(
     ? durationToMs(task.estimated_duration)
     : 30 * 60 * 1000; // default 30 minutes
 
+  // Resolve allowed_tools from the active strategy (if any).
+  // If toolset_locked=true, the strategy must have allowed_tools defined — log a warning if not.
+  if (activeStrategy?.toolset_locked && !activeStrategy.allowed_tools?.length) {
+    logger?.warn(`[TaskExecutor] Strategy ${activeStrategy.id} has toolset_locked=true but no allowed_tools defined`, {
+      taskId: task.id,
+    });
+  }
+  const allowedTools = activeStrategy?.allowed_tools?.length ? activeStrategy.allowed_tools : undefined;
+
   const agentTask: AgentTask = {
     prompt,
     timeout_ms: timeoutMs,
     adapter_type: adapter.adapterType,
+    ...(allowedTools !== undefined ? { allowed_tools: allowedTools } : {}),
   };
 
   // Update task status to running

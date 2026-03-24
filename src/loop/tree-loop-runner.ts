@@ -1,5 +1,6 @@
-import type { CoreLoopDeps, LoopConfig, LoopIterationResult } from "./core-loop-types.js";
+import type { CoreLoopDeps, ResolvedLoopConfig, LoopIterationResult } from "./core-loop-types.js";
 import type { Logger } from "../runtime/logger.js";
+import type { IterationBudget } from "./iteration-budget.js";
 
 /**
  * Standalone function extracted from CoreLoop.runTreeIteration.
@@ -11,9 +12,10 @@ export async function runTreeIteration(
   rootId: string,
   loopIndex: number,
   deps: CoreLoopDeps,
-  config: Required<LoopConfig>,
+  config: ResolvedLoopConfig,
   logger: Logger | undefined,
-  runOneIteration: (goalId: string, loopIndex: number) => Promise<LoopIterationResult>
+  runOneIteration: (goalId: string, loopIndex: number) => Promise<LoopIterationResult>,
+  nodeConsumedMap: Map<string, number>
 ): Promise<LoopIterationResult> {
   const orchestrator = deps.treeLoopOrchestrator!;
 
@@ -79,6 +81,41 @@ export async function runTreeIteration(
     };
   }
 
+  // 3. Enforce per-node limit if a shared budget with per_node_limit is configured
+  const budget = config.iterationBudget;
+  if (budget && budget.perNodeLimit !== undefined) {
+    const nodeCount = nodeConsumedMap.get(selectedNodeId) ?? 0;
+    if (nodeCount >= budget.perNodeLimit) {
+      logger?.info(
+        `[TREE] Node "${selectedNodeId}" has reached per-node limit (${budget.perNodeLimit}), skipping`,
+        { selectedNodeId, nodeCount }
+      );
+      // Return a no-op result so the loop can continue with the next node
+      return {
+        loopIndex,
+        goalId: rootId,
+        gapAggregate: 0,
+        driveScores: [],
+        taskResult: null,
+        stallDetected: false,
+        stallReport: null,
+        pivotOccurred: false,
+        completionJudgment: {
+          is_complete: false,
+          blocking_dimensions: [],
+          low_confidence_dimensions: [],
+          needs_verification_task: false,
+          checked_at: new Date().toISOString(),
+        },
+        elapsedMs: 0,
+        error: null,
+        skipped: true as const,
+        skipReason: "per_node_limit",
+      };
+    }
+    nodeConsumedMap.set(selectedNodeId, nodeCount + 1);
+  }
+
   // 3. Run normal iteration on selected node
   const result = await runOneIteration(selectedNodeId, loopIndex);
 
@@ -119,7 +156,7 @@ export async function runTreeIteration(
 export async function runMultiGoalIteration(
   loopIndex: number,
   deps: CoreLoopDeps,
-  config: Required<LoopConfig>,
+  config: ResolvedLoopConfig,
   runOneIteration: (goalId: string, loopIndex: number) => Promise<LoopIterationResult>
 ): Promise<LoopIterationResult> {
   if (!config.multiGoalMode || !config.goalIds || config.goalIds.length === 0) {

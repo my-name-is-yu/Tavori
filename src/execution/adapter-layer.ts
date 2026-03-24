@@ -16,6 +16,8 @@ export interface AgentTask {
   timeout_ms: number;
   /** Which adapter to use for this task */
   adapter_type: string;
+  /** Tool/capability allowlist — locked at task creation, immutable during execution */
+  allowed_tools?: readonly string[];
 }
 
 export interface AgentResult {

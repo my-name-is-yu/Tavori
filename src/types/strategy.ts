@@ -51,6 +51,10 @@ export const StrategySchema = z.object({
   rollback_target_id: z.string().nullable().default(null),
   max_pivot_count: z.number().int().min(0).default(2),
   pivot_count: z.number().int().min(0).default(0),
+
+  // Toolset immutability: snapshot tools at strategy activation
+  toolset_locked: z.boolean().default(false),
+  allowed_tools: z.array(z.string()).default([]),
 });
 export type Strategy = z.infer<typeof StrategySchema>;
 

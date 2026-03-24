@@ -1,5 +1,7 @@
 import { CuriosityEngine } from "../traits/curiosity-engine.js";
+import type { IterationBudget } from "./iteration-budget.js";
 import type { Logger } from "../runtime/logger.js";
+import type { StrategyTemplateRegistry } from "../strategy/strategy-template-registry.js";
 import type { TrustManager } from "../traits/trust-manager.js";
 import type { KnowledgeTransfer } from "../knowledge/knowledge-transfer.js";
 import type { TransferCandidate } from "../types/cross-portfolio.js";
@@ -77,6 +79,12 @@ export interface ReportingEngine {
 
 // ─── Config ───
 
+/**
+ * LoopConfig with all required fields resolved (except iterationBudget which remains optional).
+ * Used as the internal config type throughout CoreLoop and its sub-modules.
+ */
+export type ResolvedLoopConfig = Required<Omit<LoopConfig, "iterationBudget">> & Pick<LoopConfig, "iterationBudget">;
+
 export interface LoopConfig {
   maxIterations?: number;
   maxConsecutiveErrors?: number;
@@ -108,6 +116,13 @@ export interface LoopConfig {
    * runs regardless so stall detection can fire. Default: 5.
    */
   maxConsecutiveSkips?: number;
+  /**
+   * Shared iteration budget for parent-child agent trees.
+   * When set, all iterations (including child node iterations in tree mode) consume
+   * from this budget. Prevents runaway recursion across hierarchical agent invocations.
+   * If not set, maxIterations acts as the sole upper bound.
+   */
+  iterationBudget?: IterationBudget;
 }
 
 // ─── Result types ───
@@ -228,6 +243,12 @@ export interface CoreLoopDeps {
    * callers (e.g. CLIRunner) can print user-friendly progress lines.
    */
   onProgress?: (event: ProgressEvent) => void;
+  /**
+   * Optional StrategyTemplateRegistry. When provided, CoreLoop wires it into
+   * StrategyManager so that strategies completing with effectiveness_score >= 0.5
+   * are automatically registered as reusable templates.
+   */
+  strategyTemplateRegistry?: StrategyTemplateRegistry;
 }
 
 export interface ProgressEvent {

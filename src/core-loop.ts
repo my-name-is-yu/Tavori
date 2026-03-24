@@ -5,6 +5,7 @@ import type { TaskGroup } from "./types/index.js";
 import { evaluateTaskComplexity, generateTaskGroup } from "./execution/task-generation.js";
 import type { ParallelExecutionResult } from "./execution/parallel-executor.js";
 import type { StateDiffCalculator, IterationSnapshot } from "./loop/state-diff.js";
+import { IterationBudget } from "./loop/iteration-budget.js";
 
 import type {
   GapCalculatorModule,
@@ -12,6 +13,7 @@ import type {
   ExecutionSummaryParams,
   ReportingEngine,
   LoopConfig,
+  ResolvedLoopConfig,
   LoopIterationResult,
   LoopResult,
   CoreLoopDeps,
@@ -46,6 +48,7 @@ export type {
   ExecutionSummaryParams,
   ReportingEngine,
   LoopConfig,
+  ResolvedLoopConfig,
   LoopIterationResult,
   LoopResult,
   CoreLoopDeps,
@@ -53,7 +56,7 @@ export type {
 } from "./loop/core-loop-types.js";
 export { buildDriveContext } from "./loop/core-loop-types.js";
 
-const DEFAULT_CONFIG: Required<LoopConfig> = {
+const DEFAULT_CONFIG: Required<Omit<LoopConfig, "iterationBudget">> = {
   maxIterations: 100,
   maxConsecutiveErrors: 3,
   delayBetweenLoopsMs: 1000,
@@ -78,7 +81,7 @@ const DEFAULT_CONFIG: Required<LoopConfig> = {
  */
 export class CoreLoop {
   private readonly deps: CoreLoopDeps;
-  private readonly config: Required<LoopConfig>;
+  private readonly config: ResolvedLoopConfig;
   private readonly logger?: Logger;
   private stopped = false;
   private readonly learning: CoreLoopLearning = new CoreLoopLearning();
@@ -92,6 +95,11 @@ export class CoreLoop {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.logger = deps.logger;
     this.stateDiff = stateDiff;
+
+    // Wire optional StrategyTemplateRegistry into StrategyManager for auto-templating
+    if (deps.strategyTemplateRegistry) {
+      deps.strategyManager.setStrategyTemplateRegistry(deps.strategyTemplateRegistry);
+    }
   }
 
   // ─── Public API ───
@@ -200,15 +208,46 @@ export class CoreLoop {
     let consecutiveEscalations = 0;
     let finalStatus: LoopResult["finalStatus"] = "max_iterations";
 
+    // Use the provided iterationBudget if set; otherwise create a local one from maxIterations.
+    // A provided budget is shared (e.g. with parent/child agents); a local budget is loop-private.
+    const budget: IterationBudget = this.config.iterationBudget
+      ?? new IterationBudget(this.config.maxIterations);
+
+    // Per-node iteration tracking for tree mode — persists across loop iterations so
+    // per-node limits accumulate correctly (not reset each call).
+    const nodeConsumedMap = new Map<string, number>();
+
     for (let loopIndex = startLoopIndex; loopIndex < this.config.maxIterations; loopIndex++) {
       if (this.stopped) {
         finalStatus = "stopped";
         break;
       }
 
+      // Check shared iteration budget before each iteration (but do not consume yet)
+      if (budget.exhausted) {
+        this.logger?.info("Iteration budget exhausted, stopping loop");
+        break;
+      }
+
       const iterationResult = this.config.treeMode && this.deps.treeLoopOrchestrator
-        ? await this.runTreeIteration(goalId, loopIndex)
+        ? await this.runTreeIteration(goalId, loopIndex, nodeConsumedMap)
         : await this.runOneIteration(goalId, loopIndex);
+      // Carry forward gapAggregate from the previous iteration when this one was skipped,
+      // so callers always see a meaningful value rather than the default 0.
+      if (iterationResult.skipped && iterations.length >= 1) {
+        iterationResult.gapAggregate = iterations[iterations.length - 1]!.gapAggregate;
+      }
+
+      // Only consume budget for non-skipped iterations — skipped iterations do minimal
+      // work (observation only) and should not count against the shared budget.
+      if (!iterationResult.skipped) {
+        const { allowed, warnings } = budget.consume();
+        for (const w of warnings) { this.logger?.warn(w); }
+        if (!allowed) {
+          this.logger?.info("Iteration budget exhausted, stopping loop");
+          break;
+        }
+      }
       iterations.push(iterationResult);
 
       // Save checkpoint after each successful verify step (§4.8)
@@ -471,6 +510,11 @@ export class CoreLoop {
         if (goalState?.status === "completed") {
           result.completionJudgment.is_complete = true;
         }
+        this.deps.onProgress?.({
+          iteration: loopIndex + 1,
+          maxIterations: this.config.maxIterations,
+          phase: "Skipped (no state change)",
+        });
         result.elapsedMs = Date.now() - startTime;
         return result;
       }
@@ -576,9 +620,9 @@ export class CoreLoop {
    *
    * Called by run() when treeMode=true.
    */
-  async runTreeIteration(rootId: string, loopIndex: number): Promise<LoopIterationResult> {
+  async runTreeIteration(rootId: string, loopIndex: number, nodeConsumedMap: Map<string, number>): Promise<LoopIterationResult> {
     return runTreeIterationImpl(rootId, loopIndex, this.deps, this.config, this.logger,
-      (id, idx) => this.runOneIteration(id, idx));
+      (id, idx) => this.runOneIteration(id, idx), nodeConsumedMap);
   }
 
   /**

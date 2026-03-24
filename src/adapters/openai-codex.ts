@@ -15,6 +15,7 @@
 //   - NOTE: --full-auto does NOT exist in this version; use sandbox policy instead
 
 import type { IAdapter, AgentTask, AgentResult } from "../execution/adapter-layer.js";
+import type { Logger } from "../runtime/logger.js";
 import { spawnWithTimeout } from "./spawn-helper.js";
 
 export interface OpenAICodexCLIAdapterConfig {
@@ -40,13 +41,15 @@ export class OpenAICodexCLIAdapter implements IAdapter {
   private readonly sandboxPolicy: string | null;
   private readonly model: string | undefined;
   private readonly repoPath: string;
+  private readonly logger?: Logger;
 
-  constructor(config: OpenAICodexCLIAdapterConfig = {}) {
+  constructor(config: OpenAICodexCLIAdapterConfig = {}, logger?: Logger) {
     this.cliPath = config.cliPath ?? "codex";
     this.sandboxPolicy =
       config.sandboxPolicy !== undefined ? config.sandboxPolicy : "danger-full-access";
     this.model = config.model;
     this.repoPath = config.repoPath?.trim() || ".";
+    this.logger = logger;
   }
 
   async execute(task: AgentTask): Promise<AgentResult> {
@@ -62,6 +65,17 @@ export class OpenAICodexCLIAdapter implements IAdapter {
 
     if (this.model) {
       spawnArgs.push("-m", this.model);
+    }
+
+    // allowed_tools: codex-cli does not have a native tool-restriction flag.
+    // Log a warning for observability; toolset constraint is enforced at the
+    // Tavori layer (ToolsetLock) rather than being delegated to the CLI.
+    if (task.allowed_tools && task.allowed_tools.length > 0) {
+      this.logger?.warn(
+        "[OpenAICodexCLIAdapter] allowed_tools is set but codex-cli does not support " +
+          "a native tool-restriction flag. Proceeding without restriction.",
+        { allowed_tools: task.allowed_tools }
+      );
     }
 
     // NOTE: --path is NOT supported by codex-cli 0.114.0; use cwd instead

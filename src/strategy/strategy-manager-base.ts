@@ -8,6 +8,8 @@ import type { ILLMClient } from "../llm/llm-client.js";
 import type { IPromptGateway } from "../prompt/gateway.js";
 import type { KnowledgeGapSignal } from "../types/knowledge.js";
 import type { KnowledgeManager } from "../knowledge/knowledge-manager.js";
+import type { StrategyTemplateRegistry } from "./strategy-template-registry.js";
+import type { Logger } from "../runtime/logger.js";
 import {
   VALID_TRANSITIONS,
   StrategyArraySchema,
@@ -27,20 +29,30 @@ export class StrategyManagerBase {
   protected knowledgeManager?: KnowledgeManager;
   /** Optional PromptGateway for memory-enriched LLM calls. */
   protected promptGateway?: IPromptGateway;
+  /** Optional StrategyTemplateRegistry for auto-templating successful strategies. */
+  private strategyTemplateRegistry?: StrategyTemplateRegistry;
+  /** Optional Logger for diagnostic output. */
+  protected logger?: Logger;
 
   /** In-memory index: strategyId → goalId */
   protected readonly strategyIndex: Map<string, string> = new Map();
 
-  constructor(stateManager: StateManager, llmClient: ILLMClient, knowledgeManager?: KnowledgeManager, promptGateway?: IPromptGateway) {
+  constructor(stateManager: StateManager, llmClient: ILLMClient, knowledgeManager?: KnowledgeManager, promptGateway?: IPromptGateway, logger?: Logger) {
     this.stateManager = stateManager;
     this.llmClient = llmClient;
     this.knowledgeManager = knowledgeManager;
     this.promptGateway = promptGateway;
+    this.logger = logger;
   }
 
   /** Inject or update KnowledgeManager after construction (e.g., when KM is instantiated after SM). */
   setKnowledgeManager(km: KnowledgeManager): void {
     this.knowledgeManager = km;
+  }
+
+  /** Inject StrategyTemplateRegistry for auto-templating successful strategies. */
+  setStrategyTemplateRegistry(registry: StrategyTemplateRegistry): void {
+    this.strategyTemplateRegistry = registry;
   }
 
   // ─── Core Lifecycle Methods ───
@@ -230,6 +242,20 @@ export class StrategyManagerBase {
           await this.knowledgeManager.updateDecisionOutcome(strategyId, outcome);
         } catch (e) {
           console.warn(`[StrategyManager] updateDecisionOutcome failed for ${strategyId}:`, e);
+        }
+      }
+
+      // Auto-template successful strategies (fire-and-forget — do not block state transition)
+      if (newState === "completed" && this.strategyTemplateRegistry) {
+        if ((updated.effectiveness_score ?? 0) >= 0.5) {
+          void this.strategyTemplateRegistry.registerTemplate(updated, goalId)
+            .then(() => {
+              this.logger?.info(`Auto-templated strategy ${strategyId} (effectiveness: ${updated.effectiveness_score})`);
+            })
+            .catch((err: unknown) => {
+              // Non-fatal — log and continue
+              this.logger?.warn(`Failed to auto-template strategy ${strategyId}: ${err instanceof Error ? err.message : String(err)}`);
+            });
         }
       }
     }
