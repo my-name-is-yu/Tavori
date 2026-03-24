@@ -122,12 +122,12 @@ export class CLIRunner {
     const subcommand = argv[0];
 
     if (subcommand === "run") {
-      let values: { goal?: string; "max-iterations"?: string; adapter?: string; tree?: boolean; yes?: boolean; verbose?: boolean };
+      let values: { goal?: string[]; "max-iterations"?: string; adapter?: string; tree?: boolean; yes?: boolean; verbose?: boolean };
       try {
         ({ values } = parseArgs({
           args: argv.slice(1),
           options: {
-            goal: { type: "string" },
+            goal: { type: "string", multiple: true },
             "max-iterations": { type: "string" },
             adapter: { type: "string" },
             tree: { type: "boolean" },
@@ -135,17 +135,22 @@ export class CLIRunner {
             verbose: { type: "boolean" },
           },
           strict: false,
-        }) as { values: { goal?: string; "max-iterations"?: string; adapter?: string; tree?: boolean; yes?: boolean; verbose?: boolean } });
+        }) as { values: { goal?: string[]; "max-iterations"?: string; adapter?: string; tree?: boolean; yes?: boolean; verbose?: boolean } });
       } catch (err) {
         logger.error(formatOperationError("parse run command arguments", err));
         values = {};
       }
 
-      const goalId = values.goal;
-      if (!goalId || typeof goalId !== "string") {
+      const goalIds = values.goal ?? [];
+      if (goalIds.length === 0) {
         logger.error("Error: --goal <id> is required for `tavori run`.");
         return 1;
       }
+      if (goalIds.length > 1) {
+        logger.error("Error: only one --goal is supported per `tavori run`. Run separately for each goal, or use --tree for tree traversal.");
+        return 1;
+      }
+      const goalId = goalIds[0];
 
       const loopConfig: LoopConfig = {};
       if (values["max-iterations"] !== undefined) {

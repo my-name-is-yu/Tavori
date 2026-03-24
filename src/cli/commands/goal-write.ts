@@ -306,7 +306,7 @@ export async function cmdGoalArchive(
 
   console.log(`Goal "${goalId}" archived successfully.`);
   console.log(`  Title:  ${goal.title}`);
-  console.log(`  Status: ${goal.status}`);
+  console.log(`  Status: archived`);
   return 0;
 }
 

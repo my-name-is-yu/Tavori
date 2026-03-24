@@ -19,8 +19,14 @@ export async function runTreeIteration(
 ): Promise<LoopIterationResult> {
   const orchestrator = deps.treeLoopOrchestrator!;
 
-  // 0. Auto-decompose (or refine) if root has no children yet
+  // 0. Auto-decompose (or refine) if root has no children yet.
+  // If root already has children (e.g. resumed session), reset all nodes to "idle"
+  // so that stale "running" statuses from a prior run do not block node selection.
   const rootGoalForDecomp = await deps.stateManager.loadGoal(rootId);
+  if (rootGoalForDecomp && rootGoalForDecomp.children_ids.length > 0 && loopIndex === 0) {
+    const defaultConfig = { min_specificity: 0.7, max_depth: 3, parallel_loop_limit: 3, auto_prune_threshold: 0.3 };
+    await deps.treeLoopOrchestrator?.startTreeExecution(rootId, defaultConfig);
+  }
   if (rootGoalForDecomp && rootGoalForDecomp.children_ids.length === 0) {
     const defaultConfig = { min_specificity: 0.7, max_depth: 3, parallel_loop_limit: 3, auto_prune_threshold: 0.3 };
     if (deps.goalRefiner) {
@@ -132,9 +138,20 @@ export async function runTreeIteration(
     }
   }
 
-  // 4. If the node's goal is now completed, call onNodeCompleted
+  // 4. If the node's goal is now completed, call onNodeCompleted.
+  // Otherwise reset loop_status to "idle" so the node remains eligible for
+  // future iterations (the eligibility filter skips "running" nodes).
   if (result.completionJudgment.is_complete) {
     await orchestrator.onNodeCompleted(selectedNodeId);
+  } else {
+    const nodeGoal = await deps.stateManager.loadGoal(selectedNodeId);
+    if (nodeGoal) {
+      await deps.stateManager.saveGoal({
+        ...nodeGoal,
+        loop_status: "idle",
+        updated_at: new Date().toISOString(),
+      });
+    }
   }
 
   return result;

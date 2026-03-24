@@ -137,7 +137,29 @@ export class StateManager {
     try {
       await fsp.access(dir);
     } catch {
-      return false;
+      // After the active goals check fails, try archive directory
+      const archiveDir = path.join(this.baseDir, "archive", goalId);
+      try {
+        await fsp.access(archiveDir);
+        // Load archived goal to get children_ids before deleting
+        const archiveGoalPath = path.join(archiveDir, "goal", "goal.json");
+        let archivedGoal: Goal | null = null;
+        try {
+          const raw = await this.atomicRead<unknown>(archiveGoalPath);
+          if (raw !== null) archivedGoal = GoalSchema.parse(raw);
+        } catch {
+          this.logger?.warn(`[StateManager] Skipping children of archived "${goalId}": goal.json unreadable`);
+        }
+        if (archivedGoal !== null) {
+          for (const childId of archivedGoal.children_ids) {
+            await this.deleteGoal(childId, _visited);
+          }
+        }
+        await fsp.rm(archiveDir, { recursive: true, force: true });
+        return true;
+      } catch {
+        return false;
+      }
     }
 
     // Recursively delete children first (depth-first)
