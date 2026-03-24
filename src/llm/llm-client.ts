@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { ZodSchema } from "zod";
 import { sleep } from "../utils/sleep.js";
-import { BaseLLMClient, DEFAULT_MAX_TOKENS, extractJSON } from "./base-llm-client.js";
+import { BaseLLMClient, DEFAULT_MAX_TOKENS, DEFAULT_LLM_TIMEOUT_MS, MAX_RETRY_ATTEMPTS, RETRY_DELAYS_MS, extractJSON } from "./base-llm-client.js";
 import { LLMError } from "../utils/errors.js";
 import { GuardrailRunner } from "../guardrail-runner.js";
 
@@ -42,11 +42,6 @@ export interface ILLMClient {
 
 const DEFAULT_MODEL = "claude-sonnet-4-20250514";
 const DEFAULT_TEMPERATURE = 0;
-const MAX_RETRY_ATTEMPTS = 3;
-const DEFAULT_LLM_TIMEOUT_MS = 60_000;
-
-/** Exponential backoff delays in milliseconds: 1s, 2s, 4s */
-const RETRY_DELAYS_MS = [1000, 2000, 4000];
 
 // Re-export shared utilities for consumers that import from this module
 export { extractJSON, DEFAULT_MAX_TOKENS };

@@ -1,9 +1,18 @@
 import type { ZodSchema } from "zod";
 import { LLMError } from "../utils/errors.js";
 
-// ─── Shared constant ───
+// ─── Shared constants ───
 
 export const DEFAULT_MAX_TOKENS = 4096;
+
+/** Default LLM request timeout in milliseconds */
+export const DEFAULT_LLM_TIMEOUT_MS = 60_000;
+
+/** Maximum number of retry attempts on transient errors */
+export const MAX_RETRY_ATTEMPTS = 3;
+
+/** Exponential backoff delays in milliseconds: 1s, 2s, 4s */
+export const RETRY_DELAYS_MS = [1000, 2000, 4000];
 
 // ─── JSON extraction utility ───
 

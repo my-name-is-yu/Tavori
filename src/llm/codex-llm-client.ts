@@ -2,7 +2,7 @@ import * as fsp from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { spawn } from "node:child_process";
-import { BaseLLMClient } from "./base-llm-client.js";
+import { BaseLLMClient, MAX_RETRY_ATTEMPTS, RETRY_DELAYS_MS } from "./base-llm-client.js";
 import {
   type ILLMClient,
   type LLMMessage,
@@ -15,10 +15,6 @@ import { LLMError } from "../utils/errors.js";
 // ─── Constants ───
 
 const DEFAULT_TIMEOUT_MS = 120_000; // 2 minutes per call
-const MAX_RETRY_ATTEMPTS = 3;
-
-/** Exponential backoff delays in milliseconds: 1s, 2s, 4s */
-const RETRY_DELAYS_MS = [1000, 2000, 4000];
 
 /**
  * Build a single prompt string from messages and system prompt.

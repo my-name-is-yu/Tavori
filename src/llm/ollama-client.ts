@@ -1,4 +1,4 @@
-import { BaseLLMClient, DEFAULT_MAX_TOKENS } from "./base-llm-client.js";
+import { BaseLLMClient, DEFAULT_MAX_TOKENS, DEFAULT_LLM_TIMEOUT_MS, MAX_RETRY_ATTEMPTS, RETRY_DELAYS_MS } from "./base-llm-client.js";
 import { type ILLMClient, type LLMMessage, type LLMRequestOptions, type LLMResponse } from "./llm-client.js";
 import { sleep } from "../utils/sleep.js";
 import { LLMError } from "../utils/errors.js";
@@ -7,11 +7,6 @@ import { LLMError } from "../utils/errors.js";
 
 const DEFAULT_MODEL = "qwen3:4b";
 const DEFAULT_TEMPERATURE = 0;
-const MAX_RETRY_ATTEMPTS = 3;
-const DEFAULT_LLM_TIMEOUT_MS = 60_000;
-
-/** Exponential backoff delays in milliseconds: 1s, 2s, 4s */
-const RETRY_DELAYS_MS = [1000, 2000, 4000];
 
 // ─── OllamaLLMClient ───
 

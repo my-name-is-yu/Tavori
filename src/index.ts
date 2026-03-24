@@ -8,6 +8,7 @@ export {
   calculateDimensionGap,
   calculateGapVector,
   aggregateGaps,
+  dimensionProgress,
 } from "./drive/gap-calculator.js";
 export type { DimensionGapInput } from "./drive/gap-calculator.js";
 export { TrustManager } from "./traits/trust-manager.js";

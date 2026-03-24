@@ -36,7 +36,7 @@ import {
 } from "./loop/core-loop-phases-b.js";
 import { handleCapabilityAcquisition } from "./loop/core-loop-capability.js";
 import { CoreLoopLearning } from "./loop/core-loop-learning.js";
-import { computeRawGap, normalizeGap } from "./drive/gap-calculator.js";
+import { dimensionProgress } from "./drive/gap-calculator.js";
 
 // Re-export types for backward compatibility
 export type {
@@ -677,13 +677,14 @@ export class CoreLoop {
   ): Promise<void> {
     try {
       const observation = goal.dimensions.map((d) => {
-        let progress = 0;
-        if (typeof d.current_value === "number" && d.threshold) {
-          const rawGap = computeRawGap(d.current_value, d.threshold);
-          const normalizedGap = normalizeGap(rawGap, d.threshold, d.current_value);
-          progress = 1 - Math.max(0, Math.min(1, normalizedGap));
+        const prog = dimensionProgress(d.current_value, d.threshold);
+        let progress: number;
+        if (prog !== null) {
+          progress = prog;
         } else if (typeof d.current_value === "number") {
           progress = d.current_value;
+        } else {
+          progress = 0;
         }
         return {
           dimensionName: d.name,

@@ -98,8 +98,9 @@ export interface LoopConfig {
    */
   autoArchive?: boolean;
   /**
-   * When true, suppress loop side effects such as checkpoint persistence,
-   * final goal status writes, and archive operations.
+   * When true, suppress loop-level persistence side effects: checkpoint writes,
+   * final goal status updates, and archive operations.
+   * Note: observation writes (via ObservationEngine) are NOT suppressed by this flag.
    */
   dryRun?: boolean;
 }

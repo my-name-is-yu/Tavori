@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { BaseLLMClient, DEFAULT_MAX_TOKENS } from "./base-llm-client.js";
+import { BaseLLMClient, DEFAULT_MAX_TOKENS, DEFAULT_LLM_TIMEOUT_MS, MAX_RETRY_ATTEMPTS, RETRY_DELAYS_MS } from "./base-llm-client.js";
 import { type ILLMClient, type LLMMessage, type LLMRequestOptions, type LLMResponse } from "./llm-client.js";
 import { sleep } from "../utils/sleep.js";
 import { LLMError } from "../utils/errors.js";
@@ -8,11 +8,6 @@ import { LLMError } from "../utils/errors.js";
 
 const DEFAULT_MODEL = "gpt-4o";
 const DEFAULT_TEMPERATURE = 0.2;
-const MAX_RETRY_ATTEMPTS = 3;
-const DEFAULT_LLM_TIMEOUT_MS = 60_000;
-
-/** Exponential backoff delays in milliseconds: 1s, 2s, 4s */
-const RETRY_DELAYS_MS = [1000, 2000, 4000];
 
 /** Model prefixes that do not support the temperature parameter */
 const REASONING_MODEL_PREFIXES = ["o1", "o3", "o4"];

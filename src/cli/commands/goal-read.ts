@@ -9,7 +9,105 @@ import { StateManager } from "../../state-manager.js";
 import { ReportingEngine } from "../../reporting-engine.js";
 import { formatOperationError } from "../utils.js";
 import { getCliLogger } from "../cli-logger.js";
-import { computeRawGap, normalizeGap } from "../../drive/gap-calculator.js";
+import { dimensionProgress } from "../../drive/gap-calculator.js";
+
+async function printActiveGoals(
+  stateManager: StateManager,
+  goalsDir: string
+): Promise<void> {
+  let goalsDirEntries: string[] = [];
+  try {
+    await fsp.access(goalsDir);
+    goalsDirEntries = await fsp.readdir(goalsDir);
+  } catch { /* dir doesn't exist or unreadable */ }
+
+  if (goalsDirEntries.length === 0) {
+    console.log("No goals registered. Use `tavori goal add` to create one.");
+    return;
+  }
+
+  const goalDirs: string[] = [];
+  for (const e of goalsDirEntries) {
+    try {
+      const stat = await fsp.stat(path.join(goalsDir, e));
+      if (stat.isDirectory()) goalDirs.push(e);
+    } catch (err) {
+      getCliLogger().error(formatOperationError(`inspect goal directory entry "${e}"`, err));
+    }
+  }
+
+  if (goalDirs.length === 0) {
+    console.log("No goals registered. Use `tavori goal add` to create one.");
+    return;
+  }
+
+  const allGoals: Array<{ id: string; title: string; status: string; dimensions: number; isSubgoal: boolean }> = [];
+  for (const goalId of goalDirs) {
+    const goal = await stateManager.loadGoal(goalId);
+    if (!goal) {
+      allGoals.push({ id: goalId, title: "(could not load)", status: "unknown", dimensions: 0, isSubgoal: false });
+    } else {
+      allGoals.push({
+        id: goalId,
+        title: goal.title,
+        status: goal.status,
+        dimensions: goal.dimensions.length,
+        isSubgoal: !!goal.parent_id,
+      });
+    }
+  }
+
+  const rootGoals = allGoals.filter((g) => !g.isSubgoal);
+  const subgoalCount = allGoals.length - rootGoals.length;
+
+  if (rootGoals.length === 0) {
+    console.log("No root goals found.");
+  } else {
+    console.log(`Found ${rootGoals.length} root goal(s):\n`);
+    for (const g of rootGoals) {
+      console.log(`[${g.id}] status: ${g.status} — ${g.title} (dimensions: ${g.dimensions})`);
+    }
+  }
+
+  if (subgoalCount > 0) {
+    console.log(`\n(${subgoalCount} subgoal(s) hidden — use \`tavori goal show <id>\` for tree details)`);
+  }
+}
+
+async function printArchivedGoals(stateManager: StateManager): Promise<void> {
+  const archivedIds = await stateManager.listArchivedGoals();
+  if (archivedIds.length === 0) {
+    console.log(`\nNo archived goals found.`);
+    return;
+  }
+
+  console.log(`\nArchived goals (${archivedIds.length}):\n`);
+  for (const goalId of archivedIds) {
+    const archivedGoalPath = path.join(
+      getArchiveDir(stateManager.getBaseDir()),
+      goalId,
+      "goal",
+      "goal.json"
+    );
+    let title = "(could not load)";
+    let status = "unknown";
+    let dimCount = 0;
+    try {
+      await fsp.access(archivedGoalPath);
+      const raw = await readJsonFile<{
+        title?: string;
+        status?: string;
+        dimensions?: unknown[];
+      }>(archivedGoalPath);
+      title = raw.title ?? title;
+      status = raw.status ?? status;
+      dimCount = raw.dimensions?.length ?? 0;
+    } catch (err) {
+      getCliLogger().error(formatOperationError(`read archived goal metadata for "${goalId}"`, err));
+    }
+    console.log(`[${goalId}] status: ${status} — ${title} (dimensions: ${dimCount})`);
+  }
+}
 
 export async function cmdGoalList(
   stateManager: StateManager,
@@ -17,97 +115,11 @@ export async function cmdGoalList(
 ): Promise<number> {
   const goalsDir = getGoalsDir(stateManager.getBaseDir());
 
-  let goalsDirEntries: string[] = [];
-  try {
-    await fsp.access(goalsDir);
-    goalsDirEntries = await fsp.readdir(goalsDir);
-  } catch { /* dir doesn't exist or unreadable */ }
-
-  if (!opts.archived) {
-    if (goalsDirEntries.length === 0) {
-      console.log("No goals registered. Use `tavori goal add` to create one.");
-    } else {
-      const goalDirs: string[] = [];
-      for (const e of goalsDirEntries) {
-        try {
-          const stat = await fsp.stat(path.join(goalsDir, e));
-          if (stat.isDirectory()) goalDirs.push(e);
-        } catch (err) {
-          getCliLogger().error(formatOperationError(`inspect goal directory entry "${e}"`, err));
-        }
-      }
-
-      if (goalDirs.length === 0) {
-        console.log("No goals registered. Use `tavori goal add` to create one.");
-      } else {
-        const allGoals: Array<{ id: string; title: string; status: string; dimensions: number; isSubgoal: boolean }> = [];
-        for (const goalId of goalDirs) {
-          const goal = await stateManager.loadGoal(goalId);
-          if (!goal) {
-            allGoals.push({ id: goalId, title: "(could not load)", status: "unknown", dimensions: 0, isSubgoal: false });
-          } else {
-            allGoals.push({
-              id: goalId,
-              title: goal.title,
-              status: goal.status,
-              dimensions: goal.dimensions.length,
-              isSubgoal: !!goal.parent_id,
-            });
-          }
-        }
-
-        const rootGoals = allGoals.filter((g) => !g.isSubgoal);
-        const subgoalCount = allGoals.length - rootGoals.length;
-
-        if (rootGoals.length === 0) {
-          console.log("No root goals found.");
-        } else {
-          console.log(`Found ${rootGoals.length} root goal(s):\n`);
-          for (const g of rootGoals) {
-            console.log(`[${g.id}] status: ${g.status} — ${g.title} (dimensions: ${g.dimensions})`);
-          }
-        }
-
-        if (subgoalCount > 0) {
-          console.log(`\n(${subgoalCount} subgoal(s) hidden — use \`tavori goal show <id>\` for tree details)`);
-        }
-      }
-    }
-  }
-
-  const archivedIds = await stateManager.listArchivedGoals();
   if (opts.archived) {
-    if (archivedIds.length === 0) {
-      console.log(`\nNo archived goals found.`);
-    } else {
-      console.log(`\nArchived goals (${archivedIds.length}):\n`);
-      for (const goalId of archivedIds) {
-        const archivedGoalPath = path.join(
-          getArchiveDir(stateManager.getBaseDir()),
-          goalId,
-          "goal",
-          "goal.json"
-        );
-        let title = "(could not load)";
-        let status = "unknown";
-        let dimCount = 0;
-        try {
-          await fsp.access(archivedGoalPath);
-          const raw = await readJsonFile<{
-            title?: string;
-            status?: string;
-            dimensions?: unknown[];
-          }>(archivedGoalPath);
-          title = raw.title ?? title;
-          status = raw.status ?? status;
-          dimCount = raw.dimensions?.length ?? 0;
-        } catch (err) {
-          getCliLogger().error(formatOperationError(`read archived goal metadata for "${goalId}"`, err));
-        }
-        console.log(`[${goalId}] status: ${status} — ${title} (dimensions: ${dimCount})`);
-      }
-    }
+    await printArchivedGoals(stateManager);
   } else {
+    await printActiveGoals(stateManager, goalsDir);
+    const archivedIds = await stateManager.listArchivedGoals();
     console.log(`\nArchived goals: ${archivedIds.length} (use \`tavori goal list --archived\` to show)`);
   }
 
@@ -136,16 +148,14 @@ export async function cmdStatus(
   console.log(`\n## Dimensions\n`);
   for (const dim of goal.dimensions) {
     let progress: string;
-    if (dim.current_value === null || dim.current_value === undefined || !dim.threshold) {
+    const prog = dimensionProgress(dim.current_value, dim.threshold);
+    if (prog === null) {
       progress = "not yet measured";
     } else {
-      const rawGap = computeRawGap(dim.current_value, dim.threshold);
-      const normalizedGap = normalizeGap(rawGap, dim.threshold, dim.current_value);
-      const normalizedProgress = 1 - Math.max(0, Math.min(1, normalizedGap));
       const rawDisplay = typeof dim.current_value === "number"
         ? dim.current_value.toFixed(1)
         : String(dim.current_value);
-      progress = `${normalizedProgress.toFixed(3)} (raw: ${rawDisplay})`;
+      progress = `${prog.toFixed(3)} (raw: ${rawDisplay})`;
     }
     const confidence = `${(dim.confidence * 100).toFixed(1)}%`;
     console.log(`- **${dim.label}** (${dim.name})`);
