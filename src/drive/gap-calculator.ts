@@ -274,19 +274,12 @@ export function aggregateGaps(
  * from the raw gap pipeline (computeRawGap → normalizeGap).
  */
 export function dimensionProgress(
-  currentValue: unknown,
-  threshold: unknown
+  currentValue: number | string | boolean | null | undefined,
+  threshold: Threshold | null | undefined
 ): number | null {
   if (currentValue === null || currentValue === undefined || !threshold) return null;
-  const rawGap = computeRawGap(
-    currentValue as number | string | boolean | null,
-    threshold as Threshold
-  );
-  const normalizedGap = normalizeGap(
-    rawGap,
-    threshold as Threshold,
-    currentValue as number | string | boolean | null
-  );
+  const rawGap = computeRawGap(currentValue, threshold);
+  const normalizedGap = normalizeGap(rawGap, threshold, currentValue);
   return 1 - Math.max(0, Math.min(1, normalizedGap));
 }
 

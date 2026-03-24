@@ -335,8 +335,8 @@ export class ObservationEngine {
           // Only pass previousScore when there's actual observation history.
           // The seed current_value in a new goal is not a real observation and
           // should not trigger the §3.3 score-jump suppression guard.
-          // Use the last history entry (not current_value) to avoid treating
-          // verifier-written values as prior observations (bug #233).
+          // current_value may have been written by the verifier (not by an observation).
+          // Use the last history entry so jump-suppression (§3.3) only compares genuine observations.
           const hasPriorObs = Array.isArray(dim.history) && dim.history.length > 0;
           const lastObsEntry =
             hasPriorObs ? dim.history[dim.history.length - 1] : null;

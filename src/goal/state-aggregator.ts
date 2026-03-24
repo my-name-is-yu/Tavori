@@ -1,7 +1,7 @@
 import { StateManager } from "../state-manager.js";
 import { StateError } from "../utils/errors.js";
 import { SatisficingJudge, aggregateValues } from "../drive/satisficing-judge.js";
-import { computeRawGap, normalizeGap } from "../drive/gap-calculator.js";
+import { dimensionProgress } from "../drive/gap-calculator.js";
 import type { Goal, Dimension } from "../types/goal.js";
 import type { SatisficingAggregation } from "../types/goal.js";
 import type { StateAggregationRule } from "../types/goal-tree.js";
@@ -370,13 +370,9 @@ function computeChildGap(goal: Goal): number {
  * confidence-weighted pipeline (which is used by GapCalculator for drive scoring).
  */
 function computeDimensionGapSimple(dim: Dimension): number {
-  const { current_value, threshold } = dim;
-
-  if (current_value === null) return 1;
-
-  const rawGap = computeRawGap(current_value, threshold);
-  const normalizedGap = normalizeGap(rawGap, threshold, current_value);
-  return Math.min(1, Math.max(0, normalizedGap));
+  if (dim.current_value === null) return 1;
+  const prog = dimensionProgress(dim.current_value, dim.threshold);
+  return prog === null ? 1 : 1 - prog;
 }
 
 /**

@@ -1,5 +1,5 @@
 import { StateManager } from "../state-manager.js";
-import { computeRawGap, normalizeGap } from "./gap-calculator.js";
+import { dimensionProgress } from "./gap-calculator.js";
 import type { Goal, Dimension } from "../types/goal.js";
 import type {
   CompletionJudgment,
@@ -162,16 +162,8 @@ export class SatisficingJudge {
    * null current_value = 0 progress.
    */
   private computeActualProgress(dim: Dimension): number {
-    const { current_value, threshold } = dim;
-
-    if (current_value === null) return 0;
-
-    const rawGap = computeRawGap(current_value, threshold);
-    const normalizedGap = normalizeGap(rawGap, threshold, current_value);
-
-    // Clamp to [0, 1] and invert: progress = 1 - gap
-    const clamped = Math.min(1, Math.max(0, normalizedGap));
-    return 1 - clamped;
+    if (dim.current_value === null) return 0;
+    return dimensionProgress(dim.current_value, dim.threshold) ?? 0;
   }
 
   // ─── Satisfaction Check ───

@@ -17,7 +17,6 @@ async function printActiveGoals(
 ): Promise<void> {
   let goalsDirEntries: string[] = [];
   try {
-    await fsp.access(goalsDir);
     goalsDirEntries = await fsp.readdir(goalsDir);
   } catch { /* dir doesn't exist or unreadable */ }
 
@@ -74,8 +73,7 @@ async function printActiveGoals(
   }
 }
 
-async function printArchivedGoals(stateManager: StateManager): Promise<void> {
-  const archivedIds = await stateManager.listArchivedGoals();
+async function printArchivedGoals(stateManager: StateManager, archivedIds: string[]): Promise<void> {
   if (archivedIds.length === 0) {
     console.log(`\nNo archived goals found.`);
     return;
@@ -93,7 +91,6 @@ async function printArchivedGoals(stateManager: StateManager): Promise<void> {
     let status = "unknown";
     let dimCount = 0;
     try {
-      await fsp.access(archivedGoalPath);
       const raw = await readJsonFile<{
         title?: string;
         status?: string;
@@ -114,12 +111,12 @@ export async function cmdGoalList(
   opts: { archived?: boolean } = {}
 ): Promise<number> {
   const goalsDir = getGoalsDir(stateManager.getBaseDir());
+  const archivedIds = await stateManager.listArchivedGoals();
 
   if (opts.archived) {
-    await printArchivedGoals(stateManager);
+    await printArchivedGoals(stateManager, archivedIds);
   } else {
     await printActiveGoals(stateManager, goalsDir);
-    const archivedIds = await stateManager.listArchivedGoals();
     console.log(`\nArchived goals: ${archivedIds.length} (use \`tavori goal list --archived\` to show)`);
   }
 
