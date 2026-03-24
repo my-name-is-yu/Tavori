@@ -102,6 +102,12 @@ export interface LoopConfig {
    * final goal status updates, and archive operations.
    */
   dryRun?: boolean;
+  /**
+   * Maximum number of consecutive iterations that can be skipped due to no state change
+   * (Pillar 2: State Diff + Loop Skip). After this many consecutive skips, the full loop
+   * runs regardless so stall detection can fire. Default: 5.
+   */
+  maxConsecutiveSkips?: number;
 }
 
 // ─── Result types ───
@@ -124,6 +130,14 @@ export interface LoopIterationResult {
   milestoneAlerts?: Array<{ goalId: string; status: string; pace_ratio: number }>;
   /** Transfer candidates detected from cross-goal knowledge (suggestion-only, Phase 1) */
   transfer_candidates?: TransferCandidate[];
+  /**
+   * When true, this iteration was skipped because no meaningful state change was
+   * detected (Pillar 2: State Diff + Loop Skip). Only observation ran; gap
+   * calculation, task generation, execution, and verification were bypassed.
+   */
+  skipped?: boolean;
+  /** Reason for the skip, when skipped=true. */
+  skipReason?: string;
 }
 
 export interface LoopResult {

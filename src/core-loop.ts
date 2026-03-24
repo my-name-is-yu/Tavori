@@ -4,6 +4,7 @@ import type { Goal } from "./types/goal.js";
 import type { TaskGroup } from "./types/index.js";
 import { evaluateTaskComplexity, generateTaskGroup } from "./execution/task-generation.js";
 import type { ParallelExecutionResult } from "./execution/parallel-executor.js";
+import type { StateDiffCalculator, IterationSnapshot } from "./loop/state-diff.js";
 
 import type {
   GapCalculatorModule,
@@ -63,6 +64,7 @@ const DEFAULT_CONFIG: Required<LoopConfig> = {
   minIterations: 1,
   autoArchive: false,
   dryRun: false,
+  maxConsecutiveSkips: 5,
 };
 
 // ─── CoreLoop ───
@@ -80,11 +82,16 @@ export class CoreLoop {
   private readonly logger?: Logger;
   private stopped = false;
   private readonly learning: CoreLoopLearning = new CoreLoopLearning();
+  /** Optional StateDiffCalculator for Pillar 2 (State Diff + Loop Skip). */
+  private readonly stateDiff?: StateDiffCalculator;
+  /** Per-goal state diff tracking (keyed by goalId). Reset on run(). */
+  private stateDiffState = new Map<string, { previousSnapshot: IterationSnapshot | null; consecutiveSkips: number }>();
 
-  constructor(deps: CoreLoopDeps, config?: LoopConfig) {
+  constructor(deps: CoreLoopDeps, config?: LoopConfig, stateDiff?: StateDiffCalculator) {
     this.deps = deps;
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.logger = deps.logger;
+    this.stateDiff = stateDiff;
   }
 
   // ─── Public API ───
@@ -95,6 +102,8 @@ export class CoreLoop {
   async run(goalId: string): Promise<LoopResult> {
     const startedAt = new Date().toISOString();
     this.stopped = false;
+    // Reset state diff tracking for each run (snapshots are in-memory only)
+    this.stateDiffState.clear();
 
     // Load and validate goal
     const goal = await this.deps.stateManager.loadGoal(goalId);
@@ -429,6 +438,48 @@ export class CoreLoop {
 
     // 2. Observe + reload
     goal = await observeAndReload(ctx, goalId, goal, loopIndex);
+
+    // 2b. State diff check (Pillar 2: State Diff + Loop Skip)
+    // When StateDiffCalculator is present and no meaningful change is detected,
+    // skip phases 3-9 to avoid redundant LLM calls. After maxConsecutiveSkips,
+    // the full loop runs so stall detection can fire.
+    if (this.stateDiff) {
+      const diffState = this.stateDiffState.get(goalId) ?? { previousSnapshot: null, consecutiveSkips: 0 };
+      const snapshot = this.stateDiff.buildSnapshot(goal, loopIndex);
+      const diff = this.stateDiff.compare(diffState.previousSnapshot, snapshot);
+      diffState.previousSnapshot = snapshot;
+
+      if (!diff.hasChange && diffState.consecutiveSkips < this.config.maxConsecutiveSkips) {
+        diffState.consecutiveSkips++;
+        this.stateDiffState.set(goalId, diffState);
+        this.logger?.info(
+          `[CoreLoop] iteration ${loopIndex} skipped: no state change detected ` +
+          `(consecutiveSkips=${diffState.consecutiveSkips}/${this.config.maxConsecutiveSkips})`,
+          { goalId }
+        );
+        result.skipped = true;
+        result.skipReason = "no_state_change";
+        // Carry forward completion status from the previous snapshot's iteration
+        // so a completed goal is not forced through 5 more iterations.
+        const goalState = await this.deps.stateManager.loadGoal(goalId);
+        if (goalState?.status === "completed") {
+          result.completionJudgment.is_complete = true;
+        }
+        result.elapsedMs = Date.now() - startTime;
+        return result;
+      }
+
+      // Reset skip counter — full loop is running
+      diffState.consecutiveSkips = 0;
+      this.stateDiffState.set(goalId, diffState);
+      if (!diff.hasChange) {
+        this.logger?.info(
+          `[CoreLoop] max consecutive skips reached (${this.config.maxConsecutiveSkips}), ` +
+          "forcing full iteration for stall detection",
+          { goalId }
+        );
+      }
+    }
 
     // 3. Gap calculate + zero check
     const gapResult = await calculateGapOrComplete(ctx, goalId, goal, loopIndex, result, startTime);
