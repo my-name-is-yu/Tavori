@@ -52,6 +52,14 @@ export const DimensionSchema = z.object({
    */
   state_integrity: z.enum(["ok", "uncertain"]).default("ok"),
   /**
+   * The observation layer that last updated this dimension's confidence.
+   * Used to compare against incoming observation priority (replaces static
+   * confidence_tier comparison which never changes after goal creation).
+   */
+  last_observed_layer: z
+    .enum(["self_report", "independent_review", "mechanical"])
+    .optional(),
+  /**
    * Maps this subgoal dimension to a parent goal dimension with an aggregation strategy.
    * When set, propagateSubgoalCompletion uses parent_dimension (not name matching)
    * and aggregates multiple subgoal dimensions mapped to the same parent dimension.

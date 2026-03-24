@@ -98,7 +98,11 @@ export async function removeCapability(
   capabilityId: string
 ): Promise<void> {
   const registry = await loadRegistry(deps);
+  const before = registry.capabilities.length;
   registry.capabilities = registry.capabilities.filter((c) => c.id !== capabilityId);
+  if (registry.capabilities.length === before) {
+    throw new Error(`Capability with id "${capabilityId}" not found.`);
+  }
   registry.last_checked = new Date().toISOString();
   await saveRegistry(deps, registry);
 }

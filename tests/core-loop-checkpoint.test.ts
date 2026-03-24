@@ -319,8 +319,9 @@ describe("CoreLoop §4.8 checkpoint", () => {
       const loop2 = new CoreLoop(deps2, { maxIterations: 10, delayBetweenLoopsMs: 0 });
       return loop2.run("goal-1");
     })();
-    // Started at cycle 7, so only 3 iterations ran (7, 8, 9)
-    expect(result2.totalIterations).toBe(3);
+    // startLoopIndex is always 0 (per-run), so all 10 iterations run regardless of
+    // the checkpoint's cycle_number (which only served as cumulative counter before fix)
+    expect(result2.totalIterations).toBe(10);
   });
 
   // ─── 3. No checkpoint → normal zero-start, no error ───

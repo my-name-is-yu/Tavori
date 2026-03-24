@@ -129,13 +129,13 @@ export class CoreLoop {
     }
     await this.deps.stateManager.saveGapHistory(goalId, []);
 
-    // Restore from checkpoint if present (§4.8).
-    // NOTE: this checkpoint (goals/<goalId>/checkpoint.json) is for loop recovery across
-    // process restarts — it saves cycle progress and dimension state so the loop can
-    // resume mid-run. It is distinct from CheckpointManager in
-    // src/execution/checkpoint-manager.ts, which handles multi-agent session transfer
-    // (passing state from one agent session to another).
-    let startLoopIndex = 0;
+    // Restore dimension/trust state from checkpoint if present (§4.8), but always
+    // start loopIndex at 0 so --max-iterations is per-run, not cumulative across runs.
+    // NOTE: this checkpoint (goals/<goalId>/checkpoint.json) is for crash-recovery state
+    // (dimension values, trust balance) — NOT for resuming loop count.  It is distinct
+    // from CheckpointManager in src/execution/checkpoint-manager.ts, which handles
+    // multi-agent session transfer (passing state from one agent session to another).
+    const startLoopIndex = 0;
     try {
       const checkpoint = await this.deps.stateManager.readRaw(`goals/${goalId}/checkpoint.json`);
       if (
@@ -150,10 +150,6 @@ export class CoreLoop {
           trust_snapshot?: number;
           timestamp?: string;
         };
-        startLoopIndex = cp.cycle_number;
-        this.logger?.warn(
-          `Resuming from checkpoint (cycle ${cp.cycle_number}, task ${cp.last_verified_task_id ?? "unknown"})`
-        );
         // Restore dimension values from snapshot
         if (cp.dimension_snapshot && typeof cp.dimension_snapshot === "object") {
           const goalData = await this.deps.stateManager.readRaw(`goals/${goalId}/goal.json`);

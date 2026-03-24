@@ -424,8 +424,21 @@ export async function cmdCapabilityRemove(
   const reportingEngine = new ReportingEngine(stateManager);
   const capabilityDetector = new CapabilityDetector(stateManager, llmClient, reportingEngine);
 
+  let cap;
   try {
-    await capabilityDetector.removeCapability(name);
+    cap = await capabilityDetector.findCapabilityByName(name);
+  } catch (err) {
+    getCliLogger().error(formatOperationError(`look up capability "${name}"`, err));
+    return 1;
+  }
+
+  if (!cap) {
+    getCliLogger().error(`Error: Capability "${name}" not found.`);
+    return 1;
+  }
+
+  try {
+    await capabilityDetector.removeCapability(cap.id);
     console.log(`Capability "${name}" removed.`);
     return 0;
   } catch (err) {
