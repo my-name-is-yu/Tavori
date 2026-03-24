@@ -110,6 +110,20 @@ export const GoalStatusEnum = z.enum([
 ]);
 export type GoalStatus = z.infer<typeof GoalStatusEnum>;
 
+// --- Observation Optimization ---
+
+export const ObservationOptimizationSchema = z.object({
+  /** Minimum seconds between LLM observations for a dimension (default: 60) */
+  min_observation_interval_sec: z.number().int().min(0).default(60),
+  /** Skip LLM observation when pre-check detects no change (default: true) */
+  skip_on_no_change: z.boolean().default(true),
+  /** Pre-check strategies to use before LLM observation */
+  pre_check_strategies: z
+    .array(z.enum(["datasource_delta", "file_stat", "git_diff", "age"]))
+    .default(["datasource_delta", "git_diff", "age"]),
+});
+export type ObservationOptimization = z.infer<typeof ObservationOptimizationSchema>;
+
 // --- Goal (a node in the goal tree) ---
 
 export const GoalSchema = z.object({
@@ -152,6 +166,9 @@ export const GoalSchema = z.object({
   decomposition_depth: z.number().int().min(0).default(0),
   specificity_score: z.number().min(0).max(1).nullable().default(null),
   loop_status: z.enum(["idle", "running", "paused"]).default("idle"),
+
+  // Token optimization: staged observation config (optional)
+  observation_optimization: ObservationOptimizationSchema.optional(),
 
   // Timing
   created_at: z.string(),

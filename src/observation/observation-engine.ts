@@ -6,6 +6,7 @@ import type { KnowledgeGapSignal } from "../types/knowledge.js";
 import type { IDataSourceAdapter } from "./data-source-adapter.js";
 import type { ILLMClient } from "../llm/llm-client.js";
 import type { Logger } from "../runtime/logger.js";
+import type { IDimensionPreChecker } from "./dimension-pre-checker.js";
 import {
   observeForTask as _observeForTask,
 } from "./observation-task.js";
@@ -59,6 +60,7 @@ export class ObservationEngine {
   private readonly contextProvider?: (goalId: string, dimensionName: string) => Promise<string>;
   private readonly options: ObservationEngineOptions;
   private readonly logger?: Logger;
+  private readonly preChecker?: IDimensionPreChecker;
 
   constructor(
     stateManager: StateManager,
@@ -66,7 +68,8 @@ export class ObservationEngine {
     llmClient?: ILLMClient,
     contextProvider?: (goalId: string, dimensionName: string) => Promise<string>,
     options: ObservationEngineOptions = {},
-    logger?: Logger
+    logger?: Logger,
+    preChecker?: IDimensionPreChecker
   ) {
     this.stateManager = stateManager;
     this.dataSources = dataSources;
@@ -74,6 +77,7 @@ export class ObservationEngine {
     this.contextProvider = contextProvider;
     this.options = options;
     this.logger = logger;
+    this.preChecker = preChecker;
   }
 
   // ─── Cross-Validation ───
@@ -259,9 +263,61 @@ export class ObservationEngine {
       return undefined;
     };
 
+    // Workspace path for pre-checker (extracted from contextProvider key heuristic)
+    const workspacePath = goal.constraints.find((c) => c.startsWith("workspace_path:"))?.slice("workspace_path:".length);
+
     for (let idx = 0; idx < observeCount; idx++) {
       const dim = goal.dimensions[idx]!;
       const method: ObservationMethod = methods[idx] ?? dim.observation_method;
+
+      // Stage 0: Deterministic pre-check (skip LLM if nothing changed)
+      // Respect goal-level opt-out: skip_on_no_change=false disables the pre-check entirely.
+      if (this.preChecker && goal.observation_optimization?.skip_on_no_change !== false) {
+        const lastObs = Array.isArray(dim.history) && dim.history.length > 0
+          ? (() => {
+              // Reconstruct a minimal ObservationLogEntry from the last history entry
+              const h = dim.history[dim.history.length - 1]!;
+              return {
+                observation_id: h.source_observation_id,
+                goal_id: goalId,
+                dimension_name: dim.name,
+                layer: (dim.last_observed_layer ?? "self_report") as ObservationLayer,
+                method,
+                trigger: "periodic" as const,
+                raw_result: h.value,
+                extracted_value: h.value as number | string | boolean | null,
+                confidence: h.confidence,
+                timestamp: h.timestamp,
+                notes: null,
+              } satisfies ObservationLogEntry;
+            })()
+          : null;
+
+        try {
+          const preCheck = await this.preChecker.check(dim, lastObs, { workspace_path: workspacePath });
+          if (!preCheck.changed && lastObs !== null) {
+            const cachedEntry = createObservationEntry({
+              goalId,
+              dimensionName: dim.name,
+              layer: lastObs.layer ?? "self_report",  // preserve original observation layer
+              method,
+              trigger: "periodic",
+              rawResult: `cached: ${String(lastObs.extracted_value)}`,
+              extractedValue: lastObs.extracted_value,
+              confidence: Math.max(0.10, lastObs.confidence * 0.95),
+            });
+            await this.applyObservation(goalId, cachedEntry);
+            this.logger?.debug(
+              `[ObservationEngine] Pre-check: skipping LLM for dimension "${dim.name}" (no change detected, confidence decayed to ${cachedEntry.confidence.toFixed(3)})`
+            );
+            continue;
+          }
+        } catch (err) {
+          this.logger?.warn(
+            `[ObservationEngine] Pre-check failed for dimension "${dim.name}": ${err instanceof Error ? err.message : String(err)}. Proceeding with normal observation.`
+          );
+        }
+      }
 
       // 1. Try DataSource first
       const dataSource = this.findDataSourceForDimension(dim.name, goalId);
