@@ -196,11 +196,13 @@ describe("removeCapability", () => {
     expect(registry.capabilities.find((c) => c.id === "cap-remove")).toBeUndefined();
   });
 
-  it("is a no-op for a non-existent id (does not throw)", async () => {
+  it("throws for a non-existent id", async () => {
     const llm = createMockLLMClient([]);
     const detector = new CapabilityDetector(stateManager, llm, reportingEngine);
 
-    await expect(detector.removeCapability("nonexistent-cap-id")).resolves.toBeUndefined();
+    await expect(detector.removeCapability("nonexistent-cap-id")).rejects.toThrow(
+      'Capability with id "nonexistent-cap-id" not found'
+    );
   });
 
   it("does not remove other capabilities when removing by id", async () => {
