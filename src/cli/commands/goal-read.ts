@@ -196,8 +196,17 @@ export async function cmdGoalShow(stateManager: StateManager, goalId: string): P
     console.log(`\nDimensions:`);
     for (const dim of goal.dimensions) {
       console.log(`  - ${dim.label} (${dim.name})`);
+      const currentValueDisplay = dim.current_value !== undefined && dim.current_value !== null
+        ? String(dim.current_value)
+        : "(not yet measured)";
+      console.log(`    Current value:   ${currentValueDisplay}`);
       console.log(`    Threshold type:  ${dim.threshold.type}`);
       console.log(`    Threshold value: ${JSON.stringify((dim.threshold as { value?: unknown }).value ?? dim.threshold)}`);
+      console.log(`    Confidence:      ${(dim.confidence * 100).toFixed(1)}%`);
+      const progress = dimensionProgress(dim.current_value, dim.threshold);
+      const progressDisplay = progress !== null ? progress.toFixed(4) : "(not yet measured)";
+      console.log(`    Progress:        ${progressDisplay}`);
+      console.log(`    History entries: ${dim.history?.length ?? 0}`);
     }
   } else {
     console.log(`\nDimensions: (none)`);

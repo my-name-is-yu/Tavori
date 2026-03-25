@@ -319,8 +319,8 @@ describe("CoreLoop §4.8 checkpoint", () => {
       const loop2 = new CoreLoop(deps2, { maxIterations: 10, delayBetweenLoopsMs: 0 });
       return loop2.run("goal-1");
     })();
-    // startLoopIndex is always 0 (per-run), so all 10 iterations run regardless of
-    // the checkpoint's cycle_number (which only served as cumulative counter before fix)
+    // startLoopIndex is set from cycle_number, so sleep-skip boundary shifts accordingly;
+    // totalIterations still reflects the number of new iterations run in this session (10)
     expect(result2.totalIterations).toBe(10);
   });
 

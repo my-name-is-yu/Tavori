@@ -132,20 +132,20 @@ export class CoreLoop {
       };
     }
 
-    // Reset stall state AND gap history at the beginning of each run so prior
-    // run's escalation and stale gap entries do not immediately poison a fresh start.
+    // Reset stall escalation state at the beginning of each run so prior
+    // run's escalation does not immediately poison a fresh start.
+    // Gap history is intentionally preserved across runs (appended) for historical tracking.
     for (const dim of goal.dimensions) {
       await this.deps.stallDetector.resetEscalation(goalId, dim.name);
     }
-    await this.deps.stateManager.saveGapHistory(goalId, []);
 
-    // Restore dimension/trust state from checkpoint if present (§4.8), but always
-    // start loopIndex at 0 so --max-iterations is per-run, not cumulative across runs.
+    // Restore dimension/trust state from checkpoint if present (§4.8).
+    // cycle_number is used to resume iteration counting so loopIndex values are
+    // cumulative across runs. --max-iterations limits total NEW iterations per run.
     // NOTE: this checkpoint (goals/<goalId>/checkpoint.json) is for crash-recovery state
-    // (dimension values, trust balance) — NOT for resuming loop count.  It is distinct
-    // from CheckpointManager in src/execution/checkpoint-manager.ts, which handles
-    // multi-agent session transfer (passing state from one agent session to another).
-    const startLoopIndex = 0;
+    // (dimension values, trust balance) — it is distinct from CheckpointManager in
+    // src/execution/checkpoint-manager.ts, which handles multi-agent session transfer.
+    let startLoopIndex = 0;
     try {
       const checkpoint = await this.deps.stateManager.readRaw(`goals/${goalId}/checkpoint.json`);
       if (
@@ -160,6 +160,8 @@ export class CoreLoop {
           trust_snapshot?: number;
           timestamp?: string;
         };
+        // Resume iteration counting from the saved cycle_number
+        startLoopIndex = cp.cycle_number;
         // Restore dimension values from snapshot
         if (cp.dimension_snapshot && typeof cp.dimension_snapshot === "object") {
           const goalData = await this.deps.stateManager.readRaw(`goals/${goalId}/goal.json`);
@@ -189,9 +191,12 @@ export class CoreLoop {
             // Non-fatal — trust restore failure should not abort the run
           }
         }
+      } else if (checkpoint && typeof checkpoint === "object") {
+        this.logger?.warn?.("Checkpoint has no valid cycle_number, starting fresh", { goalId });
       }
-    } catch {
+    } catch (err) {
       // Checkpoint restore failure is non-fatal — start from beginning
+      this.logger?.warn?.("Checkpoint restore failed, starting fresh", { error: String(err) });
     }
 
     const iterations: LoopIterationResult[] = [];
@@ -200,7 +205,7 @@ export class CoreLoop {
     let consecutiveEscalations = 0;
     let finalStatus: LoopResult["finalStatus"] = "max_iterations";
 
-    for (let loopIndex = startLoopIndex; loopIndex < this.config.maxIterations; loopIndex++) {
+    for (let loopIndex = startLoopIndex; loopIndex < startLoopIndex + this.config.maxIterations; loopIndex++) {
       if (this.stopped) {
         finalStatus = "stopped";
         break;
@@ -310,7 +315,7 @@ export class CoreLoop {
       await this.learning.checkPeriodicReview(goalId, this.deps, this.logger);
 
       // Delay between loops (skip on last iteration)
-      if (loopIndex < this.config.maxIterations - 1 && this.config.delayBetweenLoopsMs > 0) {
+      if (loopIndex < startLoopIndex + this.config.maxIterations - 1 && this.config.delayBetweenLoopsMs > 0) {
         await sleep(this.config.delayBetweenLoopsMs);
       }
     }
