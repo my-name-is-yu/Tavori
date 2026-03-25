@@ -16,7 +16,7 @@
 
 import type { IAdapter, AgentTask, AgentResult } from "../execution/adapter-layer.js";
 import type { Logger } from "../runtime/logger.js";
-import { spawnWithTimeout } from "./spawn-helper.js";
+import { spawnWithTimeout, spawnResultToAgentResult } from "./spawn-helper.js";
 
 export interface OpenAICodexCLIAdapterConfig {
   /** The executable name / path for the codex CLI. Default: "codex" */
@@ -87,37 +87,6 @@ export class OpenAICodexCLIAdapter implements IAdapter {
     );
 
     const elapsed = Date.now() - startedAt;
-
-    if (result.timedOut) {
-      return {
-        success: false,
-        output: result.stdout,
-        error: `Timed out after ${task.timeout_ms}ms`,
-        exit_code: result.exitCode,
-        elapsed_ms: elapsed,
-        stopped_reason: "timeout",
-      };
-    }
-
-    if (result.exitCode === null) {
-      return {
-        success: false,
-        output: result.stdout,
-        error: result.stderr,
-        exit_code: null,
-        elapsed_ms: elapsed,
-        stopped_reason: "error",
-      };
-    }
-
-    const success = result.exitCode === 0;
-    return {
-      success,
-      output: result.stdout,
-      error: success ? null : result.stderr || `Process exited with code ${result.exitCode}`,
-      exit_code: result.exitCode,
-      elapsed_ms: elapsed,
-      stopped_reason: success ? "completed" : "error",
-    };
+    return spawnResultToAgentResult(result, elapsed, task.timeout_ms);
   }
 }

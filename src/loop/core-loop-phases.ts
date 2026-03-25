@@ -83,20 +83,13 @@ export async function observeAndReload(
     phase: "Observing...",
   });
   try {
-    const engine = ctx.deps.observationEngine as unknown as {
-      observe?: (goalId: string, methods: unknown[]) => Promise<void> | void;
-      getDataSources?: () => Array<{ sourceId: string }>;
-    };
+    const engine = ctx.deps.observationEngine;
 
-    ctx.logger?.debug("CoreLoop: engine.getDataSources exists", { exists: typeof engine.getDataSources === "function" });
-    const dataSources = typeof engine.getDataSources === "function"
-      ? engine.getDataSources()
-      : [];
+    ctx.logger?.debug("CoreLoop: engine.getDataSources exists", { exists: true });
+    const dataSources = engine.getDataSources();
     ctx.logger?.debug("CoreLoop: observation setup", { dataSourceCount: dataSources.length });
 
-    if (typeof engine.observe === "function") {
-      await engine.observe(goalId, []);
-    }
+    await engine.observe(goalId, []);
 
     const reloaded = await ctx.deps.stateManager.loadGoal(goalId);
     if (reloaded) return reloaded;

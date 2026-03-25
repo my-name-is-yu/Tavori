@@ -8,6 +8,7 @@
 // both `error` and `close` on a spawn failure (ENOENT).
 
 import { spawn } from "node:child_process";
+import type { AgentResult } from "../execution/adapter-layer.js";
 
 export interface SpawnOptions {
   /** Environment variables. Default: process.env */
@@ -37,6 +38,48 @@ export interface SpawnResult {
  * @param timeoutMs - Kill the process with SIGTERM after this many ms.
  * @returns SpawnResult with stdout, stderr, exitCode, and timedOut flag.
  */
+/**
+ * Map a SpawnResult to a standard AgentResult using the three-branch logic
+ * shared by all CLI adapters: timedOut → exitCode null → success/error.
+ */
+export function spawnResultToAgentResult(
+  result: SpawnResult,
+  elapsed: number,
+  timeoutMs: number
+): AgentResult {
+  if (result.timedOut) {
+    return {
+      success: false,
+      output: result.stdout,
+      error: `Timed out after ${timeoutMs}ms`,
+      exit_code: result.exitCode,
+      elapsed_ms: elapsed,
+      stopped_reason: "timeout",
+    };
+  }
+
+  if (result.exitCode === null) {
+    return {
+      success: false,
+      output: result.stdout,
+      error: result.stderr,
+      exit_code: null,
+      elapsed_ms: elapsed,
+      stopped_reason: "error",
+    };
+  }
+
+  const success = result.exitCode === 0;
+  return {
+    success,
+    output: result.stdout,
+    error: success ? null : result.stderr || `Process exited with code ${result.exitCode}`,
+    exit_code: result.exitCode,
+    elapsed_ms: elapsed,
+    stopped_reason: success ? "completed" : "error",
+  };
+}
+
 export function spawnWithTimeout(
   command: string,
   args: string[],

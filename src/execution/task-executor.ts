@@ -155,7 +155,8 @@ export async function executeTask(
     };
   }
 
-  // Post-execution scope check: revert changes to protected files
+  // Post-execution scope check: revert changes to protected files,
+  // and annotate result.filesChanged from the same git diff --name-only call.
   if (result.success) {
     try {
       const diffOutput = execFileSyncFn("git", ["diff", "--name-only"], {
@@ -163,8 +164,16 @@ export async function executeTask(
         encoding: "utf-8",
       }).trim();
 
-      if (diffOutput) {
-        const changedFiles = diffOutput.split("\n");
+      const changedFiles = diffOutput ? diffOutput.split("\n") : [];
+      result.filesChanged = changedFiles.length > 0;
+      if (!result.filesChanged) {
+        logger?.warn(
+          "[TaskLifecycle] Adapter reported success but no files were modified",
+          { taskId: task.id }
+        );
+      }
+
+      if (changedFiles.length > 0) {
         const protectedPatterns = [
           /vitest\.config/,
           /jest\.config/,
@@ -189,26 +198,6 @@ export async function executeTask(
       }
     } catch {
       // Non-fatal: scope check failure should not break execution
-    }
-  }
-
-  // Post-execution: check whether any files were actually modified via git diff --stat.
-  // This is a diagnostic annotation only — it does NOT fail the task.
-  if (result.success) {
-    try {
-      const diffStat = execFileSyncFn("git", ["diff", "--stat"], {
-        cwd: process.cwd(),
-        encoding: "utf-8",
-      });
-      result.filesChanged = diffStat.trim().length > 0;
-      if (!result.filesChanged) {
-        logger?.warn(
-          "[TaskLifecycle] Adapter reported success but no files were modified",
-          { taskId: task.id }
-        );
-      }
-    } catch {
-      // Not a git repo or git is unavailable — skip the check silently
     }
   }
 

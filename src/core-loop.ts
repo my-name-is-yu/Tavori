@@ -1,17 +1,14 @@
 import { sleep } from "./utils/sleep.js";
 import type { Logger } from "./runtime/logger.js";
-import type { Goal } from "./types/goal.js";
-import type { TaskGroup } from "./types/index.js";
-import { evaluateTaskComplexity, generateTaskGroup } from "./execution/task-generation.js";
-import type { ParallelExecutionResult } from "./execution/parallel-executor.js";
 import type { StateDiffCalculator, IterationSnapshot } from "./loop/state-diff.js";
 import { IterationBudget } from "./loop/iteration-budget.js";
+import { saveLoopCheckpoint, restoreLoopCheckpoint } from "./loop/checkpoint-manager-loop.js";
+import { runPostLoopHooks } from "./loop/post-loop-hooks.js";
+import { tryRunParallel } from "./loop/parallel-dispatch.js";
+import { generateLoopReport } from "./loop/loop-report-helper.js";
 
+import { makeEmptyIterationResult } from "./loop/core-loop-types.js";
 import type {
-  GapCalculatorModule,
-  DriveScorerModule,
-  ExecutionSummaryParams,
-  ReportingEngine,
   LoopConfig,
   ResolvedLoopConfig,
   LoopIterationResult,
@@ -19,7 +16,6 @@ import type {
   CoreLoopDeps,
   ProgressEvent,
 } from "./loop/core-loop-types.js";
-import { buildDriveContext } from "./loop/core-loop-types.js";
 import {
   runTreeIteration as runTreeIterationImpl,
   runMultiGoalIteration as runMultiGoalIterationImpl,
@@ -39,7 +35,6 @@ import {
 } from "./loop/core-loop-phases-b.js";
 import { handleCapabilityAcquisition } from "./loop/core-loop-capability.js";
 import { CoreLoopLearning } from "./loop/core-loop-learning.js";
-import { dimensionProgress } from "./drive/gap-calculator.js";
 
 // Re-export types for backward compatibility
 export type {
@@ -53,8 +48,9 @@ export type {
   LoopResult,
   CoreLoopDeps,
   ProgressEvent,
+  ProgressPhase,
 } from "./loop/core-loop-types.js";
-export { buildDriveContext } from "./loop/core-loop-types.js";
+export { buildDriveContext, makeEmptyIterationResult } from "./loop/core-loop-types.js";
 
 const DEFAULT_CONFIG: Required<Omit<LoopConfig, "iterationBudget">> = {
   maxIterations: 100,
@@ -85,9 +81,8 @@ export class CoreLoop {
   private readonly logger?: Logger;
   private stopped = false;
   private readonly learning: CoreLoopLearning = new CoreLoopLearning();
-  /** Optional StateDiffCalculator for Pillar 2 (State Diff + Loop Skip). */
+  /** Optional StateDiffCalculator for loop-skip optimization. */
   private readonly stateDiff?: StateDiffCalculator;
-  /** Per-goal state diff tracking (keyed by goalId). Reset on run(). */
   private stateDiffState = new Map<string, { previousSnapshot: IterationSnapshot | null; consecutiveSkips: number }>();
 
   constructor(deps: CoreLoopDeps, config?: LoopConfig, stateDiff?: StateDiffCalculator) {
@@ -154,53 +149,12 @@ export class CoreLoop {
     // from CheckpointManager in src/execution/checkpoint-manager.ts, which handles
     // multi-agent session transfer (passing state from one agent session to another).
     const startLoopIndex = 0;
-    try {
-      const checkpoint = await this.deps.stateManager.readRaw(`goals/${goalId}/checkpoint.json`);
-      if (
-        checkpoint &&
-        typeof checkpoint === "object" &&
-        typeof (checkpoint as Record<string, unknown>).cycle_number === "number"
-      ) {
-        const cp = checkpoint as {
-          cycle_number: number;
-          last_verified_task_id?: string;
-          dimension_snapshot?: Record<string, number>;
-          trust_snapshot?: number;
-          timestamp?: string;
-        };
-        // Restore dimension values from snapshot
-        if (cp.dimension_snapshot && typeof cp.dimension_snapshot === "object") {
-          const goalData = await this.deps.stateManager.readRaw(`goals/${goalId}/goal.json`);
-          if (goalData && typeof goalData === "object") {
-            const goalObj = goalData as Record<string, unknown>;
-            const dims = goalObj.dimensions as Array<Record<string, unknown>> | undefined;
-            if (dims) {
-              for (const dim of dims) {
-                const snapshotVal = cp.dimension_snapshot[String(dim.name)];
-                if (typeof snapshotVal === "number") {
-                  dim.current_value = snapshotVal;
-                }
-              }
-              await this.deps.stateManager.writeRaw(`goals/${goalId}/goal.json`, goalObj);
-            }
-          }
-        }
-        // Restore trust balance for the adapter domain from snapshot
-        if (typeof cp.trust_snapshot === "number" && this.deps.trustManager) {
-          try {
-            await this.deps.trustManager.setOverride(
-              this.config.adapterType,
-              cp.trust_snapshot,
-              "checkpoint_restore"
-            );
-          } catch {
-            // Non-fatal — trust restore failure should not abort the run
-          }
-        }
-      }
-    } catch {
-      // Checkpoint restore failure is non-fatal — start from beginning
-    }
+    await restoreLoopCheckpoint(
+      this.deps.stateManager,
+      goalId,
+      this.config.adapterType,
+      this.deps.trustManager
+    );
 
     const iterations: LoopIterationResult[] = [];
     let consecutiveErrors = 0;
@@ -252,40 +206,15 @@ export class CoreLoop {
 
       // Save checkpoint after each successful verify step (§4.8)
       if (!this.config.dryRun && iterationResult.error === null && iterationResult.taskResult !== null) {
-        try {
-          const currentGoalForCp = await this.deps.stateManager.readRaw(`goals/${goalId}/goal.json`);
-          const dimensionSnapshot: Record<string, number> = {};
-          if (currentGoalForCp && typeof currentGoalForCp === "object") {
-            const dims = (currentGoalForCp as Record<string, unknown>).dimensions as
-              | Array<Record<string, unknown>>
-              | undefined;
-            if (dims) {
-              for (const dim of dims) {
-                if (typeof dim.name === "string" && typeof dim.current_value === "number") {
-                  dimensionSnapshot[dim.name] = dim.current_value;
-                }
-              }
-            }
-          }
-          let trustSnapshot: number | undefined;
-          if (this.deps.trustManager) {
-            try {
-              const trustBalance = await this.deps.trustManager.getBalance(this.config.adapterType);
-              trustSnapshot = trustBalance.balance;
-            } catch {
-              // Non-fatal
-            }
-          }
-          await this.deps.stateManager.writeRaw(`goals/${goalId}/checkpoint.json`, {
-            cycle_number: loopIndex + 1,
-            last_verified_task_id: iterationResult.taskResult.task.id,
-            dimension_snapshot: dimensionSnapshot,
-            trust_snapshot: trustSnapshot,
-            timestamp: new Date().toISOString(),
-          });
-        } catch {
-          // Checkpoint save failure is non-fatal
-        }
+        await saveLoopCheckpoint(
+          this.deps.stateManager,
+          goalId,
+          loopIndex,
+          iterationResult,
+          this.config.adapterType,
+          this.deps.trustManager,
+          this.logger
+        );
       }
 
       // Check completion (R1-2: must complete at least minIterations before exiting)
@@ -354,79 +283,21 @@ export class CoreLoop {
       }
     }
 
-    // Persist final status to disk before post-loop hooks
-    if (finalStatus === "completed" && !this.config.dryRun) {
-      try {
-        const goalState = await this.deps.stateManager.loadGoal(goalId);
-        if (goalState) {
-          goalState.status = "completed";
-          await this.deps.stateManager.saveGoal(goalState);
-        }
-      } catch (err) {
-        this.logger?.warn("CoreLoop: failed to persist final status", { goalId, finalStatus, error: err instanceof Error ? err.message : String(err) });
-      }
-    }
-
-    // After loop completes, check curiosity triggers if engine is available
-    if (this.deps.curiosityEngine && (finalStatus === "completed" || finalStatus === "max_iterations")) {
-      try {
-        this.deps.curiosityEngine.checkAutoExpiration();
-
-        const currentGoal = await this.deps.stateManager.loadGoal(goalId);
-        if (currentGoal) {
-          const allGoals = [currentGoal];
-          if (await this.deps.curiosityEngine.shouldExplore(allGoals)) {
-            const triggers = await this.deps.curiosityEngine.evaluateTriggers(allGoals);
-            if (triggers.length > 0) {
-              await this.deps.curiosityEngine.generateProposals(triggers, allGoals);
-            }
-          }
-        }
-      } catch (err) {
-        this.logger?.warn("CoreLoop: curiosity evaluation failed", { error: err instanceof Error ? err.message : String(err) });
-      }
-    }
+    // Run post-loop hooks (curiosity, memory lifecycle, archive, final report)
+    await runPostLoopHooks({
+      goalId,
+      finalStatus,
+      iterations,
+      deps: this.deps,
+      config: this.config,
+      logger: this.logger,
+      tryGenerateReport: (id, idx, r, g) => generateLoopReport(id, idx, r, g, this.deps.reportingEngine, this.logger),
+    });
 
     // After loop completes, trigger learning pipeline for goal completion
+    // (kept here so CoreLoopLearning state stays inside CoreLoop)
     if (finalStatus === "completed") {
       await this.learning.onGoalCompleted(goalId, this.deps, this.logger);
-    }
-
-    // Trigger memory lifecycle close on completion
-    if (this.deps.memoryLifecycleManager && finalStatus === "completed") {
-      try {
-        await this.deps.memoryLifecycleManager.onGoalClose(goalId, "completed");
-      } catch (err) {
-        // non-fatal
-        this.logger?.warn("CoreLoop: memoryLifecycleManager.onGoalClose failed", { goalId, error: err instanceof Error ? err.message : String(err) });
-      }
-    }
-
-    // Archive goal state on completion (only when autoArchive is explicitly enabled)
-    if (finalStatus === "completed" && this.config.autoArchive && !this.config.dryRun) {
-      try {
-        await this.deps.stateManager.archiveGoal(goalId);
-      } catch (err) {
-        // non-fatal
-        this.logger?.warn("CoreLoop: stateManager.archiveGoal failed", { goalId, error: err instanceof Error ? err.message : String(err) });
-      }
-    }
-
-    // Save a final run report for non-completed exits (max_iterations, error, stalled, stopped).
-    // Per-iteration reports are saved inside runOneIteration, but when an iteration exits early
-    // (e.g. gap calculation error, dependency block) no report is written for that iteration.
-    // This guarantees at least one report exists after every run so `tavori status` can display it.
-    if (finalStatus !== "completed" && iterations.length > 0) {
-      try {
-        const finalGoal = await this.deps.stateManager.loadGoal(goalId);
-        if (finalGoal) {
-          const lastIteration = iterations[iterations.length - 1]!;
-          await this.tryGenerateReport(goalId, lastIteration.loopIndex, lastIteration, finalGoal);
-        }
-      } catch (err) {
-        // non-fatal
-        this.logger?.warn("CoreLoop: final run report generation failed", { goalId, finalStatus, error: err instanceof Error ? err.message : String(err) });
-      }
     }
 
     return {
@@ -450,25 +321,7 @@ export class CoreLoop {
     const ctx: PhaseCtx = { deps: this.deps, config: this.config, logger: this.logger };
 
     // Default result (filled in progressively)
-    const result: LoopIterationResult = {
-      loopIndex,
-      goalId,
-      gapAggregate: 0,
-      driveScores: [],
-      taskResult: null,
-      stallDetected: false,
-      stallReport: null,
-      pivotOccurred: false,
-      completionJudgment: {
-        is_complete: false,
-        blocking_dimensions: [],
-        low_confidence_dimensions: [],
-        needs_verification_task: false,
-        checked_at: new Date().toISOString(),
-      },
-      elapsedMs: 0,
-      error: null,
-    };
+    const result: LoopIterationResult = makeEmptyIterationResult(goalId, loopIndex);
 
     // 1. Load goal + tree aggregation
     const loadedGoal = await loadGoalWithAggregation(ctx, goalId, result, startTime);
@@ -504,8 +357,9 @@ export class CoreLoop {
           phase: "Skipped",
           skipReason: result.skipReason,
         });
-        // Carry forward completion status from the previous snapshot's iteration
-        // so a completed goal is not forced through 5 more iterations.
+        // Carry forward completion status from the already-loaded goal so a
+        // completed goal is not forced through 5 more iterations.
+        // Reload fresh state to ensure we reflect any status changes since observation.
         const goalState = await this.deps.stateManager.loadGoal(goalId);
         if (goalState?.status === "completed") {
           result.completionJudgment.is_complete = true;
@@ -545,7 +399,7 @@ export class CoreLoop {
     if (!skipTaskGeneration) {
       const driveResult = await scoreDrivesAndCheckKnowledge(
         ctx, goalId, goal, gapVector, loopIndex, result, startTime,
-        (id, idx, r, g) => this.tryGenerateReport(id, idx, r, g)
+        (id, idx, r, g) => generateLoopReport(id, idx, r, g, this.deps.reportingEngine, this.logger)
       );
       if (!driveResult) return result;
       driveScores = driveResult.driveScores;
@@ -566,7 +420,7 @@ export class CoreLoop {
     // If it says not complete (e.g. low confidence), continue the loop normally
     // but skip task generation since there is no gap to close.
     if (skipTaskGeneration) {
-      await this.tryGenerateReport(goalId, loopIndex, result, goal);
+      await generateLoopReport(goalId, loopIndex, result, goal, this.deps.reportingEngine, this.logger);
       result.elapsedMs = Date.now() - startTime;
       return result;
     }
@@ -578,12 +432,12 @@ export class CoreLoop {
     // When parallelExecutor and generateTaskGroupFn are both provided, attempt
     // to decompose large tasks into a TaskGroup and execute in parallel waves.
     if (this.deps.parallelExecutor && this.deps.generateTaskGroupFn) {
-      const parallelResult = await this.tryRunParallel(
-        goalId, goal, gapAggregate, result, startTime
+      const parallelResult = await tryRunParallel(
+        goalId, goal, gapAggregate, result, startTime, this.deps, this.logger
       );
       if (parallelResult !== null) {
         // Parallel path completed — skip normal task cycle
-        await this.tryGenerateReport(goalId, loopIndex, result, goal);
+        await generateLoopReport(goalId, loopIndex, result, goal, this.deps.reportingEngine, this.logger);
         result.elapsedMs = Date.now() - startTime;
         return result;
       }
@@ -603,12 +457,12 @@ export class CoreLoop {
         this.logger
       ),
       () => this.learning.incrementTransferCounter(),
-      (id, idx, r, g) => this.tryGenerateReport(id, idx, r, g)
+      (id, idx, r, g) => generateLoopReport(id, idx, r, g, this.deps.reportingEngine, this.logger)
     );
     if (!taskCycleOk) return result;
 
     // 8. Report
-    await this.tryGenerateReport(goalId, loopIndex, result, goal);
+    await generateLoopReport(goalId, loopIndex, result, goal, this.deps.reportingEngine, this.logger);
 
     result.elapsedMs = Date.now() - startTime;
     return result;
@@ -655,168 +509,6 @@ export class CoreLoop {
     return this.stopped;
   }
 
-  // ─── Private Helpers ───
-
-  /**
-   * Attempt TaskGroup decomposition and parallel execution.
-   *
-   * Returns a ParallelExecutionResult when the parallel path ran successfully,
-   * or null when the caller should fall through to the normal single-task cycle.
-   * Updates result.taskResult with a synthetic entry reflecting the parallel outcome.
-   */
-  private async tryRunParallel(
-    goalId: string,
-    goal: Goal,
-    gapAggregate: number,
-    result: import("./loop/core-loop-types.js").LoopIterationResult,
-    startTime: number
-  ): Promise<ParallelExecutionResult | null> {
-    const { parallelExecutor, generateTaskGroupFn, adapterRegistry } = this.deps;
-    if (!parallelExecutor || !generateTaskGroupFn) return null;
-
-    // Only attempt parallel decomposition for multi-dimension goals (heuristic for "large")
-    if (goal.dimensions.length < 2) return null;
-
-    const topDimension = goal.dimensions[0]?.name ?? "";
-    const currentState = String(goal.dimensions[0]?.current_value ?? "unknown");
-    const availableAdapters = adapterRegistry?.listAdapters() ?? ["default"];
-
-    const contextBlock = this.deps.contextProvider
-      ? await this.deps.contextProvider(goalId, topDimension).catch(() => undefined)
-      : undefined;
-
-    let group: TaskGroup | null = null;
-    try {
-      group = await generateTaskGroupFn({
-        goalDescription: goal.title ?? goal.id,
-        targetDimension: topDimension,
-        currentState,
-        gap: gapAggregate,
-        availableAdapters,
-        contextBlock,
-      });
-    } catch (err) {
-      this.logger?.warn("CoreLoop: generateTaskGroupFn threw, falling back to single-task", {
-        goalId,
-        error: err instanceof Error ? err.message : String(err),
-      });
-      return null;
-    }
-
-    if (!group) {
-      // LLM chose not to decompose — fall through to normal flow
-      return null;
-    }
-
-    this.logger?.info("CoreLoop: TaskGroup detected, routing to ParallelExecutor", {
-      goalId,
-      subtaskCount: group.subtasks.length,
-    });
-
-    // Determine active strategy for feedback
-    let strategyId: string | undefined;
-    try {
-      const activeStrategy = await this.deps.strategyManager.getActiveStrategy(goalId);
-      strategyId = activeStrategy?.id;
-    } catch (err) {
-      // non-fatal
-      this.logger?.warn("CoreLoop: strategyManager.getActiveStrategy failed", { goalId, error: err instanceof Error ? err.message : String(err) });
-    }
-
-    let parallelResult: ParallelExecutionResult;
-    try {
-      parallelResult = await parallelExecutor.execute(group, { goalId, strategy_id: strategyId });
-    } catch (err) {
-      this.logger?.error("CoreLoop: ParallelExecutor threw, falling back to single-task", {
-        goalId,
-        error: err instanceof Error ? err.message : String(err),
-      });
-      return null;
-    }
-
-    // Map parallel outcome to a synthetic TaskCycleResult so downstream
-    // logic (reporting, portfolio recording) can work without branching.
-    const syntheticTask = group.subtasks[0];
-    if (syntheticTask) {
-      const action =
-        parallelResult.overall_verdict === "pass"
-          ? "completed"
-          : parallelResult.overall_verdict === "partial"
-          ? "keep"
-          : "escalate";
-
-      const confidence = parallelResult.overall_verdict === "pass" ? 0.9 : 0.4;
-      const now = new Date().toISOString();
-
-      result.taskResult = {
-        task: syntheticTask,
-        verificationResult: {
-          task_id: syntheticTask.id,
-          verdict: parallelResult.overall_verdict,
-          confidence,
-          evidence: parallelResult.results.map((r) => ({
-            layer: "mechanical" as const,
-            description: r.output || `subtask ${r.task_id}: ${r.verdict}`,
-            confidence,
-          })),
-          dimension_updates: [],
-          timestamp: now,
-        },
-        action,
-      };
-    }
-
-    result.elapsedMs = Date.now() - startTime;
-    return parallelResult;
-  }
-
-  private async tryGenerateReport(
-    goalId: string,
-    loopIndex: number,
-    iterationResult: LoopIterationResult,
-    goal: Goal
-  ): Promise<void> {
-    try {
-      const observation = goal.dimensions.map((d) => {
-        const prog = dimensionProgress(d.current_value, d.threshold);
-        let progress: number;
-        if (prog !== null) {
-          progress = prog;
-        } else if (typeof d.current_value === "number") {
-          progress = d.current_value;
-        } else {
-          progress = 0;
-        }
-        return {
-          dimensionName: d.name,
-          progress,
-          confidence: d.confidence,
-        };
-      });
-
-      const taskResult =
-        iterationResult.taskResult !== null
-          ? {
-              taskId: iterationResult.taskResult.task.id,
-              action: iterationResult.taskResult.action,
-              dimension: iterationResult.taskResult.task.primary_dimension,
-            }
-          : null;
-
-      const report = this.deps.reportingEngine.generateExecutionSummary({
-        goalId,
-        loopIndex,
-        observation,
-        gapAggregate: iterationResult.gapAggregate,
-        taskResult,
-        stallDetected: iterationResult.stallDetected,
-        pivotOccurred: iterationResult.pivotOccurred,
-        elapsedMs: iterationResult.elapsedMs,
-      });
-      await this.deps.reportingEngine.saveReport(report);
-    } catch (err) {
-      // Report generation failure is non-fatal
-      this.logger?.warn("CoreLoop: report generation failed", { goalId, error: err instanceof Error ? err.message : String(err) });
-    }
-  }
 }
+
+

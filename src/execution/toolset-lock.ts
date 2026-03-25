@@ -7,10 +7,12 @@
 
 export class ToolsetLock {
   private readonly _snapshot: readonly string[];
+  private readonly _snapshotSet: ReadonlySet<string>;
   private _locked: boolean;
 
   constructor(tools: string[]) {
     this._snapshot = Object.freeze([...tools].sort());
+    this._snapshotSet = new Set(this._snapshot);
     this._locked = false;
   }
 
@@ -35,8 +37,9 @@ export class ToolsetLock {
       return { valid: true, added: [], removed: [] };
     }
     const current = [...currentTools].sort();
-    const added = current.filter((t) => !this._snapshot.includes(t));
-    const removed = this._snapshot.filter((t) => !current.includes(t));
+    const currentSet = new Set(current);
+    const added = current.filter((t) => !this._snapshotSet.has(t));
+    const removed = this._snapshot.filter((t) => !currentSet.has(t));
     return { valid: added.length === 0 && removed.length === 0, added, removed };
   }
 

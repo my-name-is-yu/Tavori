@@ -1,4 +1,5 @@
 import type { CoreLoopDeps, ResolvedLoopConfig, LoopIterationResult } from "./core-loop-types.js";
+import { makeEmptyIterationResult } from "./core-loop-types.js";
 import type { Logger } from "../runtime/logger.js";
 import type { IterationBudget } from "./iteration-budget.js";
 
@@ -23,10 +24,13 @@ export async function runTreeIteration(
   // If root already has children (e.g. resumed session), reset all nodes to "idle"
   // so that stale "running" statuses from a prior run do not block node selection.
   const rootGoalForDecomp = await deps.stateManager.loadGoal(rootId);
+  // On the first iteration, if root already has children (resumed session), reset all
+  // nodes to "idle" so stale "running" statuses from a prior run do not block selection.
   if (rootGoalForDecomp && rootGoalForDecomp.children_ids.length > 0 && loopIndex === 0) {
     const defaultConfig = { min_specificity: 0.7, max_depth: 3, parallel_loop_limit: 3, auto_prune_threshold: 0.3 };
     await deps.treeLoopOrchestrator?.startTreeExecution(rootId, defaultConfig);
   }
+  let decomposed = false;
   if (rootGoalForDecomp && rootGoalForDecomp.children_ids.length === 0) {
     const defaultConfig = { min_specificity: 0.7, max_depth: 3, parallel_loop_limit: 3, auto_prune_threshold: 0.3 };
     if (deps.goalRefiner) {
@@ -35,6 +39,7 @@ export async function runTreeIteration(
         const refineResult = await deps.goalRefiner.refine(rootId);
         logger?.info("CoreLoop: refinement complete", { rootId, leaf: refineResult.leaf });
         await deps.treeLoopOrchestrator?.startTreeExecution(rootId, defaultConfig);
+        decomposed = true;
       } catch (err) {
         logger?.warn("CoreLoop: refinement failed, falling back to flat iteration", { rootId, err });
       }
@@ -44,6 +49,7 @@ export async function runTreeIteration(
         const decompResult = await deps.goalTreeManager.decomposeGoal(rootId, defaultConfig);
         logger?.info("CoreLoop: decomposition complete", { rootId, childCount: decompResult.children.length });
         await deps.treeLoopOrchestrator?.startTreeExecution(rootId, defaultConfig);
+        decomposed = true;
       } catch (err) {
         logger?.warn("CoreLoop: decomposition failed, falling back to flat iteration", { rootId, err });
       }
@@ -54,7 +60,9 @@ export async function runTreeIteration(
   // flat iteration — tree mode cannot proceed without subgoals.
   // We check this regardless of whether goalTreeManager was present, so that the
   // no-goalTreeManager path (where decomposition was skipped) is also covered.
-  const rootGoalCheck = await deps.stateManager.loadGoal(rootId);
+  const rootGoalCheck = decomposed
+    ? await deps.stateManager.loadGoal(rootId)
+    : rootGoalForDecomp;
   if (rootGoalCheck && rootGoalCheck.children_ids.length === 0) {
     logger?.info("[TREE] Goal has no subgoals, falling back to flat iteration", { rootId });
     return runOneIteration(rootId, loopIndex);
@@ -72,19 +80,7 @@ export async function runTreeIteration(
           : deps.satisficingJudge.isGoalComplete(rootGoal))
       : { is_complete: false, blocking_dimensions: [], low_confidence_dimensions: [], needs_verification_task: false, checked_at: new Date().toISOString() };
 
-    return {
-      loopIndex,
-      goalId: rootId,
-      gapAggregate: 0,
-      driveScores: [],
-      taskResult: null,
-      stallDetected: false,
-      stallReport: null,
-      pivotOccurred: false,
-      completionJudgment: isComplete,
-      elapsedMs: 0,
-      error: null,
-    };
+    return makeEmptyIterationResult(rootId, loopIndex, { completionJudgment: isComplete });
   }
 
   // 3. Enforce per-node limit if a shared budget with per_node_limit is configured
@@ -97,27 +93,10 @@ export async function runTreeIteration(
         { selectedNodeId, nodeCount }
       );
       // Return a no-op result so the loop can continue with the next node
-      return {
-        loopIndex,
-        goalId: rootId,
-        gapAggregate: 0,
-        driveScores: [],
-        taskResult: null,
-        stallDetected: false,
-        stallReport: null,
-        pivotOccurred: false,
-        completionJudgment: {
-          is_complete: false,
-          blocking_dimensions: [],
-          low_confidence_dimensions: [],
-          needs_verification_task: false,
-          checked_at: new Date().toISOString(),
-        },
-        elapsedMs: 0,
-        error: null,
-        skipped: true as const,
+      return makeEmptyIterationResult(rootId, loopIndex, {
+        skipped: true,
         skipReason: "per_node_limit",
-      };
+      });
     }
     nodeConsumedMap.set(selectedNodeId, nodeCount + 1);
   }
