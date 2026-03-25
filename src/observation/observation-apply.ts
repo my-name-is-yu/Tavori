@@ -78,7 +78,7 @@ export async function applyObservation(
     if (
       dim.threshold.type === 'min' &&
       effectiveValue < dim.current_value &&
-      entry.confidence < (dim.confidence ?? 0)
+      entry.confidence < (dim.confidence ?? 1)
     ) {
       effectiveValue = dim.current_value;
     }
