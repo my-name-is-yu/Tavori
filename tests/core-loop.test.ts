@@ -60,6 +60,7 @@ const mocks = vi.hoisted(() => {
       writeRaw: vi.fn().mockResolvedValue(undefined),
       saveGoal: vi.fn().mockResolvedValue(undefined),
       archiveGoal: vi.fn().mockResolvedValue(undefined),
+      restoreFromCheckpoint: vi.fn().mockResolvedValue(undefined),
     },
     stallDetector: {
       resetEscalation: vi.fn().mockResolvedValue(undefined),

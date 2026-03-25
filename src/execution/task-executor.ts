@@ -59,15 +59,11 @@ export async function executeTask(
   );
 
   // Convert to AgentTask
+  // If the adapter provides formatPrompt, delegate prompt construction to it.
+  // Otherwise use the default builder.
   let prompt: string;
-  if (adapter.adapterType === "github_issue") {
-    // For github_issue adapter, format as a structured JSON block so
-    // GitHubIssueAdapter.parsePrompt extracts a proper title instead of
-    // picking up the context-slot label as the issue title.
-    const titleLine = task.work_description.split("\n")[0]?.trim() ?? task.work_description;
-    const title = titleLine.length > 120 ? titleLine.slice(0, 117) + "..." : titleLine;
-    const issuePayload = JSON.stringify({ title, body: task.work_description });
-    prompt = `\`\`\`github-issue\n${issuePayload}\n\`\`\``;
+  if (adapter.formatPrompt) {
+    prompt = adapter.formatPrompt(task, workspaceContext);
   } else {
     // Build prompt with task description as primary content
     const scopeConstraints =
@@ -120,9 +116,9 @@ export async function executeTask(
   let result: AgentResult;
   try {
     // Generic dedup check — any adapter may optionally implement checkDuplicate
-    if ('checkDuplicate' in adapter && typeof (adapter as unknown as Record<string, unknown>).checkDuplicate === 'function') {
+    if (adapter.checkDuplicate) {
       try {
-        const isDuplicate = await (adapter as unknown as { checkDuplicate: (t: AgentTask) => Promise<boolean> }).checkDuplicate(agentTask);
+        const isDuplicate = await adapter.checkDuplicate(agentTask);
         if (isDuplicate) {
           // Return synthetic result — task already exists, skip execution
           result = {

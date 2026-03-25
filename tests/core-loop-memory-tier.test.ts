@@ -350,9 +350,11 @@ describe("CoreLoop memory tier wiring", () => {
         0,
         result,
         Date.now(),
-        vi.fn().mockResolvedValue(undefined),
-        vi.fn().mockReturnValue(1),
-        vi.fn()
+        {
+          handleCapabilityAcquisition: vi.fn().mockResolvedValue(undefined),
+          incrementTransferCounter: vi.fn().mockReturnValue(1),
+          tryGenerateReport: vi.fn(),
+        }
       );
 
       expect(selectForWorkingMemoryTierAware).toHaveBeenCalled();
@@ -402,9 +404,11 @@ describe("CoreLoop memory tier wiring", () => {
         0,
         result,
         Date.now(),
-        vi.fn().mockResolvedValue(undefined),
-        vi.fn().mockReturnValue(1),
-        vi.fn()
+        {
+          handleCapabilityAcquisition: vi.fn().mockResolvedValue(undefined),
+          incrementTransferCounter: vi.fn().mockReturnValue(1),
+          tryGenerateReport: vi.fn(),
+        }
       );
 
       expect(selectForWorkingMemoryTierAware).toHaveBeenCalled();

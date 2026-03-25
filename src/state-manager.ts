@@ -9,15 +9,10 @@ import { ObservationLogSchema, ObservationLogEntrySchema } from "./types/state.j
 import { GapHistoryEntrySchema } from "./types/gap.js";
 import type { Goal, GoalTree } from "./types/goal.js";
 import type { ObservationLog, ObservationLogEntry } from "./types/state.js";
-import type { RescheduleOptions } from "./types/state.js";
 import type { GapHistoryEntry } from "./types/gap.js";
 import type { PaceSnapshot } from "./types/goal.js";
-import {
-  getMilestones as _getMilestones,
-  getOverdueMilestones as _getOverdueMilestones,
-  evaluatePace as _evaluatePace,
-  generateRescheduleOptions as _generateRescheduleOptions,
-} from "./goal/milestone-evaluator.js";
+import { LoopCheckpointSchema } from "./types/checkpoint.js";
+import type { TrustManager } from "./traits/trust-manager.js";
 
 /**
  * StateManager handles persistence of goals, state vectors, observation logs,
@@ -392,24 +387,6 @@ export class StateManager {
     await this.saveGapHistory(goalId, history);
   }
 
-  // ─── Milestone Tracking (delegates to milestone-evaluator.ts) ───
-
-  getMilestones(goals: Goal[]): Goal[] {
-    return _getMilestones(goals);
-  }
-
-  getOverdueMilestones(goals: Goal[]): Goal[] {
-    return _getOverdueMilestones(goals);
-  }
-
-  evaluatePace(milestone: Goal, currentAchievement: number): PaceSnapshot {
-    return _evaluatePace(milestone, currentAchievement);
-  }
-
-  generateRescheduleOptions(milestone: Goal, currentAchievement: number): RescheduleOptions {
-    return _generateRescheduleOptions(milestone, currentAchievement);
-  }
-
   /**
    * Save a pace snapshot to a milestone goal (persists to disk).
    */
@@ -425,11 +402,10 @@ export class StateManager {
   // ─── Goal Tree Traversal ───
 
   /**
-   * Get the full goal tree rooted at rootId.
-   * Returns null if the root goal doesn't exist.
-   * Returns goals in BFS order: root first, then children level by level.
+   * BFS traversal starting at rootId.
+   * Returns null if rootId doesn't exist, otherwise returns goals in BFS order.
    */
-  async getGoalTree(rootId: string): Promise<Goal[] | null> {
+  private async bfsCollect(rootId: string): Promise<Goal[] | null> {
     const root = await this.loadGoal(rootId);
     if (root === null) return null;
 
@@ -458,35 +434,20 @@ export class StateManager {
   }
 
   /**
+   * Get the full goal tree rooted at rootId.
+   * Returns null if the root goal doesn't exist.
+   * Returns goals in BFS order: root first, then children level by level.
+   */
+  async getGoalTree(rootId: string): Promise<Goal[] | null> {
+    return this.bfsCollect(rootId);
+  }
+
+  /**
    * Get all goals in the subtree of goalId (including goalId itself).
    * Returns [] if goal not found.
    */
   async getSubtree(goalId: string): Promise<Goal[]> {
-    const root = await this.loadGoal(goalId);
-    if (root === null) return [];
-
-    const result: Goal[] = [];
-    const queue: string[] = [goalId];
-    const visited = new Set<string>();
-
-    while (queue.length > 0) {
-      const currentId = queue.shift()!;
-      if (visited.has(currentId)) continue;
-      visited.add(currentId);
-
-      const goal = await this.loadGoal(currentId);
-      if (goal === null) continue;
-
-      result.push(goal);
-
-      for (const childId of goal.children_ids) {
-        if (!visited.has(childId)) {
-          queue.push(childId);
-        }
-      }
-    }
-
-    return result;
+    return (await this.bfsCollect(goalId)) ?? [];
   }
 
   /**
@@ -529,6 +490,59 @@ export class StateManager {
       await fsp.access(path.join(this.baseDir, "goals", goalId, "goal.json"));
       return true;
     } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Restore dimension values and trust balance from a loop crash-recovery checkpoint.
+   * Uses Zod validation on both the checkpoint and the goal.
+   * Non-fatal: returns false if no checkpoint exists or restoration fails.
+   */
+  async restoreFromCheckpoint(
+    goalId: string,
+    adapterType: string,
+    trustManager?: TrustManager
+  ): Promise<boolean> {
+    try {
+      const raw = await this.atomicRead<unknown>(
+        path.join(this.baseDir, "goals", goalId, "checkpoint.json")
+      );
+      if (raw === null) return false;
+
+      const parseResult = LoopCheckpointSchema.safeParse(raw);
+      if (!parseResult.success) {
+        this.logger?.warn(`[StateManager] Invalid checkpoint for "${goalId}": ${parseResult.error.message}`);
+        return false;
+      }
+      const cp = parseResult.data;
+
+      // Restore dimension values from snapshot
+      if (cp.dimension_snapshot) {
+        const goal = await this.loadGoal(goalId);
+        if (goal !== null) {
+          const updatedDimensions = goal.dimensions.map((dim) => {
+            const snapshotVal = cp.dimension_snapshot![dim.name];
+            return typeof snapshotVal === "number"
+              ? { ...dim, current_value: snapshotVal }
+              : dim;
+          });
+          await this.saveGoal({ ...goal, dimensions: updatedDimensions });
+        }
+      }
+
+      // Restore trust balance for the adapter domain
+      if (typeof cp.trust_snapshot === "number" && trustManager) {
+        try {
+          await trustManager.setOverride(adapterType, cp.trust_snapshot, "checkpoint_restore");
+        } catch {
+          // Non-fatal — trust restore failure should not abort the run
+        }
+      }
+
+      return true;
+    } catch {
+      // Checkpoint restore failure is non-fatal — caller starts from beginning
       return false;
     }
   }

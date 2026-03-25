@@ -2,6 +2,12 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { StateManager } from "../src/state-manager.js";
+import {
+  getMilestones,
+  getOverdueMilestones,
+  evaluatePace,
+  generateRescheduleOptions,
+} from "../src/goal/milestone-evaluator.js";
 import type { Goal, GoalTree } from "../src/types/goal.js";
 import type { ObservationLogEntry } from "../src/types/state.js";
 import type { GapHistoryEntry } from "../src/types/gap.js";
@@ -301,18 +307,18 @@ describe("StateManager", async () => {
         const g3 = makeGoal({ id: "g3", node_type: "subgoal" });
         const g4 = makeMilestone({ id: "m2" });
 
-        const milestones = manager.getMilestones([g1, g2, g3, g4]);
+        const milestones = getMilestones([g1, g2, g3, g4]);
         expect(milestones).toHaveLength(2);
         expect(milestones.map((m) => m.id)).toEqual(["m1", "m2"]);
       });
 
       it("returns empty array when no milestones", () => {
         const goals = [makeGoal({ id: "g1" }), makeGoal({ id: "g2", node_type: "subgoal" })];
-        expect(manager.getMilestones(goals)).toHaveLength(0);
+        expect(getMilestones(goals)).toHaveLength(0);
       });
 
       it("returns empty array for empty input", () => {
-        expect(manager.getMilestones([])).toHaveLength(0);
+        expect(getMilestones([])).toHaveLength(0);
       });
     });
 
@@ -325,20 +331,20 @@ describe("StateManager", async () => {
         const upcoming = makeMilestone({ id: "m-upcoming", target_date: futureDate });
         const noDate = makeMilestone({ id: "m-nodate", target_date: null });
 
-        const result = manager.getOverdueMilestones([overdue, upcoming, noDate]);
+        const result = getOverdueMilestones([overdue, upcoming, noDate]);
         expect(result).toHaveLength(1);
         expect(result[0].id).toBe("m-overdue");
       });
 
       it("excludes milestones without a target_date", () => {
         const noDate = makeMilestone({ id: "m-nodate", target_date: null });
-        expect(manager.getOverdueMilestones([noDate])).toHaveLength(0);
+        expect(getOverdueMilestones([noDate])).toHaveLength(0);
       });
 
       it("returns empty array when no milestones are overdue", () => {
         const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
         const m = makeMilestone({ id: "m-future", target_date: futureDate });
-        expect(manager.getOverdueMilestones([m])).toHaveLength(0);
+        expect(getOverdueMilestones([m])).toHaveLength(0);
       });
     });
 
@@ -350,7 +356,7 @@ describe("StateManager", async () => {
         const targetDate = new Date(now + 80 * 24 * 60 * 60 * 1000).toISOString(); // 80 days from now
         const milestone = makeMilestone({ id: "m-ontrack", created_at: createdAt, target_date: targetDate });
 
-        const snapshot = manager.evaluatePace(milestone, 0.2);
+        const snapshot = evaluatePace(milestone, 0.2);
         expect(snapshot.status).toBe("on_track");
         expect(snapshot.achievement_ratio).toBe(0.2);
         expect(snapshot.pace_ratio).toBeGreaterThanOrEqual(0.8);
@@ -363,7 +369,7 @@ describe("StateManager", async () => {
         const targetDate = new Date(now + 50 * 24 * 60 * 60 * 1000).toISOString(); // 50 days from now
         const milestone = makeMilestone({ id: "m-atrisk", created_at: createdAt, target_date: targetDate });
 
-        const snapshot = manager.evaluatePace(milestone, 0.3);
+        const snapshot = evaluatePace(milestone, 0.3);
         expect(snapshot.status).toBe("at_risk");
         expect(snapshot.pace_ratio).toBeGreaterThanOrEqual(0.5);
         expect(snapshot.pace_ratio).toBeLessThan(0.8);
@@ -376,14 +382,14 @@ describe("StateManager", async () => {
         const targetDate = new Date(now + 20 * 24 * 60 * 60 * 1000).toISOString(); // 20 days from now
         const milestone = makeMilestone({ id: "m-behind", created_at: createdAt, target_date: targetDate });
 
-        const snapshot = manager.evaluatePace(milestone, 0.2);
+        const snapshot = evaluatePace(milestone, 0.2);
         expect(snapshot.status).toBe("behind");
         expect(snapshot.pace_ratio).toBeLessThan(0.5);
       });
 
       it("returns on_track when no target_date is set", () => {
         const milestone = makeMilestone({ id: "m-nodate", target_date: null });
-        const snapshot = manager.evaluatePace(milestone, 0.5);
+        const snapshot = evaluatePace(milestone, 0.5);
         expect(snapshot.status).toBe("on_track");
         expect(snapshot.pace_ratio).toBe(1);
         expect(snapshot.elapsed_ratio).toBe(0);
@@ -399,7 +405,7 @@ describe("StateManager", async () => {
           target_date: futureDate,
         });
 
-        const snapshot = manager.evaluatePace(milestone, 0.0);
+        const snapshot = evaluatePace(milestone, 0.0);
         // Should not throw; pace_ratio = 1 when elapsed_ratio ≈ 0
         expect(snapshot.status).toBe("on_track");
         expect(snapshot.pace_ratio).toBe(1);
@@ -411,7 +417,7 @@ describe("StateManager", async () => {
         const targetDate = new Date(now + 90 * 24 * 60 * 60 * 1000).toISOString();
         const milestone = makeMilestone({ id: "m-ts", created_at: createdAt, target_date: targetDate });
 
-        const snapshot = manager.evaluatePace(milestone, 0.1);
+        const snapshot = evaluatePace(milestone, 0.1);
         expect(snapshot.evaluated_at).toBeTruthy();
         expect(() => new Date(snapshot.evaluated_at)).not.toThrow();
       });
@@ -422,7 +428,7 @@ describe("StateManager", async () => {
         const milestone = makeMilestone({ id: "m-save" });
         await manager.saveGoal(milestone);
 
-        const snapshot = manager.evaluatePace(milestone, 0.5);
+        const snapshot = evaluatePace(milestone, 0.5);
         await manager.savePaceSnapshot("m-save", snapshot);
 
         const loaded = await manager.loadGoal("m-save");
@@ -454,7 +460,7 @@ describe("StateManager", async () => {
           target_date: targetDate,
         });
 
-        const opts = manager.generateRescheduleOptions(milestone, 0.1);
+        const opts = generateRescheduleOptions(milestone, 0.1);
 
         expect(opts.milestone_id).toBe("m-behind-opts");
         expect(opts.options).toHaveLength(3);
@@ -475,7 +481,7 @@ describe("StateManager", async () => {
           target_date: targetDate,
         });
 
-        const opts = manager.generateRescheduleOptions(milestone, 0.2);
+        const opts = generateRescheduleOptions(milestone, 0.2);
         const extendOpt = opts.options.find((o) => o.option_type === "extend_deadline")!;
 
         expect(extendOpt.new_target_date).not.toBeNull();
@@ -487,7 +493,7 @@ describe("StateManager", async () => {
 
       it("sets renegotiate option with no new values", () => {
         const milestone = makeMilestone({ id: "m-renegotiate" });
-        const opts = manager.generateRescheduleOptions(milestone, 0.1);
+        const opts = generateRescheduleOptions(milestone, 0.1);
         const renegotiateOpt = opts.options.find((o) => o.option_type === "renegotiate")!;
 
         expect(renegotiateOpt.new_target_date).toBeNull();
@@ -496,19 +502,19 @@ describe("StateManager", async () => {
 
       it("uses parent_id as goal_id when set", () => {
         const milestone = makeMilestone({ id: "m-child", parent_id: "parent-goal" });
-        const opts = manager.generateRescheduleOptions(milestone, 0.5);
+        const opts = generateRescheduleOptions(milestone, 0.5);
         expect(opts.goal_id).toBe("parent-goal");
       });
 
       it("falls back to milestone id as goal_id when no parent_id", () => {
         const milestone = makeMilestone({ id: "m-root", parent_id: null });
-        const opts = manager.generateRescheduleOptions(milestone, 0.5);
+        const opts = generateRescheduleOptions(milestone, 0.5);
         expect(opts.goal_id).toBe("m-root");
       });
 
       it("includes generated_at timestamp", () => {
         const milestone = makeMilestone({ id: "m-ts-opts" });
-        const opts = manager.generateRescheduleOptions(milestone, 0.5);
+        const opts = generateRescheduleOptions(milestone, 0.5);
         expect(opts.generated_at).toBeTruthy();
         expect(() => new Date(opts.generated_at)).not.toThrow();
       });

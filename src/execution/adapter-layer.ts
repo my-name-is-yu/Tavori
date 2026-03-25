@@ -51,6 +51,12 @@ export interface IAdapter {
   listExistingTasks?(): Promise<string[]>;
   /** Optional: adapter-specific duplicate detection. Returns true if a duplicate exists. Fail-open: return false on error. */
   checkDuplicate?(task: AgentTask): Promise<boolean>;
+  /**
+   * Optional: format a prompt string from a task and optional workspace context.
+   * When implemented, task-executor uses this instead of the default prompt builder.
+   * Receives the raw Task (not AgentTask) so the adapter can access work_description etc.
+   */
+  formatPrompt?(task: import("../types/task.js").Task, workspaceContext?: string): string;
 }
 
 // ─── Circuit Breaker ───

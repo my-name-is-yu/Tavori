@@ -1,5 +1,18 @@
 import { z } from 'zod';
 
+/**
+ * Loop-level crash-recovery checkpoint (§4.8).
+ * Distinct from CheckpointSchema, which handles multi-agent session transfer.
+ */
+export const LoopCheckpointSchema = z.object({
+  cycle_number: z.number().int().nonnegative(),
+  last_verified_task_id: z.string().optional(),
+  dimension_snapshot: z.record(z.string(), z.number()).optional(),
+  trust_snapshot: z.number().optional(),
+  timestamp: z.string().optional(),
+});
+export type LoopCheckpoint = z.infer<typeof LoopCheckpointSchema>;
+
 export const CheckpointMetadataSchema = z.object({
   strategy_id: z.string().optional(),
   iteration_count: z.number().optional(),

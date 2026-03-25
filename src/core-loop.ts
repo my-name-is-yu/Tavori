@@ -32,6 +32,7 @@ import {
   detectStallsAndRebalance,
   checkDependencyBlock,
   runTaskCycleWithContext,
+  type LoopCallbacks,
 } from "./loop/core-loop-phases-b.js";
 import { handleCapabilityAcquisition } from "./loop/core-loop-capability.js";
 import { CoreLoopLearning } from "./loop/core-loop-learning.js";
@@ -446,9 +447,8 @@ export class CoreLoop {
     }
 
     // 7. Task cycle with context
-    const taskCycleOk = await runTaskCycleWithContext(
-      ctx, goalId, goal, gapVector, driveScores, highDissatisfactionDimensions, loopIndex, result, startTime,
-      (task, gId, adapter) => handleCapabilityAcquisition(
+    const loopCallbacks: LoopCallbacks = {
+      handleCapabilityAcquisition: (task, gId, adapter) => handleCapabilityAcquisition(
         task as Parameters<typeof handleCapabilityAcquisition>[0],
         gId,
         adapter as Parameters<typeof handleCapabilityAcquisition>[2],
@@ -456,8 +456,12 @@ export class CoreLoop {
         this.learning.getCapabilityFailures(),
         this.logger
       ),
-      () => this.learning.incrementTransferCounter(),
-      (id, idx, r, g) => generateLoopReport(id, idx, r, g, this.deps.reportingEngine, this.logger)
+      incrementTransferCounter: () => this.learning.incrementTransferCounter(),
+      tryGenerateReport: (id, idx, r, g) => generateLoopReport(id, idx, r, g, this.deps.reportingEngine, this.logger),
+    };
+    const taskCycleOk = await runTaskCycleWithContext(
+      ctx, goalId, goal, gapVector, driveScores, highDissatisfactionDimensions, loopIndex, result, startTime,
+      loopCallbacks
     );
     if (!taskCycleOk) return result;
 

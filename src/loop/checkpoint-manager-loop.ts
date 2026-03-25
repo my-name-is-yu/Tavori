@@ -66,6 +66,7 @@ export async function saveLoopCheckpoint(
 
 /**
  * Restore dimension values and trust balance from a checkpoint if one exists.
+ * Delegates to StateManager.restoreFromCheckpoint which uses Zod validation.
  * Non-fatal: restore failures do not abort the run.
  */
 export async function restoreLoopCheckpoint(
@@ -74,51 +75,5 @@ export async function restoreLoopCheckpoint(
   adapterType: string,
   trustManager: TrustManager | undefined
 ): Promise<void> {
-  try {
-    const checkpoint = await stateManager.readRaw(`goals/${goalId}/checkpoint.json`);
-    if (
-      checkpoint &&
-      typeof checkpoint === "object" &&
-      typeof (checkpoint as Record<string, unknown>).cycle_number === "number"
-    ) {
-      const cp = checkpoint as {
-        cycle_number: number;
-        last_verified_task_id?: string;
-        dimension_snapshot?: Record<string, number>;
-        trust_snapshot?: number;
-        timestamp?: string;
-      };
-      // Restore dimension values from snapshot
-      if (cp.dimension_snapshot && typeof cp.dimension_snapshot === "object") {
-        const goalData = await stateManager.readRaw(`goals/${goalId}/goal.json`);
-        if (goalData && typeof goalData === "object") {
-          const goalObj = goalData as Record<string, unknown>;
-          const dims = goalObj.dimensions as Array<Record<string, unknown>> | undefined;
-          if (dims) {
-            for (const dim of dims) {
-              const snapshotVal = cp.dimension_snapshot[String(dim.name)];
-              if (typeof snapshotVal === "number") {
-                dim.current_value = snapshotVal;
-              }
-            }
-            await stateManager.writeRaw(`goals/${goalId}/goal.json`, goalObj);
-          }
-        }
-      }
-      // Restore trust balance for the adapter domain from snapshot
-      if (typeof cp.trust_snapshot === "number" && trustManager) {
-        try {
-          await trustManager.setOverride(
-            adapterType,
-            cp.trust_snapshot,
-            "checkpoint_restore"
-          );
-        } catch {
-          // Non-fatal — trust restore failure should not abort the run
-        }
-      }
-    }
-  } catch {
-    // Checkpoint restore failure is non-fatal — start from beginning
-  }
+  await stateManager.restoreFromCheckpoint(goalId, adapterType, trustManager);
 }

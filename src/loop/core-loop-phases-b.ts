@@ -15,6 +15,10 @@ import {
   type LoopIterationResult,
 } from "./core-loop-types.js";
 import type { PhaseCtx } from "./core-loop-phases.js";
+import {
+  getMilestones,
+  evaluatePace,
+} from "../goal/milestone-evaluator.js";
 
 // ─── Phase 5 ───
 
@@ -58,7 +62,7 @@ export async function checkCompletionAndMilestones(
       if (child) allGoals.push(child);
     }
 
-    const milestones = ctx.deps.stateManager.getMilestones(allGoals);
+    const milestones = getMilestones(allGoals);
     if (milestones.length > 0) {
       const milestoneAlerts: Array<{ goalId: string; status: string; pace_ratio: number }> = [];
       for (const milestone of milestones) {
@@ -68,7 +72,7 @@ export async function checkCompletionAndMilestones(
             ? Math.min((milestone.dimensions[0].current_value as number) / 100, 1)
             : 0);
 
-        const snapshot = ctx.deps.stateManager.evaluatePace(milestone, currentAchievement);
+        const snapshot = evaluatePace(milestone, currentAchievement);
         await ctx.deps.stateManager.savePaceSnapshot(milestone.id, snapshot);
 
         if (snapshot.status === "at_risk" || snapshot.status === "behind") {
@@ -379,6 +383,13 @@ export function checkDependencyBlock(
 
 // ─── Phase 7 ───
 
+/** Callbacks passed to runTaskCycleWithContext to keep mutable state and side-effects on CoreLoop. */
+export interface LoopCallbacks {
+  handleCapabilityAcquisition: (task: unknown, goalId: string, adapter: unknown) => Promise<void>;
+  incrementTransferCounter: () => number;
+  tryGenerateReport: (goalId: string, loopIndex: number, result: LoopIterationResult, goal: Goal) => void;
+}
+
 /** Collect context, run task cycle, handle capability acquisition,
  * transfer detection, and post-task completion re-check.
  * Returns true on success, false if the caller should return result early.
@@ -393,10 +404,9 @@ export async function runTaskCycleWithContext(
   loopIndex: number,
   result: LoopIterationResult,
   startTime: number,
-  handleCapabilityAcquisition: (task: unknown, goalId: string, adapter: unknown) => Promise<void>,
-  incrementTransferCounter: () => number,
-  tryGenerateReport: (goalId: string, loopIndex: number, result: LoopIterationResult, goal: Goal) => void
+  callbacks: LoopCallbacks
 ): Promise<boolean> {
+  const { handleCapabilityAcquisition, incrementTransferCounter, tryGenerateReport } = callbacks;
   try {
     const driveContext = buildDriveContext(goal);
     const adapter = ctx.deps.adapterRegistry.getAdapter(ctx.config.adapterType);

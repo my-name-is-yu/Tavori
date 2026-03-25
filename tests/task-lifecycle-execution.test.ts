@@ -327,6 +327,11 @@ describe("TaskLifecycle", async () => {
       let receivedPrompt = "";
       const adapter: import("../src/execution/task-lifecycle.js").IAdapter = {
         adapterType: "github_issue",
+        formatPrompt(t: Task) {
+          const titleLine = t.work_description.split("\n")[0]?.trim() ?? t.work_description;
+          const title = titleLine.length > 120 ? titleLine.slice(0, 117) + "..." : titleLine;
+          return `\`\`\`github-issue\n${JSON.stringify({ title, body: t.work_description })}\n\`\`\``;
+        },
         async execute(agentTask) {
           receivedPrompt = agentTask.prompt;
           return {
@@ -353,6 +358,11 @@ describe("TaskLifecycle", async () => {
       let receivedPrompt = "";
       const adapter: import("../src/execution/task-lifecycle.js").IAdapter = {
         adapterType: "github_issue",
+        formatPrompt(t: Task) {
+          const titleLine = t.work_description.split("\n")[0]?.trim() ?? t.work_description;
+          const title = titleLine.length > 120 ? titleLine.slice(0, 117) + "..." : titleLine;
+          return `\`\`\`github-issue\n${JSON.stringify({ title, body: t.work_description })}\n\`\`\``;
+        },
         async execute(agentTask) {
           receivedPrompt = agentTask.prompt;
           return {

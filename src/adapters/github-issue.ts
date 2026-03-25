@@ -11,6 +11,7 @@ import { spawn } from "node:child_process";
 import type { IAdapter, AgentTask, AgentResult } from "../execution/adapter-layer.js";
 import { spawnWithTimeout } from "./spawn-helper.js";
 import type { Logger } from "../runtime/logger.js";
+import type { Task } from "../types/task.js";
 
 // ─── Config ───
 
@@ -117,6 +118,18 @@ export class GitHubIssueAdapter implements IAdapter {
         });
       }
     });
+  }
+
+  /**
+   * Format a prompt as a structured ```github-issue JSON block so that
+   * parsePrompt() can extract a proper issue title without picking up
+   * context-slot labels as the title.
+   */
+  formatPrompt(task: Task): string {
+    const titleLine = task.work_description.split("\n")[0]?.trim() ?? task.work_description;
+    const title = titleLine.length > 120 ? titleLine.slice(0, 117) + "..." : titleLine;
+    const issuePayload = JSON.stringify({ title, body: task.work_description });
+    return `\`\`\`github-issue\n${issuePayload}\n\`\`\``;
   }
 
   /**
