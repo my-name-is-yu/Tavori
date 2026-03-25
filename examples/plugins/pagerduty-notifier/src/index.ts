@@ -1,6 +1,6 @@
 // ─── PagerDutyNotifier ───
 //
-// A Tavori notifier plugin that sends events to PagerDuty via Events API v2.
+// A SeedPulse notifier plugin that sends events to PagerDuty via Events API v2.
 // Uses native fetch — no external dependencies required.
 
 import type {
@@ -59,7 +59,7 @@ export class PagerDutyNotifier implements INotifier {
       event_action: "trigger",
       payload: {
         summary: event.summary,
-        source: this.config.source ?? "tavori",
+        source: this.config.source ?? "seedpulse",
         severity: SEVERITY_MAP[event.severity],
         timestamp: event.timestamp,
         component: this.config.component,

@@ -25,7 +25,7 @@ export interface ActionResult {
 // ─── ActionHandler ───
 
 /**
- * Executes recognized intents against Tavori modules.
+ * Executes recognized intents against SeedPulse modules.
  * Each handler maps an IntentType to a concrete operation.
  */
 export class ActionHandler {

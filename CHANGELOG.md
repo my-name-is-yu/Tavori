@@ -31,7 +31,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Initial Release
 
-First public release of Tavori — an AI agent orchestrator that gives existing agents the drive to persist. Tavori sits above agents, selecting goals, spawning sessions, observing results, and judging completion. Tavori delegates all execution; it does not act directly.
+First public release of SeedPulse — an AI agent orchestrator that gives existing agents the drive to persist. SeedPulse sits above agents, selecting goals, spawning sessions, observing results, and judging completion. SeedPulse delegates all execution; it does not act directly.
 
 ### Added
 
@@ -95,11 +95,11 @@ First public release of Tavori — an AI agent orchestrator that gives existing 
 
 #### Infrastructure
 
-- Added plugin architecture for external integrations, loaded dynamically from `~/.tavori/plugins/`.
+- Added plugin architecture for external integrations, loaded dynamically from `~/.seedpulse/plugins/`.
 - Added TUI dashboard built with Ink/React, including approval UI and chat interface.
 - Added Web UI built with Next.js, covering Goals, Sessions, Knowledge, and Settings pages.
 - Added daemon mode with PID management, graceful shutdown, and interrupted goal state restoration.
-- Added event server with HTTP and file-queue (`~/.tavori/events/`) ingestion modes.
+- Added event server with HTTP and file-queue (`~/.seedpulse/events/`) ingestion modes.
 - Added notification dispatcher with SMTP email delivery via `nodemailer`.
 - Added date-based log rotation with async stream management.
 

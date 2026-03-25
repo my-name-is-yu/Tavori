@@ -16,7 +16,7 @@ import type { TrustManager } from "./traits/trust-manager.js";
 
 /**
  * StateManager handles persistence of goals, state vectors, observation logs,
- * and gap history under a base directory (default: ~/.tavori/).
+ * and gap history under a base directory (default: ~/.seedpulse/).
  *
  * File layout:
  *   <base>/goals/<goal_id>/goal.json

@@ -65,7 +65,7 @@ export function HelpOverlay({ onDismiss }: HelpOverlayProps) {
           </Box>
           <Box>
             <Box width={20}><Text dimColor>{"<anything else>"}</Text></Box>
-            <Text>Chat with Tavori</Text>
+            <Text>Chat with SeedPulse</Text>
           </Box>
         </Box>
       </Box>
@@ -81,7 +81,7 @@ export function HelpOverlay({ onDismiss }: HelpOverlayProps) {
           </Box>
           <Box>
             <Box width={20}><Text color="cyan" bold>Ctrl-C</Text></Box>
-            <Text>Quit Tavori</Text>
+            <Text>Quit SeedPulse</Text>
           </Box>
         </Box>
       </Box>

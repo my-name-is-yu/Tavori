@@ -1,26 +1,26 @@
 <div align="center">
 
-# Tavori
+# SeedPulse
 
 ### Give your AI agents the drive to persist.
 
-[![CI](https://github.com/my-name-is-yu/Tavori/actions/workflows/ci.yml/badge.svg)](https://github.com/my-name-is-yu/Tavori/actions/workflows/ci.yml)
-[![npm version](https://img.shields.io/npm/v/tavori.svg)](https://www.npmjs.com/package/tavori)
+[![CI](https://github.com/my-name-is-yu/SeedPulse/actions/workflows/ci.yml/badge.svg)](https://github.com/my-name-is-yu/SeedPulse/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/seedpulse.svg)](https://www.npmjs.com/package/seedpulse)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Set a goal. Tavori observes the world, finds the gap, generates the next task, delegates it to any AI agent, verifies the result, and loops — until done.
+Set a goal. SeedPulse observes the world, finds the gap, generates the next task, delegates it to any AI agent, verifies the result, and loops — until done.
 
-The project is documented for local use; follow the Quick Start steps to run Tavori from source or as an installed CLI.
+The project is documented for local use; follow the Quick Start steps to run SeedPulse from source or as an installed CLI.
 
 <br/>
 </div>
 
 ## Quick Start
 
-**1. Install Tavori (Node.js 20+):**
+**1. Install SeedPulse (Node.js 20+):**
 
 ```bash
-npm install -g tavori
+npm install -g seedpulse
 ```
 
 **2. Set your API key:**
@@ -29,32 +29,32 @@ npm install -g tavori
 export OPENAI_API_KEY=sk-...
 
 # Or use Anthropic
-# export TAVORI_LLM_PROVIDER=anthropic
+# export SEEDPULSE_LLM_PROVIDER=anthropic
 # export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
 **3. Set a goal and run:**
 
 ```bash
-tavori goal add "Increase test coverage to 90%"
-tavori run
-tavori status
+seedpulse goal add "Increase test coverage to 90%"
+seedpulse run
+seedpulse status
 ```
 
-That's it. Tavori assesses feasibility, decomposes the goal into measurable dimensions, delegates tasks to agents, and tracks progress automatically.
+That's it. SeedPulse assesses feasibility, decomposes the goal into measurable dimensions, delegates tasks to agents, and tracks progress automatically.
 
-## What is Tavori?
+## What is SeedPulse?
 
-Tavori is a **task discovery engine**. You give it a long-term goal — "double revenue in 6 months," "keep my dog healthy" — and it pursues it autonomously. It observes, calculates the gap, generates tasks, delegates to AI agents, and verifies results. Then it loops.
+SeedPulse is a **task discovery engine**. You give it a long-term goal — "double revenue in 6 months," "keep my dog healthy" — and it pursues it autonomously. It observes, calculates the gap, generates tasks, delegates to AI agents, and verifies results. Then it loops.
 
-**Tavori doesn't execute. It orchestrates.** Every action is delegated to external agents (Claude Code, OpenAI Codex, Browser Use, or your own adapter). Tavori's only direct operations are LLM calls for reasoning and state file read/write.
+**SeedPulse doesn't execute. It orchestrates.** Every action is delegated to external agents (Claude Code, OpenAI Codex, Browser Use, or your own adapter). SeedPulse's only direct operations are LLM calls for reasoning and state file read/write.
 
-**Tavori knows when to stop.** It applies *satisficing* — when all goal dimensions cross their thresholds with sufficient evidence, the goal is complete. No runaway loops. No premature completion.
+**SeedPulse knows when to stop.** It applies *satisficing* — when all goal dimensions cross their thresholds with sufficient evidence, the goal is complete. No runaway loops. No premature completion.
 
-## Why Tavori?
+## Why SeedPulse?
 
-- **Execution boundary** — Tavori never executes. It orchestrates and verifies. No runaway scripts.
-- **Goal-driven, not prompt-driven** — Set a long-term goal with measurable thresholds. Tavori decomposes, delegates, observes, and loops.
+- **Execution boundary** — SeedPulse never executes. It orchestrates and verifies. No runaway scripts.
+- **Goal-driven, not prompt-driven** — Set a long-term goal with measurable thresholds. SeedPulse decomposes, delegates, observes, and loops.
 - **Satisficing** — Stops when "good enough." Prevents infinite loops and wasted compute.
 - **Asymmetric trust** — Failure costs 3x more than success rewards. Irreversible actions always require human approval.
 - **Agent-agnostic** — Works with any AI agent. Swap agents without changing goals.
@@ -65,7 +65,7 @@ Tavori is a **task discovery engine**. You give it a long-term goal — "double 
 
 > Goal = "Increase test coverage to 90% across the project"
 
-Tavori observes current coverage, identifies untested modules, delegates test writing to a coding agent, and verifies results with actual test runs.
+SeedPulse observes current coverage, identifies untested modules, delegates test writing to a coding agent, and verifies results with actual test runs.
 
 *Demo coming soon* · [Example goal config](docs/design/goal-negotiation.md)
 
@@ -73,7 +73,7 @@ Tavori observes current coverage, identifies untested modules, delegates test wr
 
 > Goal = "Double monthly revenue within 6 months"
 
-Tavori tracks revenue metrics, identifies growth opportunities, delegates research and implementation tasks, and measures real outcomes.
+SeedPulse tracks revenue metrics, identifies growth opportunities, delegates research and implementation tasks, and measures real outcomes.
 
 *Demo coming soon*
 
@@ -81,7 +81,7 @@ Tavori tracks revenue metrics, identifies growth opportunities, delegates resear
 
 > Goal = "Keep my dog healthy and happy"
 
-Tavori monitors health indicators, schedules vet checkups, tracks nutrition, and escalates to you when human judgment is needed.
+SeedPulse monitors health indicators, schedules vet checkups, tracks nutrition, and escalates to you when human judgment is needed.
 
 *Demo coming soon*
 
@@ -104,7 +104,7 @@ For detailed architecture, see [docs/architecture-map.md](docs/architecture-map.
 
 ## Loop-Stall Prevention
 
-Tavori runs the `Observe → Gap → Score → Task → Execute → Verify → Loop` cycle until the goal is complete or until the orchestrator must stop because progress cannot be made.
+SeedPulse runs the `Observe → Gap → Score → Task → Execute → Verify → Loop` cycle until the goal is complete or until the orchestrator must stop because progress cannot be made.
 
 ### Loop-Stall Prevention and Measurement
 
@@ -146,14 +146,14 @@ npm run test:changed
 | `github_issue` | REST API | Issue creation, search |
 | `a2a` | A2A Protocol | Remote agent delegation |
 
-Custom adapters can be added as [plugins](docs/design/plugin-development-guide.md) in `~/.tavori/plugins/`.
+Custom adapters can be added as [plugins](docs/design/plugin-development-guide.md) in `~/.seedpulse/plugins/`.
 
 ## Programmatic Usage
 
 ```typescript
-import { CoreLoop, StateManager } from "tavori";
+import { CoreLoop, StateManager } from "seedpulse";
 
-const stateManager = new StateManager("~/.tavori");
+const stateManager = new StateManager("~/.seedpulse");
 const loop = new CoreLoop({ stateManager, /* ...adapters */ });
 await loop.runOnce();
 ```
@@ -162,17 +162,17 @@ await loop.runOnce();
 
 | Command | Description |
 |---------|-------------|
-| `tavori goal add "<goal>"` | Negotiate and register a new goal |
-| `tavori goal list` | List all goals with status |
-| `tavori run` | Run one core loop iteration |
-| `tavori status` | Show progress, gaps, trust scores |
-| `tavori report` | Display latest report |
-| `tavori cleanup` | Archive completed goals |
-| `tavori datasource add/list/remove` | Manage data sources |
+| `seedpulse goal add "<goal>"` | Negotiate and register a new goal |
+| `seedpulse goal list` | List all goals with status |
+| `seedpulse run` | Run one core loop iteration |
+| `seedpulse status` | Show progress, gaps, trust scores |
+| `seedpulse report` | Display latest report |
+| `seedpulse cleanup` | Archive completed goals |
+| `seedpulse datasource add/list/remove` | Manage data sources |
 
 ## FAQ
 
-**How does Tavori verify progress?**
+**How does SeedPulse verify progress?**
 
 3-layer verification: mechanical checks (test results, file diffs, metrics) first, then independent LLM review, then executor self-report. Self-report alone caps progress at 70%.
 
@@ -186,19 +186,19 @@ Stall detection uses four indicators. Responses are graduated: try a different a
 
 **Can I use it for free?**
 
-Yes. Tavori is open source and free. You only need an LLM API key (OpenAI or Anthropic).
+Yes. SeedPulse is open source and free. You only need an LLM API key (OpenAI or Anthropic).
 
 ## Development
 
 ```bash
-git clone https://github.com/my-name-is-yu/Tavori.git
-cd Tavori
+git clone https://github.com/my-name-is-yu/SeedPulse.git
+cd SeedPulse
 npm install
 npm run build
 npm test
 ```
 
-State: `~/.tavori/` · Reports: `~/.tavori/reports/` · Ethics logs: `~/.tavori/ethics/`
+State: `~/.seedpulse/` · Reports: `~/.seedpulse/reports/` · Ethics logs: `~/.seedpulse/ethics/`
 
 Regression note: `tests/refine.test.ts` now covers `refine()` normalization for supported inputs, malformed payload handling, and propagated refinement failures.
 Verify it with:
@@ -235,7 +235,7 @@ See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 ---
 
-Tavori stores all state locally. No telemetry. No phone-home. Your LLM provider is the only external connection.
+SeedPulse stores all state locally. No telemetry. No phone-home. Your LLM provider is the only external connection.
 
 [MIT License](LICENSE)
 

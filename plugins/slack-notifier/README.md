@@ -1,6 +1,6 @@
 # slack-notifier
 
-A Tavori notifier plugin that sends events to a Slack channel via Incoming Webhook.
+A SeedPulse notifier plugin that sends events to a Slack channel via Incoming Webhook.
 
 ## Requirements
 
@@ -9,19 +9,19 @@ A Tavori notifier plugin that sends events to a Slack channel via Incoming Webho
 
 ## Installation
 
-Copy (or symlink) this directory into `~/.tavori/plugins/slack-notifier/` and build it:
+Copy (or symlink) this directory into `~/.seedpulse/plugins/slack-notifier/` and build it:
 
 ```bash
 npm install
 npm run build
 ```
 
-Then create `~/.tavori/plugins/slack-notifier/config.json`:
+Then create `~/.seedpulse/plugins/slack-notifier/config.json`:
 
 ```json
 {
   "webhook_url": "https://hooks.slack.com/services/T.../B.../...",
-  "channel": "#tavori-alerts",
+  "channel": "#seedpulse-alerts",
   "mention_on_critical": true
 }
 ```

@@ -1,7 +1,7 @@
 /**
  * Milestone 2 D-1: README quality goal — E2E tests
  *
- * Tests that a "Improve README quality" goal running through Tavori's CoreLoop:
+ * Tests that a "Improve README quality" goal running through SeedPulse's CoreLoop:
  *   1. Uses LLM observation (independent_review confidence tier) for all 3 dimensions
  *   2. Converges within 2 iterations when LLM reports improvement
  *   3. Generates README improvement tasks

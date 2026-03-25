@@ -61,12 +61,12 @@ describe("ActionHandler — handle()", () => {
       const handler = new ActionHandler(makeDeps());
       const result = await handler.handle({
         intent: "chat",
-        response: "Tavori manages goals with measurable dimensions.",
-        params: { response: "Tavori manages goals with measurable dimensions." },
-        raw: "What can Tavori do?",
+        response: "SeedPulse manages goals with measurable dimensions.",
+        params: { response: "SeedPulse manages goals with measurable dimensions." },
+        raw: "What can SeedPulse do?",
       });
       expect(result.messages).toEqual([
-        "Tavori manages goals with measurable dimensions.",
+        "SeedPulse manages goals with measurable dimensions.",
       ]);
     });
 

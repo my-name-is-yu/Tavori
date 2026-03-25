@@ -1,10 +1,10 @@
 'use client';
 
-import { useTavoriStore } from '../../lib/store';
+import { useSeedPulseStore } from '../../lib/store';
 import { GoalTable, type GoalRow } from '../../components/dashboard/goal-table';
 
 export default function GoalsPage() {
-  const goals = useTavoriStore((state) => state.goals) as GoalRow[];
+  const goals = useSeedPulseStore((state) => state.goals) as GoalRow[];
 
   return (
     <div>

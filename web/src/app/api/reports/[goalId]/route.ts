@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getReportingEngine } from '../../../../lib/tavori-client';
+import { getReportingEngine } from '../../../../lib/seedpulse-client';
 
 export async function GET(
   _req: NextRequest,

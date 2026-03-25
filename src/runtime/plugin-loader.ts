@@ -22,10 +22,10 @@ import type { NotifierRegistry } from "./notifier-registry.js";
 // ─── PluginLoader ───
 
 /**
- * Discovers, loads, validates, and registers plugins from ~/.tavori/plugins/.
+ * Discovers, loads, validates, and registers plugins from ~/.seedpulse/plugins/.
  *
  * Design principles:
- *  - Plugin load failures never crash Tavori. Every error is caught, logged,
+ *  - Plugin load failures never crash SeedPulse. Every error is caught, logged,
  *    and returned as an error-state PluginState.
  *  - Supports both plugin.yaml and plugin.json manifest formats.
  *  - Routes each plugin to the correct registry based on manifest.type.
@@ -82,18 +82,21 @@ export class PluginLoader {
     const manifest = await this.loadManifest(pluginDir);
 
     // 1b. Semver compatibility check
-    const tavoriVersion = getTavoriVersion();
-    if (!satisfiesRange(tavoriVersion, manifest.min_tavori_version, manifest.max_tavori_version)) {
+    const seedpulseVersion = getSeedPulseVersion();
+    // Prefer new field names; fall back to deprecated tavori fields for backward compat
+    const minVer = manifest.min_seedpulse_version ?? manifest.min_tavori_version;
+    const maxVer = manifest.max_seedpulse_version ?? manifest.max_tavori_version;
+    if (!satisfiesRange(seedpulseVersion, minVer, maxVer)) {
       const range = [
-        manifest.min_tavori_version ? `>=${manifest.min_tavori_version}` : "",
-        manifest.max_tavori_version ? `<=${manifest.max_tavori_version}` : "",
+        minVer ? `>=${minVer}` : "",
+        maxVer ? `<=${maxVer}` : "",
       ]
         .filter(Boolean)
         .join(", ");
       this.logger?.warn(
-        `[PluginLoader] Skipping incompatible plugin "${manifest.name}": requires Tavori ${range}, got ${tavoriVersion}`
+        `[PluginLoader] Skipping incompatible plugin "${manifest.name}": requires SeedPulse ${range}, got ${seedpulseVersion}`
       );
-      return this.buildIncompatibleState(manifest, tavoriVersion, range);
+      return this.buildIncompatibleState(manifest, seedpulseVersion, range);
     }
 
     // 2. Dynamically import the entry point
@@ -264,12 +267,12 @@ export class PluginLoader {
     return state;
   }
 
-  buildIncompatibleState(manifest: PluginManifest, tavoriVersion: string, range: string): PluginState {
+  buildIncompatibleState(manifest: PluginManifest, seedpulseVersion: string, range: string): PluginState {
     const state = PluginStateSchema.parse({
       name: manifest.name,
       manifest,
       status: "incompatible",
-      error_message: `Requires Tavori ${range}, got ${tavoriVersion}`,
+      error_message: `Requires SeedPulse ${range}, got ${seedpulseVersion}`,
       loaded_at: new Date().toISOString(),
       trust_score: 0,
       usage_count: 0,
@@ -330,7 +333,7 @@ export class PluginLoader {
     const updated = PluginStateSchema.parse({ ...existing, ...updates });
     this.pluginStates.set(pluginName, updated);
 
-    // Persist to disk: ~/.tavori/plugins/<name>/state.json
+    // Persist to disk: ~/.seedpulse/plugins/<name>/state.json
     const statePath = path.join(this.pluginsDir, pluginName, "state.json");
     await writeJsonFileAtomic(statePath, updated);
   }
@@ -352,23 +355,23 @@ export class PluginLoader {
 
 // ─── Module-level helpers ───
 
-// ─── Tavori version (read once from package.json) ───
+// ─── SeedPulse version (read once from package.json) ───
 
-let _tavoriVersion: string | undefined;
+let _seedpulseVersion: string | undefined;
 
-function getTavoriVersion(): string {
-  if (_tavoriVersion !== undefined) return _tavoriVersion;
+function getSeedPulseVersion(): string {
+  if (_seedpulseVersion !== undefined) return _seedpulseVersion;
   try {
     const pkgPath = path.resolve(
       path.dirname(url.fileURLToPath(import.meta.url)),
       "../../package.json"
     );
     const pkg = JSON.parse(fsSync.readFileSync(pkgPath, "utf-8")) as { version: string };
-    _tavoriVersion = pkg.version;
+    _seedpulseVersion = pkg.version;
   } catch {
-    _tavoriVersion = "0.0.0";
+    _seedpulseVersion = "0.0.0";
   }
-  return _tavoriVersion;
+  return _seedpulseVersion;
 }
 
 // ─── Semver utilities (no external deps) ───

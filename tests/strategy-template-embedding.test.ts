@@ -72,7 +72,7 @@ describe("StrategyTemplateRegistry — embedding-based recommendation", () => {
   let vectorIndex: VectorIndex;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "tavori-emb-test-"));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "seedpulse-emb-test-"));
     embeddingClient = new MockEmbeddingClient(64);
     vectorIndex = new VectorIndex(
       path.join(tmpDir, "vector-index.json"),

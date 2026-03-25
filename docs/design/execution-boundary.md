@@ -1,22 +1,22 @@
-# Tavori --- Defining the Execution Boundary
+# SeedPulse --- Defining the Execution Boundary
 
 ---
 
 ## 1. Core Principle
 
-**Tavori does not execute on its own. Tavori always delegates to agents.**
+**SeedPulse does not execute on its own. SeedPulse always delegates to agents.**
 
-"Tavori wrote the code," "Tavori collected the data," "Tavori built the system" — none of these are accurate. The precise statements are: "Tavori instructed an agent to implement the code," "Tavori asked an agent to collect the data," "Tavori delegated system construction to an agent."
+"SeedPulse wrote the code," "SeedPulse collected the data," "SeedPulse built the system" — none of these are accurate. The precise statements are: "SeedPulse instructed an agent to implement the code," "SeedPulse asked an agent to collect the data," "SeedPulse delegated system construction to an agent."
 
-Tavori is the brain, not the body. It decides; it does not act.
+SeedPulse is the brain, not the body. It decides; it does not act.
 
 ---
 
-## 2. What Tavori Is Responsible For
+## 2. What SeedPulse Is Responsible For
 
-The only thing Tavori does directly is **LLM calls for its own thinking process**.
+The only thing SeedPulse does directly is **LLM calls for its own thinking process**.
 
-| What Tavori does directly | Purpose |
+| What SeedPulse does directly | Purpose |
 |---------------------------|---------|
 | LLM calls for goal decomposition | Convert ambiguous goals into a tree of sub-goals |
 | LLM calls for observation analysis | Interpret results received from agents and recognize gaps |
@@ -29,9 +29,9 @@ Everything else is delegated to agents.
 
 ---
 
-## 3. What Tavori Delegates
+## 3. What SeedPulse Delegates
 
-Anything related to execution is outside Tavori's scope.
+Anything related to execution is outside SeedPulse's scope.
 
 | Delegation category | Examples | Delegate targets |
 |--------------------|---------|-----------------|
@@ -44,13 +44,13 @@ Anything related to execution is outside Tavori's scope.
 | Communication and notifications | Sending reports, firing alerts, approval requests | Messaging systems |
 | Human confirmation | Approval requests for irreversible actions | Humans (directly) |
 
-Think of it this way: "Tavori has no body." Tavori observes, thinks, and instructs. It is always another entity that moves its hands.
+Think of it this way: "SeedPulse has no body." SeedPulse observes, thinks, and instructs. It is always another entity that moves its hands.
 
 ---
 
 ## 4. The Delegation Model
 
-Tavori's delegation to agents consists of four steps.
+SeedPulse's delegation to agents consists of four steps.
 
 ```
 1. Adapter selection
@@ -78,15 +78,15 @@ Tavori's delegation to agents consists of four steps.
    - Provide feedback for the next loop
 ```
 
-Through these four steps, Tavori controls "what to ask for" while leaving "how to execute it" to the agent.
+Through these four steps, SeedPulse controls "what to ask for" while leaving "how to execute it" to the agent.
 
 ---
 
 ## 5. Capability Registry
 
-Tavori knows "what agents can do," but it does not do those things itself.
+SeedPulse knows "what agents can do," but it does not do those things itself.
 
-The Capability Registry is a catalog of capabilities Tavori can delegate to.
+The Capability Registry is a catalog of capabilities SeedPulse can delegate to.
 
 ```
 Capability Registry
@@ -109,15 +109,15 @@ Capability Registry
       └── Judgment and approval (irreversible actions, escalations)
 ```
 
-The capability catalog changes dynamically. When a user provides an API key, data sources expand; when permissions are granted, available actions expand. Tavori consults the catalog's current state when designing tasks.
+The capability catalog changes dynamically. When a user provides an API key, data sources expand; when permissions are granted, available actions expand. SeedPulse consults the catalog's current state when designing tasks.
 
-However, Tavori does not "use" the capability catalog — it "references" it. The actual exercise of a capability is performed by the delegated agent or system.
+However, SeedPulse does not "use" the capability catalog — it "references" it. The actual exercise of a capability is performed by the delegated agent or system.
 
 ---
 
 ## 5.1 Detecting Capability Gaps
 
-Tavori determines it "cannot handle this with the current capabilities" when any of the following signals occur.
+SeedPulse determines it "cannot handle this with the current capabilities" when any of the following signals occur.
 
 **Signal 1: A required capability is missing from the registry at task generation time**
 
@@ -156,7 +156,7 @@ Example:
 
 ## 5.2 Dynamic Acquisition Flow
 
-Once a capability gap is confirmed, Tavori acquires the capability through the following flow.
+Once a capability gap is confirmed, SeedPulse acquires the capability through the following flow.
 
 ```
 1. Confirm the capability gap
@@ -207,7 +207,7 @@ The default delegate target is a code implementation agent (Claude Code CLI, Ope
 
 ### Requesting Permissions/API Keys from the User
 
-**Applicable case**: The capability gap is caused by missing credentials, permissions, or access to an external service. This is a type of capability that Tavori can request but cannot acquire autonomously.
+**Applicable case**: The capability gap is caused by missing credentials, permissions, or access to an external service. This is a type of capability that SeedPulse can request but cannot acquire autonomously.
 
 ```
 Example:
@@ -232,7 +232,7 @@ Example:
   Acquisition method: Propose Slack Webhook configuration to the user
   Proposal content:
     - Service to integrate: Slack
-    - Capability gained: Send notifications to the #tavori-alerts channel
+    - Capability gained: Send notifications to the #seedpulse-alerts channel
     - Setup steps: Generate and provide an Incoming Webhook URL
 ```
 
@@ -288,19 +288,19 @@ Autonomously acquired capabilities are registered in the registry in a form reus
 
 ---
 
-## 6. What "Tavori Did X" Actually Means
+## 6. What "SeedPulse Did X" Actually Means
 
 An explicit mapping of expressions:
 
 | Shorthand (imprecise) | Precise meaning |
 |----------------------|----------------|
-| Tavori wrote the code | Tavori instructed a code implementation agent to implement the code and confirmed the result |
-| Tavori collected the data | Tavori delegated a data collection task to an agent and received the result |
-| Tavori built the system | Tavori sequentially delegated construction tasks to multiple agents and verified the integration |
-| Tavori called the API | Tavori instructed an agent to perform that action and observed the response |
-| Tavori sent the notification | Tavori delegated message delivery to the notification system |
-| Tavori built the tool | Tavori instructed a code implementation agent to create the tool and verified its operation |
-| Tavori investigated | Tavori delegated an investigation task to an agent and analyzed the result |
+| SeedPulse wrote the code | SeedPulse instructed a code implementation agent to implement the code and confirmed the result |
+| SeedPulse collected the data | SeedPulse delegated a data collection task to an agent and received the result |
+| SeedPulse built the system | SeedPulse sequentially delegated construction tasks to multiple agents and verified the integration |
+| SeedPulse called the API | SeedPulse instructed an agent to perform that action and observed the response |
+| SeedPulse sent the notification | SeedPulse delegated message delivery to the notification system |
+| SeedPulse built the tool | SeedPulse instructed a code implementation agent to create the tool and verified its operation |
+| SeedPulse investigated | SeedPulse delegated an investigation task to an agent and analyzed the result |
 
 The shorthand is convenient in conversation, but use the precise form when discussing design.
 
@@ -316,7 +316,7 @@ A special case during delegation is irreversible actions.
 - Sending mass emails to customers
 - Modifying or destroying existing infrastructure
 
-Actions in this category **always require human approval**, regardless of trust level or goal confidence. Even if Tavori judges something to be "sufficiently certain," it must not delegate without human confirmation.
+Actions in this category **always require human approval**, regardless of trust level or goal confidence. Even if SeedPulse judges something to be "sufficiently certain," it must not delegate without human confirmation.
 
 The approval flow is itself a form of delegation. The question "is it okay to perform this action?" is handed to the human, and the delegation to the agent takes place only after a "yes" is received.
 
@@ -324,10 +324,10 @@ The approval flow is itself a form of delegation. The question "is it okay to pe
 
 ## 8. Summary
 
-Tavori's execution boundary in one sentence:
+SeedPulse's execution boundary in one sentence:
 
-> **Tavori thinks. Agents act.**
+> **SeedPulse thinks. Agents act.**
 
-Tavori's value lies in continuously discovering "what should be done next" from the gap between goals and reality. It is always agents, humans, or existing systems that carry out the results of that discovery.
+SeedPulse's value lies in continuously discovering "what should be done next" from the gap between goals and reality. It is always agents, humans, or existing systems that carry out the results of that discovery.
 
-This separation makes Tavori scalable. No matter how complex the goal, Tavori keeps deciding "what should be done." "How to execute it" is handled by whichever agent is best suited at that moment.
+This separation makes SeedPulse scalable. No matter how complex the goal, SeedPulse keeps deciding "what should be done." "How to execute it" is handled by whichever agent is best suited at that moment.

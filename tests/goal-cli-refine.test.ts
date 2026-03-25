@@ -64,7 +64,7 @@ function makeMockStateManager(): StateManager {
     saveGoal: vi.fn(async (goal: Goal) => { goals.set(goal.id, goal); }),
     loadGoal: vi.fn(async (id: string) => goals.get(id) ?? null),
     deleteGoal: vi.fn(async (id: string) => { goals.delete(id); }),
-    getBaseDir: vi.fn(() => "/tmp/tavori-test"),
+    getBaseDir: vi.fn(() => "/tmp/seedpulse-test"),
   } as unknown as StateManager;
 }
 

@@ -2,10 +2,10 @@
  * reward-log.ts
  *
  * Consolidated JSON log output for the reward (drive score) computation.
- * Controlled by the TAVORI_REWARD_LOG environment variable.
+ * Controlled by the SEEDPULSE_REWARD_LOG environment variable.
  *
  * Usage:
- *   TAVORI_REWARD_LOG=1 tavori run <goal>
+ *   SEEDPULSE_REWARD_LOG=1 seedpulse run <goal>
  *
  * Each log line is a single JSON object written to stderr so it does not
  * pollute stdout / TUI output. Default: OFF.
@@ -35,15 +35,15 @@ export interface RewardLogEntry {
 }
 
 /**
- * Returns true when TAVORI_REWARD_LOG=1 is set in the environment.
+ * Returns true when SEEDPULSE_REWARD_LOG=1 is set in the environment.
  */
 export function isRewardLogEnabled(): boolean {
-  return process.env["TAVORI_REWARD_LOG"] === "1";
+  return (process.env["SEEDPULSE_REWARD_LOG"] ?? process.env["TAVORI_REWARD_LOG"]) === "1";
 }
 
 /**
  * Emit a single JSON line to stderr with all major reward computation inputs/outputs.
- * No-op when TAVORI_REWARD_LOG is not set to "1".
+ * No-op when SEEDPULSE_REWARD_LOG is not set to "1".
  */
 export function logRewardComputation(params: {
   goalId: string;

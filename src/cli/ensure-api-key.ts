@@ -13,7 +13,7 @@ import { getTavoriDirPath } from "../utils/paths.js";
  * Load provider config and verify that the required API key is present for
  * the configured provider. Throws if a required key is missing.
  *
- * If no ~/.tavori/provider.json exists and stdin is a TTY, automatically
+ * If no ~/.seedpulse/provider.json exists and stdin is a TTY, automatically
  * runs the interactive setup wizard. If not a TTY, uses defaults silently.
  *
  * Ollama provider is not checked here — it needs no API key.
@@ -40,7 +40,7 @@ export async function ensureProviderConfig(): Promise<ProviderConfig> {
     const result = await cmdSetup([]);
     if (result !== 0) {
       throw new Error(
-        "Setup wizard failed. Run `tavori setup` manually to configure your provider."
+        "Setup wizard failed. Run `seedpulse setup` manually to configure your provider."
       );
     }
   }
@@ -52,7 +52,7 @@ export async function ensureProviderConfig(): Promise<ProviderConfig> {
   if (config.provider === "anthropic" && !config.api_key) {
     throw new Error(
       "No API key configured. Set ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable, " +
-        "or run: tavori setup"
+        "or run: seedpulse setup"
     );
   }
 

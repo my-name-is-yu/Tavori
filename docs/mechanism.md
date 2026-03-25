@@ -1,28 +1,28 @@
-# Tavori --- Core Mechanism
+# SeedPulse --- Core Mechanism
 
 ---
 
-## 1. What Is Tavori?
+## 1. What Is SeedPulse?
 
-Tavori is a **task discovery engine**. It accepts long-term goals and keeps discovering "what should be done next."
+SeedPulse is a **task discovery engine**. It accepts long-term goals and keeps discovering "what should be done next."
 
 ### The Problem It Solves
 
 "I want to double revenue." "I want to stay healthy." "I want to get a new business off the ground." Goals like these share a common difficulty: what needs to be done is not self-evident, the situation keeps changing, and reaching completion takes months to years.
 
-Humans dealing with this kind of goal continually think every day: "What's the current situation?" "What's missing?" "What should I do next?" Tavori performs this thinking process on your behalf.
+Humans dealing with this kind of goal continually think every day: "What's the current situation?" "What's missing?" "What should I do next?" SeedPulse performs this thinking process on your behalf.
 
 ### What It Does and Doesn't Do
 
-Tavori does exactly one thing: **discover the next task from the gap between the goal and reality.**
+SeedPulse does exactly one thing: **discover the next task from the gap between the goal and reality.**
 
-Execution is left to existing systems. If code needs to be written, an external agent. If an API needs to be called, the appropriate tool. If human judgment is needed, ask a human. If a persistent process is needed, use a daemon or cron. Tavori is the brain that decides "what should be done" — it is not the body that "does it."
+Execution is left to existing systems. If code needs to be written, an external agent. If an API needs to be called, the appropriate tool. If human judgment is needed, ask a human. If a persistent process is needed, use a daemon or cron. SeedPulse is the brain that decides "what should be done" — it is not the body that "does it."
 
 ---
 
 ## 2. Core --- The Task Discovery Loop
 
-At the center of Tavori is a 4-step loop. This loop does not depend on the goal's domain. Whether health management, business, or education, the same structure operates. (In implementation, this expands to 6 steps: observe → gap → score → task → execute → verify. Drive scoring and execution/verification are internal steps of §2.3 and §2.4)
+At the center of SeedPulse is a 4-step loop. This loop does not depend on the goal's domain. Whether health management, business, or education, the same structure operates. (In implementation, this expands to 6 steps: observe → gap → score → task → execute → verify. Drive scoring and execution/verification are internal steps of §2.3 and §2.4)
 
 ```
 Observe → Gap Recognition → Strategy Selection → Task Concretization → (back to Observe)
@@ -34,11 +34,11 @@ The loop never stops. It keeps running until the goal is achieved or the user st
 
 ### 2.1 Observation --- Knowing the World's Current State
 
-To discover tasks, we must first know reality. Tavori observes the real-world state relevant to the goal.
+To discover tasks, we must first know reality. SeedPulse observes the real-world state relevant to the goal.
 
 #### What to Observe
 
-Observation targets change by goal. IoT sensor data, business metrics, database values, API responses, file states, external service conditions. Tavori's observation is not confined to codebases. Any information source related to the goal is a target.
+Observation targets change by goal. IoT sensor data, business metrics, database values, API responses, file states, external service conditions. SeedPulse's observation is not confined to codebases. Any information source related to the goal is a target.
 
 #### Observation Confidence
 
@@ -60,7 +60,7 @@ Observation has two rhythms.
 
 **Event-driven observation**: Observing immediately upon detecting a situational change. Sensor values exceeding a threshold, sharp metric fluctuations, external notifications. There's no reason to wait when a change occurs.
 
-Combining these two, Tavori prevents both "missed signals" and "overreaction."
+Combining these two, SeedPulse prevents both "missed signals" and "overreaction."
 
 ---
 
@@ -88,7 +88,7 @@ Here, the observation confidence from §2.1 comes into play. Gaps based on low-c
 
 The reason is simple: treating what's not well understood as "fine" is dangerous. Low-confidence dimensions are handled conservatively as "not yet confirmed = a problem may be lurking."
 
-This weighting causes Tavori to generate confirmation tasks with priority, rather than leaving unconfirmed areas unattended.
+This weighting causes SeedPulse to generate confirmation tasks with priority, rather than leaving unconfirmed areas unattended.
 
 #### What Gaps Tell Us
 
@@ -104,7 +104,7 @@ Once gaps are understood, how to close them is determined. This is strategy sele
 
 For a single gap, there are multiple ways to close it. For the gap "customers are leaving," hypotheses such as "improve onboarding," "strengthen support," "revisit pricing," and "add features" are all possible.
 
-Tavori doesn't look for a single right answer — it generates multiple hypotheses and evaluates which are promising.
+SeedPulse doesn't look for a single right answer — it generates multiple hypotheses and evaluates which are promising.
 
 #### Three Drive Forces
 
@@ -126,7 +126,7 @@ The **PortfolioManager** implemented in Stage 9 is the concrete implementation o
 
 #### "Waiting" as a Strategy
 
-Measuring effectiveness immediately after taking action is sometimes premature. Accounting for the time it takes for effects to appear after an initiative is launched, "wait now and measure N days later" is also one of Tavori's strategies. While waiting, other gaps can be tackled.
+Measuring effectiveness immediately after taking action is sometimes premature. Accounting for the time it takes for effects to appear after an initiative is launched, "wait now and measure N days later" is also one of SeedPulse's strategies. While waiting, other gaps can be tackled.
 
 This "waiting" judgment is implemented as a formal strategy type called `WaitStrategy` and is treated as a member of the strategy portfolio managed by PortfolioManager.
 
@@ -142,7 +142,7 @@ Once the strategy is determined, convert it into executable tasks.
 
 #### Narrowing Scope
 
-A strategy indicates direction, but is often too large to execute all at once. Tavori splits it into sizes that can be completed in a single execution unit.
+A strategy indicates direction, but is often too large to execute all at once. SeedPulse splits it into sizes that can be completed in a single execution unit.
 
 The splitting criterion is simple: a size at which the executor (human or AI) who receives the task can begin without additional information and can determine when it's complete.
 
@@ -154,7 +154,7 @@ Every task must define "what constitutes completion." Not "improve" but "this me
 
 The concretized task is passed to the appropriate execution means. If code needs to be written, an external agent. If an API needs to be called, the appropriate tool. If human judgment is needed, confirm with a human.
 
-Tavori's job ends at deciding "what should be done." The execution itself is left to the most suitable means.
+SeedPulse's job ends at deciding "what should be done." The execution itself is left to the most suitable means.
 
 #### Execution Result Feedback
 
@@ -164,7 +164,7 @@ Task results are reflected in the next loop's observation. If a task succeeds, t
 
 ### 2.5 Knowledge Acquisition --- Integration into the Core Loop
 
-While running the core loop, Tavori may encounter a state of "I don't know what this observation value means" or "I don't know what effective approaches exist in this domain." This is not an information shortage but a **domain knowledge shortage**. Tavori detects this state and actively generates knowledge acquisition tasks within the core loop.
+While running the core loop, SeedPulse may encounter a state of "I don't know what this observation value means" or "I don't know what effective approaches exist in this domain." This is not an information shortage but a **domain knowledge shortage**. SeedPulse detects this state and actively generates knowledge acquisition tasks within the core loop.
 
 #### When Knowledge Deficiencies Are Detected
 
@@ -202,11 +202,11 @@ This loop has three important properties.
 
 ### Receiving Goals
 
-Users give goals in vague natural language. "I want to stay healthy." "I want to grow the business." "I want to solve this problem." Tavori accepts this vagueness. It doesn't require a precise definition from the start. As the loop runs, understanding of the goal deepens.
+Users give goals in vague natural language. "I want to stay healthy." "I want to grow the business." "I want to solve this problem." SeedPulse accepts this vagueness. It doesn't require a precise definition from the start. As the loop runs, understanding of the goal deepens.
 
 ### Goal Negotiation
 
-Upon receiving a goal, Tavori first evaluates feasibility in 6 steps. The honest evaluation of "10x is difficult, but 2x is achievable" comes from here. The first step (Step 0) is an ethics/legal gate that determines whether the goal's purpose and means are permissible.
+Upon receiving a goal, SeedPulse first evaluates feasibility in 6 steps. The honest evaluation of "10x is difficult, but 2x is achievable" comes from here. The first step (Step 0) is an ethics/legal gate that determines whether the goal's purpose and means are permissible.
 
 **Negotiation flow:**
 
@@ -217,7 +217,7 @@ Upon receiving a goal, Tavori first evaluates feasibility in 6 steps. The honest
 4. **Feasibility Evaluation (hybrid method)** — Dimensions with historical data are evaluated quantitatively; new domains are evaluated qualitatively by LLM. Quantitative evaluation compares "required rate of change vs. observed rate of change" and confirms capability/resource sufficiency. Qualitative evaluation applies a conservative bias due to high uncertainty.
 5. **Response** — Returns 3 types of responses based on evaluation results: acceptance (realistic) / counter-proposal (alternative target + intermediate milestones) / cautionary flag (for new domains or when evaluation confidence is low).
 
-**When the user pushes through a difficult goal**: Tavori accepts it. However, initial confidence is set to "low" and evaluation results are recorded. Rather than following blindly, it evaluates and then records and tracks the user's choice.
+**When the user pushes through a difficult goal**: SeedPulse accepts it. However, initial confidence is set to "low" and evaluation results are recorded. Rather than following blindly, it evaluates and then records and tracks the user's choice.
 
 **Renegotiation**: Renegotiation occurs after stall detection, when new information during execution causes premise changes, or upon explicit user request for re-evaluation. Once a target is agreed upon, it is pursued with full effort.
 
@@ -254,14 +254,14 @@ When progress stops, detect it and respond.
 
 The detection indicators are simple: the gap hasn't narrowed after N loops. The same kind of task repeatedly fails. The estimated time is being significantly exceeded.
 
-When a stall is detected, Tavori responds autonomously.
+When a stall is detected, SeedPulse responds autonomously.
 
 - **Insufficient information** → Generate a research task to gather information
 - **Wrong approach** → Pivot the strategy
 - **Capability limit** → Escalate to user
 - **External dependency** → Switch to another goal and wait
 
-Not leaving stalls unaddressed is itself an important function of Tavori.
+Not leaving stalls unaddressed is itself an important function of SeedPulse.
 
 Note that when the cause of the stall is the unrealistic nature of the goal itself or changes in premises, stall detection triggers goal renegotiation. See `design/goal-negotiation.md` §6 for renegotiation details.
 
@@ -269,7 +269,7 @@ Note that when the cause of the stall is the unrealistic nature of the goal itse
 
 ## 4. Learning
 
-Tavori learns from experience.
+SeedPulse learns from experience.
 
 ### Accumulating Experience
 
@@ -286,9 +286,9 @@ Accumulated experience improves each step of the loop.
 - Strategy selection: prioritizing strategies that succeeded in the past, avoiding those that failed
 - Task concretization: learning appropriate scope sizes
 
-### Meta-Tavorition (Curiosity)
+### Meta-Iteration (Curiosity)
 
-When all goals are satisfied, Tavori doesn't stop — it proposes new goals. This emerges from accumulated experience. From past patterns, it notices "there's still room for improvement in this domain" or "this approach might be effective in another context" and proposes to the user.
+When all goals are satisfied, SeedPulse doesn't stop — it proposes new goals. This emerges from accumulated experience. From past patterns, it notices "there's still room for improvement in this domain" or "this approach might be effective in another context" and proposes to the user.
 
 Curiosity is always just a proposal. If the user doesn't accept it, it isn't pursued.
 
@@ -369,19 +369,19 @@ The expansion of analysis triggers and the widening of feedback destinations mea
 
 ## 5. Integration with Existing Systems
 
-Tavori is an engine that discovers "what should be done." For everything else, it uses existing systems.
+SeedPulse is an engine that discovers "what should be done." For everything else, it uses existing systems.
 
 ### Execution
 
-Executing tasks is not Tavori's job. What Tavori does is judge "what should be executed" and select "who to delegate to." Various AI agents (CLI type, API type, custom adapters), human actions. The optimal delegation target is chosen based on the nature of the goal and task. See `design/execution-boundary.md` for the detailed delegation model.
+Executing tasks is not SeedPulse's job. What SeedPulse does is judge "what should be executed" and select "who to delegate to." Various AI agents (CLI type, API type, custom adapters), human actions. The optimal delegation target is chosen based on the nature of the goal and task. See `design/execution-boundary.md` for the detailed delegation model.
 
 ### Persistent Infrastructure
 
-For Tavori to keep running over the long term, a persistent mechanism is needed. This is realized with existing infrastructure. Daemon processes, cron, heartbeat mechanisms. Periodically launching Tavori's loop to perform observation and task discovery.
+For SeedPulse to keep running over the long term, a persistent mechanism is needed. This is realized with existing infrastructure. Daemon processes, cron, heartbeat mechanisms. Periodically launching SeedPulse's loop to perform observation and task discovery.
 
 ### Capability Management
 
-The tools and data sources Tavori can use are dynamically added and removed. When a user provides an API key, a new data source becomes available; when permissions are granted, new actions become possible.
+The tools and data sources SeedPulse can use are dynamically added and removed. When a user provides an API key, a new data source becomes available; when permissions are granted, new actions become possible.
 
 Capability management is implemented as **CapabilityDetector**, which goes beyond lazy loading to perform **proactive deficiency detection**. When a required capability is unregistered at task generation time, it automatically issues an escalation to the user. This design prevents the after-the-fact failure of "tried something thinking it was possible, but didn't have permission" before task delegation.
 
@@ -391,15 +391,15 @@ Reports to users, urgent notifications, approval requests. These use existing co
 
 ### State Persistence
 
-Tavori's state (goal tree, observation logs, learning data) is saved in a file-based format. Transparent, human-readable, and manageable with git. Rather than a black-box database, it's kept in a format that can always be inspected.
+SeedPulse's state (goal tree, observation logs, learning data) is saved in a file-based format. Transparent, human-readable, and manageable with git. Rather than a black-box database, it's kept in a format that can always be inspected.
 
-### Tavori's Position
+### SeedPulse's Position
 
 ```
 User
   │ Provides goals
   ↓
-Tavori (task discovery engine)
+SeedPulse (task discovery engine)
   │ Discovers "what should be done next"
   ↓
 Existing system group
@@ -410,22 +410,22 @@ Existing system group
   └── Persistence: files, git
 ```
 
-Tavori is the brain. The body already exists. What was missing was only a mechanism to keep discovering "what should be done next" for long-term goals.
+SeedPulse is the brain. The body already exists. What was missing was only a mechanism to keep discovering "what should be done next" for long-term goals.
 
 ---
 
 ## 6. Execution Boundary
 
-**Tavori does not execute anything itself. Tavori always delegates to agents.**
+**SeedPulse does not execute anything itself. SeedPulse always delegates to agents.**
 
-### What Tavori Does Directly
+### What SeedPulse Does Directly
 
-What Tavori processes itself is only LLM calls for its own thinking process and reading/writing state.
+What SeedPulse processes itself is only LLM calls for its own thinking process and reading/writing state.
 
 - LLM calls for goal decomposition, observation result analysis, strategy selection, and task concretization
 - Reading and writing the goal tree, observation logs, and learning data to files
 
-### What Tavori Delegates
+### What SeedPulse Delegates
 
 Everything related to execution is delegated.
 
@@ -434,8 +434,8 @@ Everything related to execution is delegated.
 - Notification and report delivery → messaging systems
 - Approval for irreversible actions → humans (mandatory)
 
-### What "Tavori Did ○○" Means
+### What "SeedPulse Did ○○" Means
 
-Expressions like "Tavori wrote the code" or "Tavori built the system" are shorthand. More precisely, they mean "Tavori instructed an agent to implement the code and verified the results" and "Tavori delegated construction tasks to a group of agents and confirmed the integration."
+Expressions like "SeedPulse wrote the code" or "SeedPulse built the system" are shorthand. More precisely, they mean "SeedPulse instructed an agent to implement the code and verified the results" and "SeedPulse delegated construction tasks to a group of agents and confirmed the integration."
 
-Tavori is an entity that thinks, not an entity that acts. See `design/execution-boundary.md` for details.
+SeedPulse is an entity that thinks, not an entity that acts. See `design/execution-boundary.md` for details.

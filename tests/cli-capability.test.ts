@@ -1,7 +1,7 @@
 /**
  * CLIRunner — capability subcommand tests
  *
- * Verifies that `tavori capability list` and `tavori capability remove` work
+ * Verifies that `seedpulse capability list` and `seedpulse capability remove` work
  * correctly against the capability registry stored in StateManager.
  */
 
@@ -150,7 +150,7 @@ afterEach(() => {
   } else {
     process.env.ANTHROPIC_API_KEY = origApiKey;
   }
-  delete process.env.TAVORI_LLM_PROVIDER;
+  delete process.env.SEEDPULSE_LLM_PROVIDER;
   fs.rmSync(tmpDir, { recursive: true, force: true });
   vi.clearAllMocks();
   vi.restoreAllMocks();
@@ -158,7 +158,7 @@ afterEach(() => {
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
-describe("CLIRunner — tavori capability list", () => {
+describe("CLIRunner — seedpulse capability list", () => {
   it("shows registered capabilities", async () => {
     const cap = makeCapability({
       id: "git_tool",
@@ -208,7 +208,7 @@ describe("CLIRunner — tavori capability list", () => {
   });
 });
 
-describe("CLIRunner — tavori capability remove", () => {
+describe("CLIRunner — seedpulse capability remove", () => {
   it("removes a capability by id", async () => {
     const cap = makeCapability({
       id: "removable_cap",

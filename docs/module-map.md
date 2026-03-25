@@ -18,8 +18,8 @@
 | Cross-goal state aggregation | src/goal/state-aggregator.ts | tests/state-aggregator.test.ts |
 | Goal tree loop execution | src/goal/tree-loop-orchestrator.ts | tests/tree-loop-orchestrator.test.ts |
 | Gap calculation (5 threshold types) | src/drive/gap-calculator.ts | tests/gap-calculator.test.ts |
-| Tavorition scoring | src/drive/drive-scorer.ts | tests/drive-scorer.test.ts |
-| Tavorition drive system | src/drive/drive-system.ts | tests/drive-system.test.ts |
+| Drive scoring | src/drive/drive-scorer.ts | tests/drive-scorer.test.ts |
+| Drive system | src/drive/drive-system.ts | tests/drive-system.test.ts |
 | Stall detection | src/drive/stall-detector.ts | tests/stall-detector.test.ts |
 | Satisficing judgment | src/drive/satisficing-judge.ts | tests/satisficing-judge.test.ts, tests/satisficing-judge-undershoot.test.ts |
 | Checkpoint save and restore | src/execution/checkpoint-manager.ts | tests/checkpoint-manager.test.ts |
@@ -127,7 +127,7 @@
 | state-aggregator.ts | State aggregation across the entire goal tree | `StateAggregator`, `AggregatedState` | state-manager, types/goal, types/goal-tree |
 | tree-loop-orchestrator.ts | Loop execution across the entire goal tree | `TreeLoopOrchestrator` | state-manager, goal/goal-tree-manager, goal/state-aggregator, execution/task-lifecycle, drive/satisficing-judge, types/goal-tree |
 
-### src/drive/ — Tavorition Calculation
+### src/drive/ — Drive Calculation
 
 | File | Responsibility | Key Exports | Dependencies |
 |---|---|---|---|
@@ -230,7 +230,7 @@
 | daemon-runner.ts | Daemon start, stop, and restart management, graceful shutdown, and crash recovery | `DaemonRunner`, `DaemonDeps` | runtime/pid-manager, runtime/logger, runtime/event-server, types/daemon |
 | event-server.ts | File-queue-based event reception and real-time file watcher (fs.watch) | `EventServer`, `EventServerConfig` | node:fs |
 | notification-dispatcher.ts | Notification delivery (stdout/file/webhook) + routing to INotifier plugins | `NotificationDispatcher`, `INotificationDispatcher` | runtime/logger, runtime/notifier-registry, types/notification |
-| plugin-loader.ts | Dynamic plugin loading from `~/.tavori/plugins/`, manifest validation, and auto-registration to registry | `PluginLoader`, `PluginLoaderOptions` | runtime/notifier-registry, execution/adapter-layer, observation/data-source-adapter, types/plugin |
+| plugin-loader.ts | Dynamic plugin loading from `~/.seedpulse/plugins/`, manifest validation, and auto-registration to registry | `PluginLoader`, `PluginLoaderOptions` | runtime/notifier-registry, execution/adapter-layer, observation/data-source-adapter, types/plugin |
 | notifier-registry.ts | INotifier plugin CRUD management and eventType-based routing | `NotifierRegistry` | types/plugin |
 
 ### src/adapters/ — Agent Adapter Implementations
@@ -276,12 +276,12 @@
 |---|---|---|---|
 | setup.ts | DI assembly for all dependencies | `buildDeps` | all modules (DI assembly) |
 | utils.ts | CLI helpers and usage display | `formatOperationError`, `printUsage`, `printCharacterConfig` | (none) |
-| commands/run.ts | `tavori run` command implementation | `buildApprovalFn` | core-loop, state-manager |
-| commands/goal.ts | `tavori goal *` command group | `cmdGoalList`, `cmdStatus`, `cmdGoalShow`, `cmdGoalReset`, `cmdLog`, `cmdCleanup`, `autoRegisterFileExistenceDataSources` | state-manager, observation/data-source-adapter, adapters/file-existence-datasource |
-| commands/report.ts | `tavori report` command | `cmdReport` | state-manager, reporting-engine |
-| commands/suggest.ts | `tavori suggest` / `tavori improve` commands | `normalizeSuggestPayload` | goal/goal-negotiator, observation/capability-detector, state-manager |
-| commands/config.ts | `tavori provider` / `tavori character` / `tavori datasource` | `maskSecrets`, `cmdProvider`, `cmdConfigCharacter`, `cmdDatasourceList`, `cmdDatasourceRemove` | llm/provider-config, traits/character-config, state-manager |
-| commands/daemon.ts | `tavori daemon start/stop/status` commands | (internal implementation) | runtime/daemon-runner, runtime/pid-manager |
+| commands/run.ts | `seedpulse run` command implementation | `buildApprovalFn` | core-loop, state-manager |
+| commands/goal.ts | `seedpulse goal *` command group | `cmdGoalList`, `cmdStatus`, `cmdGoalShow`, `cmdGoalReset`, `cmdLog`, `cmdCleanup`, `autoRegisterFileExistenceDataSources` | state-manager, observation/data-source-adapter, adapters/file-existence-datasource |
+| commands/report.ts | `seedpulse report` command | `cmdReport` | state-manager, reporting-engine |
+| commands/suggest.ts | `seedpulse suggest` / `seedpulse improve` commands | `normalizeSuggestPayload` | goal/goal-negotiator, observation/capability-detector, state-manager |
+| commands/config.ts | `seedpulse provider` / `seedpulse character` / `seedpulse datasource` | `maskSecrets`, `cmdProvider`, `cmdConfigCharacter`, `cmdDatasourceList`, `cmdDatasourceRemove` | llm/provider-config, traits/character-config, state-manager |
+| commands/daemon.ts | `seedpulse daemon start/stop/status` commands | (internal implementation) | runtime/daemon-runner, runtime/pid-manager |
 
 ### src/tui/ — TUI Dashboard (Ink/React)
 

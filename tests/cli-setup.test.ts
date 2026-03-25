@@ -31,20 +31,20 @@ async function readConfig(): Promise<Record<string, unknown>> {
 // ─── Setup / Teardown ───
 
 beforeEach(async () => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "tavori-setup-test-"));
-  process.env["TAVORI_HOME"] = tmpDir;
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "seedpulse-setup-test-"));
+  process.env["SEEDPULSE_HOME"] = tmpDir;
   // Clear relevant env vars
   delete process.env["OPENAI_API_KEY"];
   delete process.env["ANTHROPIC_API_KEY"];
-  delete process.env["TAVORI_PROVIDER"];
-  delete process.env["TAVORI_ADAPTER"];
-  delete process.env["TAVORI_MODEL"];
-  // Reset module cache so PROVIDER_CONFIG_PATH re-evaluates with new TAVORI_HOME
+  delete process.env["SEEDPULSE_PROVIDER"];
+  delete process.env["SEEDPULSE_ADAPTER"];
+  delete process.env["SEEDPULSE_MODEL"];
+  // Reset module cache so PROVIDER_CONFIG_PATH re-evaluates with new SEEDPULSE_HOME
   vi.resetModules();
 });
 
 afterEach(async () => {
-  delete process.env["TAVORI_HOME"];
+  delete process.env["SEEDPULSE_HOME"];
   try {
     await fsp.rm(tmpDir, { recursive: true, force: true });
   } catch {

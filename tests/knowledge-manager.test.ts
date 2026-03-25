@@ -17,7 +17,7 @@ import { randomUUID } from "node:crypto";
 function makeTempDir(): string {
   const dir = path.join(
     os.tmpdir(),
-    `tavori-knowledge-test-${Math.random().toString(36).slice(2)}`
+    `seedpulse-knowledge-test-${Math.random().toString(36).slice(2)}`
   );
   fs.mkdirSync(dir, { recursive: true });
   return dir;

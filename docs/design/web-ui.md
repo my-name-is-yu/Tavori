@@ -18,7 +18,7 @@
 
 ## 2. Design Philosophy: "Calm Control Room"
 
-Tavori is the "control room for agents." Like a cockpit, a large amount of information is arranged in organized positions, and attention is drawn only when something is anomalous.
+SeedPulse is the "control room for agents." Like a cockpit, a large amount of information is arranged in organized positions, and attention is drawn only when something is anomalous.
 
 | Patterns to avoid | Countermeasure |
 |------------------|---------------|
@@ -26,7 +26,7 @@ Tavori is the "control room for agents." Like a cockpit, a large amount of infor
 | All elements at the same visual weight | 3-level typographic hierarchy. Numbers large, labels small |
 | Excessive decoration and gradients | Zero decoration. Accent color only for status indication |
 | Uniform grid | Asymmetric layout: main 70% + side panel 30% |
-| SaaS blue + light gray | Dark base + amber accent (warm color to express "tavorition") |
+| SaaS blue + light gray | Dark base + amber accent (warm color to express "motivation") |
 
 **Reference UIs**: Linear (information density, keyboard navigation), Vercel Dashboard (real-time monitoring), Grafana (data-heavy monitoring), Railway (minimal developer dashboard)
 
@@ -60,14 +60,14 @@ web/
 │       ├── goals/, sessions/, strategies/, knowledge/, reports/
 │       └── events/route.ts  # SSE proxy
 ├── components/  (ui/, dashboard/, goal/, session/, knowledge/, layout/)
-├── lib/  (tavori-client.ts, store.ts, sse.ts)
+├── lib/  (seedpulse-client.ts, store.ts, sse.ts)
 ├── styles/tokens.css
 └── package.json, next.config.ts, tailwind.config.ts
 ```
 
 ### Data Layer and API
 
-Route Handlers directly import tavori-core modules within the Node.js process (same process, no RPC needed).
+Route Handlers directly import seedpulse-core modules within the Node.js process (same process, no RPC needed).
 
 | Endpoint | Method | Corresponding module |
 |----------|--------|---------------------|
@@ -126,7 +126,7 @@ Common layout: left sidebar (nav, 120px fixed) + main area
 
 ### 5.5 Settings & Users
 
-Provider settings (`~/.tavori/provider.json`), plugin management (enable/disable), system health (CoreLoop state, EventServer connection count)
+Provider settings (`~/.seedpulse/provider.json`), plugin management (enable/disable), system health (CoreLoop state, EventServer connection count)
 
 ---
 
@@ -155,7 +155,7 @@ Provider settings (`~/.tavori/provider.json`), plugin management (enable/disable
 - [ ] Gap/Trust trend charts display 30 days of data on Goal Detail
 - [ ] Session output is streamed via SSE on Agent Sessions
 - [ ] All features are accessible without authentication via localhost
-- [ ] TUI and Web UI can operate concurrently against the same Tavori process
+- [ ] TUI and Web UI can operate concurrently against the same SeedPulse process
 - [ ] Initial load < 1.5 seconds (SSR), SSE event reflected < 500ms
 - [ ] Dogfooding: Web UI monitoring operates without issues for 2+ hours
 
@@ -170,7 +170,7 @@ Provider settings (`~/.tavori/provider.json`), plugin management (enable/disable
   --bg-primary: #0a0a0a;  --bg-secondary: #141414;  --bg-tertiary: #1a1a1a;  --bg-hover: #1f1f1f;
   --border-primary: #262626;  --border-secondary: #333333;
   --text-primary: #fafafa;  --text-secondary: #a3a3a3;  --text-tertiary: #737373;
-  /* Accent: Amber (tavorition = warmth) */
+  /* Accent: Amber (motivation = warmth) */
   --accent-primary: #f59e0b;  --accent-secondary: #d97706;  --accent-muted: #78350f;
   /* Semantic */
   --status-success: #22c55e;  --status-warning: #f59e0b;  --status-error: #ef4444;

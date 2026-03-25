@@ -48,7 +48,7 @@ export async function cmdPluginList(pluginsDir?: string): Promise<number> {
   const dir = pluginsDir ?? defaultPluginsDir();
 
   if (!(await pathExists(dir))) {
-    console.log("No plugins installed. Use `tavori plugin install <path>` to install one.");
+    console.log("No plugins installed. Use `seedpulse plugin install <path>` to install one.");
     return 0;
   }
 
@@ -85,7 +85,7 @@ export async function cmdPluginList(pluginsDir?: string): Promise<number> {
   }
 
   if (rows.length === 0) {
-    console.log("No plugins installed. Use `tavori plugin install <path>` to install one.");
+    console.log("No plugins installed. Use `seedpulse plugin install <path>` to install one.");
     return 0;
   }
 
@@ -119,27 +119,30 @@ async function readNpmManifest(pluginDir: string, packageName: string) {
   return readManifest(nodeModulesDir);
 }
 
-/** Check Tavori version compatibility, log a warning if incompatible, return false to abort. */
+/** Check SeedPulse version compatibility, log a warning if incompatible, return false to abort. */
 function checkVersionCompat(
-  manifest: { name: string; version: string; min_tavori_version?: string; max_tavori_version?: string },
-  tavoriVersion: string
+  manifest: { name: string; version: string; min_tavori_version?: string; max_tavori_version?: string; min_seedpulse_version?: string; max_seedpulse_version?: string },
+  seedpulseVersion: string
 ): boolean {
-  if (!satisfiesRange(tavoriVersion, manifest.min_tavori_version, manifest.max_tavori_version)) {
+  // Prefer new field names; fall back to deprecated tavori fields for backward compat
+  const minVer = manifest.min_seedpulse_version ?? manifest.min_tavori_version;
+  const maxVer = manifest.max_seedpulse_version ?? manifest.max_tavori_version;
+  if (!satisfiesRange(seedpulseVersion, minVer, maxVer)) {
     const range = [
-      manifest.min_tavori_version ? `>=${manifest.min_tavori_version}` : "",
-      manifest.max_tavori_version ? `<=${manifest.max_tavori_version}` : "",
+      minVer ? `>=${minVer}` : "",
+      maxVer ? `<=${maxVer}` : "",
     ]
       .filter(Boolean)
       .join(", ");
     getCliLogger().warn(
-      `Plugin "${manifest.name}" requires Tavori ${range}, but current version is ${tavoriVersion}. Aborting install.`
+      `Plugin "${manifest.name}" requires SeedPulse ${range}, but current version is ${seedpulseVersion}. Aborting install.`
     );
     return false;
   }
   return true;
 }
 
-function getTavoriVersion(): string {
+function getSeedPulseVersion(): string {
   try {
     const pkgPath = path.resolve(new URL(".", import.meta.url).pathname, "../../../package.json");
     const pkg = JSON.parse(fsSync.readFileSync(pkgPath, "utf-8")) as { version?: string };
@@ -152,7 +155,7 @@ function getTavoriVersion(): string {
 export async function cmdPluginInstall(
   pluginsDir: string | undefined,
   argv: string[],
-  _getTavoriVersion?: () => string,
+  _getSeedPulseVersion?: () => string,
   _execFileFn?: typeof execFile
 ): Promise<number> {
   const logger = getCliLogger();
@@ -161,7 +164,7 @@ export async function cmdPluginInstall(
   const force = argv.includes("--force");
 
   if (!source) {
-    logger.error("Error: source path or package name is required. Usage: tavori plugin install <path|package> [--force]");
+    logger.error("Error: source path or package name is required. Usage: seedpulse plugin install <path|package> [--force]");
     return 1;
   }
 
@@ -201,8 +204,8 @@ export async function cmdPluginInstall(
     }
 
     const manifest = result.data;
-    const tavoriVer = _getTavoriVersion ? _getTavoriVersion() : getTavoriVersion();
-    if (!checkVersionCompat(manifest, tavoriVer)) return 1;
+    const seedpulseVer = _getSeedPulseVersion ? _getSeedPulseVersion() : getSeedPulseVersion();
+    if (!checkVersionCompat(manifest, seedpulseVer)) return 1;
 
     if (manifest.permissions.shell) {
       logger.warn(`Plugin "${manifest.name}" requests shell execution permission.`);
@@ -253,8 +256,8 @@ export async function cmdPluginInstall(
     return 1;
   }
 
-  const tavoriVer = _getTavoriVersion ? _getTavoriVersion() : getTavoriVersion();
-  if (!checkVersionCompat(manifest, tavoriVer)) return 1;
+  const seedpulseVer = _getSeedPulseVersion ? _getSeedPulseVersion() : getSeedPulseVersion();
+  if (!checkVersionCompat(manifest, seedpulseVer)) return 1;
 
   if (manifest.permissions.shell) {
     getCliLogger().warn(`Plugin "${manifest.name}" requests shell execution permission.`);
@@ -274,7 +277,7 @@ export async function cmdPluginUpdate(
   const name = argv[0];
 
   if (!name) {
-    logger.error("Error: plugin name is required. Usage: tavori plugin update <name>");
+    logger.error("Error: plugin name is required. Usage: seedpulse plugin update <name>");
     return 1;
   }
 
@@ -305,14 +308,14 @@ export async function cmdPluginSearch(
   const keyword = argv[0];
 
   if (!keyword) {
-    logger.error("Error: keyword is required. Usage: tavori plugin search <keyword>");
+    logger.error("Error: keyword is required. Usage: seedpulse plugin search <keyword>");
     return 1;
   }
 
   const execFn = _execFileFn ?? execFile;
   let stdout: string;
   try {
-    const result = await execFn("npm", ["search", `@tavori-plugins/${keyword}`, "--json"]);
+    const result = await execFn("npm", ["search", `@seedpulse-plugins/${keyword}`, "--json"]);
     stdout = result.stdout;
   } catch (err) {
     logger.error(formatOperationError("npm search", err));
@@ -349,7 +352,7 @@ export async function cmdPluginRemove(pluginsDir: string | undefined, argv: stri
   const name = argv[0];
 
   if (!name) {
-    logger.error("Error: plugin name is required. Usage: tavori plugin remove <name>");
+    logger.error("Error: plugin name is required. Usage: seedpulse plugin remove <name>");
     return 1;
   }
 

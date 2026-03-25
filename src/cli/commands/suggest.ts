@@ -1,4 +1,4 @@
-// ─── tavori suggest and improve commands ───
+// ─── seedpulse suggest and improve commands ───
 
 import { parseArgs } from "node:util";
 
@@ -72,7 +72,7 @@ export async function cmdSuggest(
 
   const context = positionals[0];
   if (!context) {
-    logger.error('Usage: tavori suggest "<context>" [--max N] [--path <dir>]');
+    logger.error('Usage: seedpulse suggest "<context>" [--max N] [--path <dir>]');
     return 1;
   }
 
@@ -143,7 +143,7 @@ export async function cmdImprove(
   }
 
   const targetPath = positionals[0] || ".";
-  console.log(`\n[Tavori Improve] Analyzing ${targetPath}...\n`);
+  console.log(`\n[SeedPulse Improve] Analyzing ${targetPath}...\n`);
 
   try {
     await ensureProviderConfig();
@@ -214,7 +214,7 @@ export async function cmdImprove(
 
   // Negotiate the selected goal
   const selectedDescription = selected.steps.join("\n");
-  console.log(`[Tavori Improve] Negotiating goal: "${selected.title}"...`);
+  console.log(`[SeedPulse Improve] Negotiating goal: "${selected.title}"...`);
   let goal: Awaited<ReturnType<typeof deps.goalNegotiator.negotiate>>["goal"];
   let response: Awaited<ReturnType<typeof deps.goalNegotiator.negotiate>>["response"];
   try {
@@ -232,21 +232,21 @@ export async function cmdImprove(
     return 1;
   }
 
-  console.log(`[Tavori Improve] Goal registered: ${goal.id}`);
+  console.log(`[SeedPulse Improve] Goal registered: ${goal.id}`);
   console.log(`  Response: ${responseType} — ${response.message}\n`);
 
   // Run the loop if --auto or --yes
   if (values.auto || values.yes) {
-    console.log(`[Tavori Improve] Starting improvement loop for goal ${goal.id}...`);
+    console.log(`[SeedPulse Improve] Starting improvement loop for goal ${goal.id}...`);
     try {
       await deps.coreLoop.run(goal.id);
     } catch (err) {
       logger.error(formatOperationError(`run improvement loop for goal "${goal.id}"`, err));
       return 1;
     }
-    console.log(`[Tavori Improve] Loop completed for goal ${goal.id}`);
+    console.log(`[SeedPulse Improve] Loop completed for goal ${goal.id}`);
   } else {
-    console.log(`Goal created. Run with: tavori run --goal ${goal.id}`);
+    console.log(`Goal created. Run with: seedpulse run --goal ${goal.id}`);
   }
 
   return 0;

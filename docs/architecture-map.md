@@ -1,10 +1,10 @@
-# Tavori -- Architecture Map
+# SeedPulse -- Architecture Map
 
 ---
 
 ## 1. In a Nutshell
 
-Tavori is a **task discovery engine**. It takes on the user's long-term goals ("I want to double revenue," "I want to live happily with my dog"), observes the real world, and keeps discovering "what should be done next" from the gap with the goal. Tavori itself executes nothing. It delegates discovered tasks to AI agents, verifies the results, and runs the loop again. Until the goal is achieved — days or years, however long it takes.
+SeedPulse is a **task discovery engine**. It takes on the user's long-term goals ("I want to double revenue," "I want to live happily with my dog"), observes the real world, and keeps discovering "what should be done next" from the gap with the goal. SeedPulse itself executes nothing. It delegates discovered tasks to AI agents, verifies the results, and runs the loop again. Until the goal is achieved — days or years, however long it takes.
 
 ---
 
@@ -22,7 +22,7 @@ Tavori is a **task discovery engine**. It takes on the user's long-term goals ("
                 ↓                               ↑
 ┌───────────────────────────────────────────────────────────────────────┐
 │                                                                       │
-│                      Tavori (Task Discovery Engine)                  │
+│                      SeedPulse (Task Discovery Engine)                  │
 │                                                                       │
 │  ┌──────────────────────────────────────────────────────────────┐     │
 │  │              Goal Negotiation                                 │     │
@@ -212,7 +212,7 @@ Tavori is a **task discovery engine**. It takes on the user's long-term goals ("
  │ [6] Session Launch → Execute                                       │
  │                                                                    │
  │   Adapter selection → Context assembly → Agent execution           │
- │   During execution: Tavori does not intervene                     │
+ │   During execution: SeedPulse does not intervene                     │
  │   (monitors only status / timeout / heartbeat)                     │
  └────────────────────────────┬───────────────────────────────────────┘
                                ↓ Execution result
@@ -348,7 +348,7 @@ Tavori is a **task discovery engine**. It takes on the user's long-term goals ("
 
 | Document | Description | Read by | Outputs to | Status |
 |---|---|---|---|---|
-| `vision.md` | Vision. Definition of the world Tavori enables | -- | All design documents | Designed |
+| `vision.md` | Vision. Definition of the world SeedPulse enables | -- | All design documents | Designed |
 | `mechanism.md` | Core mechanism. Conceptual definition of the task discovery loop | vision.md | All design/ documents | Designed |
 | `runtime.md` | Runtime infrastructure. Orchestration, drive, and context | mechanism.md | drive-system, session-and-context, execution-boundary | Designed |
 
@@ -363,14 +363,14 @@ Tavori is a **task discovery engine**. It takes on the user's long-term goals ("
 | `task-lifecycle.md` | Task lifecycle (generation → execution → verification → failure handling) | drive-scoring.md, execution-boundary.md | state-vector.md (result reflection) | Designed |
 | `goal-negotiation.md` | Goal negotiation (6 steps, includes Step 0 ethics gate) | mechanism.md, goal-ethics.md | state-vector.md (initial setup) | Designed |
 | `goal-ethics.md` | Ethics/legal gate (GoalNegotiator Step 0, 2-layer judgment) | goal-negotiation.md | goal-negotiation.md, task-lifecycle.md | Designed |
-| `character.md` | Tavori persona definition (4 behavioral axes, LLM prompt spec) | -- | goal-negotiation.md, reporting.md, stall-detection.md | Designed |
+| `character.md` | SeedPulse persona definition (4 behavioral axes, LLM prompt spec) | -- | goal-negotiation.md, reporting.md, stall-detection.md | Designed |
 | `satisficing.md` | Satisficing (completion judgment, progress cap) | state-vector.md, observation.md | curiosity.md (empty task queue) | Designed |
 | `stall-detection.md` | Stall detection (4 indicators, staged response) | gap-calculation.md, task-lifecycle.md | drive-scoring.md (decay_factor), goal-negotiation.md (renegotiation) | Designed |
 | `trust-and-safety.md` | Trust and safety (2-axis matrix, irreversible rules, ethics gate priority 0) | mechanism.md | task-lifecycle.md (execution permission judgment) | Designed |
-| `curiosity.md` | Curiosity (meta-tavorition, new goal proposals) | satisficing.md, stall-detection.md | goal-negotiation.md (new goals) | Designed |
+| `curiosity.md` | Curiosity (meta-iteration, new goal proposals) | satisficing.md, stall-detection.md | goal-negotiation.md (new goals) | Designed |
 | `session-and-context.md` | Session/context management (3-layer memory) | runtime.md | task-lifecycle.md (context assembly) | Designed |
 | `drive-system.md` | Drive method (4 triggers, startup judgment) | runtime.md, drive-scoring.md | core loop startup | Designed |
-| `execution-boundary.md` | Execution boundary (what Tavori does and what it delegates) | mechanism.md | task-lifecycle.md | Designed |
+| `execution-boundary.md` | Execution boundary (what SeedPulse does and what it delegates) | mechanism.md | task-lifecycle.md | Designed |
 | `knowledge-acquisition.md` | Knowledge acquisition (knowledge gap detection, research tasks, DomainKnowledge storage) | observation.md, task-lifecycle.md | goal-negotiation.md | Implemented |
 | `portfolio-management.md` | Portfolio management (PortfolioManager, parallel multi-strategy execution, effectiveness measurement, auto-rebalancing) | drive-scoring.md, stall-detection.md | task-lifecycle.md | Implemented |
 | `memory-lifecycle.md` | Memory lifecycle (generation, promotion, deletion, and archival policy for memories) | session-and-context.md | knowledge-acquisition.md | Designed |
@@ -409,7 +409,7 @@ Cross-cutting:
 | `trust-and-safety.md` | Trust score numeric thresholds defined as v1 defaults (HIGH_TRUST=+20, HIGH_CONFIDENCE=0.50) | trust-and-safety.md |
 | `runtime.md` | Process model decided (CLI for MVP, daemon/cron for Phase 2) | runtime.md §2 |
 | `session-and-context.md` | Priority-based context selection algorithm (MVP: fixed top-4) defined in §4 | session-and-context.md §4 |
-| `drive-system.md` | File-queue method (`~/.tavori/events/`) for event reception confirmed as MVP design | drive-system.md |
+| `drive-system.md` | File-queue method (`~/.seedpulse/events/`) for event reception confirmed as MVP design | drive-system.md |
 | `stall-detection.md` | Stall type → cause classification mapping defined in §3.6 | stall-detection.md §3.6 |
 | `task-lifecycle.md` | estimated_duration defined as Duration type in §2.7; revert failure handling also defined | task-lifecycle.md §2.7 |
 | `curiosity.md` | Cross-goal similarity = dimension_name exact match defined in §4.3 | curiosity.md §4.3 |
@@ -452,13 +452,13 @@ Stop at "good enough," not "perfect." Completion only when all dimensions exceed
 Detects by 4 indicators (dimension stall / time overrun / consecutive failures / overall stall). Staged response (1st: change approach → 2nd: strategy pivot → 3rd: human escalation). Stalled dimensions have their drive score temporarily suppressed with decay_factor.
 
 **Curiosity (curiosity)**
-Goal-level meta-tavorition. Triggered by empty task queue / unexpected observation / repeated failures / periodic exploration. Two functions: new goal proposal and existing goal redefinition. Always lower priority than user goals. Unaccepted proposals automatically expire after 12 hours.
+Goal-level meta-iteration. Triggered by empty task queue / unexpected observation / repeated failures / periodic exploration. Two functions: new goal proposal and existing goal redefinition. Always lower priority than user goals. Unaccepted proposals automatically expire after 12 hours.
 
 **Goal Negotiation (goal-negotiation)**
 6 steps (ethics/legal gate (Step 0) → receive → dimension decomposition → baseline observation → feasibility evaluation → response). Hybrid evaluation (quantitative + qualitative). 3 response types (accept / counter-propose / cautionary flag). Renegotiation occurs on stall detection or premise changes.
 
 **Execution Boundary (execution-boundary)**
-"Tavori thinks. Agents act." Tavori directly performs only LLM calls (for thinking) and reading/writing state files. Everything else (code implementation, data collection, notification delivery, etc.) is delegated to agents.
+"SeedPulse thinks. Agents act." SeedPulse directly performs only LLM calls (for thinking) and reading/writing state files. Everything else (code implementation, data collection, notification delivery, etc.) is delegated to agents.
 
 **Knowledge Acquisition (knowledge-acquisition)**
 KnowledgeManager detects knowledge gaps before and after task execution. If deficiencies exist, research tasks are generated with priority, and results are saved as DomainKnowledge. Conflicting knowledge entries are automatically detected and escalated to humans. CapabilityDetector manages the capability registry and issues capability grant requests to users when a required capability is unregistered.

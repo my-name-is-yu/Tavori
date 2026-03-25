@@ -1,6 +1,6 @@
 # Drive Scoring Design
 
-How to quantify the priority judgment for "what to tackle next." Tavori defines three drive types, each of which reads the gap vector from a different angle. This document describes the calculation structure and design decisions behind that.
+How to quantify the priority judgment for "what to tackle next." SeedPulse defines three drive types, each of which reads the gap vector from a different angle. This document describes the calculation structure and design decisions behind that.
 
 As a prerequisite, see `gap-calculation.md` for the gap calculation structure.
 
@@ -12,7 +12,7 @@ As a prerequisite, see `gap-calculation.md` for the gap calculation structure.
 
 "This gap is too large. It must be fixed."
 
-This is the most fundamental drive force. The larger the current gap, the higher the priority. However, dimensions that have been repeatedly attempted without progress receive a temporary penalty, preventing Tavori from endlessly hammering the same wall.
+This is the most fundamental drive force. The larger the current gap, the higher the priority. However, dimensions that have been repeatedly attempted without progress receive a temporary penalty, preventing SeedPulse from endlessly hammering the same wall.
 
 ### Score Formula
 
@@ -255,7 +255,7 @@ How to integrate the three scores into a final priority score.
 final_score(dim) = max(score_dissatisfaction(dim), score_deadline(dim), score_opportunity(dim))
 ```
 
-The strongest tavorition dominates the priority decision.
+The strongest drive force dominates the priority decision.
 
 - Simple and easy to interpret
 - When one strong drive exists, it is not dragged down by other weak drives
@@ -277,7 +277,7 @@ All three drives are added together.
 
 **Max** is adopted as the default.
 
-There are three reasons. First, drives are not competitive — they are alternatives. It is natural for tavorition to switch in the form of "this week there's an opportunity, so..." or "next week there's a deadline, so..." Second, interpretability supports transparency in priority decisions. Third, weight configuration for a weighted sum creates a high cognitive load for users.
+There are three reasons. First, drives are not competitive — they are alternatives. It is natural for drive force to switch in the form of "this week there's an opportunity, so..." or "next week there's a deadline, so..." Second, interpretability supports transparency in priority decisions. Third, weight configuration for a weighted sum creates a high cognitive load for users.
 
 However, a **Deadline Override Rule** is added.
 

@@ -207,7 +207,7 @@ Dimensions with low confidence are treated as "possibly worse than we think," nu
 
 ### Design Rationale
 
-The risk of treating something poorly understood as "no problem" is high. Especially for long-term goals, overlooked issues can become costly later. Tavori should be designed to "fear what it cannot see."
+The risk of treating something poorly understood as "no problem" is high. Especially for long-term goals, overlooked issues can become costly later. SeedPulse should be designed to "fear what it cannot see."
 
 ---
 
@@ -271,7 +271,7 @@ parent_gap = max(normalized_weighted_gap(child_1), ..., normalized_weighted_gap(
 
 - "The weakest link determines the overall strength" approach
 - Fits sequentially dependent goals where a single failure collapses the parent goal
-- Improvements in small child goals are less likely to be reflected in the parent score, which can reduce tavorition
+- Improvements in small child goals are less likely to be reflected in the parent score, which can reduce motivation
 
 **Weighted Average**: Children are averaged with weights applied.
 

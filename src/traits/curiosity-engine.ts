@@ -54,7 +54,7 @@ export interface CuriosityEngineDeps {
 /**
  * CuriosityEngine implements Stage 11C (Curiosity MVP).
  *
- * It acts as a meta-tavoritor: while the 3 drive forces (dissatisfaction,
+ * It acts as a meta-orchestrator: while the 3 drive forces (dissatisfaction,
  * deadline, opportunity) select tasks within existing goals, CuriosityEngine
  * proposes new goals or goal restructurings based on learning feedback.
  *

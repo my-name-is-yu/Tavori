@@ -6,7 +6,7 @@ import { Sidebar } from '../components/layout/sidebar';
 import { StoreProvider } from '../components/providers/store-provider';
 
 export const metadata: Metadata = {
-  title: 'Tavori',
+  title: 'SeedPulse',
   description: 'AI Agent Orchestrator Dashboard',
 };
 

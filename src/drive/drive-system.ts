@@ -2,8 +2,8 @@ import { watch } from "node:fs";
 import type { FSWatcher } from "node:fs";
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
-import { TavoriEventSchema, GoalScheduleSchema } from "../types/drive.js";
-import type { TavoriEvent, GoalSchedule } from "../types/drive.js";
+import { SeedPulseEventSchema, GoalScheduleSchema } from "../types/drive.js";
+import type { SeedPulseEvent, GoalSchedule } from "../types/drive.js";
 import type { StateManager } from "../state-manager.js";
 import type { Logger } from "../runtime/logger.js";
 import { writeJsonFileAtomic } from "../utils/json-io.js";
@@ -25,8 +25,8 @@ export class DriveSystem {
   private readonly stateManager: StateManager;
   private readonly logger?: Logger;
   private watcher: FSWatcher | null = null;
-  private inMemoryQueue: TavoriEvent[] = [];
-  private onEventCallback: ((event: TavoriEvent) => void) | null = null;
+  private inMemoryQueue: SeedPulseEvent[] = [];
+  private onEventCallback: ((event: SeedPulseEvent) => void) | null = null;
   private readonly initPromise: Promise<void>;
 
   constructor(stateManager: StateManager, options?: { baseDir?: string; logger?: Logger }) {
@@ -99,10 +99,10 @@ export class DriveSystem {
 
   /**
    * Read all JSON files from {baseDir}/events/ directory.
-   * Parse each as TavoriEvent. Return sorted by timestamp (oldest first).
+   * Parse each as SeedPulseEvent. Return sorted by timestamp (oldest first).
    * Skips files that fail to parse (logs a warning).
    */
-  async readEventQueue(): Promise<TavoriEvent[]> {
+  async readEventQueue(): Promise<SeedPulseEvent[]> {
     await this.initPromise;
     const eventsDir = path.join(this.baseDir, "events");
 
@@ -113,7 +113,7 @@ export class DriveSystem {
       return [];
     }
 
-    const events: TavoriEvent[] = [];
+    const events: SeedPulseEvent[] = [];
     for (const fileName of fileNames) {
       const filePath = path.join(eventsDir, fileName);
 
@@ -128,7 +128,7 @@ export class DriveSystem {
       try {
         const content = await fsp.readFile(filePath, "utf-8");
         const raw = JSON.parse(content) as unknown;
-        const event = TavoriEventSchema.parse(raw);
+        const event = SeedPulseEventSchema.parse(raw);
         events.push(event);
       } catch (err) {
         this.logger?.warn(`DriveSystem: skipping invalid event file "${fileName}": ${err}`);
@@ -160,7 +160,7 @@ export class DriveSystem {
   /**
    * Read queue, archive each processed event, return the events.
    */
-  async processEvents(): Promise<TavoriEvent[]> {
+  async processEvents(): Promise<SeedPulseEvent[]> {
     await this.initPromise;
     const eventsDir = path.join(this.baseDir, "events");
 
@@ -171,7 +171,7 @@ export class DriveSystem {
       return [];
     }
 
-    const events: TavoriEvent[] = [];
+    const events: SeedPulseEvent[] = [];
     for (const fileName of fileNames) {
       const filePath = path.join(eventsDir, fileName);
 
@@ -185,7 +185,7 @@ export class DriveSystem {
       try {
         const content = await fsp.readFile(filePath, "utf-8");
         const raw = JSON.parse(content) as unknown;
-        const event = TavoriEventSchema.parse(raw);
+        const event = SeedPulseEventSchema.parse(raw);
         await this.archiveEvent(fileName);
         events.push(event);
       } catch (err) {
@@ -298,7 +298,7 @@ export class DriveSystem {
    * Write an event file to the events directory.
    * Public method used by EventServer to enqueue events via HTTP.
    */
-  async writeEvent(event: TavoriEvent): Promise<void> {
+  async writeEvent(event: SeedPulseEvent): Promise<void> {
     await this.initPromise;
     const eventsDir = path.join(this.baseDir, "events");
     await fsp.mkdir(eventsDir, { recursive: true });
@@ -312,7 +312,7 @@ export class DriveSystem {
    * When a new .json file appears, parse it and push it to the in-memory queue.
    * Optionally calls onEvent callback immediately on each new event.
    */
-  startWatcher(onEvent?: (event: TavoriEvent) => void): void {
+  startWatcher(onEvent?: (event: SeedPulseEvent) => void): void {
     this.onEventCallback = onEvent ?? null;
     const eventsDir = path.join(this.baseDir, "events");
 
@@ -347,7 +347,7 @@ export class DriveSystem {
       return;
     }
     try {
-      const event = TavoriEventSchema.parse(JSON.parse(content) as unknown);
+      const event = SeedPulseEventSchema.parse(JSON.parse(content) as unknown);
       this.inMemoryQueue.push(event);
       if (this.onEventCallback) {
         this.onEventCallback(event);
@@ -372,7 +372,7 @@ export class DriveSystem {
    * Return all events accumulated in the in-memory queue since the last drain,
    * and clear the queue.
    */
-  drainInMemoryQueue(): TavoriEvent[] {
+  drainInMemoryQueue(): SeedPulseEvent[] {
     const events = [...this.inMemoryQueue];
     this.inMemoryQueue = [];
     return events;

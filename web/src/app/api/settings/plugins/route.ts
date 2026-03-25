@@ -3,7 +3,7 @@ import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
-const PLUGINS_DIR = path.join(os.homedir(), '.tavori', 'plugins');
+const PLUGINS_DIR = path.join(os.homedir(), '.seedpulse', 'plugins');
 
 interface PluginInfo {
   name: string;

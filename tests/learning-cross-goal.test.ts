@@ -64,7 +64,7 @@ describe("LearningPipeline — extractCrossGoalPatterns", () => {
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), "tavori-cross-goal-test-")
+      path.join(os.tmpdir(), "seedpulse-cross-goal-test-")
     );
     stateManager = new StateManager(tmpDir);
     const mockEmbeddingClient = new MockEmbeddingClient(4);
@@ -252,7 +252,7 @@ describe("LearningPipeline — sharePatternsAcrossGoals", () => {
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), "tavori-share-patterns-test-")
+      path.join(os.tmpdir(), "seedpulse-share-patterns-test-")
     );
     stateManager = new StateManager(tmpDir);
     const llm = createMockLLMClient([]);
@@ -379,7 +379,7 @@ describe("KnowledgeTransfer — storePattern / retrievePatterns", () => {
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(
-      path.join(os.tmpdir(), "tavori-kt-pattern-test-")
+      path.join(os.tmpdir(), "seedpulse-kt-pattern-test-")
     );
     stateManager = new StateManager(tmpDir);
 

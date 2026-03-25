@@ -1,7 +1,7 @@
-// ─── tavori setup — Interactive setup wizard ───
+// ─── seedpulse setup — Interactive setup wizard ───
 //
 // Guides the user through first-time configuration of their LLM provider,
-// model, and execution adapter. Saves the result to ~/.tavori/provider.json.
+// model, and execution adapter. Saves the result to ~/.seedpulse/provider.json.
 
 import * as readline from "node:readline";
 import { parseArgs } from "node:util";
@@ -181,7 +181,7 @@ async function runNonInteractive(argv: string[]): Promise<number> {
   }
 
   await saveProviderConfig(config);
-  console.log("Setup complete! Configuration saved to ~/.tavori/provider.json");
+  console.log("Setup complete! Configuration saved to ~/.seedpulse/provider.json");
   console.log(`  Provider: ${config.provider}`);
   console.log(`  Model:    ${config.model}`);
   console.log(`  Adapter:  ${config.adapter}`);
@@ -314,7 +314,7 @@ async function runInteractive(): Promise<number> {
         if (key) {
           config.api_key = key;
         } else {
-          console.error(`Warning: no API key provided. Set ${envKeyName} before running Tavori.`);
+          console.error(`Warning: no API key provided. Set ${envKeyName} before running SeedPulse.`);
         }
       }
     }
@@ -333,7 +333,7 @@ async function runInteractive(): Promise<number> {
     }
 
     await saveProviderConfig(config);
-    console.log("\nSetup complete! Configuration saved to ~/.tavori/provider.json");
+    console.log("\nSetup complete! Configuration saved to ~/.seedpulse/provider.json");
     return 0;
   } finally {
     rl.close();
@@ -342,7 +342,7 @@ async function runInteractive(): Promise<number> {
 
 // ─── Help text ───
 
-const HELP_TEXT = `Usage: tavori setup [options]
+const HELP_TEXT = `Usage: seedpulse setup [options]
 
 Interactive setup wizard for provider configuration.
 

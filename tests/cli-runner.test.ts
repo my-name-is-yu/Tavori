@@ -4,18 +4,18 @@
  * CLIRunner API (src/cli-runner.ts):
  *   class CLIRunner {
  *     constructor(baseDir?: string)
- *     run(argv: string[]): Promise<number>   // argv is pure subcommand args (no "node"/"tavori" prefix)
+ *     run(argv: string[]): Promise<number>   // argv is pure subcommand args (no "node"/"seedpulse" prefix)
  *     stop(): void
  *   }
  *
  * argv format: ["run", "--goal", "<id>"] (pure subcommand args)
  *
  * Subcommands:
- *   tavori run --goal <id>
- *   tavori goal add "<description>"
- *   tavori goal list
- *   tavori status --goal <id>
- *   tavori report --goal <id>
+ *   seedpulse run --goal <id>
+ *   seedpulse goal add "<description>"
+ *   seedpulse goal list
+ *   seedpulse status --goal <id>
+ *   seedpulse report --goal <id>
  *
  * Exit codes: 0 success, 1 error, 2 stall escalation
  *
@@ -218,7 +218,7 @@ beforeEach(() => {
   // Provide a dummy API key so requireApiKey() passes by default.
   origApiKey = process.env.ANTHROPIC_API_KEY;
   process.env.ANTHROPIC_API_KEY = "test-api-key";
-  process.env.TAVORI_LLM_PROVIDER = "anthropic";
+  process.env.SEEDPULSE_LLM_PROVIDER = "anthropic";
 });
 
 afterEach(() => {
@@ -227,7 +227,7 @@ afterEach(() => {
   } else {
     process.env.ANTHROPIC_API_KEY = origApiKey;
   }
-  delete process.env.TAVORI_LLM_PROVIDER;
+  delete process.env.SEEDPULSE_LLM_PROVIDER;
 
   try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ENOTEMPTY on Node 20 CI — ignore */ }
   vi.clearAllMocks();
@@ -438,7 +438,7 @@ describe("--yes flag position independence", async () => {
   //   (b) CoreLoop.run() is called with the correct goalId
   // This confirms --yes is correctly stripped before subcommand dispatch.
 
-  it("honours --yes placed before the subcommand (tavori --yes run --goal <id>)", async () => {
+  it("honours --yes placed before the subcommand (seedpulse --yes run --goal <id>)", async () => {
     await stateManager.saveGoal(makeGoal({ id: "g-yes-before" }));
 
     const mockRun = vi.fn().mockResolvedValue(makeLoopResult({ goalId: "g-yes-before" }));
@@ -454,7 +454,7 @@ describe("--yes flag position independence", async () => {
     expect(mockRun).toHaveBeenCalledWith("g-yes-before");
   });
 
-  it("honours --yes placed after --goal (tavori run --goal <id> --yes)", async () => {
+  it("honours --yes placed after --goal (seedpulse run --goal <id> --yes)", async () => {
     await stateManager.saveGoal(makeGoal({ id: "g-yes-after" }));
 
     const mockRun = vi.fn().mockResolvedValue(makeLoopResult({ goalId: "g-yes-after" }));

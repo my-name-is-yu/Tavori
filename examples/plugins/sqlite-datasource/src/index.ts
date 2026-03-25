@@ -1,6 +1,6 @@
 // ─── SqliteDataSourceAdapter ───
 //
-// A Tavori data source plugin that queries a SQLite database.
+// A SeedPulse data source plugin that queries a SQLite database.
 // Only SELECT statements are permitted; mutating SQL is rejected.
 
 import Database from "better-sqlite3";

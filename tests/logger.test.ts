@@ -6,7 +6,7 @@ import { makeTempDir } from "./helpers/temp-dir.js";
 
 // ─── Helpers ───
 
-async function readLogFile(logger: Logger, dir: string, filename = "tavori.log"): Promise<string> {
+async function readLogFile(logger: Logger, dir: string, filename = "seedpulse.log"): Promise<string> {
   await logger.close();
   const filePath = path.join(dir, filename);
   return fs.existsSync(filePath) ? fs.readFileSync(filePath, "utf-8") : "";
@@ -53,7 +53,7 @@ describe("constructor", () => {
 // ═══════════════════════════════════════════════════════
 
 describe("log levels — file output", () => {
-  it("writes info messages to tavori.log", async () => {
+  it("writes info messages to seedpulse.log", async () => {
     const logger = new Logger({ dir: tmpDir, consoleOutput: false });
     logger.info("hello from info");
 
@@ -234,7 +234,7 @@ describe("console output", () => {
 // ═══════════════════════════════════════════════════════
 
 describe("log rotation", () => {
-  it("rotates when file exceeds maxSizeMB — creates tavori.1.log", async () => {
+  it("rotates when file exceeds maxSizeMB — creates seedpulse.1.log", async () => {
     const logger = new Logger({
       dir: tmpDir,
       maxSizeMB: 0.001, // ~1 KB
@@ -250,10 +250,10 @@ describe("log rotation", () => {
     await logger.close();
     const files = logFiles(tmpDir);
     expect(files.length).toBeGreaterThan(1);
-    expect(files).toContain("tavori.1.log");
+    expect(files).toContain("seedpulse.1.log");
   });
 
-  it("keeps writing to tavori.log after rotation", async () => {
+  it("keeps writing to seedpulse.log after rotation", async () => {
     const logger = new Logger({
       dir: tmpDir,
       maxSizeMB: 0.001,
@@ -266,8 +266,8 @@ describe("log rotation", () => {
     }
 
     await logger.close();
-    // tavori.log should still exist with new data after rotation
-    expect(fs.existsSync(path.join(tmpDir, "tavori.log"))).toBe(true);
+    // seedpulse.log should still exist with new data after rotation
+    expect(fs.existsSync(path.join(tmpDir, "seedpulse.log"))).toBe(true);
   });
 
   it("does not exceed maxFiles rotated files", async () => {
@@ -285,9 +285,9 @@ describe("log rotation", () => {
     }
 
     await logger.close();
-    const rotatedFiles = logFiles(tmpDir).filter((f) => f !== "tavori.log");
-    // Rotation shifts up to tavori.maxFiles.log, then deletes it on the next cycle.
-    // Total rotated files can be at most maxFiles (tavori.1.log … tavori.maxFiles.log).
+    const rotatedFiles = logFiles(tmpDir).filter((f) => f !== "seedpulse.log");
+    // Rotation shifts up to seedpulse.maxFiles.log, then deletes it on the next cycle.
+    // Total rotated files can be at most maxFiles (seedpulse.1.log … seedpulse.maxFiles.log).
     expect(rotatedFiles.length).toBeLessThanOrEqual(maxFiles);
   });
 
@@ -306,8 +306,8 @@ describe("log rotation", () => {
     }
 
     await logger.close();
-    // Files beyond maxFiles should not exist — tavori.(maxFiles+1).log must be absent
-    const tooOld = path.join(tmpDir, `tavori.${maxFiles + 1}.log`);
+    // Files beyond maxFiles should not exist — seedpulse.(maxFiles+1).log must be absent
+    const tooOld = path.join(tmpDir, `seedpulse.${maxFiles + 1}.log`);
     expect(fs.existsSync(tooOld)).toBe(false);
   });
 
@@ -325,7 +325,7 @@ describe("log rotation", () => {
     await logger.close();
     const files = logFiles(tmpDir);
     expect(files).toHaveLength(1);
-    expect(files[0]).toBe("tavori.log");
+    expect(files[0]).toBe("seedpulse.log");
   });
 });
 
@@ -349,10 +349,10 @@ describe("date-based rotation", () => {
     logger.info("first write");
 
     await logger.close();
-    // Only tavori.log should exist; no date-suffixed file
+    // Only seedpulse.log should exist; no date-suffixed file
     const files = logFiles(tmpDir);
     expect(files).toHaveLength(1);
-    expect(files[0]).toBe("tavori.log");
+    expect(files[0]).toBe("seedpulse.log");
   });
 
   it("should rotate log file when date changes", async () => {
@@ -367,13 +367,13 @@ describe("date-based rotation", () => {
 
     await logger.close();
     const files = logFiles(tmpDir);
-    // Both tavori.log (new day) and a rotated file should exist
-    expect(files).toContain("tavori.log");
+    // Both seedpulse.log (new day) and a rotated file should exist
+    expect(files).toContain("seedpulse.log");
     // At least one rotated file
     expect(files.length).toBeGreaterThan(1);
   });
 
-  it("should name rotated file with date suffix (tavori.YYYY-MM-DD.log)", async () => {
+  it("should name rotated file with date suffix (seedpulse.YYYY-MM-DD.log)", async () => {
     vi.setSystemTime(new Date("2026-03-16T10:00:00Z"));
     const logger = new Logger({ dir: tmpDir, consoleOutput: false });
 
@@ -385,7 +385,7 @@ describe("date-based rotation", () => {
 
     await logger.close();
     const files = logFiles(tmpDir);
-    expect(files).toContain("tavori.2026-03-16.log");
+    expect(files).toContain("seedpulse.2026-03-16.log");
   });
 
   it("should work together with size-based rotation", async () => {
@@ -407,9 +407,9 @@ describe("date-based rotation", () => {
 
     await logger.close();
     const files = logFiles(tmpDir);
-    // Size-based rotated files (tavori.1.log, ...) and date-rotated file should all exist
-    const hasDateRotated = files.some((f) => /tavori\.\d{4}-\d{2}-\d{2}\.log/.test(f));
-    const hasSizeRotated = files.some((f) => /tavori\.\d+\.log/.test(f));
+    // Size-based rotated files (seedpulse.1.log, ...) and date-rotated file should all exist
+    const hasDateRotated = files.some((f) => /seedpulse\.\d{4}-\d{2}-\d{2}\.log/.test(f));
+    const hasSizeRotated = files.some((f) => /seedpulse\.\d+\.log/.test(f));
     expect(hasDateRotated).toBe(true);
     expect(hasSizeRotated).toBe(true);
   });
@@ -432,11 +432,11 @@ describe("date-based rotation", () => {
     await logger.close();
     const files = logFiles(tmpDir);
     // No date-suffixed file should exist
-    const hasDateRotated = files.some((f) => /tavori\.\d{4}-\d{2}-\d{2}\.log/.test(f));
+    const hasDateRotated = files.some((f) => /seedpulse\.\d{4}-\d{2}-\d{2}\.log/.test(f));
     expect(hasDateRotated).toBe(false);
-    // Only tavori.log
+    // Only seedpulse.log
     expect(files).toHaveLength(1);
-    expect(files[0]).toBe("tavori.log");
+    expect(files[0]).toBe("seedpulse.log");
   });
 });
 
@@ -454,7 +454,7 @@ describe("stream error handling", () => {
     const logger = new Logger({ dir: tmpDir, consoleOutput: false });
 
     // Make the log file unwritable so that writing triggers an error
-    const logFile = path.join(tmpDir, "tavori.log");
+    const logFile = path.join(tmpDir, "seedpulse.log");
     // Write once to open + create the file
     logger.info("before error");
     // Flush and close to ensure file exists on disk
@@ -498,7 +498,7 @@ describe("close()", () => {
     logger.info("before close");
     await logger.close();
 
-    const content = fs.readFileSync(path.join(tmpDir, "tavori.log"), "utf-8");
+    const content = fs.readFileSync(path.join(tmpDir, "seedpulse.log"), "utf-8");
     expect(content).toContain("before close");
   });
 

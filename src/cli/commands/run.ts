@@ -1,5 +1,6 @@
-// ─── tavori run command ───
+// ─── seedpulse run command ───
 
+import * as path from "node:path";
 import * as readline from "node:readline";
 import { getLogsDir } from "../../utils/paths.js";
 
@@ -31,6 +32,15 @@ function buildApprovalFn(rl: readline.Interface): (task: Task) => Promise<boolea
   };
 }
 
+function warnIfLegacyBin(): void {
+  const bin = path.basename(process.argv[1] ?? "");
+  if (bin === "tavori" || bin === "tavori.js") {
+    process.stderr.write(
+      "Deprecation notice: 'tavori' command is deprecated. Use 'seedpulse' instead.\n\n"
+    );
+  }
+}
+
 export async function cmdRun(
   stateManager: StateManager,
   characterConfigManager: CharacterConfigManager,
@@ -40,6 +50,7 @@ export async function cmdRun(
   verbose?: boolean,
   activeCoreLoopRef?: { value: import("../../core-loop.js").CoreLoop | null }
 ): Promise<number> {
+  warnIfLegacyBin();
   try {
     await ensureProviderConfig();
   } catch (err) {
@@ -121,7 +132,7 @@ export async function cmdRun(
     return 1;
   }
 
-  console.log(`Running Tavori loop for goal: ${goalId}`);
+  console.log(`Running SeedPulse loop for goal: ${goalId}`);
   console.log(`Goal: ${goal.title}`);
   if (loopConfig?.treeMode) {
     console.log("Tree mode enabled — iterating across all tree nodes");
@@ -144,7 +155,7 @@ export async function cmdRun(
     result = await coreLoop.run(goalId);
   } catch (err) {
     logger.error(formatOperationError(`run core loop for goal "${goalId}"`, err));
-    logger.error(`Hint: Check ~/.tavori/logs/ for details or re-run with DEBUG=1 for stack traces.`);
+    logger.error(`Hint: Check ~/.seedpulse/logs/ for details or re-run with DEBUG=1 for stack traces.`);
     if (verbose || process.env.DEBUG) {
       logger.error(err instanceof Error ? err.stack ?? String(err) : String(err));
     }
@@ -174,7 +185,7 @@ export async function cmdRun(
       logger.error("Goal stalled — escalation level reached maximum.");
       return 2;
     case "error":
-      console.error(`Error: ${result.errorMessage || "Loop ended with error. Check ~/.tavori/logs/ for details."}`);
+      console.error(`Error: ${result.errorMessage || "Loop ended with error. Check ~/.seedpulse/logs/ for details."}`);
       return 1;
     default:
       return 0;

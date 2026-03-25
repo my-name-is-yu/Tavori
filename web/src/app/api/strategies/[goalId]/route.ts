@@ -9,7 +9,7 @@ export async function GET(
 ) {
   try {
     const { goalId } = await params;
-    const strategiesDir = join(homedir(), '.tavori', 'strategies', goalId);
+    const strategiesDir = join(homedir(), '.seedpulse', 'strategies', goalId);
 
     let files: string[];
     try {

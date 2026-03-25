@@ -1,6 +1,6 @@
 ---
 name: Bug Report
-about: Report a bug in Tavori
+about: Report a bug in SeedPulse
 labels: bug
 ---
 
@@ -18,7 +18,7 @@ What you expected to happen.
 ## Environment
 - OS: [e.g., macOS, Ubuntu]
 - Node.js version: [e.g., 20.x]
-- Tavori version: [e.g., 0.4.0]
+- SeedPulse version: [e.g., 0.4.0]
 
 ## Additional context
 Any other context about the problem.

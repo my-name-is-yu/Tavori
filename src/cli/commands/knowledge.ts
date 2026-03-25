@@ -1,4 +1,4 @@
-// ─── tavori knowledge commands ───
+// ─── seedpulse knowledge commands ───
 
 import { StateManager } from "../../state-manager.js";
 import { loadSharedEntries, loadDomainKnowledge } from "../../knowledge/knowledge-search.js";
@@ -46,7 +46,7 @@ export async function cmdKnowledgeSearch(
 ): Promise<number> {
   const query = argv[0];
   if (!query) {
-    getCliLogger().error("Error: query is required. Usage: tavori knowledge search <query>");
+    getCliLogger().error("Error: query is required. Usage: seedpulse knowledge search <query>");
     return 1;
   }
 

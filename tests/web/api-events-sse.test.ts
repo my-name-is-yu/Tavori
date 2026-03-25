@@ -15,7 +15,7 @@ let mockSm: {
   loadGoal: (id: string) => Promise<unknown>;
 };
 
-vi.mock('../../web/src/lib/tavori-client', () => ({
+vi.mock('../../web/src/lib/seedpulse-client', () => ({
   getStateManager: () => mockSm,
 }));
 

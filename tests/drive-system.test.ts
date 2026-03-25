@@ -233,7 +233,7 @@ describe("DriveSystem", () => {
 
     it("returns empty array when events directory does not exist", async () => {
       // Create DriveSystem pointing to a dir that has no events subdir
-      const anotherTmp = fs.mkdtempSync(path.join(os.tmpdir(), "tavori-noevents-"));
+      const anotherTmp = fs.mkdtempSync(path.join(os.tmpdir(), "seedpulse-noevents-"));
       try {
         const anotherSm = new StateManager(anotherTmp);
         const anotherDs = new DriveSystem(anotherSm, { baseDir: anotherTmp });

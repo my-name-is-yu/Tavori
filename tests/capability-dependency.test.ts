@@ -34,7 +34,7 @@ let reportingEngine: ReportingEngine;
 let detector: CapabilityDetector;
 
 beforeEach(() => {
-  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "tavori-dep-test-"));
+  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "seedpulse-dep-test-"));
   stateManager = new StateManager(tempDir);
   reportingEngine = new ReportingEngine(stateManager);
   detector = new CapabilityDetector(stateManager, createMockLLMClient("{}"), reportingEngine);

@@ -17,7 +17,7 @@ interface LearnedPattern {
 
 export async function GET() {
   try {
-    const learningDir = join(homedir(), '.tavori', 'learning');
+    const learningDir = join(homedir(), '.seedpulse', 'learning');
     let files: string[];
     try {
       files = await readdir(learningDir);

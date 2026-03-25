@@ -1,8 +1,8 @@
 /**
  * CLIRunner — knowledge subcommand tests
  *
- * Verifies that `tavori knowledge list`, `tavori knowledge search`, and
- * `tavori knowledge stats` work correctly against the shared knowledge base
+ * Verifies that `seedpulse knowledge list`, `seedpulse knowledge search`, and
+ * `seedpulse knowledge stats` work correctly against the shared knowledge base
  * stored in StateManager.
  */
 
@@ -161,7 +161,7 @@ afterEach(() => {
   } else {
     process.env.ANTHROPIC_API_KEY = origApiKey;
   }
-  delete process.env.TAVORI_LLM_PROVIDER;
+  delete process.env.SEEDPULSE_LLM_PROVIDER;
   fs.rmSync(tmpDir, { recursive: true, force: true });
   vi.clearAllMocks();
   vi.restoreAllMocks();
@@ -169,7 +169,7 @@ afterEach(() => {
 
 // ─── Tests: knowledge list ────────────────────────────────────────────────────
 
-describe("CLIRunner — tavori knowledge list", () => {
+describe("CLIRunner — seedpulse knowledge list", () => {
   it("shows a message when no knowledge entries exist", async () => {
     const runner = new CLIRunner(tmpDir);
     const exitCode = await runner.run(["knowledge", "list"]);
@@ -228,7 +228,7 @@ describe("CLIRunner — tavori knowledge list", () => {
 
 // ─── Tests: knowledge search ─────────────────────────────────────────────────
 
-describe("CLIRunner — tavori knowledge search", () => {
+describe("CLIRunner — seedpulse knowledge search", () => {
   it("returns error when no query argument is provided", async () => {
     const runner = new CLIRunner(tmpDir);
     const exitCode = await runner.run(["knowledge", "search"]);
@@ -307,7 +307,7 @@ describe("CLIRunner — tavori knowledge search", () => {
 
 // ─── Tests: knowledge stats ───────────────────────────────────────────────────
 
-describe("CLIRunner — tavori knowledge stats", () => {
+describe("CLIRunner — seedpulse knowledge stats", () => {
   it("shows zero counts when no knowledge exists", async () => {
     const runner = new CLIRunner(tmpDir);
     const exitCode = await runner.run(["knowledge", "stats"]);
@@ -338,7 +338,7 @@ describe("CLIRunner — tavori knowledge stats", () => {
 
 // ─── Tests: unknown knowledge subcommand ────────────────────────────────────
 
-describe("CLIRunner — tavori knowledge (error cases)", () => {
+describe("CLIRunner — seedpulse knowledge (error cases)", () => {
   it("returns error when no subcommand is given", async () => {
     const runner = new CLIRunner(tmpDir);
     const exitCode = await runner.run(["knowledge"]);

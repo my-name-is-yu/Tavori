@@ -1,7 +1,7 @@
 // ─── Provider Configuration ───
 //
-// Pluggable provider configuration system for Tavori.
-// Reads/writes ~/.tavori/provider.json to configure which LLM provider
+// Pluggable provider configuration system for SeedPulse.
+// Reads/writes ~/.seedpulse/provider.json to configure which LLM provider
 // and default adapter to use. Env vars always take precedence over config file.
 
 import * as fsp from "node:fs/promises";
@@ -186,7 +186,7 @@ function resolveProvider(
   fileProvider: ProviderConfig["provider"] | undefined
 ): ProviderConfig["provider"] {
   // New env var takes precedence, old alias as fallback
-  const envProvider = process.env["TAVORI_PROVIDER"] ?? process.env["TAVORI_LLM_PROVIDER"];
+  const envProvider = process.env["SEEDPULSE_PROVIDER"] ?? process.env["SEEDPULSE_LLM_PROVIDER"] ?? process.env["TAVORI_PROVIDER"] ?? process.env["TAVORI_LLM_PROVIDER"];
   if (envProvider === "anthropic" || envProvider === "openai" || envProvider === "ollama") {
     return envProvider;
   }
@@ -201,7 +201,7 @@ function resolveAdapter(
   fileAdapter: ProviderConfig["adapter"] | undefined
 ): ProviderConfig["adapter"] {
   // New env var takes precedence, old alias as fallback
-  const envAdapter = process.env["TAVORI_ADAPTER"] ?? process.env["TAVORI_DEFAULT_ADAPTER"];
+  const envAdapter = process.env["SEEDPULSE_ADAPTER"] ?? process.env["SEEDPULSE_DEFAULT_ADAPTER"] ?? process.env["TAVORI_ADAPTER"] ?? process.env["TAVORI_DEFAULT_ADAPTER"];
   if (
     envAdapter === "claude_code_cli" ||
     envAdapter === "claude_api" ||
@@ -217,8 +217,8 @@ function resolveModel(
   fileModel: string | undefined,
   provider: ProviderConfig["provider"]
 ): string {
-  // TAVORI_MODEL always wins (explicit Tavori-specific override)
-  const envModel = process.env["TAVORI_MODEL"];
+  // SEEDPULSE_MODEL always wins (explicit SeedPulse-specific override)
+  const envModel = process.env["SEEDPULSE_MODEL"] ?? process.env["TAVORI_MODEL"];
   if (envModel) return envModel;
 
   // provider.json explicit value takes priority over generic env vars
@@ -277,8 +277,8 @@ function resolveBaseUrl(
  * Load provider configuration.
  *
  * Priority (highest to lowest):
- *   1. Environment variables (TAVORI_PROVIDER, TAVORI_ADAPTER, TAVORI_MODEL, etc.)
- *   2. ~/.tavori/provider.json
+ *   1. Environment variables (SEEDPULSE_PROVIDER, SEEDPULSE_ADAPTER, SEEDPULSE_MODEL, etc.)
+ *   2. ~/.seedpulse/provider.json
  *   3. Defaults (openai + gpt-5.4-mini + openai_codex_cli)
  *
  * Auto-migrates old nested format to new flat format.
@@ -350,8 +350,8 @@ export async function loadProviderConfig(): Promise<ProviderConfig> {
 }
 
 /**
- * Save provider configuration to ~/.tavori/provider.json.
- * Creates the ~/.tavori directory if it does not exist.
+ * Save provider configuration to ~/.seedpulse/provider.json.
+ * Creates the ~/.seedpulse directory if it does not exist.
  */
 export async function saveProviderConfig(config: ProviderConfig): Promise<void> {
   await writeJsonFileAtomic(PROVIDER_CONFIG_PATH, config);

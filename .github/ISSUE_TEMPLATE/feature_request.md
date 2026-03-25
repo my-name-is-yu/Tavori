@@ -1,6 +1,6 @@
 ---
 name: Feature Request
-about: Suggest a feature for Tavori
+about: Suggest a feature for SeedPulse
 labels: enhancement
 ---
 

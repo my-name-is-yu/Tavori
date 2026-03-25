@@ -1,5 +1,5 @@
 /**
- * Zustand global store for Tavori dashboard.
+ * Zustand global store for SeedPulse dashboard.
  * Holds goals, sessions, decisions and SSE connection state.
  */
 import { create } from 'zustand';
@@ -8,7 +8,7 @@ import type { GoalSummary, SessionSummary, DecisionRecord, SSEEvent } from './ss
 
 export type { GoalSummary, SessionSummary, DecisionRecord };
 
-interface TavoriStore {
+interface SeedPulseStore {
   // State
   goals: GoalSummary[];
   sessions: SessionSummary[];
@@ -34,7 +34,7 @@ interface TavoriStore {
   setConnected: (connected: boolean) => void;
 }
 
-export const useTavoriStore = create<TavoriStore>((set, get) => ({
+export const useSeedPulseStore = create<SeedPulseStore>((set, get) => ({
   goals: [],
   sessions: [],
   decisions: [],
@@ -132,8 +132,8 @@ export const useTavoriStore = create<TavoriStore>((set, get) => ({
 
 function handleSSEEvent(
   event: SSEEvent,
-  get: () => TavoriStore,
-  set: (partial: Partial<TavoriStore>) => void
+  get: () => SeedPulseStore,
+  set: (partial: Partial<SeedPulseStore>) => void
 ) {
   const store = get();
 
