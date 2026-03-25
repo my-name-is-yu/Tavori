@@ -824,6 +824,51 @@ describe("observeFromDataSource", () => {
       expect(entry.extracted_value).toBe(55);
       expect(unscopedDs.query).toHaveBeenCalled();
     });
+
+    it("falls back to a datasource scoped to a different goal when no exact or unscoped match exists", async () => {
+      const goalIdA = "goal-a";
+      const goalIdB = "goal-b";
+
+      // Datasource scoped to goal-a covers "todo_count"
+      const scopedToA = makeMockDataSource({
+        sourceId: "ds-scoped-to-a",
+        config: makeDsConfig({ id: "ds-scoped-to-a", scope_goal_id: goalIdA } as never),
+        getSupportedDimensions: () => ["todo_count"],
+        query: vi.fn().mockResolvedValue({
+          value: 42,
+          raw: { value: 42 },
+          timestamp: new Date().toISOString(),
+          source_id: "ds-scoped-to-a",
+        }),
+      });
+
+      // goal-b uses the same dimension name but dedup prevented creating its own datasource
+      const eng = new ObservationEngine(stateManager, [scopedToA]);
+
+      const goalB = makeGoal({
+        id: goalIdB,
+        dimensions: [
+          {
+            name: "todo_count",
+            label: "Todo Count",
+            current_value: 0,
+            threshold: { type: "min", value: 10 },
+            confidence: 0.5,
+            observation_method: defaultMethod,
+            last_updated: new Date().toISOString(),
+            history: [],
+            weight: 1.0,
+            uncertainty_weight: null,
+            state_integrity: "ok",
+          },
+        ],
+      });
+      await stateManager.saveGoal(goalB);
+
+      const entry = await eng.observeFromDataSource(goalIdB, "todo_count", "ds-scoped-to-a");
+      expect(entry.extracted_value).toBe(42);
+      expect(scopedToA.query).toHaveBeenCalled();
+    });
   });
 
   it("uses dimension_mapping from config to build expression when present", async () => {

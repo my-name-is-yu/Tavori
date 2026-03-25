@@ -549,6 +549,13 @@ export class ObservationEngine {
       if (scopeGoalId === undefined && matches(ds)) return ds;
     }
 
+    // Third pass: fall back to a datasource scoped to a different goal.
+    // This handles the case where dedup prevented creating a goal-specific
+    // datasource because an identical one already exists for another goal.
+    for (const ds of this.dataSources) {
+      if (matches(ds)) return ds;
+    }
+
     return null;
   }
 
