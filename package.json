@@ -1,7 +1,7 @@
 {
-  "name": "tavori",
-  "version": "0.1.2",
-  "description": "AI agent orchestrator that gives existing agents the drive to persist — set a goal, and Tavori observes, delegates, verifies, and loops until done.",
+  "name": "seedpulse",
+  "version": "0.1.0",
+  "description": "AI agent orchestrator that gives existing agents the drive to persist — set a goal, and SeedPulse observes, delegates, verifies, and loops until done.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
