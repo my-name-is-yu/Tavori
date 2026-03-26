@@ -1,0 +1,14 @@
+{
+  "name": "@seedpulse/openclaw-plugin",
+  "version": "0.1.0",
+  "description": "SeedPulse goal-driven orchestration — OpenClaw Gateway plugin",
+  "openclaw": {
+    "extensions": ["src/index.ts"]
+  },
+  "keywords": ["openclaw", "plugin", "seedpulse", "orchestration", "goal-driven"],
+  "author": "SeedPulse",
+  "license": "MIT",
+  "peerDependencies": {
+    "seedpulse": ">=0.1.0"
+  }
+}

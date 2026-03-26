@@ -16,6 +16,7 @@ import { OpenAICodexCLIAdapter } from "../adapters/openai-codex.js";
 import { GitHubIssueAdapter } from "../adapters/github-issue.js";
 import { A2AAdapter } from "../adapters/a2a-adapter.js";
 import { BrowserUseCLIAdapter } from "../adapters/browser-use-cli.js";
+import { OpenClawACPAdapter } from "../adapters/openclaw-acp.js";
 import type { ProviderConfig } from "./provider-config.js";
 
 /**
@@ -132,6 +133,24 @@ export async function buildAdapterRegistry(
     registry.register(new A2AAdapter({
       baseUrl: envBaseUrl,
       authToken: process.env["SEEDPULSE_A2A_AUTH_TOKEN"],
+    }));
+  }
+
+  // OpenClaw from provider config
+  if (config.openclaw) {
+    registry.register(new OpenClawACPAdapter({
+      cliPath: config.openclaw.cli_path,
+      profile: config.openclaw.profile,
+      model: config.openclaw.model,
+      workDir: config.openclaw.work_dir,
+    }));
+  }
+
+  // Environment variable shortcut
+  if (process.env["SEEDPULSE_OPENCLAW_CLI_PATH"] && !config.openclaw) {
+    registry.register(new OpenClawACPAdapter({
+      cliPath: process.env["SEEDPULSE_OPENCLAW_CLI_PATH"],
+      profile: process.env["SEEDPULSE_OPENCLAW_PROFILE"],
     }));
   }
 

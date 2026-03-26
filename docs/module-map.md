@@ -244,6 +244,8 @@
 | github-issue-datasource.ts | GitHub Issue state observation data source | `GitHubIssueDataSourceAdapter` (IDataSourceAdapter) | observation/data-source-adapter, types/data-source |
 | file-existence-datasource.ts | Data source observing file existence | `FileExistenceDataSourceAdapter` (IDataSourceAdapter) | observation/data-source-adapter, types/data-source |
 | shell-datasource.ts | Data source observing shell command output | `ShellDataSourceAdapter`, `ShellCommandSpec` | observation/data-source-adapter, types/data-source |
+| openclaw-acp.ts | OpenClaw ACP (Agent Communication Protocol) adapter. Drives `openclaw acp` CLI as a stdio child process | `OpenClawACPAdapter`, `OpenClawACPConfig` | (none — child_process.spawn only) |
+| openclaw-datasource.ts | OpenClaw session log observation data source. Reads JSONL from `~/.openclaw/sessions/` for progress metrics | `OpenClawDataSourceAdapter`, `OpenClawDataSourceConfig` | (none — fs/promises only) |
 
 ### plugins/ — Sample Plugins (Outside Core)
 

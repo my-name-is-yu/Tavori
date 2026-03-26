@@ -60,6 +60,14 @@ export interface ProviderConfig {
       max_wait_ms?: number;
     }>;
   };
+
+  /** OpenClaw ACP adapter configuration */
+  openclaw?: {
+    cli_path?: string;
+    profile?: string;
+    model?: string;
+    work_dir?: string;
+  };
 }
 
 /** Old nested provider config format (for migration) */
@@ -332,6 +340,7 @@ export async function loadProviderConfig(): Promise<ProviderConfig> {
   if (fileConfig.codex_cli_path !== undefined) config.codex_cli_path = fileConfig.codex_cli_path;
   if (fileConfig.a2a !== undefined) config.a2a = fileConfig.a2a;
   if (fileConfig.light_model !== undefined) config.light_model = fileConfig.light_model;
+  if (fileConfig.openclaw !== undefined) config.openclaw = fileConfig.openclaw;
 
   // Validate and log warnings (only once per process)
   const validation = validateProviderConfig(config);
