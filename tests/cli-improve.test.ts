@@ -517,6 +517,36 @@ describe("improve subcommand — loop execution", () => {
     expect(mockRun).toHaveBeenCalledWith("goal-yes");
   });
 
+  it("propagates --max to CoreLoop maxIterations when --yes is provided", async () => {
+    const goal = makeGoal({ id: "goal-max-propagate" });
+    const mockSuggest = vi.fn().mockResolvedValue([makeSuggestion()]);
+    const mockNegotiate = vi.fn().mockResolvedValue(makeNegotiationResult(goal));
+    const mockRun = vi.fn().mockResolvedValue(makeLoopResult({ goalId: "goal-max-propagate" }));
+
+    vi.mocked(GoalNegotiator).mockImplementation(() => ({
+      suggestGoals: mockSuggest,
+      negotiate: mockNegotiate,
+    } as unknown as GoalNegotiator));
+
+    vi.mocked(CoreLoop).mockImplementation(() => ({
+      run: mockRun,
+      stop: vi.fn(),
+    } as unknown as CoreLoop));
+
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const code = await runCLI("improve", ".", "--max", "2", "--yes");
+    consoleSpy.mockRestore();
+
+    expect(code).toBe(0);
+    // CoreLoop should have been constructed with maxIterations: 2
+    const ctorCalls = vi.mocked(CoreLoop).mock.calls;
+    // The last CoreLoop instance is the one used for the loop (buildDeps is called twice)
+    const loopCtorCall = ctorCalls[ctorCalls.length - 1];
+    expect(loopCtorCall).toBeDefined();
+    const loopConfig = loopCtorCall![1] as { maxIterations?: number } | undefined;
+    expect(loopConfig?.maxIterations).toBe(2);
+  });
+
   it("exits with code 0 and prints completion message after loop with --auto", async () => {
     const goal = makeGoal({ id: "goal-loop-done" });
     const mockSuggest = vi.fn().mockResolvedValue([makeSuggestion()]);

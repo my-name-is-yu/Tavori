@@ -56,6 +56,8 @@ Each goal should:
 3. Include 2-4 dimension hints (what to measure)
 4. Be independent of other suggestions
 
+The "description" field must describe a concrete action — it must start with an action verb (e.g., "Add", "Update", "Implement", "Refactor", "Document", "Create", "Fix") and refer to a specific file or module path (e.g., "src/...", "tests/...", "docs/..."). Do NOT include instructions about updating README.md unless the goal is genuinely about documentation. Do NOT use vague descriptions like "deliver a verifiable improvement".
+
 Context:
 ${context}${existingGoalsSection}
 
@@ -63,7 +65,7 @@ Return a JSON array of up to ${maxSuggestions} suggestions:
 [
   {
     "title": "Short descriptive title",
-    "description": "Detailed description suitable for goal negotiation",
+    "description": "Add/Update/Implement [specific file or module] to [concrete outcome]",
     "rationale": "Why this goal matters",
     "dimensions_hint": ["dimension_name_1", "dimension_name_2"]
   }

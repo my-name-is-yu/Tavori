@@ -248,7 +248,7 @@ export async function cmdImprove(
     const loopDeps = await buildDeps(
       stateManager,
       characterConfigManager,
-      undefined,
+      { maxIterations: maxSuggestions },
       buildAutoApprovalFn(),
       loopLogger,
       buildProgressHandler()

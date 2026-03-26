@@ -7,6 +7,7 @@ import { EthicsGate } from "../src/traits/ethics-gate.js";
 import { ObservationEngine } from "../src/observation/observation-engine.js";
 import { GoalNegotiator } from "../src/goal/goal-negotiator.js";
 import type { GoalSuggestion } from "../src/goal/goal-negotiator.js";
+import { buildSuggestGoalsPrompt } from "../src/goal/goal-suggest.js";
 import { createMockLLMClient } from "./helpers/mock-llm.js";
 import {
   PASS_VERDICT_SAFE_JSON as PASS_VERDICT,
@@ -235,5 +236,30 @@ describe("GoalNegotiator.suggestGoals()", () => {
     } finally {
       cleanup(tmpDir);
     }
+  });
+});
+
+describe("buildSuggestGoalsPrompt()", () => {
+  it("does not contain README.md update instruction that could leak into LLM output", () => {
+    const prompt = buildSuggestGoalsPrompt("愛犬と幸せに暮らしたい", 5, []);
+    expect(prompt).not.toContain("by updating README.md to deliver a verifiable improvement");
+  });
+
+  it("instructs LLM to start descriptions with an action verb", () => {
+    const prompt = buildSuggestGoalsPrompt("A Node.js project", 3, []);
+    expect(prompt).toMatch(/action verb/i);
+  });
+
+  it("includes context and maxSuggestions in prompt", () => {
+    const prompt = buildSuggestGoalsPrompt("My test context", 7, []);
+    expect(prompt).toContain("My test context");
+    expect(prompt).toContain("7");
+  });
+
+  it("includes existing goals section when goals provided", () => {
+    const prompt = buildSuggestGoalsPrompt("context", 3, ["Goal A", "Goal B"]);
+    expect(prompt).toContain("Goal A");
+    expect(prompt).toContain("Goal B");
+    expect(prompt).toContain("do NOT suggest duplicates");
   });
 });
