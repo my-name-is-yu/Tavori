@@ -2,7 +2,7 @@
 
 OpenClaw handles the conversation. SeedPulse handles long-running goals.
 
-This plugin connects [SeedPulse](https://github.com/my-name-is-yu/SeedPulse) to [OpenClaw](https://openclaw.dev) via the Gateway API, giving your OpenClaw sessions autonomous goal tracking, agent orchestration, and progress observation — without changing how you use OpenClaw.
+This plugin connects [SeedPulse](https://github.com/my-name-is-yu/SeedPulse) to OpenClaw via the Gateway API, giving your OpenClaw sessions autonomous goal tracking, agent orchestration, and progress observation — without changing how you use OpenClaw.
 
 SeedPulse goal-driven orchestration as an OpenClaw Gateway plugin.
 
