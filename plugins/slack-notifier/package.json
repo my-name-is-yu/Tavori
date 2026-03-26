@@ -1,7 +1,7 @@
 {
-  "name": "@tavori/plugin-slack-notifier",
+  "name": "@seedpulse/slack-notifier",
   "version": "1.0.0",
-  "description": "Send Tavori events to a Slack channel via webhook",
+  "description": "Send SeedPulse events to a Slack channel via webhook",
   "type": "module",
   "main": "dist/index.js",
   "exports": {
@@ -10,10 +10,10 @@
   "scripts": {
     "build": "tsc --project tsconfig.json"
   },
-  "keywords": ["tavori", "plugin", "slack", "notifier"],
+  "keywords": ["seedpulse", "plugin", "slack", "notifier"],
   "license": "MIT",
   "peerDependencies": {
-    "tavori": ">=0.1.0"
+    "seedpulse": ">=0.1.0"
   },
   "devDependencies": {
     "typescript": "^5.3.0"
