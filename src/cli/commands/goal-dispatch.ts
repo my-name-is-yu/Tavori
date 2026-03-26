@@ -82,9 +82,9 @@ export async function dispatchGoalCommand(
     const yes = globalYes || (addValues.yes ?? false);
     const rawDimensions = addValues.dim ?? [];
 
-    // Auto-infer mode: title provided, no --dim, no --negotiate
+    // Auto-infer mode: title provided, no --dim, no --negotiate, no --no-refine
     const inferTitle = addValues.title || description;
-    if (inferTitle && rawDimensions.length === 0 && !addValues.negotiate) {
+    if (inferTitle && rawDimensions.length === 0 && !addValues.negotiate && !addValues["no-refine"]) {
       const { buildLLMClient } = await import("../../llm/provider-factory.js");
       const { inferDimensionsFromTitle, formatInferredDimensions } = await import("./goal-infer.js");
 
@@ -115,7 +115,7 @@ export async function dispatchGoalCommand(
             const rawDims = inferred.map((d) => `${d.name}:${d.type}:${d.value}`);
             return await cmdGoalAddRaw(stateManager, {
               title: inferTitle,
-              description: inferTitle,
+              description: description || inferTitle,
               rawDimensions: rawDims,
               parent_id: addValues.parent,
             });

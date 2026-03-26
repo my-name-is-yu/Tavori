@@ -201,6 +201,25 @@ describe("dispatchGoalCommand — auto-infer flow", () => {
     expect(result).toBe(0);
   });
 
+  it("skips inference when --no-refine is provided", async () => {
+    vi.mocked(goalInfer.inferDimensionsFromTitle).mockResolvedValue([
+      { name: "score", type: "min", value: "80" },
+    ]);
+
+    const result = await dispatchGoalCommand(
+      "add",
+      ["英語ペラペラになりたい", "--no-refine"],
+      false,
+      makeStateManager(),
+      makeCharacterConfigManager()
+    );
+
+    expect(goalInfer.inferDimensionsFromTitle).not.toHaveBeenCalled();
+    expect(goalRaw.cmdGoalAddRaw).not.toHaveBeenCalled();
+    expect(goal.cmdGoalAdd).toHaveBeenCalledOnce();
+    expect(result).toBe(0);
+  });
+
   it("falls through to refine mode when LLM client is unavailable", async () => {
     vi.mocked(providerFactory.buildLLMClient).mockRejectedValue(
       new Error("no provider configured")
