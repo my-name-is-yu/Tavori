@@ -226,8 +226,14 @@ export async function cmdImprove(
   try {
     ({ goal, response } = await deps.goalNegotiator.negotiate(selectedDescription, {
       constraints: [],
+      timeoutMs: 120_000,
     }));
   } catch (err) {
+    const isTimeout = err instanceof Error && err.message.includes("timed out");
+    if (isTimeout) {
+      logger.warn(`Goal negotiation timed out for "${selected.title}". Skipping.`);
+      return 1;
+    }
     logger.error(formatOperationError(`negotiate goal "${selected.title}"`, err));
     return 1;
   }

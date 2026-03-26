@@ -286,6 +286,19 @@ export async function autoRegisterFileExistenceDataSources(
   }
 }
 
+/**
+ * Find a shell pattern for a dimension name.
+ * Tries exact match first, then fuzzy (dimName contains key or key contains dimName).
+ * Returns undefined if no match found.
+ */
+export function findShellPattern(dimName: string): ShellCommandConfig | undefined {
+  if (SHELL_DIMENSION_PATTERNS[dimName]) return SHELL_DIMENSION_PATTERNS[dimName];
+  for (const [key, pattern] of Object.entries(SHELL_DIMENSION_PATTERNS)) {
+    if (dimName.includes(key)) return pattern;
+  }
+  return undefined;
+}
+
 export async function autoRegisterShellDataSources(
   stateManager: StateManager,
   dimensions: Array<{ name: string }>,
@@ -295,7 +308,7 @@ export async function autoRegisterShellDataSources(
     // Collect dimensions that match known shell patterns
     const matchedCommands: Record<string, ShellCommandConfig> = {};
     for (const dim of dimensions) {
-      const pattern = SHELL_DIMENSION_PATTERNS[dim.name];
+      const pattern = findShellPattern(dim.name);
       if (pattern) {
         matchedCommands[dim.name] = pattern;
       }

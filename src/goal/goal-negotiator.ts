@@ -92,6 +92,31 @@ export class GoalNegotiator {
       constraints?: string[];
       timeHorizonDays?: number;
       workspaceContext?: string;
+      timeoutMs?: number;
+    }
+  ): Promise<{ goal: Goal; response: NegotiationResponse; log: NegotiationLog }> {
+    const timeoutMs = options?.timeoutMs ?? 120_000;
+    let handle: ReturnType<typeof setTimeout>;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      handle = setTimeout(
+        () => reject(new Error(`Goal negotiation timed out after ${timeoutMs}ms`)),
+        timeoutMs
+      );
+    });
+    try {
+      return await Promise.race([this._negotiate(rawGoalDescription, options), timeoutPromise]);
+    } finally {
+      clearTimeout(handle!);
+    }
+  }
+
+  private async _negotiate(
+    rawGoalDescription: string,
+    options?: {
+      deadline?: string;
+      constraints?: string[];
+      timeHorizonDays?: number;
+      workspaceContext?: string;
     }
   ): Promise<{ goal: Goal; response: NegotiationResponse; log: NegotiationLog }> {
     const goalId = randomUUID();
