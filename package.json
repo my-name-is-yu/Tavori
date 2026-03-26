@@ -32,7 +32,9 @@
     "llm",
     "ai-agent",
     "multi-agent",
-    "typescript"
+    "typescript",
+    "openclaw",
+    "gateway"
   ],
   "repository": {
     "type": "git",

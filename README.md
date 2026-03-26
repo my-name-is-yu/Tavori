@@ -43,6 +43,8 @@ seedpulse status
 
 That's it. SeedPulse assesses feasibility, decomposes the goal into measurable dimensions, delegates tasks to agents, and tracks progress automatically.
 
+> **Using OpenClaw?** Install the official plugin for seamless integration — see [`@seedpulse/openclaw-plugin`](openclaw-plugin/README.md).
+
 ## What is SeedPulse?
 
 SeedPulse is a **task discovery engine**. You give it a long-term goal — "double revenue in 6 months," "keep my dog healthy" — and it pursues it autonomously. It observes, calculates the gap, generates tasks, delegates to AI agents, and verifies results. Then it loops.
@@ -84,6 +86,14 @@ SeedPulse tracks revenue metrics, identifies growth opportunities, delegates res
 SeedPulse monitors health indicators, schedules vet checkups, tracks nutrition, and escalates to you when human judgment is needed.
 
 *Demo coming soon*
+
+### OpenClaw Integration
+
+> "Migrate all source files from CommonJS to ESM with TypeScript"
+
+SeedPulse detects the goal in your OpenClaw conversation, spawns agent sessions, tracks file-by-file migration progress, and auto-completes when done.
+
+*Demo coming soon* — [ClawCon 2026](https://clawcon.dev)
 
 ## How It Works
 
@@ -139,6 +149,7 @@ npm run test:changed
 
 | Adapter | Type | Use Case |
 |---------|------|----------|
+| `openclaw_gateway` | OpenClaw Gateway plugin (bidirectional) | `@seedpulse/openclaw-plugin` |
 | `claude_code_cli` | CLI | Code execution, file operations |
 | `openai_codex_cli` | CLI | Code execution, file operations |
 | `browser_use_cli` | CLI | Web browsing, scraping, form filling |
@@ -147,6 +158,15 @@ npm run test:changed
 | `a2a` | A2A Protocol | Remote agent delegation |
 
 Custom adapters can be added as [plugins](docs/design/plugin-development-guide.md) in `~/.seedpulse/plugins/`.
+
+## Plugins & Integrations
+
+| Plugin | Description | Status |
+|--------|-------------|--------|
+| [`@seedpulse/openclaw-plugin`](openclaw-plugin/) | OpenClaw Gateway — goal detection, agent orchestration, progress tracking | ✅ Stable |
+| [`@seedpulse/slack-notifier`](plugins/slack-notifier/) | Slack notifications for goal events | ✅ Stable |
+
+See [Plugin Development Guide](docs/design/plugin-development-guide.md) for creating custom plugins.
 
 ## Programmatic Usage
 

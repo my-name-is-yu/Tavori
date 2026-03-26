@@ -5,7 +5,7 @@
   "openclaw": {
     "extensions": ["src/index.ts"]
   },
-  "keywords": ["openclaw", "plugin", "seedpulse", "orchestration", "goal-driven"],
+  "keywords": ["openclaw", "plugin", "seedpulse", "orchestration", "goal-driven", "ai-agent", "autonomous", "llm", "gateway"],
   "author": "SeedPulse",
   "license": "MIT",
   "peerDependencies": {
