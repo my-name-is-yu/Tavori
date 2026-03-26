@@ -93,7 +93,7 @@ SeedPulse monitors health indicators, schedules vet checkups, tracks nutrition, 
 
 SeedPulse detects the goal in your OpenClaw conversation, spawns agent sessions, tracks file-by-file migration progress, and auto-completes when done.
 
-*Demo coming soon* — [ClawCon 2026](https://clawcon.dev)
+*Demo coming soon* — ClawCon 2026
 
 ## How It Works
 
@@ -149,7 +149,7 @@ npm run test:changed
 
 | Adapter | Type | Use Case |
 |---------|------|----------|
-| `openclaw_gateway` | OpenClaw Gateway plugin (bidirectional) | `@seedpulse/openclaw-plugin` |
+| `openclaw_gateway` | OpenClaw Gateway | Goal detection, agent orchestration, progress tracking |
 | `claude_code_cli` | CLI | Code execution, file operations |
 | `openai_codex_cli` | CLI | Code execution, file operations |
 | `browser_use_cli` | CLI | Web browsing, scraping, form filling |
