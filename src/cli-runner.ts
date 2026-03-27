@@ -53,10 +53,6 @@ import { cmdSetup } from "./cli/commands/setup.js";
 import { cmdKnowledgeList, cmdKnowledgeSearch, cmdKnowledgeStats } from "./cli/commands/knowledge.js";
 import { printUsage, formatOperationError } from "./cli/utils.js";
 import { ensureProviderConfig } from "./cli/ensure-api-key.js";
-import * as fsp from "node:fs/promises";
-import * as path from "node:path";
-import * as tty from "node:tty";
-import { getSeedPulseDirPath } from "./utils/paths.js";
 
 const logger = getCliLogger();
 
@@ -109,17 +105,7 @@ export class CLIRunner {
     await this.init();
 
     if (argv.length === 0) {
-      const configPath = path.join(getSeedPulseDirPath(), "provider.json");
-      let configExists = false;
-      try {
-        await fsp.access(configPath);
-        configExists = true;
-      } catch {
-        // File does not exist
-      }
-      if (!configExists && tty.isatty(0)) {
-        await ensureProviderConfig();
-      }
+      await ensureProviderConfig();
       printUsage();
       return 1;
     }
