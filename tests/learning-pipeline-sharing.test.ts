@@ -80,7 +80,7 @@ describe("LearningPipeline", () => {
   let vectorIndex: VectorIndex;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "seedpulse-learning-test-"));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pulseed-learning-test-"));
     stateManager = new StateManager(tmpDir);
     mockEmbeddingClient = new MockEmbeddingClient(4); // tiny 4-dim vectors for speed
     vectorIndex = new VectorIndex(

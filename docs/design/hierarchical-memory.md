@@ -1,6 +1,6 @@
 # Hierarchical Context Memory Design
 
-> Applies the hierarchical memory model (core/recall/archival) pioneered by MemGPT/Letta to SeedPulse's ContextProvider and MemoryLifecycle, improving the quality of context selection.
+> Applies the hierarchical memory model (core/recall/archival) pioneered by MemGPT/Letta to PulSeed's ContextProvider and MemoryLifecycle, improving the quality of context selection.
 
 > Related: `memory-lifecycle.md`, `session-and-context.md`, `knowledge-acquisition.md`
 
@@ -14,7 +14,7 @@ The current ContextProvider operates with a fixed top-4 selection. Memory entrie
 - Knowledge from completed goals constantly occupies context budget
 - The context budget is used inefficiently
 
-The MemGPT/Letta approach is a three-tier model where "the LLM autonomously decides what to page in and out of the context window." Within SeedPulse's scope, the MVP implements this with rule-based classification; LLM-autonomous decision-making is deferred to Phase 2.
+The MemGPT/Letta approach is a three-tier model where "the LLM autonomously decides what to page in and out of the context window." Within PulSeed's scope, the MVP implements this with rule-based classification; LLM-autonomous decision-making is deferred to Phase 2.
 
 ---
 

@@ -1,7 +1,7 @@
-// ─── seedpulse setup — Interactive setup wizard ───
+// ─── pulseed setup — Interactive setup wizard ───
 //
 // Guides the user through first-time configuration of their LLM provider,
-// model, and execution adapter. Saves the result to ~/.seedpulse/provider.json.
+// model, and execution adapter. Saves the result to ~/.pulseed/provider.json.
 
 import * as readline from "node:readline";
 import { parseArgs } from "node:util";
@@ -12,7 +12,7 @@ import {
   MODEL_REGISTRY,
 } from "../../llm/provider-config.js";
 import type { ProviderConfig } from "../../llm/provider-config.js";
-import { getSeedPulseDirPath } from "../../utils/paths.js";
+import { getPulseedDirPath } from "../../utils/paths.js";
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
 
@@ -84,7 +84,7 @@ const RECOMMENDED_ADAPTERS: Record<string, string> = {
 // ─── Config file check ───
 
 async function configFileExists(): Promise<boolean> {
-  const configPath = path.join(getSeedPulseDirPath(), "provider.json");
+  const configPath = path.join(getPulseedDirPath(), "provider.json");
   try {
     await fsp.access(configPath);
     return true;
@@ -181,7 +181,7 @@ async function runNonInteractive(argv: string[]): Promise<number> {
   }
 
   await saveProviderConfig(config);
-  console.log("Setup complete! Configuration saved to ~/.seedpulse/provider.json");
+  console.log("Setup complete! Configuration saved to ~/.pulseed/provider.json");
   console.log(`  Provider: ${config.provider}`);
   console.log(`  Model:    ${config.model}`);
   console.log(`  Adapter:  ${config.adapter}`);
@@ -314,7 +314,7 @@ async function runInteractive(): Promise<number> {
         if (key) {
           config.api_key = key;
         } else {
-          console.error(`Warning: no API key provided. Set ${envKeyName} before running SeedPulse.`);
+          console.error(`Warning: no API key provided. Set ${envKeyName} before running PulSeed.`);
         }
       }
     }
@@ -333,7 +333,7 @@ async function runInteractive(): Promise<number> {
     }
 
     await saveProviderConfig(config);
-    console.log("\nSetup complete! Configuration saved to ~/.seedpulse/provider.json");
+    console.log("\nSetup complete! Configuration saved to ~/.pulseed/provider.json");
     return 0;
   } finally {
     rl.close();
@@ -342,7 +342,7 @@ async function runInteractive(): Promise<number> {
 
 // ─── Help text ───
 
-const HELP_TEXT = `Usage: seedpulse setup [options]
+const HELP_TEXT = `Usage: pulseed setup [options]
 
 Interactive setup wizard for provider configuration.
 

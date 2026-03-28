@@ -1,5 +1,5 @@
 /**
- * Zustand global store for SeedPulse dashboard.
+ * Zustand global store for PulSeed dashboard.
  * Holds goals, sessions, decisions and SSE connection state.
  */
 import { create } from 'zustand';
@@ -8,7 +8,7 @@ import type { GoalSummary, SessionSummary, DecisionRecord, SSEEvent } from './ss
 
 export type { GoalSummary, SessionSummary, DecisionRecord };
 
-interface SeedPulseStore {
+interface PulSeedStore {
   // State
   goals: GoalSummary[];
   sessions: SessionSummary[];
@@ -34,7 +34,7 @@ interface SeedPulseStore {
   setConnected: (connected: boolean) => void;
 }
 
-export const useSeedPulseStore = create<SeedPulseStore>((set, get) => ({
+export const usePulSeedStore = create<PulSeedStore>((set, get) => ({
   goals: [],
   sessions: [],
   decisions: [],
@@ -132,8 +132,8 @@ export const useSeedPulseStore = create<SeedPulseStore>((set, get) => ({
 
 function handleSSEEvent(
   event: SSEEvent,
-  get: () => SeedPulseStore,
-  set: (partial: Partial<SeedPulseStore>) => void
+  get: () => PulSeedStore,
+  set: (partial: Partial<PulSeedStore>) => void
 ) {
   const store = get();
 

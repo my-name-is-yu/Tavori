@@ -36,7 +36,7 @@ export interface OpenAIClientConfig {
  * Fallback: Responses API when the selected model is not compatible with
  * /v1/chat/completions (e.g., some Codex-style models).
  *
- * Set SEEDPULSE_LLM_PROVIDER=openai to activate via CLIRunner.
+ * Set PULSEED_LLM_PROVIDER=openai to activate via CLIRunner.
  * Optionally set OPENAI_API_KEY, OPENAI_MODEL, and OPENAI_BASE_URL to configure.
  */
 export class OpenAILLMClient extends BaseLLMClient implements ILLMClient {

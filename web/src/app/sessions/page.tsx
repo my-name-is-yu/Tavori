@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useSeedPulseStore } from '../../lib/store';
+import { usePulSeedStore } from '../../lib/store';
 import { relativeTime } from '../../lib/format-time';
 import { SkeletonTable } from '../../components/dashboard/skeleton';
 
@@ -332,8 +332,8 @@ const selectStyle: React.CSSProperties = {
 // ─── Main Page ───
 
 export default function SessionsPage() {
-  const rawSessions = useSeedPulseStore((state) => state.sessions);
-  const lastUpdate = useSeedPulseStore((state) => state.lastUpdate);
+  const rawSessions = usePulSeedStore((state) => state.sessions);
+  const lastUpdate = usePulSeedStore((state) => state.lastUpdate);
   const sessions: Session[] = rawSessions as unknown as Session[];
   const loading = lastUpdate === null && sessions.length === 0;
 

@@ -1,5 +1,5 @@
 /**
- * Seedy — SeedPulse mascot pixel art
+ * Seedy — PulSeed mascot pixel art
  *
  * A cute round cream/white seed with a green sprout on top and two black oval eyes.
  * Uses Unicode box-drawing / block characters and ANSI 24-bit color escape codes.

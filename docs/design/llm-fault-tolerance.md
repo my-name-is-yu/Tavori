@@ -4,7 +4,7 @@
 
 ## 1. Overview
 
-SeedPulse relies on LLMs across three critical paths: observation, verification, and task generation. While LLMs are often accurate, they can probabilistically hallucinate or misjudge. The purpose of this design is to limit how far a single bad output can propagate through the system.
+PulSeed relies on LLMs across three critical paths: observation, verification, and task generation. While LLMs are often accurate, they can probabilistically hallucinate or misjudge. The purpose of this design is to limit how far a single bad output can propagate through the system.
 
 Two mechanisms are addressed:
 
@@ -329,13 +329,13 @@ On task verification failure (verdict = "fail" or "partial"):
 
 **Purpose**: Allow recovery to the last known-good state after a crash or interruption during CoreLoop execution.
 
-**Current state**: If CoreLoop crashes mid-loop, intermediate state is lost. An auto-archive mechanism exists (moves goal state to `~/.seedpulse/archive/<goalId>/` on completion), but there are no mid-loop checkpoints.
+**Current state**: If CoreLoop crashes mid-loop, intermediate state is lost. An auto-archive mechanism exists (moves goal state to `~/.pulseed/archive/<goalId>/` on completion), but there are no mid-loop checkpoints.
 
 **Definition**:
 
 ```
 Checkpoint save timing: after each successful verify (at the end of each cycle)
-Save location: ~/.seedpulse/goals/<goalId>/checkpoint.json
+Save location: ~/.pulseed/goals/<goalId>/checkpoint.json
 Contents:
   - cycle_number: current cycle number
   - last_verified_task_id: ID of the last successfully verified task
@@ -382,7 +382,7 @@ Recovery behavior:
 
 **"Clamp and apply" vs "reject outright"**: The change magnitude limits (§3.2, §3.3) clamp values and write them. A full rejection would leave observation data stale, preventing the system from tracking the current state. Clamping is more conservative and avoids errors in the opposite direction.
 
-**Favor the conservative side on verdict contradictions**: The progress-verdict contradiction (§4.1) downgrades `pass` to `partial`. Preferring false negatives over false positives (missed completions over incorrect completions) is consistent with SeedPulse's safety design principle.
+**Favor the conservative side on verdict contradictions**: The progress-verdict contradiction (§4.1) downgrades `pass` to `partial`. Preferring false negatives over false positives (missed completions over incorrect completions) is consistent with PulSeed's safety design principle.
 
 **Why 2 cycles for satisficing double-check**: Set to 2. One cycle is insufficient (LLM can temporarily over-estimate), and 3 or more slows convergence. For goals with high observation cost, the cycle count may be made configurable in the future.
 

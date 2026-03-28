@@ -465,7 +465,7 @@ describe("plugin trust", () => {
   let manager: TrustManager;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "seedpulse-trust-plugin-test-"));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pulseed-trust-plugin-test-"));
     stateManager = new StateManager(tmpDir);
     manager = new TrustManager(stateManager);
   });

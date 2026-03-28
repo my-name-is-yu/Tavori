@@ -8,7 +8,7 @@
 
 Goal negotiation is the process of not simply "accepting" a user-provided goal as-is, but rather "agreeing on it after evaluating its feasibility."
 
-The reason negotiation is necessary is simple. If a goal is unachievable, running the loop indefinitely is pointless. Blindly complying while knowing a goal is unachievable is a breach of honesty with the user. SeedPulse evaluates the feasibility of a goal, communicates problems honestly, and commits fully only to goals it has agreed upon.
+The reason negotiation is necessary is simple. If a goal is unachievable, running the loop indefinitely is pointless. Blindly complying while knowing a goal is unachievable is a breach of honesty with the user. PulSeed evaluates the feasibility of a goal, communicates problems honestly, and commits fully only to goals it has agreed upon.
 
 Goal negotiation is not a one-time process. If new information emerges during execution, renegotiation may occur.
 
@@ -36,11 +36,11 @@ Step 0 (ethics and legal gate) determines whether the purpose and means of the g
 
 Users provide goals in vague natural language. "I want to grow revenue significantly," "I want to be healthier," "I want to launch a new service."
 
-At this stage, SeedPulse does two things.
+At this stage, PulSeed does two things.
 
 **Accepting ambiguity**: Do not demand a precise definition from the start. The purpose of negotiation is not to resolve ambiguity, but to evaluate feasibility. Evaluation can begin even with an ambiguous goal.
 
-**Confirming scope**: Grasp the rough scope of the goal. Time horizon ("by when"), scale ("how much"), constraints ("what cannot be done"). When these are unclear, SeedPulse assumes default values and proceeds, confirming later.
+**Confirming scope**: Grasp the rough scope of the goal. Time horizon ("by when"), scale ("how much"), constraints ("what cannot be done"). When these are unclear, PulSeed assumes default values and proceeds, confirming later.
 
 ### Step 2: Dimension Decomposition Probe
 
@@ -114,7 +114,7 @@ The coefficients 1.5 and 3.0 are default values. The Advisor can adjust them at 
 
 #### Check 2: Capability Check
 
-Cross-reference the capabilities SeedPulse can delegate (Capability Registry) with the capabilities required to achieve the goal.
+Cross-reference the capabilities PulSeed can delegate (Capability Registry) with the capabilities required to achieve the goal.
 
 ```
 Required capabilities = list of actions and data sources needed to achieve the goal
@@ -191,13 +191,13 @@ Qualitative evaluation is handled by an LLM. The LLM is given the goal structure
 
 ## 4. Step 5: Response (3 Types)
 
-Based on the evaluation results, SeedPulse returns one of three response types.
+Based on the evaluation results, PulSeed returns one of three response types.
 
 ### Response A: Accept
 
 **Condition**: All dimensions assess as "realistic" or "ambitious," and the key capabilities and resources are in place.
 
-SeedPulse accepts the goal as-is and begins the task discovery loop.
+PulSeed accepts the goal as-is and begins the task discovery loop.
 
 ```
 Example response:
@@ -212,7 +212,7 @@ Example response:
 
 **Condition**: Some dimensions received an "infeasible" assessment, but an alternative goal is judged to be achievable.
 
-SeedPulse does not reject the original goal outright, but proposes a feasible alternative.
+PulSeed does not reject the original goal outright, but proposes a feasible alternative.
 
 **Structure of a counter-proposal**:
 1. Assessment of the current situation (why the original goal is difficult)
@@ -255,7 +255,7 @@ Alternative target calculation:
 
 **Condition**: Evaluation confidence is low (new domain, insufficient data), or qualitative evaluation identified key risks.
 
-SeedPulse accepts the goal but makes the uncertainty and risks explicit.
+PulSeed accepts the goal but makes the uncertainty and risks explicit.
 
 ```
 Example response:
@@ -276,7 +276,7 @@ Example response:
 
 ## 5. When the User Insists on a Difficult Goal
 
-If the user chooses to maintain the original goal in response to a counter-proposal, SeedPulse accepts that decision. However, the following are set:
+If the user chooses to maintain the original goal in response to a counter-proposal, PulSeed accepts that decision. However, the following are set:
 
 ```
 goal.confidence = "low"           // Initial confidence set to low
@@ -414,4 +414,4 @@ The cost of carelessly accepting an uncertain goal is resource waste and opportu
 
 **Why ultimately respect the user's will?**
 
-SeedPulse is an advisor, not a decision-maker. Having communicated the evaluation honestly, the final choice is left to the user. Not "they didn't listen when I said it was difficult," but "evaluated as difficult, recorded the user's choice, and then committed fully."
+PulSeed is an advisor, not a decision-maker. Having communicated the evaluation honestly, the final choice is left to the user. Not "they didn't listen when I said it was difficult," but "evaluated as difficult, recorded the user's choice, and then committed fully."

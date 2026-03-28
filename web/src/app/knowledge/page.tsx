@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { useSeedPulseStore } from '../../lib/store';
+import { usePulSeedStore } from '../../lib/store';
 
 // ─── Types ───
 
@@ -215,7 +215,7 @@ function MetaPatternsSection() {
 // ─── Section 2: Decision Records ───
 
 function DecisionRecordsSection() {
-  const storeDecisions = useSeedPulseStore((state) => state.decisions) as unknown as DecisionRecord[];
+  const storeDecisions = usePulSeedStore((state) => state.decisions) as unknown as DecisionRecord[];
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const toggle = (id: string) =>

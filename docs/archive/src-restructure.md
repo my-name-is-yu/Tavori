@@ -136,8 +136,8 @@ src/ 直下に48個のTypeScriptファイルがフラットに配置されてい
 ### cli-runner.ts (2652行) → src/cli/
 - cli-runner.ts (~400行) — CLIRunner class shell + main()
 - cli/commands/goal.ts (~500行) — goal add/list/archive/status
-- cli/commands/run.ts (~400行) — seedpulse run
-- cli/commands/suggest.ts (~300行) — seedpulse suggest/improve
+- cli/commands/run.ts (~400行) — pulseed run
+- cli/commands/suggest.ts (~300行) — pulseed suggest/improve
 - cli/commands/config.ts (~200行) — provider/datasource設定
 - cli/commands/daemon.ts (~200行) — daemon start/stop/status
 - cli/commands/report.ts (~150行) — レポート生成

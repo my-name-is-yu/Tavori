@@ -1,4 +1,4 @@
-// ─── seedpulse config, provider, datasource, and capability commands ───
+// ─── pulseed config, provider, datasource, and capability commands ───
 
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
@@ -147,7 +147,7 @@ export async function cmdConfigCharacter(
     values["proactivity-level"] !== undefined;
 
   if (!hasFlags) {
-    console.log(`Usage: seedpulse config character [options]
+    console.log(`Usage: pulseed config character [options]
 
 Options:
   --show                          Show current character config
@@ -214,7 +214,7 @@ export async function cmdDatasourceAdd(
 ): Promise<number> {
   const type = argv[0];
   if (!type) {
-    getCliLogger().error("Error: type is required. Usage: seedpulse datasource add <type> [options]");
+    getCliLogger().error("Error: type is required. Usage: pulseed datasource add <type> [options]");
     getCliLogger().error("  Types: file, http_api, github_issue, file_existence");
     return 1;
   }
@@ -308,7 +308,7 @@ export async function cmdDatasourceList(stateManager: StateManager): Promise<num
   try { await fsp.access(datasourcesDir); dirExists = true; } catch { /* not found */ }
 
   if (!dirExists) {
-    console.log("No data sources registered. Use `seedpulse datasource add` to register one.");
+    console.log("No data sources registered. Use `pulseed datasource add` to register one.");
     return 0;
   }
 
@@ -323,7 +323,7 @@ export async function cmdDatasourceList(stateManager: StateManager): Promise<num
   const jsonFiles = entries.filter((e) => e.endsWith(".json"));
 
   if (jsonFiles.length === 0) {
-    console.log("No data sources registered. Use `seedpulse datasource add` to register one.");
+    console.log("No data sources registered. Use `pulseed datasource add` to register one.");
     return 0;
   }
 
@@ -353,7 +353,7 @@ export async function cmdDatasourceRemove(
 ): Promise<number> {
   const id = argv[0];
   if (!id) {
-    getCliLogger().error("Error: id is required. Usage: seedpulse datasource remove <id>");
+    getCliLogger().error("Error: id is required. Usage: pulseed datasource remove <id>");
     return 1;
   }
 
@@ -487,7 +487,7 @@ export async function cmdCapabilityRemove(
 ): Promise<number> {
   const name = argv[0];
   if (!name) {
-    getCliLogger().error("Error: name is required. Usage: seedpulse capability remove <name>");
+    getCliLogger().error("Error: name is required. Usage: pulseed capability remove <name>");
     return 1;
   }
 

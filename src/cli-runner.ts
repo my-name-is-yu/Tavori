@@ -1,27 +1,27 @@
 #!/usr/bin/env node
 // ─── CLIRunner ───
 //
-// SeedPulse CLI entry point. Wires all dependencies and exposes subcommands:
-//   seedpulse run --goal <id>            Run CoreLoop once for a given goal
-//   seedpulse goal add "<description>"   Negotiate and register a new goal (interactive)
-//   seedpulse goal list                  List all registered goals
-//   seedpulse goal archive <id>          Archive a completed goal
-//   seedpulse goal show <id>             Show goal details
-//   seedpulse goal reset <id>            Reset goal state for re-running
-//   seedpulse status --goal <id>         Show current progress report
-//   seedpulse report --goal <id>         Show latest report
-//   seedpulse log --goal <id>            View execution/observation log
-//   seedpulse start --goal <id>          Start daemon mode for one or more goals
-//   seedpulse stop                       Stop the running daemon
-//   seedpulse cron --goal <id>           Print crontab entry for a goal
-//   seedpulse cleanup                    Archive all completed goals and remove stale data
-//   seedpulse improve [path]             Analyze, suggest goals, and run improvement loop
-//   seedpulse suggest "<context>"        Suggest improvement goals for a project
-//   seedpulse capability list            List all registered capabilities
-//   seedpulse capability remove <name>   Remove a capability by name
-//   seedpulse knowledge list             List all shared knowledge entries
-//   seedpulse knowledge search <query>   Search knowledge entries by keyword
-//   seedpulse knowledge stats            Show knowledge base statistics
+// PulSeed CLI entry point. Wires all dependencies and exposes subcommands:
+//   pulseed run --goal <id>            Run CoreLoop once for a given goal
+//   pulseed goal add "<description>"   Negotiate and register a new goal (interactive)
+//   pulseed goal list                  List all registered goals
+//   pulseed goal archive <id>          Archive a completed goal
+//   pulseed goal show <id>             Show goal details
+//   pulseed goal reset <id>            Reset goal state for re-running
+//   pulseed status --goal <id>         Show current progress report
+//   pulseed report --goal <id>         Show latest report
+//   pulseed log --goal <id>            View execution/observation log
+//   pulseed start --goal <id>          Start daemon mode for one or more goals
+//   pulseed stop                       Stop the running daemon
+//   pulseed cron --goal <id>           Print crontab entry for a goal
+//   pulseed cleanup                    Archive all completed goals and remove stale data
+//   pulseed improve [path]             Analyze, suggest goals, and run improvement loop
+//   pulseed suggest "<context>"        Suggest improvement goals for a project
+//   pulseed capability list            List all registered capabilities
+//   pulseed capability remove <name>   Remove a capability by name
+//   pulseed knowledge list             List all shared knowledge entries
+//   pulseed knowledge search <query>   Search knowledge entries by keyword
+//   pulseed knowledge stats            Show knowledge base statistics
 
 import { parseArgs } from "node:util";
 
@@ -59,7 +59,7 @@ const logger = getCliLogger();
 // ─── CLIRunner ───
 
 /**
- * @description Coordinates CLI argument parsing, dependency wiring, and subcommand execution for the SeedPulse command-line interface.
+ * @description Coordinates CLI argument parsing, dependency wiring, and subcommand execution for the PulSeed command-line interface.
  */
 export class CLIRunner {
   private readonly stateManager: StateManager;
@@ -68,7 +68,7 @@ export class CLIRunner {
 
   /**
    * @description Creates a CLI runner with state and character configuration managers rooted at the optional base directory.
-   * @param {string} [baseDir] Optional base directory for SeedPulse state storage.
+   * @param {string} [baseDir] Optional base directory for PulSeed state storage.
    * @returns {void} Does not return a value.
    */
   constructor(baseDir?: string) {
@@ -97,7 +97,7 @@ export class CLIRunner {
   // ─── Main dispatch ───
 
   /**
-   * @description Parses CLI arguments, dispatches the matching SeedPulse subcommand, and returns the resulting exit code.
+   * @description Parses CLI arguments, dispatches the matching PulSeed subcommand, and returns the resulting exit code.
    * @param {string[]} argv Raw subcommand arguments, excluding the `node` executable and script path.
    * @returns {Promise<number>} A promise that resolves to `0` for success, `1` for errors, or `2` for stall escalation.
    */
@@ -146,11 +146,11 @@ export class CLIRunner {
 
       const goalIds = values.goal ?? [];
       if (goalIds.length === 0) {
-        logger.error("Error: --goal <id> is required for `seedpulse run`.");
+        logger.error("Error: --goal <id> is required for `pulseed run`.");
         return 1;
       }
       if (goalIds.length > 1) {
-        logger.error("Error: only one --goal is supported per `seedpulse run`. Run separately for each goal, or use --tree for tree traversal.");
+        logger.error("Error: only one --goal is supported per `pulseed run`. Run separately for each goal, or use --tree for tree traversal.");
         return 1;
       }
       const goalId = goalIds[0];
@@ -210,7 +210,7 @@ export class CLIRunner {
 
       const goalId = values.goal;
       if (!goalId || typeof goalId !== "string") {
-        logger.error("Error: --goal <id> is required for `seedpulse status`.");
+        logger.error("Error: --goal <id> is required for `pulseed status`.");
         return 1;
       }
 
@@ -238,7 +238,7 @@ export class CLIRunner {
 
       const goalId = values.goal ?? reportPositionals[0];
       if (!goalId || typeof goalId !== "string") {
-        logger.error("Error: goal ID is required. Usage: seedpulse report --goal <id>  or  seedpulse report <id>");
+        logger.error("Error: goal ID is required. Usage: pulseed report --goal <id>  or  pulseed report <id>");
         return 1;
       }
 
@@ -266,7 +266,7 @@ export class CLIRunner {
 
       const goalId = values.goal ?? logPositionals[0];
       if (!goalId || typeof goalId !== "string") {
-        logger.error("Error: goal ID is required. Usage: seedpulse log --goal <id>  or  seedpulse log <id>");
+        logger.error("Error: goal ID is required. Usage: pulseed log --goal <id>  or  pulseed log <id>");
         return 1;
       }
 

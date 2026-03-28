@@ -1,12 +1,12 @@
 // ─── Provider Configuration ───
 //
-// Pluggable provider configuration system for SeedPulse.
-// Reads/writes ~/.seedpulse/provider.json to configure which LLM provider
+// Pluggable provider configuration system for PulSeed.
+// Reads/writes ~/.pulseed/provider.json to configure which LLM provider
 // and default adapter to use. Env vars always take precedence over config file.
 
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
-import { getSeedPulseDirPath } from "../utils/paths.js";
+import { getPulseedDirPath } from "../utils/paths.js";
 import { writeJsonFileAtomic } from "../utils/json-io.js";
 
 // ─── Model Registry ───
@@ -83,7 +83,7 @@ interface LegacyProviderConfig {
 
 // ─── Constants ───
 
-const PROVIDER_CONFIG_PATH = path.join(getSeedPulseDirPath(), "provider.json");
+const PROVIDER_CONFIG_PATH = path.join(getPulseedDirPath(), "provider.json");
 
 const DEFAULT_PROVIDER_CONFIG: ProviderConfig = {
   provider: "openai",
@@ -204,7 +204,7 @@ export function validateProviderConfig(config: ProviderConfig): ValidationResult
 function resolveProvider(
   fileProvider: ProviderConfig["provider"] | undefined
 ): ProviderConfig["provider"] {
-  const envProvider = process.env["SEEDPULSE_PROVIDER"] ?? process.env["SEEDPULSE_LLM_PROVIDER"];
+  const envProvider = process.env["PULSEED_PROVIDER"] ?? process.env["PULSEED_LLM_PROVIDER"];
   if (envProvider === "anthropic" || envProvider === "openai" || envProvider === "ollama") {
     return envProvider;
   }
@@ -218,7 +218,7 @@ function resolveProvider(
 function resolveAdapter(
   fileAdapter: ProviderConfig["adapter"] | undefined
 ): ProviderConfig["adapter"] {
-  const envAdapter = process.env["SEEDPULSE_ADAPTER"] ?? process.env["SEEDPULSE_DEFAULT_ADAPTER"];
+  const envAdapter = process.env["PULSEED_ADAPTER"] ?? process.env["PULSEED_DEFAULT_ADAPTER"];
   if (
     envAdapter === "claude_code_cli" ||
     envAdapter === "claude_api" ||
@@ -234,7 +234,7 @@ function resolveModel(
   fileModel: string | undefined,
   provider: ProviderConfig["provider"]
 ): string {
-  const envModel = process.env["SEEDPULSE_MODEL"];
+  const envModel = process.env["PULSEED_MODEL"];
   if (envModel) return envModel;
 
   // provider.json explicit value takes priority over generic env vars
@@ -288,8 +288,8 @@ function resolveBaseUrl(
  * Load provider configuration.
  *
  * Priority (highest to lowest):
- *   1. Environment variables (SEEDPULSE_PROVIDER, SEEDPULSE_ADAPTER, SEEDPULSE_MODEL, etc.)
- *   2. ~/.seedpulse/provider.json
+ *   1. Environment variables (PULSEED_PROVIDER, PULSEED_ADAPTER, PULSEED_MODEL, etc.)
+ *   2. ~/.pulseed/provider.json
  *   3. Defaults (openai + gpt-5.4-mini + openai_codex_cli)
  *
  * Auto-migrates old nested format to new flat format.
@@ -373,8 +373,8 @@ export async function loadProviderConfig(): Promise<ProviderConfig> {
 }
 
 /**
- * Save provider configuration to ~/.seedpulse/provider.json.
- * Creates the ~/.seedpulse directory if it does not exist.
+ * Save provider configuration to ~/.pulseed/provider.json.
+ * Creates the ~/.pulseed directory if it does not exist.
  */
 export async function saveProviderConfig(config: ProviderConfig): Promise<void> {
   await writeJsonFileAtomic(PROVIDER_CONFIG_PATH, config);

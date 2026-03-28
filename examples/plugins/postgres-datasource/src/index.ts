@@ -1,6 +1,6 @@
 // ─── PostgresDataSourceAdapter ───
 //
-// A SeedPulse data source plugin that queries a PostgreSQL database.
+// A PulSeed data source plugin that queries a PostgreSQL database.
 // Only SELECT statements are permitted; mutating SQL is rejected.
 
 import pg from "pg";

@@ -277,9 +277,9 @@ const { loadProviderConfig } = await import("../src/llm/provider-config.js");
 describe("loadProviderConfig", () => {
   const savedEnv: Record<string, string | undefined> = {};
   const envKeys = [
-    "SEEDPULSE_PROVIDER", "SEEDPULSE_LLM_PROVIDER",
-    "SEEDPULSE_ADAPTER", "SEEDPULSE_DEFAULT_ADAPTER",
-    "SEEDPULSE_MODEL",
+    "PULSEED_PROVIDER", "PULSEED_LLM_PROVIDER",
+    "PULSEED_ADAPTER", "PULSEED_DEFAULT_ADAPTER",
+    "PULSEED_MODEL",
     "OPENAI_API_KEY", "OPENAI_MODEL", "OPENAI_BASE_URL",
     "ANTHROPIC_API_KEY", "ANTHROPIC_MODEL",
     "OLLAMA_BASE_URL", "OLLAMA_MODEL",
@@ -315,22 +315,22 @@ describe("loadProviderConfig", () => {
     warnSpy.mockRestore();
   });
 
-  it("SEEDPULSE_PROVIDER env var overrides file config", async () => {
-    process.env["SEEDPULSE_PROVIDER"] = "anthropic";
+  it("PULSEED_PROVIDER env var overrides file config", async () => {
+    process.env["PULSEED_PROVIDER"] = "anthropic";
     process.env["ANTHROPIC_API_KEY"] = "sk-ant-test";
     const config = await loadProviderConfig();
     expect(config.provider).toBe("anthropic");
   });
 
-  it("SEEDPULSE_LLM_PROVIDER (old env var) works as fallback", async () => {
-    process.env["SEEDPULSE_LLM_PROVIDER"] = "anthropic";
+  it("PULSEED_LLM_PROVIDER (old env var) works as fallback", async () => {
+    process.env["PULSEED_LLM_PROVIDER"] = "anthropic";
     process.env["ANTHROPIC_API_KEY"] = "sk-ant-test";
     const config = await loadProviderConfig();
     expect(config.provider).toBe("anthropic");
   });
 
-  it("SEEDPULSE_MODEL env var overrides file model", async () => {
-    process.env["SEEDPULSE_MODEL"] = "my-custom-model";
+  it("PULSEED_MODEL env var overrides file model", async () => {
+    process.env["PULSEED_MODEL"] = "my-custom-model";
     process.env["OPENAI_API_KEY"] = "sk-test";
     const config = await loadProviderConfig();
     expect(config.model).toBe("my-custom-model");

@@ -5,7 +5,7 @@ import type { AgentTask, AgentResult, IAdapter } from "./adapter-layer.js";
 import type { Task } from "../types/task.js";
 import { TaskSchema } from "../types/task.js";
 import type { Strategy } from "../types/strategy.js";
-const DEBUG = process.env.SEEDPULSE_DEBUG === "true";
+const DEBUG = process.env.PULSEED_DEBUG === "true";
 
 // ─── Deps interface ───
 

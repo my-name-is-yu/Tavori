@@ -27,7 +27,7 @@ export function Sidebar() {
         className="text-sm font-semibold mb-6 px-2"
         style={{ color: 'var(--accent-primary)' }}
       >
-        SeedPulse
+        PulSeed
       </div>
       {navItems.map(({ href, label, icon: Icon }) => {
         const active = href === '/' ? pathname === '/' : pathname.startsWith(href);

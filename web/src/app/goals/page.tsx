@@ -1,10 +1,10 @@
 'use client';
 
-import { useSeedPulseStore } from '../../lib/store';
+import { usePulSeedStore } from '../../lib/store';
 import { GoalTable, type GoalRow } from '../../components/dashboard/goal-table';
 
 export default function GoalsPage() {
-  const goals = useSeedPulseStore((state) => state.goals) as GoalRow[];
+  const goals = usePulSeedStore((state) => state.goals) as GoalRow[];
 
   return (
     <div>

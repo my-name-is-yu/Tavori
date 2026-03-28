@@ -207,7 +207,7 @@ Initial allocation constraints:
 
 When multiple strategies are running simultaneously, attributing Gap changes to specific strategies is inherently difficult. When both "improved onboarding" and "strengthened support" are running and churn rate drops, which strategy was responsible?
 
-**SeedPulse's approach: do not seek complete attribution.**
+**PulSeed's approach: do not seek complete attribution.**
 
 Complete causal attribution requires the level of control found in scientific experiments, which is impossible in real-world goal pursuit. Instead, the following heuristics are used to obtain **attribution signals**.
 
@@ -445,7 +445,7 @@ The MVP avoids the complexity of parallel execution and is limited to the follow
 |------|------------------|
 | Concurrent active strategies | 1 (sequential execution) |
 | Strategy generation | LLM generates 1–2 candidates. Top candidate is auto-selected |
-| Rebalancing | Manual (user switches via `seedpulse strategy switch`) |
+| Rebalancing | Manual (user switches via `pulseed strategy switch`) |
 | Effectiveness measurement | Gap history is recorded only. `effectiveness_score` is for display purposes |
 | Termination | Automatic pivot on 2nd stall detection |
 | Wait strategy | Only `plateau_until` is set (no dedicated WaitStrategy type needed) |

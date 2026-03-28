@@ -37,7 +37,7 @@ function makeMockCapabilityDetector(
 // ─── Test setup helpers ───
 
 function makeDeps(llmResponses: string[]) {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "seedpulse-filter-test-"));
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pulseed-filter-test-"));
   const stateManager = new StateManager(tmpDir);
   const llmClient = createMockLLMClient(llmResponses);
   const ethicsGate = new EthicsGate(stateManager, llmClient);

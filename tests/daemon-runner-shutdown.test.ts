@@ -13,7 +13,7 @@ import type { DaemonDeps } from "../src/runtime/daemon-runner.js";
 // ─── Helpers ───
 
 function makeTempDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), "seedpulse-shutdown-test-"));
+  return fs.mkdtempSync(path.join(os.tmpdir(), "pulseed-shutdown-test-"));
 }
 
 function makeLoopResult(overrides: Partial<LoopResult> = {}): LoopResult {
@@ -375,7 +375,7 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
     it("should not rotate when log file is below the size threshold", async () => {
       const logDir = path.join(tmpDir, "logs");
       fs.mkdirSync(logDir, { recursive: true });
-      const logPath = path.join(logDir, "seedpulse.log");
+      const logPath = path.join(logDir, "pulseed.log");
       // Write a small file (1KB)
       fs.writeFileSync(logPath, "x".repeat(1024), "utf-8");
 
@@ -388,18 +388,18 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
       const daemon = new DaemonRunner(deps);
       await daemon.rotateLog();
 
-      // seedpulse.log should still exist (not rotated)
+      // pulseed.log should still exist (not rotated)
       expect(fs.existsSync(logPath)).toBe(true);
       // No rotated files should exist
       const entries = fs.readdirSync(logDir);
-      const rotated = entries.filter((f) => f !== "seedpulse.log");
+      const rotated = entries.filter((f) => f !== "pulseed.log");
       expect(rotated.length).toBe(0);
     });
 
     it("should rotate when log file exceeds the size threshold", async () => {
       const logDir = path.join(tmpDir, "logs");
       fs.mkdirSync(logDir, { recursive: true });
-      const logPath = path.join(logDir, "seedpulse.log");
+      const logPath = path.join(logDir, "pulseed.log");
       // Create a 2MB file (exceeds 1MB threshold)
       fs.writeFileSync(logPath, "x".repeat(2 * 1024 * 1024), "utf-8");
 
@@ -412,11 +412,11 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
       const daemon = new DaemonRunner(deps);
       await daemon.rotateLog();
 
-      // seedpulse.log should no longer exist (was renamed)
+      // pulseed.log should no longer exist (was renamed)
       expect(fs.existsSync(logPath)).toBe(false);
       // At least one rotated file should exist
       const entries = fs.readdirSync(logDir);
-      const rotated = entries.filter((f) => /^seedpulse\..+\.log$/.test(f) && f !== "seedpulse.log");
+      const rotated = entries.filter((f) => /^pulseed\..+\.log$/.test(f) && f !== "pulseed.log");
       expect(rotated.length).toBeGreaterThanOrEqual(1);
     });
 
@@ -428,13 +428,13 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
       // Pre-create 5 rotated log files (older ones)
       for (let i = 0; i < 5; i++) {
         const ts = new Date(Date.now() - (5 - i) * 1000).toISOString().replace(/[:.]/g, "-");
-        fs.writeFileSync(path.join(logDir, `seedpulse.${ts}.log`), "old log", "utf-8");
+        fs.writeFileSync(path.join(logDir, `pulseed.${ts}.log`), "old log", "utf-8");
         // Small delay to ensure distinct timestamps in names
         await new Promise((r) => setTimeout(r, 5));
       }
 
       // Create current log that exceeds threshold
-      const logPath = path.join(logDir, "seedpulse.log");
+      const logPath = path.join(logDir, "pulseed.log");
       fs.writeFileSync(logPath, "x".repeat(2 * 1024 * 1024), "utf-8");
 
       const deps = makeDeps(tmpDir, {
@@ -448,7 +448,7 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
 
       // Should have at most maxFiles rotated files
       const entries = fs.readdirSync(logDir);
-      const rotated = entries.filter((f) => /^seedpulse\..+\.log$/.test(f) && f !== "seedpulse.log");
+      const rotated = entries.filter((f) => /^pulseed\..+\.log$/.test(f) && f !== "pulseed.log");
       expect(rotated.length).toBeLessThanOrEqual(maxFiles);
     });
 
@@ -467,7 +467,7 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
     it("should name rotated file with a timestamp suffix", async () => {
       const logDir = path.join(tmpDir, "logs");
       fs.mkdirSync(logDir, { recursive: true });
-      const logPath = path.join(logDir, "seedpulse.log");
+      const logPath = path.join(logDir, "pulseed.log");
       fs.writeFileSync(logPath, "x".repeat(2 * 1024 * 1024), "utf-8");
 
       const deps = makeDeps(tmpDir, {
@@ -480,10 +480,10 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
       await daemon.rotateLog();
 
       const entries = fs.readdirSync(logDir);
-      const rotated = entries.filter((f) => /^seedpulse\..+\.log$/.test(f) && f !== "seedpulse.log");
+      const rotated = entries.filter((f) => /^pulseed\..+\.log$/.test(f) && f !== "pulseed.log");
       expect(rotated.length).toBe(1);
-      // Name should match seedpulse.<timestamp>.log pattern
-      expect(rotated[0]).toMatch(/^seedpulse\..+\.log$/);
+      // Name should match pulseed.<timestamp>.log pattern
+      expect(rotated[0]).toMatch(/^pulseed\..+\.log$/);
     });
   });
 });

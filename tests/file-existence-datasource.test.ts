@@ -116,7 +116,7 @@ describe("FileExistenceDataSourceAdapter", () => {
       makeConfig({
         connection: {},
         // Map to a filename unlikely to exist in cwd so we get 0 (not an error)
-        dimension_mapping: { some_file: "__seedpulse_unlikely_file_xyz__.txt" },
+        dimension_mapping: { some_file: "__pulseed_unlikely_file_xyz__.txt" },
       })
     );
 

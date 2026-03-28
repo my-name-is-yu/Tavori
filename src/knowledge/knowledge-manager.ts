@@ -338,7 +338,7 @@ Respond with JSON:
   // ─── saveKnowledge ───
 
   /**
-   * Persist a KnowledgeEntry to ~/.seedpulse/goals/<goal_id>/domain_knowledge.json
+   * Persist a KnowledgeEntry to ~/.pulseed/goals/<goal_id>/domain_knowledge.json
    */
   async saveKnowledge(goalId: string, entry: KnowledgeEntry): Promise<void> {
     const parsed = KnowledgeEntrySchema.parse(entry);
@@ -673,7 +673,7 @@ Determine if there is a factual contradiction. Respond with JSON:
   // ─── Decision History (M14-S3) ───
 
   /**
-   * Save a DecisionRecord to ~/.seedpulse/decisions/<goalId>-<timestamp>.json
+   * Save a DecisionRecord to ~/.pulseed/decisions/<goalId>-<timestamp>.json
    * For completed records (outcome !== "pending"), enriches with LLM-extracted
    * what_worked/what_failed/suggested_next before saving.
    */

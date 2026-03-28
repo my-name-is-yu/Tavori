@@ -8,7 +8,7 @@ import { z } from "zod";
 
 // ─── ETHICS_EVALUATE & ETHICS_EXPLAIN ────────────────────────────────────────
 
-export const ETHICS_SYSTEM_PROMPT = `# SeedPulse Persona
+export const ETHICS_SYSTEM_PROMPT = `# PulSeed Persona
 
 Core stance: A gentle guardian and passionate realist.
 Decisions are driven by cold data and logic; the purpose is to deeply care

@@ -1,4 +1,4 @@
-# SeedPulse品質引き上げロードマップ — roadmapが期待するクオリティへ
+# PulSeed品質引き上げロードマップ — roadmapが期待するクオリティへ
 
 **作成日**: 2026-03-15
 **前提**: Stage 1-14 完了、2844テスト、65テストファイル、Milestone 1-2 完了
@@ -16,7 +16,7 @@
 
 ### 動かないもの（致命的）
 
-- **CoreLoopが「完了」を即座に宣言する**: `runOneIteration()` の Step 5（Completion Check、L620-638）がStep 7（Task Cycle、L838）より前にある。全次元が閾値以上（たとえギリギリでも）なら `judgment.is_complete = true` → `return result` でタスク生成に到達しない。つまり**SeedPulseは何もしない**
+- **CoreLoopが「完了」を即座に宣言する**: `runOneIteration()` の Step 5（Completion Check、L620-638）がStep 7（Task Cycle、L838）より前にある。全次元が閾値以上（たとえギリギリでも）なら `judgment.is_complete = true` → `return result` でタスク生成に到達しない。つまり**PulSeedは何もしない**
 - **LLM観測がコンテキストなしで評価する**: `observeWithLLM()` はゴール説明・次元ラベル・閾値だけをLLMに渡す。ワークスペースのファイル内容を一切読まない。`contextProvider` はDI引数として存在するが、CLI起動時に適切な実装が注入されていない
 - **タスク生成→実行→検証の一気通貫が未検証**: `TaskLifecycle.runTaskCycle()` → adapter.execute() → verifyTask() のパスは単体テストでモックされているが、実際のLLM呼び出し＋実際のアダプタ実行で動いた実績がない
 
@@ -85,12 +85,12 @@ Step 8: Completion Check（タスク実行後に判定）
 
 **修正方針**:
 - 完了後の自動アーカイブをデフォルトOFFにする（設定 `autoArchive: false`）
-- アーカイブは明示的な `seedpulse goal archive <id>` コマンドでのみ実行
+- アーカイブは明示的な `pulseed goal archive <id>` コマンドでのみ実行
 - `loadGoal()` にアーカイブフォールバック追加（`goals/` になければ `archive/` も探す）
 
 **ファイル**: `src/core-loop.ts`（autoArchive設定）、`src/state-manager.ts`（loadGoalフォールバック）
 
-**成功基準**: ループ完了後も `seedpulse goal show <id>` でゴール状態が表示される
+**成功基準**: ループ完了後も `pulseed goal show <id>` でゴール状態が表示される
 
 **複雑度**: S
 
@@ -105,8 +105,8 @@ Step 8: Completion Check（タスク実行後に判定）
 手動テスト:
 ```bash
 # 明らかに未達成のゴール（存在しないファイルを要求）
-seedpulse goal add "Create a file called /tmp/seedpulse-test-output.txt with 'hello world'"
-seedpulse run --goal <id> --yes --max-iterations 3
+pulseed goal add "Create a file called /tmp/pulseed-test-output.txt with 'hello world'"
+pulseed run --goal <id> --yes --max-iterations 3
 # 期待: タスクが1つ以上生成され、アダプタに実行が委譲される
 ```
 
@@ -199,8 +199,8 @@ seedpulse run --goal <id> --yes --max-iterations 3
 手動テスト:
 ```bash
 # README品質ゴールを作成
-seedpulse goal add "Improve README.md quality: add installation guide, usage examples, API reference"
-seedpulse run --goal <id> --yes --max-iterations 1
+pulseed goal add "Improve README.md quality: add installation guide, usage examples, API reference"
+pulseed run --goal <id> --yes --max-iterations 1
 # 期待: 観測ログにREADME.mdの内容が含まれ、スコアが0.0-1.0の妥当な値
 # README.mdを実際に編集した後に再実行 → スコアが変化する
 ```
@@ -211,7 +211,7 @@ seedpulse run --goal <id> --yes --max-iterations 1
 
 ## Phase R3: タスク生成→実行→検証の一気通貫 ✅ 完了
 
-**目的**: SeedPulseが自律的に1つの具体的改善を完了すること。
+**目的**: PulSeedが自律的に1つの具体的改善を完了すること。
 
 **依存**: R1（ループが動くこと）、R2（観測が現実を反映すること）
 
@@ -244,7 +244,7 @@ seedpulse run --goal <id> --yes --max-iterations 1
 
 **修正方針**:
 - 統合テスト `tests/e2e/r3-adapter-execution.test.ts` を新規作成
-- テストシナリオ: 「`/tmp/seedpulse-test/` に `hello.txt` を作成する」タスクを実際のアダプタで実行
+- テストシナリオ: 「`/tmp/pulseed-test/` に `hello.txt` を作成する」タスクを実際のアダプタで実行
 - Claude Code CLI / Codex のどちらか利用可能な方でテスト
 - テスト後にファイル存在を確認
 
@@ -294,9 +294,9 @@ seedpulse run --goal <id> --yes --max-iterations 1
 
 手動テスト（最も重要な検証）:
 ```bash
-# SeedPulseに「LICENSEファイルを追加する」ゴールを与える
-seedpulse goal add "Add a LICENSE file (MIT) to the project root"
-seedpulse run --goal <id> --yes --max-iterations 3
+# PulSeedに「LICENSEファイルを追加する」ゴールを与える
+pulseed goal add "Add a LICENSE file (MIT) to the project root"
+pulseed run --goal <id> --yes --max-iterations 3
 
 # 期待される動作:
 # 1. 観測: LICENSEファイルが存在しない → スコア 0.0
@@ -310,7 +310,7 @@ seedpulse run --goal <id> --yes --max-iterations 3
 
 ## Phase R4: CLIの安定化
 
-**目的**: `npm install -g seedpulse && seedpulse run` が動くこと。
+**目的**: `npm install -g pulseed && pulseed run` が動くこと。
 
 **依存**: R1-R3と並行着手可能
 
@@ -321,11 +321,11 @@ seedpulse run --goal <id> --yes --max-iterations 3
 **修正方針**:
 - `dist/cli-runner.js` の先頭に `#!/usr/bin/env node` シバンがあることを確認
 - ビルド後に `node dist/cli-runner.js --help` が動くことをCIで検証
-- `npm link` で `seedpulse` コマンドが使えることをテスト
+- `npm link` で `pulseed` コマンドが使えることをテスト
 
 **ファイル**: `src/cli-runner.ts`（シバン確認）、`package.json`（bin設定確認）、`.github/workflows/ci.yml`（ビルド後CLI動作テスト追加）
 
-**成功基準**: `npm link && seedpulse --help` が正常にヘルプテキストを表示する
+**成功基準**: `npm link && pulseed --help` が正常にヘルプテキストを表示する
 
 **複雑度**: S
 
@@ -339,7 +339,7 @@ seedpulse run --goal <id> --yes --max-iterations 3
 
 **ファイル**: `src/cli-runner.ts`（parseArgs設定）
 
-**成功基準**: `seedpulse --yes run --goal <id>` と `seedpulse run --goal <id> --yes` の両方が同じ動作をする
+**成功基準**: `pulseed --yes run --goal <id>` と `pulseed run --goal <id> --yes` の両方が同じ動作をする
 
 **複雑度**: S
 
@@ -354,7 +354,7 @@ seedpulse run --goal <id> --yes --max-iterations 3
 
 **ファイル**: `src/cli-runner.ts`（L812, L833, L1538付近）
 
-**成功基準**: `seedpulse datasource add file_existence --path ./README.md` が成功する
+**成功基準**: `pulseed datasource add file_existence --path ./README.md` が成功する
 
 **複雑度**: S
 
@@ -366,7 +366,7 @@ seedpulse run --goal <id> --yes --max-iterations 3
 
 **修正方針**:
 - 全サブコマンドの正常終了時に最低1行の確認メッセージを出力
-- `seedpulse run` 実行中のイテレーション進捗表示（`[Iteration 1/10] observing... gap=0.35, generating task...`）
+- `pulseed run` 実行中のイテレーション進捗表示（`[Iteration 1/10] observing... gap=0.35, generating task...`）
 - エラー時のメッセージ改善（スタックトレースではなく、何が起きたか・どうすればいいかを表示）
 
 **ファイル**: `src/cli-runner.ts`（全サブコマンド）、`src/core-loop.ts`（進捗コールバック追加）
@@ -385,12 +385,12 @@ seedpulse run --goal <id> --yes --max-iterations 3
   ```
   Error: OPENAI_API_KEY is not set.
   Set it via: export OPENAI_API_KEY=sk-...
-  Or configure in ~/.seedpulse/provider.json
+  Or configure in ~/.pulseed/provider.json
   ```
 
 **ファイル**: `src/provider-factory.ts`（L31-83）
 
-**成功基準**: APIキー未設定で `seedpulse run` を実行すると、即座に分かりやすいエラーが出る
+**成功基準**: APIキー未設定で `pulseed run` を実行すると、即座に分かりやすいエラーが出る
 
 **複雑度**: S
 
@@ -401,18 +401,18 @@ seedpulse run --goal <id> --yes --max-iterations 3
 ```bash
 npm run build
 npm link
-seedpulse --help                    # ヘルプ表示
-seedpulse goal add "test goal"      # ゴール作成確認メッセージ
-seedpulse goal list                 # ゴール一覧表示
-seedpulse datasource add file_existence --path ./README.md  # 成功
-seedpulse --yes run --goal <id>     # フラグ位置非依存
+pulseed --help                    # ヘルプ表示
+pulseed goal add "test goal"      # ゴール作成確認メッセージ
+pulseed goal list                 # ゴール一覧表示
+pulseed datasource add file_existence --path ./README.md  # 成功
+pulseed --yes run --goal <id>     # フラグ位置非依存
 ```
 
 ---
 
 ## Phase R5: Dogfooding再実行
 
-**目的**: R1-R4の修正後、SeedPulseが実際にゴールを自律的に達成すること。
+**目的**: R1-R4の修正後、PulSeedが実際にゴールを自律的に達成すること。
 
 **依存**: R1, R2, R3 必須。R4 推奨。
 

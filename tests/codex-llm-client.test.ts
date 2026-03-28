@@ -24,7 +24,7 @@ vi.mock("node:fs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs")>();
   return {
     ...actual,
-    mkdtempSync: vi.fn((_prefix: string) => "/tmp/seedpulse-codex-test123"),
+    mkdtempSync: vi.fn((_prefix: string) => "/tmp/pulseed-codex-test123"),
   };
 });
 
@@ -32,7 +32,7 @@ vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
   return {
     ...actual,
-    mkdtemp: vi.fn((_prefix: string) => Promise.resolve("/tmp/seedpulse-codex-test123")),
+    mkdtemp: vi.fn((_prefix: string) => Promise.resolve("/tmp/pulseed-codex-test123")),
     readFile: vi.fn((_path: string, _encoding: string) => Promise.resolve(mockTmpContents.value)),
     access: vi.fn(() => Promise.resolve()),
     unlink: vi.fn(() => Promise.resolve()),

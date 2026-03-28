@@ -3,7 +3,7 @@ import { z } from "zod";
 // Daemon configuration
 export const DaemonConfigSchema = z.object({
   check_interval_ms: z.number().int().positive().default(300_000), // 5 min default
-  pid_file: z.string().default("seedpulse.pid"),
+  pid_file: z.string().default("pulseed.pid"),
   log_dir: z.string().default("logs"),
   log_rotation: z.object({
     max_size_mb: z.number().positive().default(10),

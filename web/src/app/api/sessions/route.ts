@@ -5,7 +5,7 @@ import { homedir } from 'os';
 
 export async function GET() {
   try {
-    const sessionsDir = join(homedir(), '.seedpulse', 'sessions');
+    const sessionsDir = join(homedir(), '.pulseed', 'sessions');
 
     let files: string[];
     try {

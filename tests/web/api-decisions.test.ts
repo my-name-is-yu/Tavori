@@ -18,7 +18,7 @@ let mockSm: {
   loadGoal: (id: string) => Promise<unknown>;
 };
 
-vi.mock('../../web/src/lib/seedpulse-client', () => ({
+vi.mock('../../web/src/lib/pulseed-client', () => ({
   getStateManager: () => mockSm,
 }));
 
@@ -34,7 +34,7 @@ const { GET } = await import('../../web/src/app/api/decisions/route.js');
 
 describe('GET /api/decisions', () => {
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'seedpulse-web-decisions-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pulseed-web-decisions-'));
     mockSm = {
       loadGoal: async () => null,
     };
@@ -52,7 +52,7 @@ describe('GET /api/decisions', () => {
   });
 
   it('returns decisions from JSON files', async () => {
-    const decisionsDir = path.join(tmpDir, '.seedpulse', 'decisions');
+    const decisionsDir = path.join(tmpDir, '.pulseed', 'decisions');
     fs.mkdirSync(decisionsDir, { recursive: true });
 
     const decision = {
@@ -77,7 +77,7 @@ describe('GET /api/decisions', () => {
   });
 
   it('skips records without decision field', async () => {
-    const decisionsDir = path.join(tmpDir, '.seedpulse', 'decisions');
+    const decisionsDir = path.join(tmpDir, '.pulseed', 'decisions');
     fs.mkdirSync(decisionsDir, { recursive: true });
 
     const valid = { id: 'd1', goal_id: 'g1', decision: 'REFINE', timestamp: '2026-01-01T00:00:00Z' };
@@ -92,7 +92,7 @@ describe('GET /api/decisions', () => {
   });
 
   it('sorts decisions by timestamp descending', async () => {
-    const decisionsDir = path.join(tmpDir, '.seedpulse', 'decisions');
+    const decisionsDir = path.join(tmpDir, '.pulseed', 'decisions');
     fs.mkdirSync(decisionsDir, { recursive: true });
 
     const older = { id: 'd1', goal_id: 'g1', decision: 'PIVOT', timestamp: '2026-01-01T00:00:00Z' };
@@ -107,7 +107,7 @@ describe('GET /api/decisions', () => {
   });
 
   it('limits to 10 decisions', async () => {
-    const decisionsDir = path.join(tmpDir, '.seedpulse', 'decisions');
+    const decisionsDir = path.join(tmpDir, '.pulseed', 'decisions');
     fs.mkdirSync(decisionsDir, { recursive: true });
 
     for (let i = 0; i < 15; i++) {
@@ -126,7 +126,7 @@ describe('GET /api/decisions', () => {
   });
 
   it('resolves goal_name from state manager', async () => {
-    const decisionsDir = path.join(tmpDir, '.seedpulse', 'decisions');
+    const decisionsDir = path.join(tmpDir, '.pulseed', 'decisions');
     fs.mkdirSync(decisionsDir, { recursive: true });
 
     mockSm.loadGoal = async (id: string) =>

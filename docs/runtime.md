@@ -1,7 +1,7 @@
-# SeedPulse --- Runtime Infrastructure
+# PulSeed --- Runtime Infrastructure
 
 > The foundational design for "running" the task discovery engine (mechanism.md).
-> While mechanism.md defines "what SeedPulse thinks about," this document defines "how SeedPulse runs."
+> While mechanism.md defines "what PulSeed thinks about," this document defines "how PulSeed runs."
 
 ---
 
@@ -15,19 +15,19 @@ The task discovery engine decides WHAT. The orchestration layer handles HOW. Thi
 
 A session is the smallest unit of execution. One task, one session. Sessions are stateless: they receive the information they need at startup and return results at completion. That's it.
 
-SeedPulse has full control over the session lifecycle.
+PulSeed has full control over the session lifecycle.
 
 - **Launch**: Start the session by passing the task's scope, success criteria, and constraints. The session doesn't need to know the overall goal. It only needs to know its own task.
 - **Monitoring**: Track the session's progress. Detect timeouts, abnormal terminations, and resource exhaustion.
 - **Termination**: Success criteria met, timeout reached, or stall detected. Terminate the session under whichever condition applies.
 
-When a session ends, SeedPulse's state is not lost. All state is written to persistent files. Sessions are disposable workspaces; SeedPulse's memory lives outside sessions.
+When a session ends, PulSeed's state is not lost. All state is written to persistent files. Sessions are disposable workspaces; PulSeed's memory lives outside sessions.
 
 Execution means are abstracted through adapters. Various AI agents (Claude Code CLI, Claude API, OpenAI Codex CLI, etc.), API calls, human requests. The most suitable execution means is chosen based on the nature of the task. The orchestration layer does not depend on the type of adapter.
 
 ### Result Verification
 
-SeedPulse does not trust an executor's self-report. This is not suspicion — it is a structural design decision.
+PulSeed does not trust an executor's self-report. This is not suspicion — it is a structural design decision.
 
 Performing execution and verification in the same session makes self-evaluation bias unavoidable. The structure of "evaluating your own work" tends toward optimism in humans and AI alike. That's why execution and verification are structurally separated.
 
@@ -49,7 +49,7 @@ Tasks fail. Verification can result in rejection. The problem is not failure its
 
 **discard**: When the direction itself is wrong. Discard the results and regenerate the task with a different approach. To avoid hitting the same wall repeatedly, information about the failed approach is passed to the next task generation.
 
-**escalate**: When the same kind of failure repeats. Determined to be a problem that cannot be resolved through SeedPulse's autonomous handling, and human intervention is requested. "No matter how many times we try, it doesn't work" suggests either a capability limit or a flawed premise.
+**escalate**: When the same kind of failure repeats. Determined to be a problem that cannot be resolved through PulSeed's autonomous handling, and human intervention is requested. "No matter how many times we try, it doesn't work" suggests either a capability limit or a flawed premise.
 
 The judgment criteria are simple: if results are heading in the goal direction, keep. If the direction is wrong, discard. If failure repeats, escalate.
 
@@ -79,7 +79,7 @@ When tracking multiple goals simultaneously, `PortfolioManager` sits between tas
 
 ## 2. Process Model --- How to Start and Keep Running
 
-SeedPulse's orchestration loop itself is a pure function. A single processing unit that cycles through "observe → gap → scoring → task discovery → execute → verify." The question of the process model is "who calls this function and when."
+PulSeed's orchestration loop itself is a pure function. A single processing unit that cycles through "observe → gap → scoring → task discovery → execute → verify." The question of the process model is "who calls this function and when."
 
 The startup method changes by phase, but the core loop does not. CLI, daemon, and cron are all merely thin wrappers that call this core loop.
 
@@ -92,26 +92,26 @@ cron wrapper  ─┘
 
 ### MVP (Phase 1): CLI Mode
 
-**`seedpulse run`** executes one core loop, reports the results, and exits.
+**`pulseed run`** executes one core loop, reports the results, and exits.
 
 - User runs manually (or external cron runs periodically)
 - Start → 1 loop completes → display results in terminal → exit
-- State is written to persistent files, so the next `seedpulse run` can continue
+- State is written to persistent files, so the next `pulseed run` can continue
 - No infrastructure needed. Only dependency is the core loop
 
 ```
-$ seedpulse run
+$ pulseed run
 Observing... [dog health management]
 Gap detected: meal log not updated for 3 days
 Task executed: please update the log
 Done. Recommended next check: 1 day from now
 ```
 
-In MVP, "scheduling" is the user's (or system cron's) responsibility. SeedPulse doesn't manage schedules. It runs when called. That's it.
+In MVP, "scheduling" is the user's (or system cron's) responsibility. PulSeed doesn't manage schedules. It runs when called. That's it.
 
 ### Phase 1b: TUI Mode
 
-**`seedpulse tui`** launches an Ink-based terminal UI, allowing interactive control of the core loop while viewing a dashboard.
+**`pulseed tui`** launches an Ink-based terminal UI, allowing interactive control of the core loop while viewing a dashboard.
 
 - Entry point is `src/tui/entry.ts` (`startTUI()`)
 - Dependencies chain: `entry.ts` → `App` (`app.tsx`) → `useLoop` hook (`use-loop.ts`) → `CoreLoop`
@@ -136,7 +136,7 @@ src/tui/
 ```
 
 ```
-seedpulse tui
+pulseed tui
   ↓
 entry.ts (DI wiring + Ink render)
   ↓
@@ -153,7 +153,7 @@ TUI is not a replacement for CLI mode but a complement to it. The loop execution
 
 ### Phase 2a: Built-in Scheduler (Daemon Mode)
 
-**`seedpulse start`** launches a daemon that automatically executes the core loop at configured intervals. **`seedpulse stop`** stops it.
+**`pulseed start`** launches a daemon that automatically executes the core loop at configured intervals. **`pulseed stop`** stops it.
 
 - The daemon is internally just a wrapper that repeatedly calls the core loop
 - The core loop itself requires no changes. The cost of daemonization is small
@@ -162,12 +162,12 @@ TUI is not a replacement for CLI mode but a complement to it. The loop execution
 
 ### Phase 2b: cron Entry Generation
 
-**`seedpulse cron`** outputs a crontab entry the user can add to their shell.
+**`pulseed cron`** outputs a crontab entry the user can add to their shell.
 
 ```
-$ seedpulse cron
-# crontab entry for running SeedPulse hourly:
-0 * * * * /usr/local/bin/seedpulse run >> ~/.seedpulse/logs/cron.log 2>&1
+$ pulseed cron
+# crontab entry for running PulSeed hourly:
+0 * * * * /usr/local/bin/pulseed run >> ~/.pulseed/logs/cron.log 2>&1
 ```
 
 Phase 2b is an alternative to Phase 2a, an option for users who "don't want to keep a daemon running." Whichever is used, the same core loop is executed.
@@ -176,7 +176,7 @@ Phase 2b is an alternative to Phase 2a, an option for users who "don't want to k
 
 - The core loop is implemented as a pure function. No dependency on global state
 - CLI is implemented first. Daemon/cron are thin wrappers added afterward
-- Whether the decision of "when to run" stays with the user (MVP) or is delegated to SeedPulse (Phase 2) is the user's choice
+- Whether the decision of "when to run" stays with the user (MVP) or is delegated to PulSeed (Phase 2) is the user's choice
 
 ---
 
@@ -186,11 +186,11 @@ When should the task discovery loop be executed? Running it continuously is wast
 
 ### Drive Decision
 
-The core of SeedPulse's drive method boils down to one question: **"Is there a goal that needs attention right now?"**
+The core of PulSeed's drive method boils down to one question: **"Is there a goal that needs attention right now?"**
 
-At each potential activation timing, SeedPulse answers this question. If the answer is yes, it runs the task discovery loop. If no, it does nothing. This judgment itself must be lightweight. Check the state of each goal and see only whether attention is needed. Deep analysis happens inside the loop.
+At each potential activation timing, PulSeed answers this question. If the answer is yes, it runs the task discovery loop. If no, it does nothing. This judgment itself must be lightweight. Check the state of each goal and see only whether attention is needed. Deep analysis happens inside the loop.
 
-"Do nothing" is a normal state. When all goals are progressing well, or when intentionally waiting, SeedPulse stays quiet. Not running unnecessary loops is itself a smart use of resources.
+"Do nothing" is a normal state. When all goals are progressing well, or when intentionally waiting, PulSeed stays quiet. Not running unnecessary loops is itself a smart use of resources.
 
 ### Goal-Driven Scheduling
 
@@ -202,21 +202,21 @@ Execution timing follows the nature of the goal. Not a fixed heartbeat.
 
 **Continuous goals**: Low-frequency periodic checks are the baseline. Frequency is raised only when an anomaly is detected. Quietly monitoring normally, reacting immediately when a problem occurs.
 
-When a single SeedPulse instance has multiple goals, each goal has its own drive rhythm. The most frequently driven goal determines how often SeedPulse activates, but not every goal is checked at every activation. Only goals that need attention have the loop run for them.
+When a single PulSeed instance has multiple goals, each goal has its own drive rhythm. The most frequently driven goal determines how often PulSeed activates, but not every goal is checked at every activation. Only goals that need attention have the loop run for them.
 
 ### Active and Waiting
 
-SeedPulse is not always active. It recognizes situations where "waiting" is the correct judgment.
+PulSeed is not always active. It recognizes situations where "waiting" is the correct judgment.
 
 Immediately after launching an initiative. It takes time for effects to appear. Measuring immediately is meaningless. Decide to "measure N days later" and in the meantime attend to other goals or wait quietly.
 
-When there are external dependencies. Waiting for others' approval, waiting for external service responses, waiting for market reactions. There are timings that SeedPulse cannot control. Being able to wait when it's time to wait is equivalent to not taking unnecessary actions.
+When there are external dependencies. Waiting for others' approval, waiting for external service responses, waiting for market reactions. There are timings that PulSeed cannot control. Being able to wait when it's time to wait is equivalent to not taking unnecessary actions.
 
 However, "waiting" is not "forgetting." Goals that are waiting also have their state confirmed periodically. Because the situation may have changed while waiting.
 
 ### Types of Activation Triggers
 
-There are 4 types of triggers that activate SeedPulse.
+There are 4 types of triggers that activate PulSeed.
 
 **Scheduled activation**: Periodic checks based on the nature of the goal. The most fundamental drive method.
 
@@ -226,19 +226,19 @@ There are 4 types of triggers that activate SeedPulse.
 
 **Deadline activation**: A deadline is approaching. Separately from periodic checks, the approach of a deadline itself becomes a trigger. When less than one week remains until a deadline, an additional check runs separately from the regular periodic check.
 
-These triggers are not exclusive. Multiple triggers can fire simultaneously. SeedPulse records "why it was activated" and processes the most urgent goal first.
+These triggers are not exclusive. Multiple triggers can fire simultaneously. PulSeed records "why it was activated" and processes the most urgent goal first.
 
 ---
 
 ## 4. Context Management --- Handling Long-Term Goals with a Finite Context
 
-An LLM's context window is finite. The goals SeedPulse pursues span months to years. How is this contradiction resolved?
+An LLM's context window is finite. The goals PulSeed pursues span months to years. How is this contradiction resolved?
 
 The answer is simple. **Most information lives outside the context window.**
 
 ### Controlling Session Boundaries
 
-SeedPulse controls the start and end of sessions. This is the key to solving the context problem.
+PulSeed controls the start and end of sessions. This is the key to solving the context problem.
 
 The node boundaries of the goal tree become natural session boundaries. One sub-goal, one task corresponds to one session. When a session ends, the results are collected and the context is reset. The next session starts from a blank slate.
 
@@ -248,7 +248,7 @@ The concept of "continuing from the previous session" doesn't exist. Each sessio
 
 > For the specific algorithm for context selection (priority-based inclusion rules, exclusion rules per session type, MVP's fixed top-4 method), see `design/session-and-context.md` §4. This section describes only the overview.
 
-When launching a session, SeedPulse assembles and passes only the information that session needs.
+When launching a session, PulSeed assembles and passes only the information that session needs.
 
 What is passed to task execution sessions:
 - Task definition and success criteria
@@ -259,7 +259,7 @@ What is passed to task execution sessions:
 What is not passed:
 - The entire goal history
 - Information about unrelated goals
-- Everything SeedPulse knows
+- Everything PulSeed knows
 
 What is passed to verification sessions:
 - The task's success criteria
@@ -283,40 +283,40 @@ Sessions are stateless. Then how is consistency maintained across sessions?
 
 Persistent files. All state is written to persistent files.
 
-When a session ends, SeedPulse extracts the results and updates the state file. When the next session begins, SeedPulse reads the relevant information from the state file and assembles the context for the new session.
+When a session ends, PulSeed extracts the results and updates the state file. When the next session begins, PulSeed reads the relevant information from the state file and assembles the context for the new session.
 
 When session A's results affect session B, that effect is conveyed through the state file. Session A never directly passes anything to session B. All information flows through persistent files as the relay point.
 
-This design has the side benefit of transparency. State files are human-readable. They can be managed with git. What SeedPulse knows and what it bases its decisions on can be confirmed at any time.
+This design has the side benefit of transparency. State files are human-readable. They can be managed with git. What PulSeed knows and what it bases its decisions on can be confirmed at any time.
 
 ### Context Isolation for Multiple Goals
 
-When SeedPulse is pursuing multiple goals simultaneously, the context for each goal is completely isolated.
+When PulSeed is pursuing multiple goals simultaneously, the context for each goal is completely isolated.
 
 Session A's execution session contains no information about goal B. Session A's failure doesn't affect goal B's judgment either (because they are isolated at the state file level).
 
 This is not mere housekeeping. It's prevention of context pollution. It structurally prevents information obtained in one goal's context from biasing judgments about an unrelated goal.
 
-However, when there are dependencies between goals, exceptions apply. When goal A's results are a prerequisite for goal B, that dependency is explicitly managed by SeedPulse, and only the necessary information is included in goal B's context.
+However, when there are dependencies between goals, exceptions apply. When goal A's results are a prerequisite for goal B, that dependency is explicitly managed by PulSeed, and only the necessary information is included in goal B's context.
 
 ### Memory Hierarchy
 
-SeedPulse's information is divided into three layers.
+PulSeed's information is divided into three layers.
 
 **Working Memory**: The context window of the current session. Capacity is limited but processing speed is fast. Only information needed for the task at this moment is here.
 
-**Goal State**: The goal tree, state vectors, and progress records saved in persistent files. Maintains consistency across sessions. Loaded into the session's working memory as needed. This is SeedPulse's "medium-term memory."
+**Goal State**: The goal tree, state vectors, and progress records saved in persistent files. Maintains consistency across sessions. Loaded into the session's working memory as needed. This is PulSeed's "medium-term memory."
 
-**Experience Log**: Records of state → action → result. The data that serves as the foundation for learning. Recent raw logs are kept as Short-term Memory in `~/.seedpulse/memory/short-term/`, and when they exceed the retention period, they are compressed into patterns and lessons in Long-term Memory (`~/.seedpulse/memory/long-term/`) via LLM summarization. Long-term lessons can be referenced across goals and are selectively injected into Working Memory as priority 6 in `session-and-context.md` §4. Therefore, "not referenced in individual sessions" applies only to raw logs (Short-term raw JSON); compressed lessons do enter session context. See `design/memory-lifecycle.md` for details.
+**Experience Log**: Records of state → action → result. The data that serves as the foundation for learning. Recent raw logs are kept as Short-term Memory in `~/.pulseed/memory/short-term/`, and when they exceed the retention period, they are compressed into patterns and lessons in Long-term Memory (`~/.pulseed/memory/long-term/`) via LLM summarization. Long-term lessons can be referenced across goals and are selectively injected into Working Memory as priority 6 in `session-and-context.md` §4. Therefore, "not referenced in individual sessions" applies only to raw logs (Short-term raw JSON); compressed lessons do enter session context. See `design/memory-lifecycle.md` for details.
 
-The key point of this hierarchy is that most information lives outside the context window. The context window is a window that holds only "what's needed right now" — it is not the place to store all of SeedPulse's knowledge.
+The key point of this hierarchy is that most information lives outside the context window. The context window is a window that holds only "what's needed right now" — it is not the place to store all of PulSeed's knowledge.
 
 ### Memory Lifecycle
 
 `design/memory-lifecycle.md` defines the specific implementation of the 3-layer memory model.
 
 ```
-~/.seedpulse/memory/
+~/.pulseed/memory/
 ├── short-term/
 │   └── goals/<goal_id>/
 │       ├── experience-log.json   # Experience log (raw JSON)
@@ -371,4 +371,4 @@ Return to Drive Method
 
 The process model defines "how it's started," the drive method decides "when it runs," the task discovery engine decides "what to do," orchestration controls "how to execute," and context management organizes "what to remember."
 
-This infrastructure is built by SeedPulse itself. Precisely because existing tools are insufficient, SeedPulse itself needs this foundation. So that the task discovery engine — its brain — can operate stably over the long term, for multiple goals.
+This infrastructure is built by PulSeed itself. Precisely because existing tools are insufficient, PulSeed itself needs this foundation. So that the task discovery engine — its brain — can operate stably over the long term, for multiple goals.

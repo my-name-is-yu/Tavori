@@ -5,7 +5,7 @@
 // is preferred, falling back to first-line-as-title / rest-as-body.
 //
 // Environment variables:
-//   SEEDPULSE_GITHUB_REPO — "owner/name", overrides auto-detection
+//   PULSEED_GITHUB_REPO — "owner/name", overrides auto-detection
 
 import { spawn } from "node:child_process";
 import type { IAdapter, AgentTask, AgentResult } from "../execution/adapter-layer.js";
@@ -16,9 +16,9 @@ import type { Task } from "../types/task.js";
 // ─── Config ───
 
 export interface GitHubIssueAdapterConfig {
-  /** "owner/name". Reads SEEDPULSE_GITHUB_REPO env var if not set; auto-detects via gh CLI otherwise. */
+  /** "owner/name". Reads PULSEED_GITHUB_REPO env var if not set; auto-detects via gh CLI otherwise. */
   repo?: string;
-  /** Labels always applied to every created issue. Default: ["seedpulse"] */
+  /** Labels always applied to every created issue. Default: ["pulseed"] */
   defaultLabels?: string[];
   /** Path to the gh executable. Default: "gh" */
   ghPath?: string;
@@ -49,8 +49,8 @@ export class GitHubIssueAdapter implements IAdapter {
   private readonly logger?: Logger;
 
   constructor(config?: GitHubIssueAdapterConfig, logger?: Logger) {
-    this.repo = config?.repo ?? process.env["SEEDPULSE_GITHUB_REPO"] ?? process.env["SEEDPULSE_GITHUB_REPO"];
-    this.defaultLabels = config?.defaultLabels ?? ["seedpulse"];
+    this.repo = config?.repo ?? process.env["PULSEED_GITHUB_REPO"] ?? process.env["PULSEED_GITHUB_REPO"];
+    this.defaultLabels = config?.defaultLabels ?? ["pulseed"];
     this.ghPath = config?.ghPath ?? "gh";
     this.dryRun = config?.dryRun ?? false;
     this.logger = logger;
@@ -141,7 +141,7 @@ export class GitHubIssueAdapter implements IAdapter {
    * Returns null (not a match) on any error so the adapter stays functional when gh is unavailable.
    */
   async checkOpenIssueExists(title: string): Promise<number | null> {
-    const label = this.defaultLabels[0] ?? "seedpulse";
+    const label = this.defaultLabels[0] ?? "pulseed";
     const args = [
       "issue",
       "list",
@@ -210,7 +210,7 @@ export class GitHubIssueAdapter implements IAdapter {
   }
 
   /**
-   * Return titles of all open issues labelled with the default label (e.g. "seedpulse").
+   * Return titles of all open issues labelled with the default label (e.g. "pulseed").
    * Used by CoreLoop to inject existing task context into the prompt so the LLM can
    * avoid creating duplicates.
    *
@@ -218,7 +218,7 @@ export class GitHubIssueAdapter implements IAdapter {
    * Returns an empty array on any error (fail-open).
    */
   async listExistingTasks(): Promise<string[]> {
-    const label = this.defaultLabels[0] ?? "seedpulse";
+    const label = this.defaultLabels[0] ?? "pulseed";
     const args = [
       "issue",
       "list",
@@ -463,7 +463,7 @@ export class GitHubIssueAdapter implements IAdapter {
       clearTimeout(timeoutHandle);
       cb(
         null,
-        "Could not detect GitHub repo. Set SEEDPULSE_GITHUB_REPO or run inside a GitHub-backed git repo. " +
+        "Could not detect GitHub repo. Set PULSEED_GITHUB_REPO or run inside a GitHub-backed git repo. " +
           `(git error: ${err.message})`
       );
     });
@@ -477,7 +477,7 @@ export class GitHubIssueAdapter implements IAdapter {
       if (timedOut || code !== 0 || !url) {
         cb(
           null,
-          "Could not detect GitHub repo. Set SEEDPULSE_GITHUB_REPO or run inside a GitHub-backed git repo."
+          "Could not detect GitHub repo. Set PULSEED_GITHUB_REPO or run inside a GitHub-backed git repo."
         );
         return;
       }
@@ -499,7 +499,7 @@ export class GitHubIssueAdapter implements IAdapter {
       cb(
         null,
         `Could not parse GitHub repo from git remote URL: ${url}. ` +
-          "Set SEEDPULSE_GITHUB_REPO to 'owner/name' explicitly."
+          "Set PULSEED_GITHUB_REPO to 'owner/name' explicitly."
       );
     });
   }
@@ -571,7 +571,7 @@ export class GitHubIssueAdapter implements IAdapter {
       return "gh CLI not authenticated. Run `gh auth login`.";
     }
     if (lower.includes("could not resolve") || lower.includes("repository not found")) {
-      return `Repository not found or no access. Check SEEDPULSE_GITHUB_REPO. Original: ${msg}`;
+      return `Repository not found or no access. Check PULSEED_GITHUB_REPO. Original: ${msg}`;
     }
     return msg;
   }

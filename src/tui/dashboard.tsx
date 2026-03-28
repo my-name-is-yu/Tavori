@@ -87,7 +87,7 @@ export function Dashboard({ state }: DashboardProps) {
         overflow="hidden"
       >
         <Text bold color="magenta">
-          🎯 SEEDPULSE
+          🎯 PULSEED
         </Text>
         <Text> </Text>
         <Text color="yellow">No active goals.</Text>
@@ -101,7 +101,7 @@ export function Dashboard({ state }: DashboardProps) {
           {"  2. Then type: "}
           <Text color="green">/run</Text>
         </Text>
-        <Text>{"  3. SeedPulse will decompose and execute automatically."}</Text>
+        <Text>{"  3. PulSeed will decompose and execute automatically."}</Text>
         <Text> </Text>
         <Text dimColor>
           {"Type "}
@@ -119,7 +119,7 @@ export function Dashboard({ state }: DashboardProps) {
       {/* Header */}
       <Box>
         <Text bold color="magenta">
-          SEEDPULSE
+          PULSEED
         </Text>
         <Text>{"  goal: "}</Text>
         <Text bold>{goalLabel}</Text>

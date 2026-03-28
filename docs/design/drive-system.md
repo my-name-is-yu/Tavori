@@ -1,12 +1,12 @@
 # Drive System
 
-> The decision structure for when and why SeedPulse acts. Design of scheduling and triggers.
+> The decision structure for when and why PulSeed acts. Design of scheduling and triggers.
 
 ---
 
 ## 1. The Central Question
 
-The SeedPulse drive system reduces to a single question.
+The PulSeed drive system reduces to a single question.
 
 **"Is there a goal that deserves attention right now?"**
 
@@ -18,7 +18,7 @@ This judgment itself must be lightweight. It checks the state of each goal and d
 
 ## 2. Four Trigger Types
 
-There are four types of triggers that activate SeedPulse. Each has a different timing and a different level of urgency.
+There are four types of triggers that activate PulSeed. Each has a different timing and a different level of urgency.
 
 ### Scheduled
 
@@ -51,7 +51,7 @@ How events are received varies by phase of the process model (see "3. Event Rece
 
 Re-evaluation immediately after a task completes. This is the most frequent trigger during active work phases.
 
-When a task completes, SeedPulse automatically executes the following sequence.
+When a task completes, PulSeed automatically executes the following sequence.
 
 ```
 Task completion notification
@@ -88,7 +88,7 @@ This gradual escalation operates in concert with the Deadline Drive score in `dr
 
 ## 3. Event Reception Mechanism — How to Receive External Triggers
 
-Event-driven triggering requires a mechanism to receive events. If SeedPulse cannot receive events, event-driven triggering does not function. The reception mechanism is designed in stages according to the phase of the process model.
+Event-driven triggering requires a mechanism to receive events. If PulSeed cannot receive events, event-driven triggering does not function. The reception mechanism is designed in stages according to the phase of the process model.
 
 ### Event Format
 
@@ -107,17 +107,17 @@ Regardless of phase, events are expressed in a unified format.
 }
 ```
 
-- `type`: `"external"` (external event) or `"internal"` (SeedPulse internal trigger)
+- `type`: `"external"` (external event) or `"internal"` (PulSeed internal trigger)
 - `source`: Origin of the event (system name, sensor name, etc.)
 - `timestamp`: UTC time in ISO 8601 format
 - `data`: Event-specific payload (schema depends on source)
 
 ### MVP (Phase 1): File-Based Event Queue
 
-The **`~/.seedpulse/events/`** directory is used as an event queue. External systems write JSON files to this directory. When `seedpulse run` is executed, SeedPulse reads this directory, processes the events, and archives them.
+The **`~/.pulseed/events/`** directory is used as an event queue. External systems write JSON files to this directory. When `pulseed run` is executed, PulSeed reads this directory, processes the events, and archives them.
 
 ```
-~/.seedpulse/
+~/.pulseed/
 ├── events/
 │   ├── 20260310-090000-github-build-failed.json   ← Unprocessed event
 │   └── 20260310-085500-sensor-alert.json
@@ -126,16 +126,16 @@ The **`~/.seedpulse/events/`** directory is used as an event queue. External sys
 ```
 
 Processing flow:
-1. On `seedpulse run` launch, read `~/.seedpulse/events/`
+1. On `pulseed run` launch, read `~/.pulseed/events/`
 2. Process in timestamp order of filename
 3. Evaluate each event as a trigger for the corresponding goal
 4. Move processed events to `archive/`
 
 No infrastructure required. External systems only need to be able to write files. Shell scripts, webhook servers, cron jobs — anything works.
 
-> **Integration with the observation cycle**: Writes to this event queue function as triggers for event-driven observation (Event-driven) defined in `observation.md` §3. Upon receiving an event, SeedPulse immediately launches the observation cycle for the corresponding goal and re-evaluates the state vector.
+> **Integration with the observation cycle**: Writes to this event queue function as triggers for event-driven observation (Event-driven) defined in `observation.md` §3. Upon receiving an event, PulSeed immediately launches the observation cycle for the corresponding goal and re-evaluates the state vector.
 
-**Polling fallback**: External data sources without push notification (APIs, web pages, etc.) are checked directly by SeedPulse at the configured URL/API during the observation step. This is implemented as an integration into the observation step, not as event-driven.
+**Polling fallback**: External data sources without push notification (APIs, web pages, etc.) are checked directly by PulSeed at the configured URL/API during the observation step. This is implemented as an integration into the observation step, not as event-driven.
 
 ### Phase 2 (Daemon Mode): In-Memory Queue + File Watcher
 
@@ -143,7 +143,7 @@ When the daemon is running persistently, more real-time event processing becomes
 
 **In-memory queue**: The daemon maintains an event queue in memory and executes trigger evaluation immediately when an event arrives.
 
-**File watcher**: Watches the `~/.seedpulse/events/` directory and begins processing the instant a new file is written. Faster response than the MVP polling approach. Maintains file format compatibility with the MVP.
+**File watcher**: Watches the `~/.pulseed/events/` directory and begins processing the instant a new file is written. Faster response than the MVP polling approach. Maintains file format compatibility with the MVP.
 
 **Local HTTP endpoint**: The daemon accepts HTTP requests on a local port (default: `127.0.0.1:41700`). External systems can then send webhooks to this endpoint.
 
@@ -160,11 +160,11 @@ This endpoint binds to localhost only. It is not exposed to external networks.
 
 ## 4. Active and Waiting
 
-SeedPulse has two operating states.
+PulSeed has two operating states.
 
 ### Active State
 
-A task is executing, or the task discovery loop is evaluating. SeedPulse is doing something.
+A task is executing, or the task discovery loop is evaluating. PulSeed is doing something.
 
 Transitions from active to waiting:
 - A task completed and the next task was judged unnecessary
@@ -173,13 +173,13 @@ Transitions from active to waiting:
 
 ### Waiting State
 
-No immediate action is needed. SeedPulse is monitoring but not acting.
+No immediate action is needed. PulSeed is monitoring but not acting.
 
 There are three patterns of waiting.
 
-**Waiting for effect**: Immediately after a measure was taken. Changes take time to materialize. SeedPulse decides when to measure and waits. In the meantime, it either turns attention to other goals or waits quietly.
+**Waiting for effect**: Immediately after a measure was taken. Changes take time to materialize. PulSeed decides when to measure and waits. In the meantime, it either turns attention to other goals or waits quietly.
 
-**Waiting on external dependency**: Someone else's approval, a response from an external service, a market reaction. There are timings that SeedPulse cannot control. Knowing when to wait is the same as not taking unnecessary action.
+**Waiting on external dependency**: Someone else's approval, a response from an external service, a market reaction. There are timings that PulSeed cannot control. Knowing when to wait is the same as not taking unnecessary action.
 
 **All goals satisfied**: All goals have met their completion criteria. Only periodic monitoring checks are conducted; the system re-activates when it detects a state change.
 
@@ -208,7 +208,7 @@ This check involves no LLM calls. It completes with only a read of state files a
 
 ## 6. Multi-Goal Scheduling
 
-When SeedPulse is pursuing multiple goals, each goal has its own drive rhythm.
+When PulSeed is pursuing multiple goals, each goal has its own drive rhythm.
 
 ### Independent Scheduling
 
@@ -247,7 +247,7 @@ Multiple triggers may fire simultaneously.
 
 Duplicate triggers are merged into a single evaluation cycle. Even if multiple triggers fire for the same goal, the task discovery loop runs only once. Duplicate execution is wasteful and can in some cases create race conditions.
 
-SeedPulse records "why this activation occurred." When multiple triggers converge, all of them are retained as context and passed to the task discovery loop. A compound situation — "the deadline is approaching AND a sensor alert came in" — may be treated with higher priority than a single trigger.
+PulSeed records "why this activation occurred." When multiple triggers converge, all of them are retained as context and passed to the task discovery loop. A compound situation — "the deadline is approaching AND a sensor alert came in" — may be treated with higher priority than a single trigger.
 
 ---
 

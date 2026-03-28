@@ -134,7 +134,7 @@ describe("completion_judger timeout + retry", () => {
   let stallDetector: StallDetector;
 
   beforeEach(() => {
-    tmpDir = makeTempDir("seedpulse-cjt-");
+    tmpDir = makeTempDir("pulseed-cjt-");
     stateManager = new StateManager(tmpDir);
     sessionManager = new SessionManager(stateManager);
     trustManager = new TrustManager(stateManager);

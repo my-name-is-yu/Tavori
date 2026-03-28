@@ -126,14 +126,14 @@ describe("IntentRecognizer — LLM fallback", () => {
   it("returns chat intent with response for conversational input", async () => {
     const mockResponse = JSON.stringify({
       intent: "chat",
-      response: "SeedPulse manages goals with measurable dimensions. You currently have no active goals.",
+      response: "PulSeed manages goals with measurable dimensions. You currently have no active goals.",
     });
     const llm = makeMockLLMClient(mockResponse);
     const recognizer = new IntentRecognizer(llm);
 
-    const result = await recognizer.recognize("What can SeedPulse do?");
+    const result = await recognizer.recognize("What can PulSeed do?");
     expect(result.intent).toBe("chat");
-    expect(result.response).toBe("SeedPulse manages goals with measurable dimensions. You currently have no active goals.");
+    expect(result.response).toBe("PulSeed manages goals with measurable dimensions. You currently have no active goals.");
   });
 
   it("returns goal_create intent with description in params when user clearly wants to create a goal", async () => {

@@ -3,14 +3,14 @@ import * as fsp from "node:fs/promises";
 import * as path from "node:path";
 import * as http from "node:http";
 import type { DriveSystem } from "../drive/drive-system.js";
-import { SeedPulseEventSchema } from "../types/drive.js";
+import { PulSeedEventSchema } from "../types/drive.js";
 import { getEventsDir } from "../utils/paths.js";
 import type { Logger } from "./logger.js";
 
 export interface EventServerConfig {
   host?: string; // default: "127.0.0.1" (localhost only!)
   port?: number; // default: 41700
-  eventsDir?: string; // default: ~/.seedpulse/events/
+  eventsDir?: string; // default: ~/.pulseed/events/
 }
 
 export class EventServer {
@@ -26,7 +26,7 @@ export class EventServer {
     this.driveSystem = driveSystem;
     this.host = config?.host ?? "127.0.0.1";
     this.port = config?.port ?? 41700;
-    // Default events directory: ~/.seedpulse/events/
+    // Default events directory: ~/.pulseed/events/
     this.eventsDir = config?.eventsDir ?? getEventsDir();
     this.logger = logger;
   }
@@ -65,7 +65,7 @@ export class EventServer {
    * Start watching the events directory for new `.json` files.
    * When a file appears:
    *   1. Read and parse it
-   *   2. Validate via SeedPulseEventSchema
+   *   2. Validate via PulSeedEventSchema
    *   3. Dispatch to DriveSystem (writeEvent)
    *   4. Move to events/processed/ subdirectory
    *   5. Log errors for malformed files but don't crash
@@ -132,7 +132,7 @@ export class EventServer {
 
       const content = await fsp.readFile(filePath, "utf-8");
       const raw = JSON.parse(content) as unknown;
-      const event = SeedPulseEventSchema.parse(raw);
+      const event = PulSeedEventSchema.parse(raw);
 
       // Dispatch to DriveSystem
       await this.driveSystem.writeEvent(event);
@@ -175,7 +175,7 @@ export class EventServer {
     req.on("end", () => {
       try {
         const data = JSON.parse(body) as unknown;
-        const event = SeedPulseEventSchema.parse(data);
+        const event = PulSeedEventSchema.parse(data);
         // Write event to file queue (DriveSystem will pick it up)
         // Fire-and-forget: writeEvent is now async but HTTP handler responds immediately
         void this.driveSystem.writeEvent(event).catch((err) => {

@@ -1,8 +1,8 @@
 /**
  * CLIRunner — knowledge subcommand tests
  *
- * Verifies that `seedpulse knowledge list`, `seedpulse knowledge search`, and
- * `seedpulse knowledge stats` work correctly against the shared knowledge base
+ * Verifies that `pulseed knowledge list`, `pulseed knowledge search`, and
+ * `pulseed knowledge stats` work correctly against the shared knowledge base
  * stored in StateManager.
  */
 
@@ -161,7 +161,7 @@ afterEach(() => {
   } else {
     process.env.ANTHROPIC_API_KEY = origApiKey;
   }
-  delete process.env.SEEDPULSE_LLM_PROVIDER;
+  delete process.env.PULSEED_LLM_PROVIDER;
   fs.rmSync(tmpDir, { recursive: true, force: true });
   vi.clearAllMocks();
   vi.restoreAllMocks();
@@ -169,7 +169,7 @@ afterEach(() => {
 
 // ─── Tests: knowledge list ────────────────────────────────────────────────────
 
-describe("CLIRunner — seedpulse knowledge list", () => {
+describe("CLIRunner — pulseed knowledge list", () => {
   it("shows a message when no knowledge entries exist", async () => {
     const runner = new CLIRunner(tmpDir);
     const exitCode = await runner.run(["knowledge", "list"]);
@@ -228,7 +228,7 @@ describe("CLIRunner — seedpulse knowledge list", () => {
 
 // ─── Tests: knowledge search ─────────────────────────────────────────────────
 
-describe("CLIRunner — seedpulse knowledge search", () => {
+describe("CLIRunner — pulseed knowledge search", () => {
   it("returns error when no query argument is provided", async () => {
     const runner = new CLIRunner(tmpDir);
     const exitCode = await runner.run(["knowledge", "search"]);
@@ -307,7 +307,7 @@ describe("CLIRunner — seedpulse knowledge search", () => {
 
 // ─── Tests: knowledge stats ───────────────────────────────────────────────────
 
-describe("CLIRunner — seedpulse knowledge stats", () => {
+describe("CLIRunner — pulseed knowledge stats", () => {
   it("shows zero counts when no knowledge exists", async () => {
     const runner = new CLIRunner(tmpDir);
     const exitCode = await runner.run(["knowledge", "stats"]);
@@ -338,7 +338,7 @@ describe("CLIRunner — seedpulse knowledge stats", () => {
 
 // ─── Tests: unknown knowledge subcommand ────────────────────────────────────
 
-describe("CLIRunner — seedpulse knowledge (error cases)", () => {
+describe("CLIRunner — pulseed knowledge (error cases)", () => {
   it("returns error when no subcommand is given", async () => {
     const runner = new CLIRunner(tmpDir);
     const exitCode = await runner.run(["knowledge"]);

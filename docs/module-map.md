@@ -230,7 +230,7 @@
 | daemon-runner.ts | Daemon start, stop, and restart management, graceful shutdown, and crash recovery | `DaemonRunner`, `DaemonDeps` | runtime/pid-manager, runtime/logger, runtime/event-server, types/daemon |
 | event-server.ts | File-queue-based event reception and real-time file watcher (fs.watch) | `EventServer`, `EventServerConfig` | node:fs |
 | notification-dispatcher.ts | Notification delivery (stdout/file/webhook) + routing to INotifier plugins | `NotificationDispatcher`, `INotificationDispatcher` | runtime/logger, runtime/notifier-registry, types/notification |
-| plugin-loader.ts | Dynamic plugin loading from `~/.seedpulse/plugins/`, manifest validation, and auto-registration to registry | `PluginLoader`, `PluginLoaderOptions` | runtime/notifier-registry, execution/adapter-layer, observation/data-source-adapter, types/plugin |
+| plugin-loader.ts | Dynamic plugin loading from `~/.pulseed/plugins/`, manifest validation, and auto-registration to registry | `PluginLoader`, `PluginLoaderOptions` | runtime/notifier-registry, execution/adapter-layer, observation/data-source-adapter, types/plugin |
 | notifier-registry.ts | INotifier plugin CRUD management and eventType-based routing | `NotifierRegistry` | types/plugin |
 
 ### src/adapters/ — Agent Adapter Implementations
@@ -278,12 +278,12 @@
 |---|---|---|---|
 | setup.ts | DI assembly for all dependencies | `buildDeps` | all modules (DI assembly) |
 | utils.ts | CLI helpers and usage display | `formatOperationError`, `printUsage`, `printCharacterConfig` | (none) |
-| commands/run.ts | `seedpulse run` command implementation | `buildApprovalFn` | core-loop, state-manager |
-| commands/goal.ts | `seedpulse goal *` command group | `cmdGoalList`, `cmdStatus`, `cmdGoalShow`, `cmdGoalReset`, `cmdLog`, `cmdCleanup`, `autoRegisterFileExistenceDataSources` | state-manager, observation/data-source-adapter, adapters/file-existence-datasource |
-| commands/report.ts | `seedpulse report` command | `cmdReport` | state-manager, reporting-engine |
-| commands/suggest.ts | `seedpulse suggest` / `seedpulse improve` commands | `normalizeSuggestPayload` | goal/goal-negotiator, observation/capability-detector, state-manager |
-| commands/config.ts | `seedpulse provider` / `seedpulse character` / `seedpulse datasource` | `maskSecrets`, `cmdProvider`, `cmdConfigCharacter`, `cmdDatasourceList`, `cmdDatasourceRemove` | llm/provider-config, traits/character-config, state-manager |
-| commands/daemon.ts | `seedpulse daemon start/stop/status` commands | (internal implementation) | runtime/daemon-runner, runtime/pid-manager |
+| commands/run.ts | `pulseed run` command implementation | `buildApprovalFn` | core-loop, state-manager |
+| commands/goal.ts | `pulseed goal *` command group | `cmdGoalList`, `cmdStatus`, `cmdGoalShow`, `cmdGoalReset`, `cmdLog`, `cmdCleanup`, `autoRegisterFileExistenceDataSources` | state-manager, observation/data-source-adapter, adapters/file-existence-datasource |
+| commands/report.ts | `pulseed report` command | `cmdReport` | state-manager, reporting-engine |
+| commands/suggest.ts | `pulseed suggest` / `pulseed improve` commands | `normalizeSuggestPayload` | goal/goal-negotiator, observation/capability-detector, state-manager |
+| commands/config.ts | `pulseed provider` / `pulseed character` / `pulseed datasource` | `maskSecrets`, `cmdProvider`, `cmdConfigCharacter`, `cmdDatasourceList`, `cmdDatasourceRemove` | llm/provider-config, traits/character-config, state-manager |
+| commands/daemon.ts | `pulseed daemon start/stop/status` commands | (internal implementation) | runtime/daemon-runner, runtime/pid-manager |
 
 ### src/tui/ — TUI Dashboard (Ink/React)
 

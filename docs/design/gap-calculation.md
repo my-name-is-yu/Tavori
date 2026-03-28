@@ -207,7 +207,7 @@ Dimensions with low confidence are treated as "possibly worse than we think," nu
 
 ### Design Rationale
 
-The risk of treating something poorly understood as "no problem" is high. Especially for long-term goals, overlooked issues can become costly later. SeedPulse should be designed to "fear what it cannot see."
+The risk of treating something poorly understood as "no problem" is high. Especially for long-term goals, overlooked issues can become costly later. PulSeed should be designed to "fear what it cannot see."
 
 ---
 

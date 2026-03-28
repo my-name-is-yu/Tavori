@@ -1,6 +1,6 @@
 # Multi-Agent Delegation Design
 
-> Issue #33. Defines how SeedPulse delegates a single task across multiple agents with divided responsibilities.
+> Issue #33. Defines how PulSeed delegates a single task across multiple agents with divided responsibilities.
 > Core principle: **Define appropriate roles and delegate to appropriate capabilities. Roles are domain-agnostic and extensible.**
 
 ---
@@ -162,7 +162,7 @@ The LLM assesses size at task generation time and assigns the appropriate pipeli
 The `implementor` stage of a Large task is split into two sub-phases:
 
 1. **plan** — the implementor generates an execution plan (read-only, no changes)
-2. SeedPulse compares the plan against the strategy hypothesis and decides to approve or reject
+2. PulSeed compares the plan against the strategy hypothesis and decides to approve or reject
 3. **execute** — the approved plan is executed by the implementor
 
 Auto-approval condition: if the adapter's `trust_score >= 20` (high-trust boundary), plan approval can be automated. Otherwise, human approval is requested via `EthicsGate`.

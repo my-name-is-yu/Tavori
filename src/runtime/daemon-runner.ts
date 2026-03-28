@@ -9,7 +9,7 @@ import { StateManager } from "../state-manager.js";
 import { PIDManager } from "./pid-manager.js";
 import { Logger } from "./logger.js";
 import type { EventServer } from "./event-server.js";
-import type { SeedPulseEvent } from "../types/drive.js";
+import type { PulSeedEvent } from "../types/drive.js";
 import type { DaemonConfig, DaemonState } from "../types/daemon.js";
 import { DaemonConfigSchema, DaemonStateSchema } from "../types/daemon.js";
 
@@ -29,13 +29,13 @@ interface ShutdownMarker {
 
 // ─── DaemonRunner ───
 //
-// Runs the SeedPulse CoreLoop continuously as a long-lived daemon process.
+// Runs the PulSeed CoreLoop continuously as a long-lived daemon process.
 // Responsibilities:
 //   - PID file management (prevent duplicate daemons)
 //   - Signal handling (SIGINT/SIGTERM → graceful stop)
 //   - Multi-goal scheduling (DriveSystem.shouldActivate per goal)
 //   - Crash recovery (configurable max_retries before hard stop)
-//   - Daemon state persistence (~/.seedpulse/daemon-state.json)
+//   - Daemon state persistence (~/.pulseed/daemon-state.json)
 //
 // The daemon loop:
 //   1. Determine which goals need activation (shouldActivate)
@@ -496,7 +496,7 @@ export class DaemonRunner {
    * Called when a file-watcher event arrives from DriveSystem.
    * Aborts the current sleep so the loop runs immediately.
    */
-  private onEventReceived(event: SeedPulseEvent): void {
+  private onEventReceived(event: PulSeedEvent): void {
     this.logger.info("Event received, triggering immediate loop", {
       event_type: event.type,
     });
@@ -572,12 +572,12 @@ export class DaemonRunner {
 
   /**
    * Rotate the main log file if it exceeds the configured size limit.
-   * Renames seedpulse.log to seedpulse.<timestamp>.log and keeps at most maxFiles rotated files.
+   * Renames pulseed.log to pulseed.<timestamp>.log and keeps at most maxFiles rotated files.
    * Called at daemon startup.
    */
   async rotateLog(): Promise<void> {
     const logDir = path.join(this.baseDir, this.config.log_dir);
-    const logPath = path.join(logDir, "seedpulse.log");
+    const logPath = path.join(logDir, "pulseed.log");
     const maxSizeBytes = this.config.log_rotation.max_size_mb * 1024 * 1024;
     const maxFiles = this.config.log_rotation.max_files;
 
@@ -595,7 +595,7 @@ export class DaemonRunner {
 
       // Rotate: rename current log with timestamp suffix
       const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-      const rotatedName = `seedpulse.${timestamp}.log`;
+      const rotatedName = `pulseed.${timestamp}.log`;
       const rotatedPath = path.join(logDir, rotatedName);
       await fsp.rename(logPath, rotatedPath);
 
@@ -617,9 +617,9 @@ export class DaemonRunner {
   private async pruneRotatedLogs(logDir: string, maxFiles: number): Promise<void> {
     try {
       const entries = await fsp.readdir(logDir);
-      // Rotated files match: seedpulse.<timestamp>.log (not seedpulse.log itself)
+      // Rotated files match: pulseed.<timestamp>.log (not pulseed.log itself)
       const rotated = entries
-        .filter((f) => /^seedpulse\..+\.log$/.test(f) && f !== "seedpulse.log")
+        .filter((f) => /^pulseed\..+\.log$/.test(f) && f !== "pulseed.log")
         .sort(); // ISO timestamps sort lexicographically = chronologically
 
       // Remove oldest files beyond maxFiles
@@ -637,7 +637,7 @@ export class DaemonRunner {
   // ─── Static Utilities ───
 
   /**
-   * Generate a crontab entry that runs `seedpulse run --goal <goalId>` on a schedule.
+   * Generate a crontab entry that runs `pulseed run --goal <goalId>` on a schedule.
    *
    * Rules:
    *   intervalMinutes <= 0 → treated as 60
@@ -652,14 +652,14 @@ export class DaemonRunner {
     if (intervalMinutes <= 0) intervalMinutes = 60;
 
     if (intervalMinutes < 60) {
-      return `*/${intervalMinutes} * * * * /usr/bin/env seedpulse run --goal ${goalId}`;
+      return `*/${intervalMinutes} * * * * /usr/bin/env pulseed run --goal ${goalId}`;
     }
 
     const hours = Math.floor(intervalMinutes / 60);
     if (hours < 24) {
-      return `0 */${hours} * * * /usr/bin/env seedpulse run --goal ${goalId}`;
+      return `0 */${hours} * * * /usr/bin/env pulseed run --goal ${goalId}`;
     }
 
-    return `0 0 * * * /usr/bin/env seedpulse run --goal ${goalId}`;
+    return `0 0 * * * /usr/bin/env pulseed run --goal ${goalId}`;
   }
 }

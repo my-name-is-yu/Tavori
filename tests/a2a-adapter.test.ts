@@ -207,7 +207,7 @@ describe("A2AAdapter", () => {
       const result = await adapter.execute(makeTask());
       expect(result.success).toBe(false);
       expect(result.error).toContain("input-required");
-      expect(result.error).toContain("SeedPulse does not support interactive input");
+      expect(result.error).toContain("PulSeed does not support interactive input");
       expect(result.stopped_reason).toBe("error");
     });
 

@@ -53,12 +53,12 @@ describe.skipIf(!API_KEY_SET)("OpenAI E2E — real API calls", () => {
   // ── Test 2: buildLLMClient('openai') creates an OpenAILLMClient ──────────
 
   it(
-    "buildLLMClient() with SEEDPULSE_LLM_PROVIDER=openai creates an OpenAILLMClient",
+    "buildLLMClient() with PULSEED_LLM_PROVIDER=openai creates an OpenAILLMClient",
     async () => {
-      const originalProvider = process.env["SEEDPULSE_LLM_PROVIDER"];
-      const originalAdapter = process.env["SEEDPULSE_ADAPTER"];
-      process.env["SEEDPULSE_LLM_PROVIDER"] = "openai";
-      process.env["SEEDPULSE_ADAPTER"] = "openai_api";
+      const originalProvider = process.env["PULSEED_LLM_PROVIDER"];
+      const originalAdapter = process.env["PULSEED_ADAPTER"];
+      process.env["PULSEED_LLM_PROVIDER"] = "openai";
+      process.env["PULSEED_ADAPTER"] = "openai_api";
 
       try {
         const client = await buildLLMClient();
@@ -72,14 +72,14 @@ describe.skipIf(!API_KEY_SET)("OpenAI E2E — real API calls", () => {
         expect(res.content.length).toBeGreaterThan(0);
       } finally {
         if (originalProvider === undefined) {
-          delete process.env["SEEDPULSE_LLM_PROVIDER"];
+          delete process.env["PULSEED_LLM_PROVIDER"];
         } else {
-          process.env["SEEDPULSE_LLM_PROVIDER"] = originalProvider;
+          process.env["PULSEED_LLM_PROVIDER"] = originalProvider;
         }
         if (originalAdapter === undefined) {
-          delete process.env["SEEDPULSE_ADAPTER"];
+          delete process.env["PULSEED_ADAPTER"];
         } else {
-          process.env["SEEDPULSE_ADAPTER"] = originalAdapter;
+          process.env["PULSEED_ADAPTER"] = originalAdapter;
         }
       }
     },

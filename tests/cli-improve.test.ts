@@ -1,5 +1,5 @@
 /**
- * CLIRunner — `seedpulse improve` subcommand tests (M10.3)
+ * CLIRunner — `pulseed improve` subcommand tests (M10.3)
  *
  * Strategy:
  * - All heavy dependencies (CoreLoop, GoalNegotiator, LLM clients, etc.) are mocked.
@@ -185,7 +185,7 @@ beforeEach(() => {
 
   origApiKey = process.env.ANTHROPIC_API_KEY;
   process.env.ANTHROPIC_API_KEY = "test-api-key";
-  process.env.SEEDPULSE_LLM_PROVIDER = "anthropic";
+  process.env.PULSEED_LLM_PROVIDER = "anthropic";
 });
 
 afterEach(() => {
@@ -194,7 +194,7 @@ afterEach(() => {
   } else {
     process.env.ANTHROPIC_API_KEY = origApiKey;
   }
-  delete process.env.SEEDPULSE_LLM_PROVIDER;
+  delete process.env.PULSEED_LLM_PROVIDER;
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
   vi.clearAllMocks();
@@ -445,7 +445,7 @@ describe("improve subcommand — loop execution", () => {
     expect(mockRun).not.toHaveBeenCalled();
   });
 
-  it("prints 'Run with: seedpulse run' message when no --auto/--yes", async () => {
+  it("prints 'Run with: pulseed run' message when no --auto/--yes", async () => {
     const goal = makeGoal({ id: "goal-show-hint" });
     const mockSuggest = vi.fn().mockResolvedValue([makeSuggestion()]);
     const mockNegotiate = vi.fn().mockResolvedValue(makeNegotiationResult(goal));
@@ -465,7 +465,7 @@ describe("improve subcommand — loop execution", () => {
     const output = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
     consoleSpy.mockRestore();
 
-    expect(output).toContain("seedpulse run");
+    expect(output).toContain("pulseed run");
     expect(output).toContain("goal-show-hint");
   });
 

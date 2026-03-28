@@ -6,7 +6,7 @@
 
 ## 1. Problem
 
-SeedPulse has two separate paths for making goals concrete. `negotiate()` in GoalNegotiator runs a 6-step flow: LLM dimension decomposition, baseline estimation, feasibility evaluation (qualitative or quantitative), capability check, and response generation. It produces a single goal with validated, feasibility-checked dimensions. `decomposeGoal()` in GoalTreeManager runs a different flow: LLM specificity scoring, recursive sub-goal generation, coverage validation, and cycle detection. It produces a tree of goals, each with dimensions assigned by the decomposition LLM.
+PulSeed has two separate paths for making goals concrete. `negotiate()` in GoalNegotiator runs a 6-step flow: LLM dimension decomposition, baseline estimation, feasibility evaluation (qualitative or quantitative), capability check, and response generation. It produces a single goal with validated, feasibility-checked dimensions. `decomposeGoal()` in GoalTreeManager runs a different flow: LLM specificity scoring, recursive sub-goal generation, coverage validation, and cycle detection. It produces a tree of goals, each with dimensions assigned by the decomposition LLM.
 
 These are the same operation — "turn something ambiguous into something measurable" — split across two code paths with no shared stopping criterion. The key gap: `decomposeGoal()` marks leaf nodes with whatever dimensions the LLM produced during decomposition (`buildGoalFromSubgoalSpec` sets `observation_method.type = "manual"`, `confidence = 0.5`, no feasibility check). These leaves enter the core loop with untested dimensions — no validation that the observation method works, no feasibility assessment, no counter-proposal for unrealistic targets.
 

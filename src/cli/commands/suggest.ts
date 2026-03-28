@@ -1,4 +1,4 @@
-// ─── seedpulse suggest and improve commands ───
+// ─── pulseed suggest and improve commands ───
 
 import { parseArgs } from "node:util";
 
@@ -79,7 +79,7 @@ export async function cmdSuggest(
 
   const context = positionals[0];
   if (!context) {
-    logger.error('Usage: seedpulse suggest "<context>" [--max N] [--path <dir>]');
+    logger.error('Usage: pulseed suggest "<context>" [--max N] [--path <dir>]');
     return 1;
   }
 
@@ -151,7 +151,7 @@ export async function cmdImprove(
   }
 
   const targetPath = positionals[0] || ".";
-  console.log(`\n[SeedPulse Improve] Analyzing ${targetPath}...\n`);
+  console.log(`\n[PulSeed Improve] Analyzing ${targetPath}...\n`);
 
   try {
     await ensureProviderConfig();
@@ -223,7 +223,7 @@ export async function cmdImprove(
 
   // Negotiate the selected goal
   const selectedDescription = selected.steps.join("\n");
-  console.log(`[SeedPulse Improve] Negotiating goal: "${selected.title}"...`);
+  console.log(`[PulSeed Improve] Negotiating goal: "${selected.title}"...`);
   let goal: Awaited<ReturnType<typeof deps.goalNegotiator.negotiate>>["goal"];
   let response: Awaited<ReturnType<typeof deps.goalNegotiator.negotiate>>["response"];
   try {
@@ -247,12 +247,12 @@ export async function cmdImprove(
     return 1;
   }
 
-  console.log(`[SeedPulse Improve] Goal registered: ${goal.id}`);
+  console.log(`[PulSeed Improve] Goal registered: ${goal.id}`);
   console.log(`  Response: ${responseType} — ${response.message}\n`);
 
   // Run the loop if --auto or --yes
   if (values.auto || values.yes) {
-    console.log(`[SeedPulse Improve] Starting improvement loop for goal ${goal.id}...`);
+    console.log(`[PulSeed Improve] Starting improvement loop for goal ${goal.id}...`);
     const loopLogger = buildLoopLogger();
     const loopDeps = await buildDeps(
       stateManager,
@@ -264,7 +264,7 @@ export async function cmdImprove(
     );
     try {
       const result = await runLoopWithSignals(loopDeps.coreLoop, goal.id);
-      console.log(`[SeedPulse Improve] Loop completed for goal ${goal.id}`);
+      console.log(`[PulSeed Improve] Loop completed for goal ${goal.id}`);
       if (result.finalStatus === "stalled") {
         logger.error("Improvement loop stalled. No further progress detected.");
         return 2;
@@ -278,7 +278,7 @@ export async function cmdImprove(
       return 1;
     }
   } else {
-    console.log(`Goal created. Run with: seedpulse run --goal ${goal.id}`);
+    console.log(`Goal created. Run with: pulseed run --goal ${goal.id}`);
   }
 
   return 0;

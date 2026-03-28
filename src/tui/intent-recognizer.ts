@@ -81,14 +81,14 @@ const LLMIntentSchema = z.object({
   }).optional(),
 });
 
-const SYSTEM_PROMPT = `You are SeedPulse's assistant. SeedPulse is an AI agent orchestrator that manages goals with measurable dimensions.
+const SYSTEM_PROMPT = `You are PulSeed's assistant. PulSeed is an AI agent orchestrator that manages goals with measurable dimensions.
 
 Available actions you can trigger:
 - goal_create: When the user clearly wants to create a new goal. Extract the description.
 - loop_start: When the user wants to start executing a goal.
 - loop_stop: When the user wants to stop execution.
 
-For any other input, respond conversationally. Explain SeedPulse's state, answer questions, or suggest what to do.
+For any other input, respond conversationally. Explain PulSeed's state, answer questions, or suggest what to do.
 
 Respond in JSON: { "intent": "chat" | "goal_create" | "loop_start" | "loop_stop", "response": "your response text", "params": { "description": "..." } }`;
 

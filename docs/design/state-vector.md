@@ -313,7 +313,7 @@ Milestones have their own state vector and aggregate child node states according
 
 ### Automatic Tracking Mechanism
 
-When a milestone's deadline is reached, SeedPulse automatically runs the following evaluation.
+When a milestone's deadline is reached, PulSeed automatically runs the following evaluation.
 
 ```
 on_milestone_target_date(milestone):
@@ -356,7 +356,7 @@ pace_evaluation(milestone):
 | `at_risk` | The deadline-driven score in drive scoring naturally rises, so no additional intervention. Report the situation to the user |
 | `behind` | Trigger a rescheduling decision. Three options: (1) extend the milestone deadline, (2) revise the milestone target value downward, (3) trigger goal re-negotiation (see `goal-negotiation.md` §6) |
 
-Rescheduling decisions are proposed to the user and require approval, rather than being made autonomously by SeedPulse. Milestones were agreed upon in goal negotiation, and unilateral changes would damage trust.
+Rescheduling decisions are proposed to the user and require approval, rather than being made autonomously by PulSeed. Milestones were agreed upon in goal negotiation, and unilateral changes would damage trust.
 
 ---
 

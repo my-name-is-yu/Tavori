@@ -1,6 +1,6 @@
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
-import { getSeedPulseDirPath } from "./utils/paths.js";
+import { getPulseedDirPath } from "./utils/paths.js";
 import { StateError } from "./utils/errors.js";
 import { writeJsonFileAtomic } from "./utils/json-io.js";
 import type { Logger } from "./runtime/logger.js";
@@ -16,7 +16,7 @@ import type { TrustManager } from "./traits/trust-manager.js";
 
 /**
  * StateManager handles persistence of goals, state vectors, observation logs,
- * and gap history under a base directory (default: ~/.seedpulse/).
+ * and gap history under a base directory (default: ~/.pulseed/).
  *
  * File layout:
  *   <base>/goals/<goal_id>/goal.json
@@ -34,7 +34,7 @@ export class StateManager {
   private readonly logger?: Logger;
 
   constructor(baseDir?: string, logger?: Logger) {
-    this.baseDir = baseDir ?? getSeedPulseDirPath();
+    this.baseDir = baseDir ?? getPulseedDirPath();
     this.logger = logger;
   }
 

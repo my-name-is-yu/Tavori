@@ -3,7 +3,7 @@ version: "1.0.0"
 type: data_source
 description: "WebSocket real-time stream observation source"
 entry_point: src/index.ts
-min_seedpulse_version: "0.1.0"
+min_pulseed_version: "0.1.0"
 capabilities:
   - realtime_stream
 dimensions:

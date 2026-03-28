@@ -1,6 +1,6 @@
 /**
- * Server-side only — singleton instances of SeedPulse core modules.
- * Route Handlers import this to access SeedPulse data layer.
+ * Server-side only — singleton instances of PulSeed core modules.
+ * Route Handlers import this to access PulSeed data layer.
  */
 import { StateManager } from '../../../dist/state-manager.js';
 import { ReportingEngine } from '../../../dist/reporting-engine.js';

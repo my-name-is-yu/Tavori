@@ -228,7 +228,7 @@ describe("PluginLoader version compatibility", () => {
   });
 
   it("returns incompatible state when plugin requires a higher min version", async () => {
-    const manifest = makeValidManifest({ min_seedpulse_version: "999.0.0" });
+    const manifest = makeValidManifest({ min_pulseed_version: "999.0.0" });
     vi.spyOn(loader, "loadManifest").mockResolvedValue(manifest);
 
     const state = await loader.loadOne("/tmp/plugins/test-plugin");
@@ -237,7 +237,7 @@ describe("PluginLoader version compatibility", () => {
   });
 
   it("returns incompatible state when plugin requires a lower max version", async () => {
-    const manifest = makeValidManifest({ max_seedpulse_version: "0.0.1" });
+    const manifest = makeValidManifest({ max_pulseed_version: "0.0.1" });
     vi.spyOn(loader, "loadManifest").mockResolvedValue(manifest);
 
     const state = await loader.loadOne("/tmp/plugins/test-plugin");
@@ -392,7 +392,7 @@ describe("PluginLoader.loadAll", () => {
       makeAdapterRegistry(),
       makeDataSourceRegistry(),
       makeNotifierRegistry(),
-      "/tmp/seedpulse-plugins-nonexistent-dir"
+      "/tmp/pulseed-plugins-nonexistent-dir"
     );
 
     const states = await loader.loadAll();
@@ -404,7 +404,7 @@ describe("PluginLoader.loadAll", () => {
       makeAdapterRegistry(),
       makeDataSourceRegistry(),
       makeNotifierRegistry(),
-      "/tmp/seedpulse-plugins-nonexistent-dir"
+      "/tmp/pulseed-plugins-nonexistent-dir"
     );
 
     // Override discoverPluginDirs to return two fake dirs
@@ -456,7 +456,7 @@ describe("PluginLoader.discoverPluginDirs", () => {
       makeAdapterRegistry(),
       makeDataSourceRegistry(),
       makeNotifierRegistry(),
-      "/tmp/seedpulse-definitely-not-a-real-dir-abc123"
+      "/tmp/pulseed-definitely-not-a-real-dir-abc123"
     );
 
     const dirs = await loader.discoverPluginDirs();
@@ -474,7 +474,7 @@ describe("PluginLoader.getPluginState and updatePluginState", () => {
   let loader: PluginLoader;
 
   beforeEach(() => {
-    tmpDir = fsSync.mkdtempSync(path.join(os.tmpdir(), "seedpulse-plugin-state-test-"));
+    tmpDir = fsSync.mkdtempSync(path.join(os.tmpdir(), "pulseed-plugin-state-test-"));
     loader = new PluginLoader(
       makeAdapterRegistry(),
       makeDataSourceRegistry(),

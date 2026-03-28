@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSeedPulseStore } from '../../lib/store';
+import { usePulSeedStore } from '../../lib/store';
 
 // ─── Types ───
 
@@ -118,7 +118,7 @@ function ProviderSection() {
         <>
           {!data.exists && (
             <p className="text-xs mb-3 px-3 py-2 rounded" style={{ color: 'var(--status-warning)', background: 'color-mix(in srgb, var(--status-warning) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--status-warning) 25%, transparent)' }}>
-              ~/.seedpulse/provider.json not found — showing defaults
+              ~/.pulseed/provider.json not found — showing defaults
             </p>
           )}
           <FieldRow label="Provider" value={cfg?.provider ?? '—'} />
@@ -150,7 +150,7 @@ function PluginsSection() {
         <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>Loading…</p>
       ) : plugins.length === 0 ? (
         <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>
-          No plugins found in ~/.seedpulse/plugins/
+          No plugins found in ~/.pulseed/plugins/
         </p>
       ) : (
         <table className="w-full text-sm border-collapse">
@@ -181,14 +181,14 @@ function PluginsSection() {
 }
 
 function SystemHealthSection() {
-  const connected = useSeedPulseStore((s) => s.connected);
+  const connected = usePulSeedStore((s) => s.connected);
 
   return (
     <SectionCard title="System Health">
       <FieldRow label="Connection" value={<ConnectionDot connected={connected} />} />
       <FieldRow label="Node.js" value={typeof process !== 'undefined' ? process.version : '—'} />
-      <FieldRow label="SeedPulse Version" value="0.1.0" />
-      <FieldRow label="Data Directory" value="~/.seedpulse/" />
+      <FieldRow label="PulSeed Version" value="0.1.0" />
+      <FieldRow label="Data Directory" value="~/.pulseed/" />
       <FieldRow
         label="CoreLoop Status"
         value={<span style={{ color: 'var(--text-tertiary)' }}>n/a (not running in web mode)</span>}

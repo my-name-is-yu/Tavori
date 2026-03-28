@@ -21,7 +21,7 @@ export interface OllamaClientConfig {
  * LLM client for Ollama's OpenAI-compatible API.
  * Uses native fetch (Node 18+) — no extra dependencies.
  *
- * Set SEEDPULSE_LLM_PROVIDER=ollama to activate via CLIRunner.
+ * Set PULSEED_LLM_PROVIDER=ollama to activate via CLIRunner.
  * Optionally set OLLAMA_BASE_URL and OLLAMA_MODEL to configure.
  */
 export class OllamaLLMClient extends BaseLLMClient implements ILLMClient {

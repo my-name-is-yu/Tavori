@@ -36,7 +36,7 @@ describe("ObservationEngine — score jump suppression (§3.3)", () => {
   let stateManager: StateManager;
 
   beforeEach(() => {
-    tmpDir = makeTempDir("seedpulse-obs-clamp-");
+    tmpDir = makeTempDir("pulseed-obs-clamp-");
     stateManager = new StateManager(tmpDir);
   });
 

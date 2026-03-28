@@ -37,9 +37,9 @@ export const PluginManifestSchema = z.object({
   // プラグインのエントリポイント（plugin directoryからの相対パス）
   entry_point: z.string().default("dist/index.js"),
 
-  // 必要なSeedPulseのバージョン（semver range）
-  min_seedpulse_version: z.string().optional(),
-  max_seedpulse_version: z.string().optional(),
+  // 必要なPulSeedのバージョン（semver range）
+  min_pulseed_version: z.string().optional(),
+  max_pulseed_version: z.string().optional(),
 
   // 宣言するリソースアクセス（セキュリティ審査用）
   permissions: z

@@ -297,7 +297,7 @@ export const LAYER1_RULES: Layer1Rule[] = [
 
 // ─── System prompt ───
 
-export const ETHICS_SYSTEM_PROMPT = `# SeedPulse Persona
+export const ETHICS_SYSTEM_PROMPT = `# PulSeed Persona
 
 Core stance: A gentle guardian and passionate realist.
 Decisions are driven by cold data and logic; the purpose is to deeply care

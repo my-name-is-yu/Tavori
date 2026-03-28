@@ -102,7 +102,7 @@ export interface LoopConfig {
   /**
    * Whether to automatically archive a completed goal at the end of run().
    * Default: false — archiving is an irreversible action and should be triggered explicitly
-   * (e.g. via `seedpulse goal archive <id>` CLI command or by setting this flag intentionally).
+   * (e.g. via `pulseed goal archive <id>` CLI command or by setting this flag intentionally).
    */
   autoArchive?: boolean;
   /**
@@ -265,7 +265,7 @@ export interface CoreLoopDeps extends ObservationDeps, TreeDeps, StallDeps, Task
   /**
    * Optional TrustManager for including per-adapter trust balance in reward logs.
    * When provided, CoreLoop reads the balance for the configured adapterType and
-   * includes it in logRewardComputation calls (SEEDPULSE_REWARD_LOG=1).
+   * includes it in logRewardComputation calls (PULSEED_REWARD_LOG=1).
    */
   trustManager?: TrustManager;
   /**

@@ -1,4 +1,4 @@
-// ─── seedpulse daemon commands (start, stop, cron) ───
+// ─── pulseed daemon commands (start, stop, cron) ───
 
 import { parseArgs } from "node:util";
 
@@ -10,7 +10,7 @@ import { PIDManager } from "../../runtime/pid-manager.js";
 import { buildDeps } from "../setup.js";
 import { formatOperationError } from "../utils.js";
 import { getCliLogger } from "../cli-logger.js";
-import { getSeedPulseDirPath, getLogsDir } from "../../utils/paths.js";
+import { getPulseedDirPath, getLogsDir } from "../../utils/paths.js";
 
 export async function cmdStart(
   stateManager: StateManager,
@@ -61,12 +61,12 @@ export async function cmdStart(
     logger,
   });
 
-  logger.info(`Starting SeedPulse daemon for goals: ${goalIds.join(", ")}`);
+  logger.info(`Starting PulSeed daemon for goals: ${goalIds.join(", ")}`);
   await daemon.start(goalIds);
 }
 
 export async function cmdStop(_args: string[]): Promise<void> {
-  const pidManager = new PIDManager(getSeedPulseDirPath());
+  const pidManager = new PIDManager(getPulseedDirPath());
 
   if (!(await pidManager.isRunning())) {
     console.log("No running daemon found");
@@ -117,7 +117,7 @@ export async function cmdCron(args: string[]): Promise<void> {
     process.exit(1);
   }
 
-  console.log("# SeedPulse crontab entries");
+  console.log("# PulSeed crontab entries");
   console.log("# Add these to your crontab with: crontab -e");
   for (const goalId of goalIds) {
     console.log(DaemonRunner.generateCronEntry(goalId, intervalMinutes));

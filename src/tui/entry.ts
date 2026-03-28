@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // ─── TUI Entry Point ───
 //
-// Wires all SeedPulse dependencies (mirrors CLIRunner.buildDeps pattern) and
-// renders the Ink-based TUI. Use `seedpulse tui` or `npm run tui` to launch.
+// Wires all PulSeed dependencies (mirrors CLIRunner.buildDeps pattern) and
+// renders the Ink-based TUI. Use `pulseed tui` or `npm run tui` to launch.
 
 import { render } from "ink";
 import React from "react";
@@ -31,7 +31,7 @@ import { GoalDependencyGraph } from "../goal/goal-dependency-graph.js";
 import { TreeLoopOrchestrator } from "../goal/tree-loop-orchestrator.js";
 import { MemoryLifecycleManager, DriveScoreAdapter } from "../knowledge/memory-lifecycle.js";
 import { CharacterConfigManager } from "../traits/character-config.js";
-import { getSeedPulseDirPath } from "../utils/paths.js";
+import { getPulseedDirPath } from "../utils/paths.js";
 import * as GapCalculator from "../drive/gap-calculator.js";
 import * as DriveScorer from "../drive/drive-scorer.js";
 import type { GapCalculatorModule, DriveScorerModule } from "../core-loop.js";
@@ -60,7 +60,7 @@ async function buildDeps() {
         const goal = await stateManager.loadGoal(goalId);
         return goal?.description;
       } catch (err) {
-        getCliLogger().error(`[seedpulse] Failed to resolve goal description for "${goalId}": ${err instanceof Error ? err.message : String(err)}`);
+        getCliLogger().error(`[pulseed] Failed to resolve goal description for "${goalId}": ${err instanceof Error ? err.message : String(err)}`);
         return undefined;
       }
     }
@@ -113,13 +113,13 @@ async function buildDeps() {
     stateManager, goalTreeManager, stateAggregator, satisficingJudge
   );
 
-  const seedpulseBaseDir = getSeedPulseDirPath();
+  const pulseedBaseDir = getPulseedDirPath();
   let memoryLifecycleManager: MemoryLifecycleManager | undefined;
   let driveScoreAdapter: DriveScoreAdapter | undefined;
   try {
     driveScoreAdapter = new DriveScoreAdapter();
     memoryLifecycleManager = new MemoryLifecycleManager(
-      seedpulseBaseDir,
+      pulseedBaseDir,
       llmClient,
       undefined,
       undefined,
@@ -128,7 +128,7 @@ async function buildDeps() {
     );
     memoryLifecycleManager.initializeDirectories();
   } catch (err) {
-    getCliLogger().warn(`[seedpulse] MemoryLifecycleManager init failed — memory features disabled: ${err instanceof Error ? err.message : String(err)}`);
+    getCliLogger().warn(`[pulseed] MemoryLifecycleManager init failed — memory features disabled: ${err instanceof Error ? err.message : String(err)}`);
     memoryLifecycleManager = undefined;
     driveScoreAdapter = undefined;
   }

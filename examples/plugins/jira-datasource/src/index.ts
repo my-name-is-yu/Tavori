@@ -1,6 +1,6 @@
 // ─── JiraDataSourceAdapter ───
 //
-// A SeedPulse data source plugin that queries Jira REST API for issue counts.
+// A PulSeed data source plugin that queries Jira REST API for issue counts.
 // Uses JQL (expression field) to search issues and returns the result count.
 // Uses native fetch — no external dependencies required.
 // Authentication: Basic Auth (email + API token).

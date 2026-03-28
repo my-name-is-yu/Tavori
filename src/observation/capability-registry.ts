@@ -31,7 +31,7 @@ export interface EscalateDeps {
 // ─── loadRegistry ───
 
 /**
- * Reads capability registry from ~/.seedpulse/capability_registry.json.
+ * Reads capability registry from ~/.pulseed/capability_registry.json.
  * Returns an empty registry if the file does not exist.
  */
 export async function loadRegistry(deps: RegistryDeps): Promise<CapabilityRegistry> {

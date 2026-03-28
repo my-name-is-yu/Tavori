@@ -4,7 +4,7 @@
 
 ## 1. Why Stall Detection Is Necessary
 
-SeedPulse's loop never stops. It keeps running until a goal is achieved or the user intervenes. This "never stopping" quality is normally a strength. Even if one loop iteration is imperfect, the next corrects it.
+PulSeed's loop never stops. It keeps running until a goal is achieved or the user intervenes. This "never stopping" quality is normally a strength. Even if one loop iteration is imperfect, the next corrects it.
 
 However, for certain types of problems, this same quality becomes a flaw.
 
@@ -12,7 +12,7 @@ However, for certain types of problems, this same quality becomes a flaw.
 - Pouring all resources into an unsolvable problem
 - Spinning the loop uselessly when what is needed is to wait for an external change
 
-Stall detection is a **circuit breaker**. It detects when the loop is spinning meaninglessly and triggers an intervention. Without stall detection, SeedPulse would keep making the same moves forever in front of an unsolvable problem.
+Stall detection is a **circuit breaker**. It detects when the loop is spinning meaninglessly and triggers an intervention. Without stall detection, PulSeed would keep making the same moves forever in front of an unsolvable problem.
 
 ---
 
@@ -155,7 +155,7 @@ Hypothesis generation uses an LLM. The LLM is given "a list of strategies tried 
 
 ### 3.3 Capability Limitation
 
-**Diagnosis**: The task requirements exceed the tools, permissions, or knowledge currently available to SeedPulse. No matter what is tried, the task cannot be executed in the first place.
+**Diagnosis**: The task requirements exceed the tools, permissions, or knowledge currently available to PulSeed. No matter what is tried, the task cannot be executed in the first place.
 
 **Response**: Escalate to a human and request the provision of new capabilities.
 
@@ -168,11 +168,11 @@ Escalation content:
   - Impact: Without this access, it is impossible to narrow the gap in this dimension
 ```
 
-A capability limitation is not a failure. It is evidence that SeedPulse accurately recognizes its own boundaries. Escalation should be concrete. Not "I can't do this" but "I can do this if I have that."
+A capability limitation is not a failure. It is evidence that PulSeed accurately recognizes its own boundaries. Escalation should be concrete. Not "I can't do this" but "I can do this if I have that."
 
 ### 3.4 External Dependency
 
-**Diagnosis**: The task's preconditions are waiting on an external change. SeedPulse cannot make progress no matter what it does.
+**Diagnosis**: The task's preconditions are waiting on an external change. PulSeed cannot make progress no matter what it does.
 
 **Response**: Pause this goal and switch to other goals. Set a trigger to resume when the external dependency is resolved.
 
@@ -185,7 +185,7 @@ Response:
   - What can be done now: Redirect resources to another goal during the wait
 ```
 
-Without detecting external dependencies, SeedPulse would spin in an empty loop forever, expecting "the API might support it eventually."
+Without detecting external dependencies, PulSeed would spin in an empty loop forever, expecting "the API might support it eventually."
 
 ### 3.5 Goal Infeasibility
 
@@ -199,13 +199,13 @@ Situation:
   - Strategy has been pivoted 3 times
   - No improvement on any dimension (last 8 loops)
   - No further strategy hypotheses can be generated
-SeedPulse's assessment:
+PulSeed's assessment:
   "Achieving this goal under the current constraints appears to be difficult.
    I suggest redefining the goal, narrowing the scope, or revisiting the preconditions.
    Specifically: [list of possible options]"
 ```
 
-This escalation is not a failure report. It is an active proposal by SeedPulse — recognizing its limits and inviting the user into a more productive conversation.
+This escalation is not a failure report. It is an active proposal by PulSeed — recognizing its limits and inviting the user into a more productive conversation.
 
 ---
 
@@ -244,7 +244,7 @@ When a stall is detected, do not immediately apply the maximum response. Respond
     e.g.: Explain the situation and present possible options
 ```
 
-The purpose of graduated responses is to distinguish temporary stalls (plateaus) from genuine ones. New initiatives take time to show results. Judging "it's a stall" without waiting for that time would cause SeedPulse to abandon a strategy that is actually working.
+The purpose of graduated responses is to distinguish temporary stalls (plateaus) from genuine ones. New initiatives take time to show results. Judging "it's a stall" without waiting for that time would cause PulSeed to abandon a strategy that is actually working.
 
 Reset condition for stages: When meaningful improvement (gap reduction above the threshold) is observed in a stalled dimension, reset the stage count for that dimension to zero.
 
@@ -262,7 +262,7 @@ Dissatisfaction score (stalled) = gap_size × urgency_weight × decay_factor
   where decay_factor < 1.0 (e.g., 0.6)
 ```
 
-**Why this is necessary**: Leaving a stalled dimension at high priority causes SeedPulse to keep hitting the same wall. The `decay_factor` temporarily redirects attention to other dimensions. When the stall is resolved, the `decay_factor` returns to normal.
+**Why this is necessary**: Leaving a stalled dimension at high priority causes PulSeed to keep hitting the same wall. The `decay_factor` temporarily redirects attention to other dimensions. When the stall is resolved, the `decay_factor` returns to normal.
 
 **Recovery of `decay_factor`**: When recovery from a stall is confirmed (when improvement is observed after countermeasures are applied), the factor is restored on the following schedule.
 
@@ -285,4 +285,4 @@ Avoid an abrupt recovery. Return to normal mode gradually, leaving some uncertai
 
 **Scope of stall detection**: Stall detection operates at both the goal level and the task level. Task-level stalls (consecutive failures) accumulate into goal-level stalls (global stalls).
 
-**User notification**: Stall detection itself runs silently. The 1st and 2nd detections are handled autonomously by SeedPulse. Only the 3rd detection (escalation) triggers a user notification. This prevents users from being notified every time a temporary stall occurs.
+**User notification**: Stall detection itself runs silently. The 1st and 2nd detections are handled autonomously by PulSeed. Only the 3rd detection (escalation) triggers a user notification. This prevents users from being notified every time a temporary stall occurs.

@@ -1,6 +1,6 @@
 // ─── MysqlDataSourceAdapter ───
 //
-// A SeedPulse data source plugin that queries a MySQL database.
+// A PulSeed data source plugin that queries a MySQL database.
 // Only SELECT statements are permitted; mutating SQL is rejected.
 
 import mysql from "mysql2/promise";

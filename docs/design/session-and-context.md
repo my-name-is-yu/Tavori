@@ -1,16 +1,16 @@
 # Session and Context Management
 
-> How SeedPulse manages finite context windows while pursuing long-term goals.
+> How PulSeed manages finite context windows while pursuing long-term goals.
 
 ---
 
 ## 1. The Core Problem
 
-An LLM's context window is finite. Even if it reaches hundreds of thousands of tokens, that only covers "this session, right now." The goals SeedPulse pursues can span months or even years.
+An LLM's context window is finite. Even if it reaches hundreds of thousands of tokens, that only covers "this session, right now." The goals PulSeed pursues can span months or even years.
 
 How do we resolve this contradiction?
 
-The answer lies in controlling session boundaries. SeedPulse takes the active role of deciding when to start a session and when to end it. Rather than passively consuming context, it manages context deliberately.
+The answer lies in controlling session boundaries. PulSeed takes the active role of deciding when to start a session and when to end it. Rather than passively consuming context, it manages context deliberately.
 
 ---
 
@@ -18,17 +18,17 @@ The answer lies in controlling session boundaries. SeedPulse takes the active ro
 
 A session is an independent execution unit that does not carry over the context of previous sessions.
 
-Each session is launched for a single purpose: task execution, observation, or review. It receives only the information it needs from SeedPulse at startup, and returns results when it finishes. It has no memory of what happened in previous sessions — and it doesn't need to.
+Each session is launched for a single purpose: task execution, observation, or review. It receives only the information it needs from PulSeed at startup, and returns results when it finishes. It has no memory of what happened in previous sessions — and it doesn't need to.
 
 The rationale for this design is straightforward. Knowing "what came before" can sometimes be a liability. If an execution session carries memories of past failures, those memories introduce bias into the next attempt. If an observation session knows the struggles of the execution session, it may evaluate results too generously. Ignorance is a prerequisite for independent judgment.
 
-Continuity across sessions is maintained by SeedPulse's persistent state files. The sessions themselves remember nothing. The files remember everything.
+Continuity across sessions is maintained by PulSeed's persistent state files. The sessions themselves remember nothing. The files remember everything.
 
 ---
 
 ## 3. Determining Session Boundaries
 
-SeedPulse controls when sessions begin and end according to the following principles.
+PulSeed controls when sessions begin and end according to the following principles.
 
 ### Natural Boundaries
 
@@ -38,9 +38,9 @@ SeedPulse controls when sessions begin and end according to the following princi
 
 ### Forced Boundaries
 
-**Approaching context limits**: When a session's context usage nears its ceiling, SeedPulse terminates the session before completion. It saves state and launches a new session to carry on. This is a preemptive termination to prevent quality degradation from context exhaustion.
+**Approaching context limits**: When a session's context usage nears its ceiling, PulSeed terminates the session before completion. It saves state and launches a new session to carry on. This is a preemptive termination to prevent quality degradation from context exhaustion.
 
-**Stall detection**: If there is no progress on the same approach, SeedPulse terminates the session and restarts it with a different approach. Starting from a clean state often produces better results than switching approaches mid-session.
+**Stall detection**: If there is no progress on the same approach, PulSeed terminates the session and restarts it with a different approach. Starting from a clean state often produces better results than switching approaches mid-session.
 
 ---
 
@@ -95,7 +95,7 @@ The purpose of exclusion rules is bias prevention. Observers are better off not 
 
 ## 5. Context Assembly Per Session Type
 
-When launching a session, SeedPulse assembles and passes the minimum context appropriate for that session type. "Minimum" is not about frugality — it is about maintaining focus. Extraneous information becomes noise and distorts judgment.
+When launching a session, PulSeed assembles and passes the minimum context appropriate for that session type. "Minimum" is not about frugality — it is about maintaining focus. Extraneous information becomes noise and distorts judgment.
 
 (Specific inclusion and exclusion rules follow the selection algorithm in Section 4. The details of each session type are described below.)
 
@@ -170,13 +170,13 @@ State file updated (goal state, task results, observation records)
 Session B begins (new context, only the required information)
 ```
 
-Session A never passes anything directly to Session B. All information flows through the state file. This design has a secondary benefit of transparency. State files are maintained in a human-readable format, making it possible to verify at any time what SeedPulse knows and what basis it is using for its decisions.
+Session A never passes anything directly to Session B. All information flows through the state file. This design has a secondary benefit of transparency. State files are maintained in a human-readable format, making it possible to verify at any time what PulSeed knows and what basis it is using for its decisions.
 
 ---
 
 ## 7. Context Isolation Across Multiple Goals
 
-When SeedPulse manages multiple goals simultaneously, the context of each goal is fully isolated.
+When PulSeed manages multiple goals simultaneously, the context of each goal is fully isolated.
 
 - Information about Goal B is not included in Goal A's sessions
 - A failure in Goal A does not affect decisions for Goal B
@@ -184,20 +184,20 @@ When SeedPulse manages multiple goals simultaneously, the context of each goal i
 
 This prevents context contamination. When information from an unrelated goal bleeds in, judgment becomes inconsistent. Structural isolation ensures clean, independent judgment for each goal.
 
-When dependencies exist between goals, they are managed explicitly. If the outcome of Goal A is a precondition for Goal B, SeedPulse extracts the result of Goal A and explicitly includes it as information to be passed to Goal B's sessions. There is no implicit information sharing.
+When dependencies exist between goals, they are managed explicitly. If the outcome of Goal A is a precondition for Goal B, PulSeed extracts the result of Goal A and explicitly includes it as information to be passed to Goal B's sessions. There is no implicit information sharing.
 
 ---
 
 ## 8. Three Tiers of Memory
 
-SeedPulse's information is divided into three tiers. Each has a different role and a different way of being accessed from sessions.
+PulSeed's information is divided into three tiers. Each has a different role and a different way of being accessed from sessions.
 
 ### Working Memory
 
 - **Physical form**: The current session's context window
 - **Lifespan**: Disappears when the session ends
 - **Contents**: Only what is needed for the current task
-- **Access**: SeedPulse assembles and passes it at session startup
+- **Access**: PulSeed assembles and passes it at session startup
 
 The context window is a notepad. It is where you write what you need for the current task, not a place for long-term memory.
 
@@ -208,16 +208,16 @@ The context window is a notepad. It is where you write what you need for the cur
 - **Contents**: Goal progress, current strategy, accumulated observations
 - **Access**: Selectively loaded — only the necessary parts — at session startup
 
-Goal state is SeedPulse's "working memory" in the operational sense. It remembers what is needed to achieve the current goal. It is the core element that maintains continuity across sessions.
+Goal state is PulSeed's "working memory" in the operational sense. It remembers what is needed to achieve the current goal. It is the core element that maintains continuity across sessions.
 
 ### Experience Log
 
 - **Physical form**: Records of state → action → result
-- **Lifespan**: Persists as long as the SeedPulse instance exists
+- **Lifespan**: Persists as long as the PulSeed instance exists
 - **Contents**: Past attempts, their outcomes, and learned patterns
 - **Access**: Not directly loaded into ordinary sessions. Referenced as summaries at the time of strategy selection or stall detection
 
-The experience log is SeedPulse's "long-term learning foundation." It is rarely referenced in individual sessions, but it improves the quality of task generation over time. Knowledge such as "this approach has failed before" and "in situations like this, that strategy was effective" accumulates here.
+The experience log is PulSeed's "long-term learning foundation." It is rarely referenced in individual sessions, but it improves the quality of task generation over time. Knowledge such as "this approach has failed before" and "in situations like this, that strategy was effective" accumulates here.
 
 ---
 
@@ -257,7 +257,7 @@ goal_dependency:
 
 **Method 2: Automatic detection by LLM**
 
-At goal registration time, SeedPulse has the LLM analyze the relationship between the new goal and existing goals.
+At goal registration time, PulSeed has the LLM analyze the relationship between the new goal and existing goals.
 
 ```
 auto_detect_dependencies(new_goal, existing_goals):
@@ -333,7 +333,7 @@ before_task_generation(goal):
 
 ### Relationship to §7
 
-The "context isolation across multiple goals" principle from §7 is maintained. Dependency management is handled at SeedPulse's scheduling layer, not through context mixing at the session level. Sessions remain stateless and independent. Dependencies affect "when and for which goal to run the loop" — not "what to include inside a session."
+The "context isolation across multiple goals" principle from §7 is maintained. Dependency management is handled at PulSeed's scheduling layer, not through context mixing at the session level. Sessions remain stateless and independent. Dependencies affect "when and for which goal to run the loop" — not "what to include inside a session."
 
 The only exception is the explicit information handoff described in §7. When a prerequisite is satisfied, the result of the prerequisite goal is included in the dependent goal's sessions. This is a structured handoff based on the dependency graph's edge information, not implicit information sharing.
 
@@ -348,5 +348,5 @@ The only exception is the explicit information handoff described in §7. When a 
 | Minimum context | Each session receives only the information needed to fulfill its purpose |
 | Files carry memory | Continuity across sessions is guaranteed by persistent files |
 | Full isolation between goals | Context for multiple goals is structurally segregated |
-| SeedPulse controls boundaries | Session start and end are managed actively, not passively |
+| PulSeed controls boundaries | Session start and end are managed actively, not passively |
 | Dependencies managed at scheduling layer | Inter-goal dependencies are controlled while maintaining session-level context isolation |

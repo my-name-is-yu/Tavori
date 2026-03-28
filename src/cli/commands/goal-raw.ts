@@ -121,6 +121,6 @@ export async function cmdGoalAddRaw(
     }
   }
 
-  console.log(`\nTo run the loop: seedpulse run --goal ${goalId}`);
+  console.log(`\nTo run the loop: pulseed run --goal ${goalId}`);
   return 0;
 }

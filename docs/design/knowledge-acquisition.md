@@ -1,7 +1,7 @@
 # Knowledge Acquisition Design
 
-> SeedPulse does not start with all the knowledge needed to achieve a goal. But it can investigate, learn, and understand on its own.
-> This document defines the mechanism by which SeedPulse actively investigates, acquires, stores, and applies knowledge in unfamiliar domains.
+> PulSeed does not start with all the knowledge needed to achieve a goal. But it can investigate, learn, and understand on its own.
+> This document defines the mechanism by which PulSeed actively investigates, acquires, stores, and applies knowledge in unfamiliar domains.
 
 > Related: `observation.md`, `task-lifecycle.md`, `execution-boundary.md`, `session-and-context.md`, `curiosity.md`, `stall-detection.md`
 
@@ -23,14 +23,14 @@ Observation → Gap Recognition → Strategy Selection → Task Definition → (
 ```
 
 **Trigger 1: During Gap Recognition**
-When interpreting observation results, SeedPulse may detect a state of "I don't know what this observed value means" or "I don't know the normal range for this dimension." This is a sign that domain knowledge needed for interpretation is lacking.
+When interpreting observation results, PulSeed may detect a state of "I don't know what this observed value means" or "I don't know the normal range for this dimension." This is a sign that domain knowledge needed for interpretation is lacking.
 
 **Trigger 2: During Strategy Selection**
-When generating strategies to close a Gap, SeedPulse may detect "I don't know effective approaches in this area" or "I have no baseline to compare against." This is a sign that knowledge needed to form a plan is lacking.
+When generating strategies to close a Gap, PulSeed may detect "I don't know effective approaches in this area" or "I have no baseline to compare against." This is a sign that knowledge needed to form a plan is lacking.
 
 ### The Nature of Knowledge Acquisition
 
-Knowledge acquisition is a means to achieving a goal, not an end in itself. SeedPulse does not "learn for the sake of learning" — it "acquires the knowledge needed to make progress toward its goal." This distinction matters. Knowledge acquisition must always be tied to a node in the goal tree.
+Knowledge acquisition is a means to achieving a goal, not an end in itself. PulSeed does not "learn for the sake of learning" — it "acquires the knowledge needed to make progress toward its goal." This distinction matters. Knowledge acquisition must always be tied to a node in the goal tree.
 
 ---
 
@@ -72,7 +72,7 @@ When a stall is detected and its cause is classified as "the stall is occurring 
 ### 2.4 New Domain Detected During Goal Negotiation
 
 ```
-Signal: The goal's domain is a new area not present in SeedPulse's experience log
+Signal: The goal's domain is a new area not present in PulSeed's experience log
 Occurs at: Goal Negotiation step (mechanism.md §3)
 ```
 
@@ -93,7 +93,7 @@ Example: When trying to generate the task "create a care plan for a dog with res
 
 ## 3. Generating Investigation Tasks
 
-When a knowledge gap is detected, SeedPulse generates an **investigation task** within the normal task discovery loop. Investigation tasks share the same structure as normal tasks (`task-lifecycle.md` §2), but differ in several ways.
+When a knowledge gap is detected, PulSeed generates an **investigation task** within the normal task discovery loop. Investigation tasks share the same structure as normal tasks (`task-lifecycle.md` §2), but differ in several ways.
 
 ### 3.1 Structure of an Investigation Task
 
@@ -149,7 +149,7 @@ Investigation tasks tend to sprawl. They can expand indefinitely in the directio
 
 ## 4. Means of Knowledge Acquisition
 
-Execution of knowledge acquisition tasks is fully delegated to agents, in accordance with `execution-boundary.md`. SeedPulse does not conduct investigations itself.
+Execution of knowledge acquisition tasks is fully delegated to agents, in accordance with `execution-boundary.md`. PulSeed does not conduct investigations itself.
 
 ### 4.1 Delegatable Investigation Methods
 
@@ -163,11 +163,11 @@ Execution of knowledge acquisition tasks is fully delegated to agents, in accord
 
 ### 4.2 Criteria for Selecting Investigation Methods
 
-SeedPulse selects methods in the following priority order when generating investigation tasks:
+PulSeed selects methods in the following priority order when generating investigation tasks:
 
 ```
 1. Analysis of existing data (lowest cost, highest confidence)
-   → Is the answer in a data source SeedPulse already has access to?
+   → Is the answer in a data source PulSeed already has access to?
 
 2. Document reading (avoids going outside)
    → Documents provided by the user, known resources
@@ -211,14 +211,14 @@ Acquired knowledge is integrated and stored in the three memory tiers described 
 |-------------|--------------------------|---------|
 | Working memory | Excerpts of knowledge needed for the current task | Until session ends |
 | Goal state | Domain knowledge related to achieving the goal | As long as the goal exists |
-| Experience log | A record of "what was learned in this investigation" | As long as the SeedPulse instance exists |
+| Experience log | A record of "what was learned in this investigation" | As long as the PulSeed instance exists |
 
 ### 5.2 Domain Knowledge File
 
 Domain knowledge is saved as a dedicated file, as part of the goal state.
 
 ```
-~/.seedpulse/goals/<goal_id>/domain_knowledge.json
+~/.pulseed/goals/<goal_id>/domain_knowledge.json
 ```
 
 ```
@@ -438,7 +438,7 @@ Second time setting a different dog health goal:
 |-----------|--------------------------|
 | Knowledge acquisition is part of goal pursuit | Triggered naturally within the core loop, not as a separate learning mode |
 | Driven by specific questions | Success criterion is "answer these three questions," not "investigate" |
-| Adhere to the delegation model | SeedPulse instructs investigation. Agents execute it |
+| Adhere to the delegation model | PulSeed instructs investigation. Agents execute it |
 | Incremental deepening | Do not expect complete knowledge in one pass. Refine through loop iterations |
 | Verify knowledge | Evaluate the confidence of acquired knowledge and detect contradictions |
 | Control scope | Prevent investigation from sprawling. Limit the number and depth of questions |

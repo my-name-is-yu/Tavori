@@ -59,7 +59,7 @@ const RECOVERY_SCHEDULE: Array<{ loops: number; factor: number }> = [
 ];
 
 /**
- * StallDetector detects stalls (circuit breaker) in the SeedPulse orchestrator loop.
+ * StallDetector detects stalls (circuit breaker) in the PulSeed orchestrator loop.
  * Supports 4 stall types: dimension_stall, time_exceeded, consecutive_failure, global_stall.
  */
 export class StallDetector {

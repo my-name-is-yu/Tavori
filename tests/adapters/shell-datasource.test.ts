@@ -111,7 +111,7 @@ describe("ShellDataSourceAdapter", () => {
       "ds_shell_test",
       {
         rare_count: {
-          argv: ["grep", "-r", "__SEEDPULSE_UNLIKELY_TOKEN_XYZ_9999__", "."],
+          argv: ["grep", "-r", "__PULSEED_UNLIKELY_TOKEN_XYZ_9999__", "."],
           output_type: "number",
           cwd: tmpDir,
         },

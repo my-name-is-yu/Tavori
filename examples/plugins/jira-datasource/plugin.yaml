@@ -3,7 +3,7 @@ version: "1.0.0"
 type: data_source
 description: "Jira REST API issue count observation source"
 entry_point: src/index.ts
-min_seedpulse_version: "0.1.0"
+min_pulseed_version: "0.1.0"
 capabilities:
   - http_api
   - issue_tracking

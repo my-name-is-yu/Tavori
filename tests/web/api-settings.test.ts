@@ -39,7 +39,7 @@ const { GET: getProvider } = await import('../../web/src/app/api/settings/provid
 const { GET: getPlugins } = await import('../../web/src/app/api/settings/plugins/route.js');
 
 // Helper to build a fake plugin directory path (must match what the route uses)
-// The route uses path.join(os.homedir(), '.seedpulse', 'plugins') — we can't change
+// The route uses path.join(os.homedir(), '.pulseed', 'plugins') — we can't change
 // that path, so we mock readdir/readFile instead.
 
 describe('GET /api/settings/provider', () => {
@@ -115,7 +115,7 @@ describe('GET /api/settings/plugins', () => {
   });
 
   it('returns plugins from subdirectories with plugin.json manifests', async () => {
-    const pluginsDir = path.join(process.env.HOME ?? '/tmp', '.seedpulse', 'plugins');
+    const pluginsDir = path.join(process.env.HOME ?? '/tmp', '.pulseed', 'plugins');
     const slackDir = path.join(pluginsDir, 'slack-notifier');
 
     const manifest = {

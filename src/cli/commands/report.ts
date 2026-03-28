@@ -1,4 +1,4 @@
-// ─── seedpulse report command ───
+// ─── pulseed report command ───
 
 import { StateManager } from "../../state-manager.js";
 import { ReportingEngine } from "../../reporting-engine.js";
@@ -18,7 +18,7 @@ export async function cmdReport(stateManager: StateManager, goalId: string): Pro
 
   if (reports.length === 0) {
     console.log(`No reports found for goal "${goalId}".`);
-    console.log(`Run \`seedpulse run --goal ${goalId}\` to generate reports.`);
+    console.log(`Run \`pulseed run --goal ${goalId}\` to generate reports.`);
     return 0;
   }
 

@@ -3,13 +3,13 @@ import * as http from "node:http";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { EventServer } from "../src/runtime/event-server.js";
-import type { SeedPulseEvent } from "../src/types/drive.js";
+import type { PulSeedEvent } from "../src/types/drive.js";
 import { makeTempDir } from "./helpers/temp-dir.js";
 
 // ─── Helpers ───
 
 const createMockDriveSystem = (tmpDir: string) => ({
-  writeEvent: vi.fn().mockImplementation(async (event: SeedPulseEvent) => {
+  writeEvent: vi.fn().mockImplementation(async (event: PulSeedEvent) => {
     const eventsDir = path.join(tmpDir, "events");
     fs.mkdirSync(eventsDir, { recursive: true });
     const file = path.join(eventsDir, `test_${Date.now()}_${Math.random().toString(36).slice(2)}.json`);
@@ -89,7 +89,7 @@ function makeRequest(
   });
 }
 
-const validEvent: SeedPulseEvent = {
+const validEvent: PulSeedEvent = {
   type: "external",
   source: "test-source",
   timestamp: new Date().toISOString(),
@@ -189,7 +189,7 @@ describe("POST /events — valid event", () => {
   it("calls driveSystem.writeEvent with the parsed event", async () => {
     await postEvent(port, validEvent);
     expect(mockDriveSystem.writeEvent).toHaveBeenCalledOnce();
-    const called = mockDriveSystem.writeEvent.mock.calls[0][0] as SeedPulseEvent;
+    const called = mockDriveSystem.writeEvent.mock.calls[0][0] as PulSeedEvent;
     expect(called.type).toBe("external");
     expect(called.source).toBe("test-source");
   });
@@ -209,7 +209,7 @@ describe("POST /events — valid event", () => {
   });
 
   it("accepts internal event type", async () => {
-    const internalEvent: SeedPulseEvent = {
+    const internalEvent: PulSeedEvent = {
       type: "internal",
       source: "core-loop",
       timestamp: new Date().toISOString(),

@@ -23,8 +23,8 @@ import type { ProviderConfig } from "./provider-config.js";
  * Build an LLM client based on provider configuration.
  *
  * Configuration priority (highest to lowest):
- *   1. SEEDPULSE_PROVIDER environment variable
- *   2. ~/.seedpulse/provider.json provider field
+ *   1. PULSEED_PROVIDER environment variable
+ *   2. ~/.pulseed/provider.json provider field
  *   3. Default: OpenAI
  *
  * Providers:
@@ -128,11 +128,11 @@ export async function buildAdapterRegistry(
   }
 
   // Single-agent env var shortcut
-  const envBaseUrl = process.env["SEEDPULSE_A2A_BASE_URL"];
+  const envBaseUrl = process.env["PULSEED_A2A_BASE_URL"];
   if (envBaseUrl && !config.a2a?.agents) {
     registry.register(new A2AAdapter({
       baseUrl: envBaseUrl,
-      authToken: process.env["SEEDPULSE_A2A_AUTH_TOKEN"],
+      authToken: process.env["PULSEED_A2A_AUTH_TOKEN"],
     }));
   }
 
@@ -147,10 +147,10 @@ export async function buildAdapterRegistry(
   }
 
   // Environment variable shortcut
-  if (process.env["SEEDPULSE_OPENCLAW_CLI_PATH"] && !config.openclaw) {
+  if (process.env["PULSEED_OPENCLAW_CLI_PATH"] && !config.openclaw) {
     registry.register(new OpenClawACPAdapter({
-      cliPath: process.env["SEEDPULSE_OPENCLAW_CLI_PATH"],
-      profile: process.env["SEEDPULSE_OPENCLAW_PROFILE"],
+      cliPath: process.env["PULSEED_OPENCLAW_CLI_PATH"],
+      profile: process.env["PULSEED_OPENCLAW_PROFILE"],
     }));
   }
 

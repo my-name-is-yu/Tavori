@@ -1,10 +1,10 @@
 // ─── CLI Dependency Setup ───
 //
-// buildDeps() wires all SeedPulse dependencies for CLI subcommands.
+// buildDeps() wires all PulSeed dependencies for CLI subcommands.
 
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
-import { getSeedPulseDirPath, getDatasourcesDir } from "../utils/paths.js";
+import { getPulseedDirPath, getDatasourcesDir } from "../utils/paths.js";
 import { readJsonFile } from "../utils/json-io.js";
 
 import { StateManager } from "../state-manager.js";
@@ -61,7 +61,7 @@ export async function buildDeps(
   const trustManager = new TrustManager(stateManager);
   const driveSystem = new DriveSystem(stateManager);
 
-  // Read datasource configs from ~/.seedpulse/datasources/
+  // Read datasource configs from ~/.pulseed/datasources/
   const dsDir = getDatasourcesDir();
   const dataSources: IDataSourceAdapter[] = [];
   try {
@@ -142,7 +142,7 @@ export async function buildDeps(
   );
 
   // MemoryLifecycleManager — wires 3-tier memory model into CoreLoop.
-  const seedpulseBaseDir = getSeedPulseDirPath();
+  const pulseedBaseDir = getPulseedDirPath();
 
   // --- Embedding + Vector infrastructure ---
   const embeddingClient: IEmbeddingClient = process.env["OPENAI_API_KEY"]
@@ -151,13 +151,13 @@ export async function buildDeps(
 
   let vectorIndex: VectorIndex | undefined;
   try {
-    const vectorDir = path.join(seedpulseBaseDir, "memory");
+    const vectorDir = path.join(pulseedBaseDir, "memory");
     await fsp.mkdir(vectorDir, { recursive: true });
     const vectorIndexPath = path.join(vectorDir, "vector-index.json");
     vectorIndex = await VectorIndex.create(vectorIndexPath, embeddingClient);
   } catch (err) {
     // Non-fatal: semantic search disabled if vector index init fails
-    console.warn(`[seedpulse] VectorIndex init failed — semantic search disabled: ${err instanceof Error ? err.message : String(err)}`);
+    console.warn(`[pulseed] VectorIndex init failed — semantic search disabled: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   let memoryLifecycleManager: MemoryLifecycleManager | undefined;
@@ -165,7 +165,7 @@ export async function buildDeps(
   try {
     driveScoreAdapter = new DriveScoreAdapter();
     memoryLifecycleManager = new MemoryLifecycleManager(
-      seedpulseBaseDir,
+      pulseedBaseDir,
       llmClient,
       undefined,
       embeddingClient,
@@ -174,7 +174,7 @@ export async function buildDeps(
     );
     memoryLifecycleManager.initializeDirectories();
   } catch (err) {
-    getCliLogger().warn(`[seedpulse] MemoryLifecycleManager init failed — memory features disabled: ${err instanceof Error ? err.message : String(err)}`);
+    getCliLogger().warn(`[pulseed] MemoryLifecycleManager init failed — memory features disabled: ${err instanceof Error ? err.message : String(err)}`);
     memoryLifecycleManager = undefined;
     driveScoreAdapter = undefined;
   }

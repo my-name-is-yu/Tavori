@@ -91,7 +91,7 @@ export function buildProposalPrompt(
     )
     .join("\n");
 
-  return `You are SeedPulse, an AI agent orchestrator analyzing curiosity triggers to propose new exploration goals.
+  return `You are PulSeed, an AI agent orchestrator analyzing curiosity triggers to propose new exploration goals.
 
 ## Current Trigger
 Type: ${trigger.type}

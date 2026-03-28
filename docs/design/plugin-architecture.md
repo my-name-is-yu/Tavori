@@ -1,26 +1,26 @@
 # Plugin Architecture Design
 
-> SeedPulse plugins are not "tools users call" — they are "tools SeedPulse autonomously selects and uses."
+> PulSeed plugins are not "tools users call" — they are "tools PulSeed autonomously selects and uses."
 > This document defines the mechanism for extending external service integrations, notifications, and data observation as plugins,
-> and how SeedPulse autonomously selects them and evaluates their trustworthiness.
+> and how PulSeed autonomously selects them and evaluates their trustworthiness.
 
 > Related: `data-source.md`, `trust-and-safety.md`, `task-lifecycle.md`, `knowledge-acquisition.md`, `execution-boundary.md`
 
 ---
 
-## §1 Overview and SeedPulsetion
+## §1 Overview and PulSeedtion
 
-### SeedPulse vs Claude Code / OpenClaw
+### PulSeed vs Claude Code / OpenClaw
 
 In Claude Code and OpenClaw, plugins are "tools the user explicitly calls." The user runs a command and the tool responds. The user is the active agent.
 
-SeedPulse plugins are different. SeedPulse's core loop (observe → gap → score → task → execute → verify) runs autonomously without user instructions. Therefore, plugins must also be things **SeedPulse autonomously selects and integrates into the core loop**. Not requiring user instructions like "please call this plugin" is the starting point of SeedPulse's plugin design.
+PulSeed plugins are different. PulSeed's core loop (observe → gap → score → task → execute → verify) runs autonomously without user instructions. Therefore, plugins must also be things **PulSeed autonomously selects and integrates into the core loop**. Not requiring user instructions like "please call this plugin" is the starting point of PulSeed's plugin design.
 
 ```
 Claude Code / OpenClaw:
   User → "Search Jira" → Jira plugin → returns result to user
 
-SeedPulse:
+PulSeed:
   Core loop → "Which source is optimal for observing this dimension?"
              → Reference plugin manifests
              → Select jira-source based on trust score
@@ -29,7 +29,7 @@ SeedPulse:
 
 ### "Thin core, extend with plugins" principle
 
-What belongs in SeedPulse's core should be minimal. Use the following criteria:
+What belongs in PulSeed's core should be minimal. Use the following criteria:
 
 | Criterion | Location | Example |
 |-----------|----------|----|
@@ -38,17 +38,17 @@ What belongs in SeedPulse's core should be minimal. Use the following criteria:
 | Depends on specific external services or SaaS | Plugin | JiraAdapter, SlackNotifier, LinearDataSource |
 | Future expansion expected but not currently needed | Plugin candidate | Webhook adapter, custom LLM backend |
 
-This principle keeps the SeedPulse core small and delegates service-specific logic to plugins.
+This principle keeps the PulSeed core small and delegates service-specific logic to plugins.
 
 ---
 
 ## §2 Plugin Types
 
-SeedPulse supports three types of plugins. Each corresponds to an existing or new interface.
+PulSeed supports three types of plugins. Each corresponds to an existing or new interface.
 
 ### 2.1 adapter plugins (IAdapter implementation)
 
-**Role**: Task execution targets. Adds agents and systems that SeedPulse delegates tasks to.
+**Role**: Task execution targets. Adds agents and systems that PulSeed delegates tasks to.
 
 **Corresponding interface**: `IAdapter` in `src/adapter-layer.ts`
 
@@ -100,7 +100,7 @@ interface IDataSourceAdapter {
 
 ### 2.3 notifier plugins (INotifier implementation — new)
 
-**Role**: Notification destinations. Sends notifications when SeedPulse detects specific events.
+**Role**: Notification destinations. Sends notifications when PulSeed detects specific events.
 
 **Corresponding interface**: New definition (added to `src/types/plugin.ts`)
 
@@ -141,12 +141,12 @@ interface NotificationEvent {
 
 ## §3 Capability Declaration Schema (Plugin Manifest)
 
-Each plugin includes a manifest file (`plugin.yaml` or `plugin.json`). The manifest is a capability declaration that tells SeedPulse's autonomous selection engine "what this plugin can do."
+Each plugin includes a manifest file (`plugin.yaml` or `plugin.json`). The manifest is a capability declaration that tells PulSeed's autonomous selection engine "what this plugin can do."
 
 ### 3.1 Manifest example
 
 ```yaml
-# ~/.seedpulse/plugins/jira-source/plugin.yaml
+# ~/.pulseed/plugins/jira-source/plugin.yaml
 name: jira-source
 version: "1.0.0"
 type: data_source
@@ -177,11 +177,11 @@ config_schema:
 dependencies:
   - "@atlassian/jira-client@^3.0.0"
 entry_point: "dist/index.js"
-min_seedpulse_version: "1.0.0"
+min_pulseed_version: "1.0.0"
 ```
 
 ```yaml
-# ~/.seedpulse/plugins/slack-notifier/plugin.yaml
+# ~/.pulseed/plugins/slack-notifier/plugin.yaml
 name: slack-notifier
 version: "2.1.0"
 type: notifier
@@ -193,12 +193,12 @@ supported_events:
   - approval_needed
   - stall_detected
   - task_blocked
-description: "Sends SeedPulse events to a Slack channel"
+description: "Sends PulSeed events to a Slack channel"
 config_schema:
   channel:
     type: string
     required: true
-    description: "Target Slack channel (e.g., #seedpulse-alerts)"
+    description: "Target Slack channel (e.g., #pulseed-alerts)"
   mention_on_critical:
     type: boolean
     default: true
@@ -206,7 +206,7 @@ config_schema:
 dependencies:
   - "@slack/web-api@^6.0.0"
 entry_point: "dist/index.js"
-min_seedpulse_version: "1.0.0"
+min_pulseed_version: "1.0.0"
 ```
 
 ### 3.2 Manifest Zod schema definition
@@ -247,8 +247,8 @@ export const PluginManifestSchema = z.object({
   // Plugin entry point (relative path from plugin directory)
   entry_point: z.string().default("dist/index.js"),
 
-  // Required SeedPulse version (semver range)
-  min_seedpulse_version: z.string().optional(),
+  // Required PulSeed version (semver range)
+  min_pulseed_version: z.string().optional(),
 
   // Declared resource access (for security review)
   permissions: z.object({
@@ -286,10 +286,10 @@ export type PluginState = z.infer<typeof PluginStateSchema>;
 
 ### 4.1 Discovery
 
-Plugins are placed as subdirectories under `~/.seedpulse/plugins/`.
+Plugins are placed as subdirectories under `~/.pulseed/plugins/`.
 
 ```
-~/.seedpulse/plugins/
+~/.pulseed/plugins/
 ├── jira-source/
 │   ├── plugin.yaml        # manifest (required)
 │   ├── dist/
@@ -306,7 +306,7 @@ Plugins are placed as subdirectories under `~/.seedpulse/plugins/`.
         └── index.js
 ```
 
-Discovery runs once at startup. Each subdirectory under `~/.seedpulse/plugins/` is scanned, and those containing `plugin.yaml` or `plugin.json` are treated as plugin candidates.
+Discovery runs once at startup. Each subdirectory under `~/.pulseed/plugins/` is scanned, and those containing `plugin.yaml` or `plugin.json` are treated as plugin candidates.
 
 ### 4.2 Loading
 
@@ -318,7 +318,7 @@ class PluginLoader {
       pluginDirs.map((dir) => this.loadOne(dir))
     );
     // Failed plugins emit an error log and are skipped
-    // They do not crash the SeedPulse process
+    // They do not crash the PulSeed process
     return results.map((r, i) =>
       r.status === "fulfilled"
         ? r.value
@@ -380,7 +380,7 @@ function validateInterface(type: PluginType, impl: unknown): void {
 
 ### 4.5 Error handling
 
-Plugin load failures do not crash the SeedPulse process.
+Plugin load failures do not crash the PulSeed process.
 
 ```
 Plugin load failure cases:
@@ -390,21 +390,21 @@ Plugin load failure cases:
   - Interface compliance violation → skip, error log (with missing method names)
   - dynamic import error (syntax error, etc.) → skip, error log
 
-SeedPulse startup behavior:
+PulSeed startup behavior:
   - Output list of failed plugins in startup log
   - Enable only successfully loaded plugins and continue startup
-  - Use `seedpulse plugin list` to check the status of each plugin
+  - Use `pulseed plugin list` to check the status of each plugin
 ```
 
 ---
 
-## §5 SeedPulse Autonomous Plugin Selection (3 Phases)
+## §5 PulSeed Autonomous Plugin Selection (3 Phases)
 
-SeedPulse's ability to autonomously use plugins is strengthened incrementally across three phases.
+PulSeed's ability to autonomously use plugins is strengthened incrementally across three phases.
 
 ### Phase 1 — Manual configuration (implemented in M9)
 
-Plugins are explicitly specified within the goal definition. SeedPulse simply follows the specification and performs no autonomous selection.
+Plugins are explicitly specified within the goal definition. PulSeed simply follows the specification and performs no autonomous selection.
 
 **Example specification in goal definition**:
 
@@ -427,7 +427,7 @@ Plugins are explicitly specified within the goal definition. SeedPulse simply fo
 - Plugins specified in `plugin_config.adapters` are used as task execution targets
 - Plugins specified in `plugin_config.notifiers` receive notifications
 
-Phase 1 has zero autonomy. "Which plugins to use" is entirely determined by the user. However, "when to call plugins" is decided by SeedPulse within the core loop.
+Phase 1 has zero autonomy. "Which plugins to use" is entirely determined by the user. However, "when to call plugins" is decided by PulSeed within the core loop.
 
 ### Phase 2 — Capability auto-matching (implemented in M10)
 
@@ -564,7 +564,7 @@ type NotificationEventType =
   | "task_blocked"       // task was blocked (escalation)
   | "approval_needed"    // approval request from trust-and-safety.md §4
   | "stall_detected"     // stall detection from stall-detection.md
-  | "trust_change";      // trust score of plugin or SeedPulse itself changed significantly
+  | "trust_change";      // trust score of plugin or PulSeed itself changed significantly
 ```
 
 ### 6.2 NotifierRegistry (new)
@@ -612,7 +612,7 @@ NotificationDispatcher.dispatch(event)
 
 ### 7.1 Execution model (MVP)
 
-In MVP, plugins run in the same process as SeedPulse. No sandbox is applied. The rationale and constraints for this decision are as follows:
+In MVP, plugins run in the same process as PulSeed. No sandbox is applied. The rationale and constraints for this decision are as follows:
 
 | Item | Details |
 |------|---------|
@@ -621,7 +621,7 @@ In MVP, plugins run in the same process as SeedPulse. No sandbox is applied. The
 | Trust assumption | Only targets plugins manually installed by the user |
 | Future | VM isolate or Worker Threads considered in Phase 2 |
 
-The constraint of same-process execution is that a malicious plugin could directly access SeedPulse's internal state. This is acceptable because the user explicitly placed the plugin in `~/.seedpulse/plugins/` — an act of explicit trust.
+The constraint of same-process execution is that a malicious plugin could directly access PulSeed's internal state. This is acceptable because the user explicitly placed the plugin in `~/.pulseed/plugins/` — an act of explicit trust.
 
 ### 7.2 Integration with EthicsGate
 
@@ -641,7 +641,7 @@ EthicsGate.check(task)  // see goal-ethics.md
 Plugin authentication credentials (API keys, etc.) are not included in the manifest. They are separated into a dedicated config file.
 
 ```
-~/.seedpulse/plugins/<plugin-name>/config.json   # user config (may contain API keys, etc.)
+~/.pulseed/plugins/<plugin-name>/config.json   # user config (may contain API keys, etc.)
 ```
 
 The recommended permission for this file is `600` (owner read/write only). Plugins read this file at startup and retain it in memory only.
@@ -660,7 +660,7 @@ permissions:
   shell: false       # no shell command execution needed
 ```
 
-In MVP, permission declarations are **informational only** and are not enforced at runtime. They serve as prerequisite information for adding permission enforcement in future phases. Plugins declaring `shell: true` display an explicit warning during `seedpulse plugin install`.
+In MVP, permission declarations are **informational only** and are not enforced at runtime. They serve as prerequisite information for adding permission enforcement in future phases. Plugins declaring `shell: true` display an explicit warning during `pulseed plugin install`.
 
 ---
 
@@ -712,12 +712,12 @@ CoreLoop (unchanged)
 - `NotifierRegistry` (`src/notifier-registry.ts`)
 - `PluginLoader` (`src/plugin-loader.ts`) — discovery, loading, validation, registration
 - `NotifierRegistry` integration into `NotificationDispatcher`
-- CLI: `seedpulse plugin list`, `seedpulse plugin install <path>`, `seedpulse plugin remove <name>`
+- CLI: `pulseed plugin list`, `pulseed plugin install <path>`, `pulseed plugin remove <name>`
 - Phase 1 `plugin_config` field support in goal definitions
 
 **Completion criteria**:
-- Plugins placed in `~/.seedpulse/plugins/` are auto-detected and registered at startup
-- Failed plugin loads do not crash SeedPulse
+- Plugins placed in `~/.pulseed/plugins/` are auto-detected and registered at startup
+- Failed plugin loads do not crash PulSeed
 - Slack Notifier reference implementation works (E2E test)
 
 ### M10: Capability auto-matching (Phase 2)
@@ -739,7 +739,7 @@ CoreLoop (unchanged)
 - `trust_by_domain` management per goal domain
 - Integration with `KnowledgeManager` for plugin effectiveness sharing
 - Priority selection algorithm implementation
-- Trust score display in `seedpulse plugin list`
+- Trust score display in `pulseed plugin list`
 
 **Completion criteria**:
 - Plugin trust_score is asymmetrically updated based on success/failure
@@ -750,8 +750,8 @@ CoreLoop (unchanged)
 
 | Phase | Details |
 |-------|---------|
-| Plugin marketplace | Search and install community plugins with `seedpulse plugin search <keyword>` |
-| Version management | Enforce `min_seedpulse_version` / `max_seedpulse_version`, migration support for breaking changes |
+| Plugin marketplace | Search and install community plugins with `pulseed plugin search <keyword>` |
+| Version management | Enforce `min_pulseed_version` / `max_pulseed_version`, migration support for breaking changes |
 | Worker Thread isolation | Isolate from the same process to improve crash resilience |
 | Plugin signing | Tamper detection via code signing |
 
@@ -761,10 +761,10 @@ CoreLoop (unchanged)
 
 | Principle | Concrete design decision |
 |-----------|------------------------|
-| SeedPulse is the active agent | Plugins are not "called" — they are selected and used by SeedPulse |
+| PulSeed is the active agent | Plugins are not "called" — they are selected and used by PulSeed |
 | Incremental autonomy | Phase 1 (manual) → Phase 2 (capability matching) → Phase 3 (trust learning) |
 | Leverage existing interfaces | IAdapter and IDataSourceAdapter are not changed — only the registration path is added |
-| Failures do not stop SeedPulse | Plugin load failures and execution failures are logged and skipped |
+| Failures do not stop PulSeed | Plugin load failures and execution failures are logged and skipped |
 | Trust is asymmetric | Failure penalty > success reward (same design philosophy as TrustManager) |
 | Separate secrets | Authentication credentials are not included in manifests — separated to `config.json` |
 | Keep the core thin | All external service dependencies belong in plugins. Core contains only generic logic |

@@ -57,14 +57,14 @@ export interface CodexLLMClientConfig {
 
 /**
  * ILLMClient implementation that uses the `codex exec` CLI for LLM calls.
- * Routes all SeedPulse internal LLM calls through the Codex CLI, which uses
+ * Routes all PulSeed internal LLM calls through the Codex CLI, which uses
  * the ChatGPT subscription (no separate API key needed).
  *
  * Uses `codex exec -s danger-full-access -o <tmpfile> "PROMPT"` per call.
  * The -o flag writes the final response to a temp file for clean output.
  * Usage stats are not available from the CLI and will always be 0.
  *
- * Set SEEDPULSE_LLM_PROVIDER=codex to activate via CLIRunner / provider-factory.
+ * Set PULSEED_LLM_PROVIDER=codex to activate via CLIRunner / provider-factory.
  */
 export class CodexLLMClient extends BaseLLMClient implements ILLMClient {
   private readonly cliPath: string;
@@ -124,7 +124,7 @@ export class CodexLLMClient extends BaseLLMClient implements ILLMClient {
    */
   private async _spawnCodex(prompt: string, model?: string): Promise<string> {
     // Create a temporary directory asynchronously to avoid blocking the event loop
-    const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "seedpulse-codex-"));
+    const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "pulseed-codex-"));
     const tmpFile = path.join(tmpDir, "response.txt");
 
     return new Promise((resolve, reject) => {

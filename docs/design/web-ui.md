@@ -18,7 +18,7 @@
 
 ## 2. Design Philosophy: "Calm Control Room"
 
-SeedPulse is the "control room for agents." Like a cockpit, a large amount of information is arranged in organized positions, and attention is drawn only when something is anomalous.
+PulSeed is the "control room for agents." Like a cockpit, a large amount of information is arranged in organized positions, and attention is drawn only when something is anomalous.
 
 | Patterns to avoid | Countermeasure |
 |------------------|---------------|
@@ -60,14 +60,14 @@ web/
 │       ├── goals/, sessions/, strategies/, knowledge/, reports/
 │       └── events/route.ts  # SSE proxy
 ├── components/  (ui/, dashboard/, goal/, session/, knowledge/, layout/)
-├── lib/  (seedpulse-client.ts, store.ts, sse.ts)
+├── lib/  (pulseed-client.ts, store.ts, sse.ts)
 ├── styles/tokens.css
 └── package.json, next.config.ts, tailwind.config.ts
 ```
 
 ### Data Layer and API
 
-Route Handlers directly import seedpulse-core modules within the Node.js process (same process, no RPC needed).
+Route Handlers directly import pulseed-core modules within the Node.js process (same process, no RPC needed).
 
 | Endpoint | Method | Corresponding module |
 |----------|--------|---------------------|
@@ -126,7 +126,7 @@ Common layout: left sidebar (nav, 120px fixed) + main area
 
 ### 5.5 Settings & Users
 
-Provider settings (`~/.seedpulse/provider.json`), plugin management (enable/disable), system health (CoreLoop state, EventServer connection count)
+Provider settings (`~/.pulseed/provider.json`), plugin management (enable/disable), system health (CoreLoop state, EventServer connection count)
 
 ---
 
@@ -155,7 +155,7 @@ Provider settings (`~/.seedpulse/provider.json`), plugin management (enable/disa
 - [ ] Gap/Trust trend charts display 30 days of data on Goal Detail
 - [ ] Session output is streamed via SSE on Agent Sessions
 - [ ] All features are accessible without authentication via localhost
-- [ ] TUI and Web UI can operate concurrently against the same SeedPulse process
+- [ ] TUI and Web UI can operate concurrently against the same PulSeed process
 - [ ] Initial load < 1.5 seconds (SSR), SSE event reflected < 500ms
 - [ ] Dogfooding: Web UI monitoring operates without issues for 2+ hours
 

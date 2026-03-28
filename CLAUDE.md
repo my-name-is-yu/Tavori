@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-SeedPulse — AI agent orchestrator that gives existing agents the drive to persist. SeedPulse sits above agents and drives them: selecting goals, spawning agent sessions, observing results, and judging completion. SeedPulse doesn't think — it makes agents think.
+PulSeed — AI agent orchestrator that gives existing agents the drive to persist. PulSeed sits above agents and drives them: selecting goals, spawning agent sessions, observing results, and judging completion. PulSeed doesn't think — it makes agents think.
 
 ## Status
 
@@ -16,15 +16,15 @@ See `docs/status.md` for stage-by-stage details.
 - 4-element model: Goal (with thresholds) → Current State (observation + confidence) → Gap → Constraints
 - Orchestrator loop: observe → gap → score → task → execute → verify (NEVER STOP)
 - Adapter pattern: agent-agnostic (various AI agents: CLI-type, API-type, custom adapters — e.g., Claude Code CLI, Claude API, OpenAI Codex CLI)
-- SeedPulse calls LLMs (for goal decomposition, observation) — it is the caller, not the callee
-- Execution boundary: SeedPulse always delegates. Direct actions are LLM calls (for thinking) and state read/write only
+- PulSeed calls LLMs (for goal decomposition, observation) — it is the caller, not the callee
+- Execution boundary: PulSeed always delegates. Direct actions are LLM calls (for thinking) and state read/write only
 
 ## Tech Stack
 
 - Node.js 20+, TypeScript 5.3+
 - LLM SDK（Anthropic/OpenAI等）(for LLM calls)
 - Zod (schema validation)
-- State persistence: file-based JSON (~/.seedpulse/)
+- State persistence: file-based JSON (~/.pulseed/)
 - Test: vitest
 
 ## Build & Test
@@ -65,11 +65,11 @@ See `memory/archive/impl-roadmap-research.md` for module dependency graph and im
 - Layer 12: EmbeddingClient, VectorIndex, KnowledgeGraph, GoalDependencyGraph (semantic embedding infrastructure, cross-cutting)
 - Layer 13: CapabilityDetector (extended), DataSourceAdapter (Stage 13 autonomous capability acquisition, cross-cutting)
 - Layer 14: GoalTreeManager, StateAggregator, TreeLoopOrchestrator, CrossGoalPortfolio, StrategyTemplateRegistry, LearningPipeline, KnowledgeTransfer (cross-goal portfolio, learning, knowledge transfer)
-- Layer 15: PluginLoader, NotifierRegistry, INotifier (plugin architecture — dynamic load from `~/.seedpulse/plugins/`, notifier routing)
+- Layer 15: PluginLoader, NotifierRegistry, INotifier (plugin architecture — dynamic load from `~/.pulseed/plugins/`, notifier routing)
 
 ## Design Documents
 
-- `docs/vision.md` — why SeedPulse exists
+- `docs/vision.md` — why PulSeed exists
 - `docs/mechanism.md` — core loop and orchestration
 - `docs/runtime.md` — process model and execution
 - `docs/design/` — detailed design for each subsystem (23 files)
@@ -85,7 +85,7 @@ Design docs are the source of truth for implementation. When in doubt, read the 
 - Satisficing: stop when "good enough," don't pursue perfection
 - Confidence adjustment applies ONLY in gap-calculation §3 (no triple-application)
 - **LLM応答はZodパース前にサニタイズ** — LLMがenum外の値を返すことがある（例: threshold_typeに"exact"）。catchブロックでエラーを握りつぶさず、必ずログ出力すること
-- **Dogfooding推奨モデル**: gpt-5.3-codex（gpt-4o-miniより観測精度・収束速度が大幅に優れる。`~/.seedpulse/provider.json`で設定）
+- **Dogfooding推奨モデル**: gpt-5.3-codex（gpt-4o-miniより観測精度・収束速度が大幅に優れる。`~/.pulseed/provider.json`で設定）
 - **KEEP THE FILES SHORT**: If the code exceeds 500 lines, consider splitting it into multiple files.
 - **KEEP THE CODE SIMPLE**: Do not overcomplicate it. Keep it as simple as possible.
 - **バグ・改善点は即issue起票** — 作業中にバグ、セキュリティ問題、コード品質の改善点を見つけた場合、ユーザーの許可を待たずに `gh issue create` でissueを起票すること。修正は別途判断するが、記録は即座に行う

@@ -1,13 +1,13 @@
 # OpenAI / Codex Testing Guide
 
-A guide for running SeedPulse with the OpenAI API and OpenAI Codex CLI.
+A guide for running PulSeed with the OpenAI API and OpenAI Codex CLI.
 
 ## Prerequisites
 
 - ChatGPT Plus ($20/month) or a separate OpenAI API subscription
   - **Important**: ChatGPT Plus and the OpenAI API are billed completely separately. Calls made using an API key are pay-as-you-go. Codex CLI is available within the ChatGPT Plus subscription.
 - Node.js 20+
-- SeedPulse built (`npm run build`)
+- PulSeed built (`npm run build`)
 - OpenAI Codex CLI installed (only required when running tasks via Codex)
 
 ### Obtaining an OpenAI API Key
@@ -58,7 +58,7 @@ export OPENAI_MODEL=o4-mini         # reasoning model (lightweight)
 export OPENAI_BASE_URL=https://<your-endpoint>.openai.azure.com/
 ```
 
-> **Note**: The `o1` / `o3` / `o4` reasoning models do not support the `temperature` parameter. SeedPulse automatically omits temperature when calling these models.
+> **Note**: The `o1` / `o3` / `o4` reasoning models do not support the `temperature` parameter. PulSeed automatically omits temperature when calling these models.
 
 ### Using a .env File
 
@@ -82,14 +82,14 @@ source .env  # or: set -a; source .env; set +a
 
 ---
 
-## 2. SeedPulse Entry Point
+## 2. PulSeed Entry Point
 
 ```bash
 # Run the built binary directly
 node dist/cli-runner.js <subcommand>
 
 # Or via npx
-npx seedpulse <subcommand>
+npx pulseed <subcommand>
 ```
 
 ---
@@ -111,7 +111,7 @@ If the command starts without errors and displays the goal list (even if empty),
 ```bash
 TAVORI_LLM_PROVIDER=openai \
 OPENAI_API_KEY=sk-... \
-node dist/cli-runner.js goal add "Create a file hello.txt and write 'Hello, SeedPulse!' in it"
+node dist/cli-runner.js goal add "Create a file hello.txt and write 'Hello, PulSeed!' in it"
 ```
 
 GoalNegotiator will call the LLM to evaluate the goal's dimensions, thresholds, and feasibility.
@@ -139,7 +139,7 @@ Example goal JSON (`goal-codex-test.json`):
 
 ```json
 {
-  "description": "Create hello.txt and write 'Hello, SeedPulse!' in it",
+  "description": "Create hello.txt and write 'Hello, PulSeed!' in it",
   "adapter_type": "openai_codex_cli",
   "dimensions": [
     {
@@ -173,7 +173,7 @@ To specify `--model`, pass it to the `OpenAICodexCLIAdapter` constructor (requir
 ### A. Simple File Creation Task (easy to run with Codex)
 
 ```bash
-node dist/cli-runner.js goal add "Create hello.txt in the current directory and write 'Hello from SeedPulse!'"
+node dist/cli-runner.js goal add "Create hello.txt in the current directory and write 'Hello from PulSeed!'"
 ```
 
 ### B. Run Tests Task
@@ -220,8 +220,8 @@ If it still fails, wait a while before retrying, or upgrade to a higher-tier API
 ### Temperature Error with Reasoning Models
 
 The `o1` / `o3` / `o4` model families do not accept the temperature parameter.
-SeedPulse automatically omits temperature, so this is normally not an issue.
-Take care if you are passing parameters directly from outside SeedPulse.
+PulSeed automatically omits temperature, so this is normally not an issue.
+Take care if you are passing parameters directly from outside PulSeed.
 
 ### Incorrect Model Name
 
@@ -274,14 +274,14 @@ OPENAI_MODEL=gpt-5.4-mini
 To clear test data and start fresh:
 
 ```bash
-rm -rf ~/.seedpulse
+rm -rf ~/.pulseed
 ```
 
 ---
 
 ## 8. Automated E2E Tests
 
-SeedPulse includes E2E tests for OpenAI/Codex. They are skipped automatically if an API key or Codex CLI is not configured.
+PulSeed includes E2E tests for OpenAI/Codex. They are skipped automatically if an API key or Codex CLI is not configured.
 
 ### Test Files
 

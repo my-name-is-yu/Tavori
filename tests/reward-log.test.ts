@@ -28,25 +28,25 @@ function makeJudgment(isComplete: boolean, blocking: string[] = []): CompletionJ
 
 describe("isRewardLogEnabled", () => {
   beforeEach(() => {
-    delete process.env["SEEDPULSE_REWARD_LOG"];
+    delete process.env["PULSEED_REWARD_LOG"];
   });
 
   it("returns false when env var is not set", () => {
     expect(isRewardLogEnabled()).toBe(false);
   });
 
-  it("returns true when SEEDPULSE_REWARD_LOG=1", () => {
-    process.env["SEEDPULSE_REWARD_LOG"] = "1";
+  it("returns true when PULSEED_REWARD_LOG=1", () => {
+    process.env["PULSEED_REWARD_LOG"] = "1";
     expect(isRewardLogEnabled()).toBe(true);
   });
 
-  it("returns false when SEEDPULSE_REWARD_LOG=0", () => {
-    process.env["SEEDPULSE_REWARD_LOG"] = "0";
+  it("returns false when PULSEED_REWARD_LOG=0", () => {
+    process.env["PULSEED_REWARD_LOG"] = "0";
     expect(isRewardLogEnabled()).toBe(false);
   });
 
-  it("returns false when SEEDPULSE_REWARD_LOG=true (not exactly '1')", () => {
-    process.env["SEEDPULSE_REWARD_LOG"] = "true";
+  it("returns false when PULSEED_REWARD_LOG=true (not exactly '1')", () => {
+    process.env["PULSEED_REWARD_LOG"] = "true";
     expect(isRewardLogEnabled()).toBe(false);
   });
 });
@@ -61,12 +61,12 @@ describe("logRewardComputation", () => {
       stderrOutput += String(chunk);
       return true;
     });
-    delete process.env["SEEDPULSE_REWARD_LOG"];
+    delete process.env["PULSEED_REWARD_LOG"];
   });
 
   afterEach(() => {
     stderrSpy.mockRestore();
-    delete process.env["SEEDPULSE_REWARD_LOG"];
+    delete process.env["PULSEED_REWARD_LOG"];
   });
 
   it("produces no output when disabled (default)", () => {
@@ -85,7 +85,7 @@ describe("logRewardComputation", () => {
   });
 
   it("produces exactly one JSON line when enabled", () => {
-    process.env["SEEDPULSE_REWARD_LOG"] = "1";
+    process.env["PULSEED_REWARD_LOG"] = "1";
 
     logRewardComputation({
       goalId: "g1",
@@ -103,7 +103,7 @@ describe("logRewardComputation", () => {
   });
 
   it("output is valid JSON when enabled", () => {
-    process.env["SEEDPULSE_REWARD_LOG"] = "1";
+    process.env["PULSEED_REWARD_LOG"] = "1";
 
     logRewardComputation({
       goalId: "g42",
@@ -119,7 +119,7 @@ describe("logRewardComputation", () => {
   });
 
   it("JSON contains all required top-level fields", () => {
-    process.env["SEEDPULSE_REWARD_LOG"] = "1";
+    process.env["PULSEED_REWARD_LOG"] = "1";
 
     logRewardComputation({
       goalId: "goal-xyz",
@@ -146,7 +146,7 @@ describe("logRewardComputation", () => {
   });
 
   it("drive_scores array contains expected fields per dimension", () => {
-    process.env["SEEDPULSE_REWARD_LOG"] = "1";
+    process.env["PULSEED_REWARD_LOG"] = "1";
 
     logRewardComputation({
       goalId: "g1",
@@ -172,7 +172,7 @@ describe("logRewardComputation", () => {
   });
 
   it("top_dimension is null when driveScores is empty", () => {
-    process.env["SEEDPULSE_REWARD_LOG"] = "1";
+    process.env["PULSEED_REWARD_LOG"] = "1";
 
     logRewardComputation({
       goalId: "g1",
@@ -191,7 +191,7 @@ describe("logRewardComputation", () => {
   });
 
   it("is_complete reflects completion judgment when provided", () => {
-    process.env["SEEDPULSE_REWARD_LOG"] = "1";
+    process.env["PULSEED_REWARD_LOG"] = "1";
 
     logRewardComputation({
       goalId: "g1",

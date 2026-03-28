@@ -4,15 +4,15 @@
 
 ## §1. Why an Ethics Gate Is Needed
 
-SeedPulse's goal negotiation evaluates "is this achievable?" But "is this achievable?" and "should this be done?" are different questions.
+PulSeed's goal negotiation evaluates "is this achievable?" But "is this achievable?" and "should this be done?" are different questions.
 
 A goal like "obtain a competitor's customer list and use it for sales" might technically be achievable. But even if it passes the feasibility evaluation, it must never be carried out.
 
 ### Difference from Existing Safety Mechanisms
 
-`trust-and-safety.md` designs safety around **how SeedPulse behaves**. A low trust balance means it acts cautiously. Low confidence means it seeks confirmation. Irreversible operations require human approval. These are constraints on SeedPulse's **behavior**.
+`trust-and-safety.md` designs safety around **how PulSeed behaves**. A low trust balance means it acts cautiously. Low confidence means it seeks confirmation. Irreversible operations require human approval. These are constraints on PulSeed's **behavior**.
 
-The ethics gate designs safety around **what SeedPulse pursues**. It judges whether goals themselves, sub-goals, and the means used in tasks are ethically and legally acceptable.
+The ethics gate designs safety around **what PulSeed pursues**. It judges whether goals themselves, sub-goals, and the means used in tasks are ethically and legally acceptable.
 
 Even with high trust, full confidence, and proper approvals, some things should still not be done. The ethics gate is responsible for that judgment.
 
@@ -20,7 +20,7 @@ Even with high trust, full confidence, and proper approvals, some things should 
 
 The ethics gate is placed before the feasibility evaluation (Step 4) of goal negotiation. It filters out what should not be done before even asking whether it is possible.
 
-This is not a personality setting — it is a **structural constraint**. Not "SeedPulse tends to behave ethically," but "goals that do not pass the ethics gate will not be executed." This structural guarantee is on par with, or stronger than, the irreversible action rule, which guarantees "no execution without approval, no matter how high the confidence."
+This is not a personality setting — it is a **structural constraint**. Not "PulSeed tends to behave ethically," but "goals that do not pass the ethics gate will not be executed." This structural guarantee is on par with, or stronger than, the irreversible action rule, which guarantees "no execution without approval, no matter how high the confidence."
 
 ---
 
@@ -98,10 +98,10 @@ Goals, sub-goals, and tasks falling into the following categories are rejected i
 [Ethics Gate: Rejected]
 Goal: "Access the competitor's server and obtain their customer list"
 Reason: This goal constitutes unauthorized access and privacy violation.
-        SeedPulse will not begin pursuing this goal.
+        PulSeed will not begin pursuing this goal.
 ```
 
-**User override: Not permitted.** Even if the user says "do it anyway," SeedPulse will not comply. The same logic applies here as in `trust-and-safety.md` §4, where "the final filter of human approval cannot be removed regardless of how high the score is" — in the ethics gate, user instructions do not replace that filter.
+**User override: Not permitted.** Even if the user says "do it anyway," PulSeed will not comply. The same logic applies here as in `trust-and-safety.md` §4, where "the final filter of human approval cannot be removed regardless of how high the score is" — in the ethics gate, user instructions do not replace that filter.
 
 ### Gray Zone (User Confirmation Required)
 
@@ -266,7 +266,7 @@ The ethics gate takes precedence over all other rules. Even at the highest trust
 
 All ethics gate verdicts are recorded in a persistent log, including those that pass.
 
-**Why record passes too**: To allow retroactive verification of "why this goal was executed." The transparency of goal selection is the foundation of SeedPulse's trustworthiness.
+**Why record passes too**: To allow retroactive verification of "why this goal was executed." The transparency of goal selection is the foundation of PulSeed's trustworthiness.
 
 ### Log Structure
 
@@ -315,7 +315,7 @@ interface EthicsLog {
   },
 
   "rejection_delivered": {
-    "message": "This sub-goal constitutes a privacy violation. SeedPulse will not begin pursuing it.",
+    "message": "This sub-goal constitutes a privacy violation. PulSeed will not begin pursuing it.",
     "delivered_at": "2026-03-10T09:12:01Z"
   }
 }
@@ -359,9 +359,9 @@ interface EthicsLog {
 The ethics gate log is available for users to view at any time.
 
 ```
-seedpulse ethics-log            # Show all logs
-seedpulse ethics-log --rejected  # Show rejections only
-seedpulse ethics-log --goal <id> # Show verdict history for a specific goal
+pulseed ethics-log            # Show all logs
+pulseed ethics-log --rejected  # Show rejections only
+pulseed ethics-log --goal <id> # Show verdict history for a specific goal
 ```
 
 ---
@@ -386,13 +386,13 @@ We classify intent and context, not keywords. The question answered is: "Does th
 
 ### Why User Override Is Not Permitted
 
-`trust-and-safety.md` §4 states: "SeedPulse's judgment is probabilistic. A confidence of 0.95 means 'there is a 5% chance of being wrong.' A 5% error rate in irreversible actions is unacceptable."
+`trust-and-safety.md` §4 states: "PulSeed's judgment is probabilistic. A confidence of 0.95 means 'there is a 5% chance of being wrong.' A 5% error rate in irreversible actions is unacceptable."
 
-The same logic applies to the ethics gate's "Clear No." Even if the user says "this is okay," SeedPulse's ethical judgment is not overridden. The user themselves may be intentionally requesting illegal or unethical behavior, and in that case their instruction cannot be treated as the final authority.
+The same logic applies to the ethics gate's "Clear No." Even if the user says "this is okay," PulSeed's ethical judgment is not overridden. The user themselves may be intentionally requesting illegal or unethical behavior, and in that case their instruction cannot be treated as the final authority.
 
-SeedPulse is the user's advisor. But there are instructions an advisor should not follow. Between user autonomy and SeedPulse's structural constraints, the ethics gate prioritizes the latter.
+PulSeed is the user's advisor. But there are instructions an advisor should not follow. Between user autonomy and PulSeed's structural constraints, the ethics gate prioritizes the latter.
 
-**Gray zone is not an override**: User confirmation in the gray zone is not changing SeedPulse's judgment — it is a process of proceeding with acknowledged risk based on additional information. When the user says "I understand and want to proceed," this is an autonomous decision that does not undermine the purpose of the ethics gate.
+**Gray zone is not an override**: User confirmation in the gray zone is not changing PulSeed's judgment — it is a process of proceeding with acknowledged risk based on additional information. When the user says "I understand and want to proceed," this is an autonomous decision that does not undermine the purpose of the ethics gate.
 
 ### Why It Is Separated from Personality Settings
 
@@ -448,4 +448,4 @@ ethics_constraints:
 - `goal-negotiation.md` — The 5-step negotiation flow in which the ethics gate is integrated (Step 0 is added here)
 - `trust-and-safety.md` — Trust and safety design (safety floor priority order extended in §6)
 - `task-lifecycle.md` — Task generation and execution flow (task means check integrated in Phase 2)
-- `execution-boundary.md` — SeedPulse's execution boundary (consistent with the delegation model)
+- `execution-boundary.md` — PulSeed's execution boundary (consistent with the delegation model)

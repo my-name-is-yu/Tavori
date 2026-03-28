@@ -4,7 +4,7 @@
 
 ## 1. Overview
 
-How far can SeedPulse act autonomously? This is not a question of "what it can do" but of "what it is permitted to do."
+How far can PulSeed act autonomously? This is not a question of "what it can do" but of "what it is permitted to do."
 
 Even with the capability, it must not act without trust. Even with trust, it should act cautiously without confidence. And no matter how high the trust and confidence, irreversible actions must never be executed without human approval.
 
@@ -14,7 +14,7 @@ This design translates these three principles into concrete decision logic.
 
 ## 2. Two Axes of Autonomy
 
-SeedPulse's degree of autonomy is determined by two independent axes.
+PulSeed's degree of autonomy is determined by two independent axes.
 
 ### Axis 1: Confidence
 
@@ -28,11 +28,11 @@ Confidence is not self-assessed — it is determined by the observation method. 
 | Judgment by independent evaluator | Medium | Quality evaluation by Task Reviewer |
 | Estimate / self-report | Low | "It's probably around this much" |
 
-This prevents SeedPulse from acting boldly in a low-confidence state. Execution based on "I don't really know but it's probably fine" is not permitted.
+This prevents PulSeed from acting boldly in a low-confidence state. Execution based on "I don't really know but it's probably fine" is not permitted.
 
 ### Axis 2: Trust Balance
 
-**How much user trust has SeedPulse accumulated through its track record so far?**
+**How much user trust has PulSeed accumulated through its track record so far?**
 
 Trust balance is a numerical value determined by the accumulation of past actions. It starts at 0, increases slightly with each success, and decreases significantly with each failure.
 
@@ -108,7 +108,7 @@ quadrant =
 
 ## 3. Four-Quadrant Action Matrix
 
-The combination of confidence and trust balance determines SeedPulse's behavioral mode.
+The combination of confidence and trust balance determines PulSeed's behavioral mode.
 
 ```
                     Low Confidence          High Confidence
@@ -134,7 +134,7 @@ There is a track record. However, confidence in the current situational judgment
 
 ### Quadrant 3: Low Trust × High Confidence → Execute but Confirm with Human
 
-The current position is accurately known. However, SeedPulse itself has no track record yet. In the early stages, it operates in "propose and get approval before acting" mode, accumulating a track record.
+The current position is accurately known. However, PulSeed itself has no track record yet. In the early stages, it operates in "propose and get approval before acting" mode, accumulating a track record.
 
 ### Quadrant 4: Low Trust × Low Confidence → Observation First, Propose Plan to Human
 
@@ -160,7 +160,7 @@ This is not an exception to the quadrant matrix — it is a rule that supersedes
 | Irreversible configuration changes | Changing permission settings, changing security policies |
 | Contractual / legal acts | External consent, signatures, official notices |
 
-**Why can't scores override this?**: SeedPulse's judgment is probabilistic. A confidence of 0.95 means "95% probability of being correct," which also means "5% probability of being wrong." A 5% error in irreversible actions is not acceptable. No matter how high the score, the final filter of human confirmation cannot be removed.
+**Why can't scores override this?**: PulSeed's judgment is probabilistic. A confidence of 0.95 means "95% probability of being correct," which also means "5% probability of being wrong." A 5% error in irreversible actions is not acceptable. No matter how high the score, the final filter of human confirmation cannot be removed.
 
 **Integration with the discard path**: The determination of irreversible actions is referenced not only in the pre-execution approval gate (§4), but also in the revert decision during task failure (`task-lifecycle.md` discard path). Tasks with a `reversibility` tag of `irreversible` or `unknown` do not attempt a revert on the discard path and proceed directly to human escalation.
 
@@ -171,7 +171,7 @@ This is not an exception to the quadrant matrix — it is a rule that supersedes
 Action: Deploy to production (v2.3.1)
 Irreversible operation: Yes
 Current trust: +42 / 100 / Confidence: 0.91 (mechanical verification)
-SeedPulse's assessment:
+PulSeed's assessment:
   - All tests passed (98/98)
   - Operating normally in staging environment for 24 hours
   - Rollback procedure: [procedure link]
@@ -206,13 +206,13 @@ Gradually return to the previous level of behavior
 | Mid recovery | Moderate | Low-risk task execution (with confirmation) |
 | Late recovery | High | Normal behavior (according to quadrant matrix) |
 
-**What "you can't return immediately" means**: Even if the user explicitly says "it's fine, you can act autonomously again," SeedPulse returns to its previous behavior level only after several verified successes. This is not stubbornness — it is a process for confirming "whether the recovery is genuine." However, a user override (see below) can force an immediate return.
+**What "you can't return immediately" means**: Even if the user explicitly says "it's fine, you can act autonomously again," PulSeed returns to its previous behavior level only after several verified successes. This is not stubbornness — it is a process for confirming "whether the recovery is genuine." However, a user override (see below) can force an immediate return.
 
 ---
 
 ## 6. User Override
 
-Users can manually adjust SeedPulse's degree of autonomy.
+Users can manually adjust PulSeed's degree of autonomy.
 
 ### Granting Trust
 
@@ -234,7 +234,7 @@ Permanent gates are treated the same as the irreversible operations rule. They a
 
 ### Recording Overrides
 
-User overrides are explicitly logged. It should be traceable "why SeedPulse is acting differently from its own judgment."
+User overrides are explicitly logged. It should be traceable "why PulSeed is acting differently from its own judgment."
 
 ```
 [Override Log]
@@ -269,10 +269,10 @@ Higher-priority rules cannot be invalidated by lower-priority ones. Even with a 
 
 ## 8. Design Decisions and Boundaries
 
-**What does "trusting" mean?**: For a user to trust SeedPulse means not "believing SeedPulse's judgment is correct," but "choosing to pay the cost of verifying SeedPulse's judgment after the fact." Even in autonomous execution mode, users can always check the action log. Trust is supported by transparency.
+**What does "trusting" mean?**: For a user to trust PulSeed means not "believing PulSeed's judgment is correct," but "choosing to pay the cost of verifying PulSeed's judgment after the fact." Even in autonomous execution mode, users can always check the action log. Trust is supported by transparency.
 
 **Granularity of domain separation**: Domains must be neither too fine nor too coarse. Too fine means learning from similar situations cannot be transferred. Too coarse means high trust in code tasks bleeds into business decisions. The appropriate granularity is determined by "whether the nature of the judgment is fundamentally similar."
 
-**Non-manipulability of confidence**: Confidence is not something SeedPulse sets subjectively. It is determined objectively by the observation method. This prevents SeedPulse from self-declaring "my judgment is certain" to increase its own autonomy. The only way to increase confidence is to use a more reliable observation method.
+**Non-manipulability of confidence**: Confidence is not something PulSeed sets subjectively. It is determined objectively by the observation method. This prevents PulSeed from self-declaring "my judgment is certain" to increase its own autonomy. The only way to increase confidence is to use a more reliable observation method.
 
 **Definition of failure**: When the Task Reviewer judges that "the completion criteria are not met." The judgment is based on whether the intended result was obtained, not whether execution technically completed. "The code was deployable but a bug was introduced" is a failure, not a success.

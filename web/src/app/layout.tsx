@@ -6,7 +6,7 @@ import { Sidebar } from '../components/layout/sidebar';
 import { StoreProvider } from '../components/providers/store-provider';
 
 export const metadata: Metadata = {
-  title: 'SeedPulse',
+  title: 'PulSeed',
   description: 'AI Agent Orchestrator Dashboard',
   icons: { icon: '/icon.svg' },
 };

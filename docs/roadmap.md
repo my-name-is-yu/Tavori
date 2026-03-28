@@ -11,7 +11,7 @@ OSS optimization #112-#146: all 35 items complete.
 
 ### Milestone 14: Hypothesis Verification Mechanism (PIVOT/REFINE + Learning Loop)
 
-**Theme**: Introduce AutoResearchClaw's hypothesis verification pattern into SeedPulse to strengthen autonomous decision-making when strategies stall. Design: `docs/design/hypothesis-verification.md`
+**Theme**: Introduce AutoResearchClaw's hypothesis verification pattern into PulSeed to strengthen autonomous decision-making when strategies stall. Design: `docs/design/hypothesis-verification.md`
 
 ### 14.1: Structured PIVOT/REFINE Decision (StallDetector + StrategyManager Integration)
 - Add `analyzeStallCause()` to StallDetector — infer cause from gap transition patterns
@@ -46,7 +46,7 @@ OSS optimization #112-#146: all 35 items complete.
 
 ### Milestone 15: Multi-Agent Delegation
 
-**Theme**: SeedPulse itself uses sub-agents in parallel to decompose, delegate, and integrate large-scale tasks. Design: `docs/design/multi-agent-delegation.md`
+**Theme**: PulSeed itself uses sub-agents in parallel to decompose, delegate, and integrate large-scale tasks. Design: `docs/design/multi-agent-delegation.md`
 
 - Implement PipelineExecutor (3-stage: implementor → reviewer → verifier)
 - PipelineState persistence (stage continuation across restarts)
@@ -116,7 +116,7 @@ OSS optimization #112-#146: all 35 items complete.
 
 - DatabaseDataSourceAdapter (PostgreSQL / MySQL / SQLite)
 - WebSocket / SSE real-time DataSource
-- Community plugin foundation (npm scope: `@seedpulse-plugins/`, Jira DataSource, PagerDuty Notifier)
+- Community plugin foundation (npm scope: `@pulseed-plugins/`, Jira DataSource, PagerDuty Notifier)
 - Plugin development guide (`docs/design/plugin-development-guide.md`)
 - Prerequisite: M12 (plugin architecture) complete
 
@@ -151,7 +151,7 @@ OSS optimization #112-#146: all 35 items complete.
 | 3 | npm publish quality (contextProvider addition) | 2026-03-15 |
 | 8 | Safety hardening + npm publish (EthicsGate L1) | 2026-03-16 |
 | 9 | Observation accuracy improvement (ShellDataSource + cross-validation) | 2026-03-16 |
-| 10 | Automatic goal generation (suggestGoals, seedpulse improve) | 2026-03-16 |
+| 10 | Automatic goal generation (suggestGoals, pulseed improve) | 2026-03-16 |
 | 11 | Autonomous strategy selection + execution quality (healthCheck, undershoot) | 2026-03-16 |
 | 12 | Plugin architecture (+115 tests) | 2026-03-17 |
 | 13 | Autonomous plugin selection + semantic knowledge sharing | 2026-03-17 |
@@ -173,6 +173,6 @@ See `docs/status.md` for details.
 5. **Implement one sub-stage at a time** — split large stages into smaller pieces
 6. **Keep the core thin; extend via plugins** — isolate specific service dependencies (Slack, email, GitHub, etc.) into plugins to minimize core dependencies
 7. **Plugin decision criteria**: (1) required for the loop → core, (2) zero dependencies → can be bundled with core, (3) specific service dependency → plugin
-8. **SeedPulse masters plugins** — autonomously selects and uses plugins via capability metadata and matching
+8. **PulSeed masters plugins** — autonomously selects and uses plugins via capability metadata and matching
 9. **Observation accuracy is the foundation of everything** — don't blindly trust LLM observations. Cross-checking with mechanical verification is mandatory
 10. **Autonomous capability follows core → extension order** — see correctly (M9) → think independently (M10) → decide independently (M11) → extend (M12+)

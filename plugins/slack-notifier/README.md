@@ -1,6 +1,6 @@
 # slack-notifier
 
-A SeedPulse notifier plugin that sends events to a Slack channel via Incoming Webhook.
+A PulSeed notifier plugin that sends events to a Slack channel via Incoming Webhook.
 
 ## Requirements
 
@@ -9,19 +9,19 @@ A SeedPulse notifier plugin that sends events to a Slack channel via Incoming We
 
 ## Installation
 
-Copy (or symlink) this directory into `~/.seedpulse/plugins/slack-notifier/` and build it:
+Copy (or symlink) this directory into `~/.pulseed/plugins/slack-notifier/` and build it:
 
 ```bash
 npm install
 npm run build
 ```
 
-Then create `~/.seedpulse/plugins/slack-notifier/config.json`:
+Then create `~/.pulseed/plugins/slack-notifier/config.json`:
 
 ```json
 {
   "webhook_url": "https://hooks.slack.com/services/T.../B.../...",
-  "channel": "#seedpulse-alerts",
+  "channel": "#pulseed-alerts",
   "mention_on_critical": true
 }
 ```

@@ -3,7 +3,7 @@ import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
-const PLUGINS_DIR = path.join(os.homedir(), '.seedpulse', 'plugins');
+const PLUGINS_DIR = path.join(os.homedir(), '.pulseed', 'plugins');
 
 interface PluginInfo {
   name: string;

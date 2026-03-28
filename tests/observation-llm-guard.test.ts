@@ -38,7 +38,7 @@ describe("Guard 3: Score-evidence consistency check (§4.3)", () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = makeTempDir("seedpulse-guard3-");
+    tmpDir = makeTempDir("pulseed-guard3-");
     noopApply.mockReset();
   });
 
@@ -166,7 +166,7 @@ describe("RC-1: Preserve previous score when no context but previousScore is kno
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = makeTempDir("seedpulse-rc1-");
+    tmpDir = makeTempDir("pulseed-rc1-");
     noopApply.mockReset();
   });
 
@@ -234,7 +234,7 @@ describe("RC-2: applyObservation called in no_context_existing_value skip path",
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = makeTempDir("seedpulse-rc2-");
+    tmpDir = makeTempDir("pulseed-rc2-");
     noopApply.mockReset();
   });
 

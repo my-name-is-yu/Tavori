@@ -1,6 +1,6 @@
 # Observation System Design
 
-> `runtime.md` defines that "result verification is performed across 3 layers." This document provides a concrete design for that 3-layer observation system. The observation system is SeedPulse's only window into the current state of the world.
+> `runtime.md` defines that "result verification is performed across 3 layers." This document provides a concrete design for that 3-layer observation system. The observation system is PulSeed's only window into the current state of the world.
 
 ---
 
@@ -45,7 +45,7 @@ Types of observations in scope:
 | Database query | Result set from SQL queries against a DB |
 | System metrics | CPU usage, memory usage, response time |
 
-Mechanical observations run automatically. No human intervention or judgment is required. The observation method (which command to run, which API to call) is defined by the Advisor at goal-setting time, and SeedPulse executes it autonomously on each observation cycle.
+Mechanical observations run automatically. No human intervention or judgment is required. The observation method (which command to run, which API to call) is defined by the Advisor at goal-setting time, and PulSeed executes it autonomously on each observation cycle.
 
 **Layer 1 constraint**: Dimensions for which mechanical observation cannot be configured fall back to Layer 2 or Layer 3. It is not always possible to configure mechanical observation for every dimension (e.g., qualitative quality assessments, human emotions).
 
@@ -103,7 +103,7 @@ Not used for:
 - As the primary basis for calculating achievement level
 - As the primary basis for completion determination
 
-The content of self-reports is not directly reflected in `current_value` in the state vector. It is recorded in the observation log and feeds into SeedPulse's decision-making alongside Layer 1 and 2 results, but always has the lowest priority.
+The content of self-reports is not directly reflected in `current_value` in the state vector. It is recorded in the observation log and feeds into PulSeed's decision-making alongside Layer 1 and 2 results, but always has the lowest priority.
 
 ---
 
@@ -148,7 +148,7 @@ Triggers include:
 
 Event-driven observation does not wait for the periodic observation schedule. It observes the moment a change occurs.
 
-Event-driven observation is triggered via the event reception mechanism in `drive-system.md` §3 (MVP: file queue at `~/.seedpulse/events/`).
+Event-driven observation is triggered via the event reception mechanism in `drive-system.md` §3 (MVP: file queue at `~/.pulseed/events/`).
 
 ---
 
@@ -191,7 +191,7 @@ The 70% value is not fixed — the Advisor can adjust it at goal-setting time. H
 
 ### Evidence gate and verification task generation
 
-For dimensions where achievement has reached the threshold based only on low-confidence observation, SeedPulse automatically generates a **verification task**.
+For dimensions where achievement has reached the threshold based only on low-confidence observation, PulSeed automatically generates a **verification task**.
 
 ```
 if effective_progress >= threshold AND confidence < 0.85:
@@ -307,7 +307,7 @@ Dimension: code quality
 If the primary method fails (API error, sensor disconnected, etc.):
 1. Fall back to the secondary method
 2. If no secondary method exists, significantly lower `confidence`
-3. Log the unobservable state and notify SeedPulse
+3. Log the unobservable state and notify PulSeed
 
 ---
 
@@ -328,14 +328,14 @@ If mechanical observation says "all tests passed (achieved)" and independent rev
 If multiple mechanical observation methods conflict (e.g., unit tests pass, E2E tests fail):
 - **Record both**
 - Use the more pessimistic result for achievement (minimum principle)
-- Notify SeedPulse of the contradiction and generate a resolution task
+- Notify PulSeed of the contradiction and generate a resolution task
 
 ### Contradiction between self-report and mechanical observation
 
 If the executor reports "completed" but mechanical observation shows "not achieved":
 - Adopt the mechanical observation
 - Record the self-report content in the execution log, but do not use it to update the state vector
-- If contradictions recur repeatedly, SeedPulse considers escalation
+- If contradictions recur repeatedly, PulSeed considers escalation
 
 ---
 

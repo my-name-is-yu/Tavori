@@ -72,7 +72,7 @@ const DEFAULT_CONFIG: Required<Omit<LoopConfig, "iterationBudget">> = {
 // ─── CoreLoop ───
 
 /**
- * CoreLoop is the heart of SeedPulse — it orchestrates one full iteration of the
+ * CoreLoop is the heart of PulSeed — it orchestrates one full iteration of the
  * task discovery loop: observe → gap → score → completion check → stall check → task → report.
  *
  * It runs multiple iterations until the goal is complete (SatisficingJudge),

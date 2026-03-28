@@ -1,6 +1,6 @@
-// ─── seedpulse goal subcommand dispatcher ───
+// ─── pulseed goal subcommand dispatcher ───
 //
-// Parses args for each `seedpulse goal <subcommand>` and delegates to the
+// Parses args for each `pulseed goal <subcommand>` and delegates to the
 // individual command functions in goal.ts / goal-raw.ts.
 
 import { parseArgs } from "node:util";
@@ -21,7 +21,7 @@ import { cmdGoalAddRaw } from "./goal-raw.js";
 const logger = getCliLogger();
 
 /**
- * Dispatch a `seedpulse goal <subCmd> [args…]` invocation.
+ * Dispatch a `pulseed goal <subCmd> [args…]` invocation.
  *
  * @param subCmd  - The word after "goal" (e.g. "add", "list", …)
  * @param args    - Everything after the subcommand (argv.slice(2))
@@ -130,7 +130,7 @@ export async function dispatchGoalCommand(
       const title = addValues.title || description;
       if (!title) {
         logger.error(
-          'Error: --title or description is required. Usage: seedpulse goal add --title "tsc zero" --dim "tsc_error_count:min:0"',
+          'Error: --title or description is required. Usage: pulseed goal add --title "tsc zero" --dim "tsc_error_count:min:0"',
         );
         return 1;
       }
@@ -139,7 +139,7 @@ export async function dispatchGoalCommand(
 
     // Refine/negotiate mode: requires description
     if (!description) {
-      logger.error('Error: description is required. Usage: seedpulse goal add "<description>" [--no-refine]');
+      logger.error('Error: description is required. Usage: pulseed goal add "<description>" [--no-refine]');
       return 1;
     }
 
@@ -172,7 +172,7 @@ export async function dispatchGoalCommand(
   if (subCmd === "archive") {
     const goalId = args[0];
     if (!goalId) {
-      logger.error("Error: goal ID is required. Usage: seedpulse goal archive <id>");
+      logger.error("Error: goal ID is required. Usage: pulseed goal archive <id>");
       return 1;
     }
     let archiveValues: { yes?: boolean; force?: boolean } = {};
@@ -198,7 +198,7 @@ export async function dispatchGoalCommand(
   if (subCmd === "remove") {
     const goalId = args[0];
     if (!goalId) {
-      logger.error("Error: goal ID is required. Usage: seedpulse goal remove <id>");
+      logger.error("Error: goal ID is required. Usage: pulseed goal remove <id>");
       return 1;
     }
     const deleted = await stateManager.deleteGoal(goalId);
@@ -214,7 +214,7 @@ export async function dispatchGoalCommand(
   if (subCmd === "show") {
     const goalId = args[0];
     if (!goalId) {
-      logger.error("Error: goal ID is required. Usage: seedpulse goal show <id>");
+      logger.error("Error: goal ID is required. Usage: pulseed goal show <id>");
       return 1;
     }
     return await cmdGoalShow(stateManager, goalId);
@@ -223,7 +223,7 @@ export async function dispatchGoalCommand(
   if (subCmd === "reset") {
     const goalId = args[0];
     if (!goalId) {
-      logger.error("Error: goal ID is required. Usage: seedpulse goal reset <id>");
+      logger.error("Error: goal ID is required. Usage: pulseed goal reset <id>");
       return 1;
     }
     return await cmdGoalReset(stateManager, goalId);

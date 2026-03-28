@@ -1,6 +1,6 @@
 // ─── ReportView ───
 //
-// Renders a SeedPulse Report object in a formatted, readable way inside the TUI.
+// Renders a PulSeed Report object in a formatted, readable way inside the TUI.
 // Handles all 3 primary report types (execution_summary, daily_summary,
 // weekly_report) with type-specific headers, plus a generic fallback for
 // notification types (urgent_alert, approval_request, stall_escalation, etc.).

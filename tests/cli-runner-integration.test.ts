@@ -77,7 +77,7 @@ beforeEach(() => {
   stateManager = new StateManager(tmpDir);
   origApiKey = process.env.ANTHROPIC_API_KEY;
   process.env.ANTHROPIC_API_KEY = "test-api-key-for-integration";
-  process.env.SEEDPULSE_LLM_PROVIDER = "anthropic";
+  process.env.PULSEED_LLM_PROVIDER = "anthropic";
 });
 
 afterEach(() => {
@@ -86,7 +86,7 @@ afterEach(() => {
   } else {
     process.env.ANTHROPIC_API_KEY = origApiKey;
   }
-  delete process.env.SEEDPULSE_LLM_PROVIDER;
+  delete process.env.PULSEED_LLM_PROVIDER;
   fs.rmSync(tmpDir, { recursive: true, force: true });
   vi.clearAllMocks();
 });

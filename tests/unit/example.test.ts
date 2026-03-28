@@ -86,7 +86,7 @@ function makeGoal(id: string, dimensions: Dimension[], overrides: Partial<Goal> 
 }
 
 function makeTempStateManager(): { stateManager: StateManager; baseDir: string } {
-  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), "seedpulse-example-test-"));
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), "pulseed-example-test-"));
   return { stateManager: new StateManager(baseDir), baseDir };
 }
 

@@ -1,6 +1,6 @@
 /**
- * SeedPulse OpenClaw Gateway Plugin — SeedPulseEngine pattern
- * Detects goals in user messages, drives seedpulse CLI in background,
+ * PulSeed OpenClaw Gateway Plugin — PulSeedEngine pattern
+ * Detects goals in user messages, drives pulseed CLI in background,
  * streams progress back into the session via state-file polling.
  */
 
@@ -19,8 +19,8 @@ import {
 import type { ProgressEvent, LoopResultSummary, StallInfo } from "./progress-reporter.js";
 
 const execFileAsync = promisify(execFile);
-const SEEDPULSE_CLI = process.env["SEEDPULSE_CLI_PATH"] ?? "seedpulse";
-const SEEDPULSE_DIR = join(homedir(), ".seedpulse");
+const PULSEED_CLI = process.env["PULSEED_CLI_PATH"] ?? "pulseed";
+const PULSEED_DIR = join(homedir(), ".pulseed");
 const POLL_MS = 3_000;
 
 // ---------------------------------------------------------------------------
@@ -48,7 +48,7 @@ export interface OpenClawPluginApi {
 
 async function runCLI(args: string[]): Promise<{ success: boolean; output: string }> {
   try {
-    const { stdout, stderr } = await execFileAsync(SEEDPULSE_CLI, args, { timeout: 15_000 });
+    const { stdout, stderr } = await execFileAsync(PULSEED_CLI, args, { timeout: 15_000 });
     return { success: true, output: stdout || stderr };
   } catch (err) { return { success: false, output: err instanceof Error ? err.message : String(err) }; }
 }
@@ -62,7 +62,7 @@ interface GoalState {
 
 async function readGoalState(goalId: string): Promise<GoalState | null> {
   if (!/^[a-zA-Z0-9_-]+$/.test(goalId)) return null;
-  try { return JSON.parse(await readFile(join(SEEDPULSE_DIR, "goals", goalId, "state.json"), "utf8")) as GoalState; }
+  try { return JSON.parse(await readFile(join(PULSEED_DIR, "goals", goalId, "state.json"), "utf8")) as GoalState; }
   catch { return null; }
 }
 
@@ -74,16 +74,16 @@ async function listActiveGoals(): Promise<GoalState[]> {
 function makeLLMStub(log: Logger): ILLMClient {
   return { async sendMessage(messages) {
     const r = await runCLI(["llm-call", "--message", messages[messages.length - 1]?.content ?? ""]);
-    if (!r.success) { log.warn("SeedPulse: LLM stub failed"); return { content: '{"isGoal":false,"confidence":0}' }; }
+    if (!r.success) { log.warn("PulSeed: LLM stub failed"); return { content: '{"isGoal":false,"confidence":0}' }; }
     return { content: r.output };
   }};
 }
 
 // ---------------------------------------------------------------------------
-// SeedPulseEngine
+// PulSeedEngine
 // ---------------------------------------------------------------------------
 
-class SeedPulseEngine {
+class PulSeedEngine {
   private goalId: string | null = null;
   private running = false;
   private proc: ChildProcess | null = null;
@@ -99,17 +99,17 @@ class SeedPulseEngine {
     await this.api.sendMessage(session.sessionKey, formatSessionResume(top.description, top.gap ?? 1));
     this.goalId = top.id;
     this.running = true;
-    this.proc = spawn(SEEDPULSE_CLI, ["run", "--goal", top.id, "--adapter", "openclaw_gateway", "--yes"], { stdio: "ignore" });
-    this.proc.on("error", (e) => { this.api.log.error("SeedPulse: resume run error", e); this.running = false; this.clearPoll(); });
+    this.proc = spawn(PULSEED_CLI, ["run", "--goal", top.id, "--adapter", "openclaw_gateway", "--yes"], { stdio: "ignore" });
+    this.proc.on("error", (e) => { this.api.log.error("PulSeed: resume run error", e); this.running = false; this.clearPoll(); });
     this.poll(session.sessionKey, top.id);
-    this.api.log.info(`SeedPulse: resumed goal ${top.id}`);
+    this.api.log.info(`PulSeed: resumed goal ${top.id}`);
   }
 
   async interceptMessage(msg: MessageContext): Promise<void> {
     if (msg.role !== "user" || this.running) return;
     let result;
     try { result = await detectGoal(msg.content, makeLLMStub(this.api.log)); }
-    catch (err) { this.api.log.error("SeedPulse: detectGoal failed", err); return; }
+    catch (err) { this.api.log.error("PulSeed: detectGoal failed", err); return; }
     if (!result.isGoal) return;
     const desc = result.description ?? msg.content;
     await this.api.sendMessage(msg.sessionKey, formatGoalStart(desc, result.dimensions ?? []));
@@ -120,7 +120,7 @@ class SeedPulseEngine {
     this.clearPoll();
     this.running = false;
     this.goalId = null;
-    this.api.log.info("SeedPulse: session ended, state persisted to ~/.seedpulse/");
+    this.api.log.info("PulSeed: session ended, state persisted to ~/.pulseed/");
   }
 
   async getStatus(): Promise<{ content: string }> {
@@ -133,7 +133,7 @@ class SeedPulseEngine {
     this.proc?.kill("SIGTERM");
     this.proc = null;
     this.running = false;
-    return { content: "SeedPulseループを停止しました" };
+    return { content: "PulSeedループを停止しました" };
   }
 
   private async startGoal(sessionKey: string, desc: string): Promise<void> {
@@ -146,10 +146,10 @@ class SeedPulseEngine {
     }
     let goal: { id: string };
     try { goal = JSON.parse(neg.output) as { id: string }; }
-    catch (err) { this.api.log.error("SeedPulse: parse negotiate failed", err); this.running = false; return; }
+    catch (err) { this.api.log.error("PulSeed: parse negotiate failed", err); this.running = false; return; }
     this.goalId = goal.id;
-    this.proc = spawn(SEEDPULSE_CLI, ["run", "--goal", goal.id, "--adapter", "openclaw_gateway", "--yes"], { stdio: "ignore" });
-    this.proc.on("error", (e) => { this.api.log.error("SeedPulse: run error", e); this.running = false; this.clearPoll(); });
+    this.proc = spawn(PULSEED_CLI, ["run", "--goal", goal.id, "--adapter", "openclaw_gateway", "--yes"], { stdio: "ignore" });
+    this.proc.on("error", (e) => { this.api.log.error("PulSeed: run error", e); this.running = false; this.clearPoll(); });
     this.poll(sessionKey, goal.id);
   }
 
@@ -192,11 +192,11 @@ class SeedPulseEngine {
 // ---------------------------------------------------------------------------
 
 export function activate(api: OpenClawPluginApi): void {
-  const engine = new SeedPulseEngine(api);
+  const engine = new PulSeedEngine(api);
   api.onSessionStart((s) => engine.resumeGoals(s));
   api.onMessage((m) => engine.interceptMessage(m));
   api.onSessionEnd((s) => engine.checkpoint(s));
-  api.registerTool("seedpulse_status", { description: "Show current SeedPulse goal status", parameters: {}, handler: () => engine.getStatus() });
-  api.registerTool("seedpulse_stop", { description: "Stop the SeedPulse loop", parameters: {}, handler: () => engine.stopLoop() });
-  api.log.info("SeedPulse plugin activated — goal-driven orchestration enabled");
+  api.registerTool("pulseed_status", { description: "Show current PulSeed goal status", parameters: {}, handler: () => engine.getStatus() });
+  api.registerTool("pulseed_stop", { description: "Stop the PulSeed loop", parameters: {}, handler: () => engine.stopLoop() });
+  api.log.info("PulSeed plugin activated — goal-driven orchestration enabled");
 }

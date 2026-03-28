@@ -1,6 +1,6 @@
 'use client';
 
-import { useSeedPulseStore } from '../lib/store';
+import { usePulSeedStore } from '../lib/store';
 import { GoalTable, type GoalRow } from '../components/dashboard/goal-table';
 import { ActiveSessions } from '../components/dashboard/active-sessions';
 import { DecisionTimeline } from '../components/dashboard/decision-timeline';
@@ -22,9 +22,9 @@ function ConnectionDot({ connected }: { connected: boolean }) {
 }
 
 export default function DashboardPage() {
-  const goals = useSeedPulseStore((state) => state.goals) as GoalRow[];
-  const connected = useSeedPulseStore((state) => state.connected);
-  const lastUpdate = useSeedPulseStore((state) => state.lastUpdate);
+  const goals = usePulSeedStore((state) => state.goals) as GoalRow[];
+  const connected = usePulSeedStore((state) => state.connected);
+  const lastUpdate = usePulSeedStore((state) => state.lastUpdate);
 
   const lastUpdatedText = lastUpdate
     ? new Date(lastUpdate).toLocaleTimeString()

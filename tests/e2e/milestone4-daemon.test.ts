@@ -344,12 +344,12 @@ describe("Milestone 4 — Group 1: Daemon Mode Integration", () => {
     // Wait for async rotation (WriteStream flush + rename) to complete
     await logger.close();
 
-    // After date change, the old log should have been rotated to seedpulse.YYYY-MM-DD.log
-    const rotatedFile = path.join(logDir, `seedpulse.${yesterday}.log`);
+    // After date change, the old log should have been rotated to pulseed.YYYY-MM-DD.log
+    const rotatedFile = path.join(logDir, `pulseed.${yesterday}.log`);
     expect(fs.existsSync(rotatedFile)).toBe(true);
 
     // The current log file should exist (today's log)
-    const currentLog = path.join(logDir, "seedpulse.log");
+    const currentLog = path.join(logDir, "pulseed.log");
     expect(fs.existsSync(currentLog)).toBe(true);
 
     const rotatedContent = fs.readFileSync(rotatedFile, "utf-8");
@@ -364,27 +364,27 @@ describe("Milestone 4 — Group 1: Daemon Mode Integration", () => {
   it("DaemonRunner.generateCronEntry produces correct crontab format", () => {
     // < 60 minutes → every N minutes
     expect(DaemonRunner.generateCronEntry("goal-a", 15)).toBe(
-      "*/15 * * * * /usr/bin/env seedpulse run --goal goal-a"
+      "*/15 * * * * /usr/bin/env pulseed run --goal goal-a"
     );
 
     // exactly 60 minutes → every 1 hour
     expect(DaemonRunner.generateCronEntry("goal-b", 60)).toBe(
-      "0 */1 * * * /usr/bin/env seedpulse run --goal goal-b"
+      "0 */1 * * * /usr/bin/env pulseed run --goal goal-b"
     );
 
     // 120 minutes = 2 hours
     expect(DaemonRunner.generateCronEntry("goal-c", 120)).toBe(
-      "0 */2 * * * /usr/bin/env seedpulse run --goal goal-c"
+      "0 */2 * * * /usr/bin/env pulseed run --goal goal-c"
     );
 
     // 1440 minutes = 1 day → once per day
     expect(DaemonRunner.generateCronEntry("goal-d", 1440)).toBe(
-      "0 0 * * * /usr/bin/env seedpulse run --goal goal-d"
+      "0 0 * * * /usr/bin/env pulseed run --goal goal-d"
     );
 
     // default (no interval) → 60 minutes → every 1 hour
     expect(DaemonRunner.generateCronEntry("goal-e")).toBe(
-      "0 */1 * * * /usr/bin/env seedpulse run --goal goal-e"
+      "0 */1 * * * /usr/bin/env pulseed run --goal goal-e"
     );
   });
 });

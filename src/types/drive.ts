@@ -59,13 +59,13 @@ export type DriveConfig = z.infer<typeof DriveConfigSchema>;
 
 // --- Event (for drive system) ---
 
-export const SeedPulseEventSchema = z.object({
+export const PulSeedEventSchema = z.object({
   type: z.enum(["external", "internal"]),
   source: z.string(),
   timestamp: z.string(),
   data: z.record(z.string(), z.unknown()),
 });
-export type SeedPulseEvent = z.infer<typeof SeedPulseEventSchema>;
+export type PulSeedEvent = z.infer<typeof PulSeedEventSchema>;
 
 // --- Stage 2 additions ---
 

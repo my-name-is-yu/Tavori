@@ -86,7 +86,7 @@ These modules provide direct integrations with language models and embedding ser
 
 ## 8. External Adapter and Data Source Modules
 
-These modules connect SeedPulse to external execution environments and external observation sources.
+These modules connect PulSeed to external execution environments and external observation sources.
 
 ### Agent adapters
 

@@ -22,8 +22,8 @@ describe("PIDManager", () => {
   // ─── constructor / getPath ───
 
   describe("constructor and getPath", () => {
-    it("should use default PID filename 'seedpulse.pid'", () => {
-      expect(pidManager.getPath()).toBe(path.join(tmpDir, "seedpulse.pid"));
+    it("should use default PID filename 'pulseed.pid'", () => {
+      expect(pidManager.getPath()).toBe(path.join(tmpDir, "pulseed.pid"));
     });
 
     it("should support a custom PID filename", () => {

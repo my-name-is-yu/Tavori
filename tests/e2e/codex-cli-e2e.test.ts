@@ -100,7 +100,7 @@ describe.skipIf(!CODEX_AVAILABLE)(
     let tmpDir: string;
 
     beforeAll(() => {
-      tmpDir = mkdtempSync(join(tmpdir(), "seedpulse-codex-e2e-"));
+      tmpDir = mkdtempSync(join(tmpdir(), "pulseed-codex-e2e-"));
     });
 
     afterAll(() => {

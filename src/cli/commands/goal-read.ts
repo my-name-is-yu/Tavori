@@ -1,4 +1,4 @@
-// ─── seedpulse goal read commands (read-only) ───
+// ─── pulseed goal read commands (read-only) ───
 
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
@@ -21,7 +21,7 @@ async function printActiveGoals(
   } catch { /* dir doesn't exist or unreadable */ }
 
   if (goalsDirEntries.length === 0) {
-    console.log("No goals registered. Use `seedpulse goal add` to create one.");
+    console.log("No goals registered. Use `pulseed goal add` to create one.");
     return;
   }
 
@@ -36,7 +36,7 @@ async function printActiveGoals(
   }
 
   if (goalDirs.length === 0) {
-    console.log("No goals registered. Use `seedpulse goal add` to create one.");
+    console.log("No goals registered. Use `pulseed goal add` to create one.");
     return;
   }
 
@@ -69,7 +69,7 @@ async function printActiveGoals(
   }
 
   if (subgoalCount > 0) {
-    console.log(`\n(${subgoalCount} subgoal(s) hidden — use \`seedpulse goal show <id>\` for tree details)`);
+    console.log(`\n(${subgoalCount} subgoal(s) hidden — use \`pulseed goal show <id>\` for tree details)`);
   }
 }
 
@@ -117,7 +117,7 @@ export async function cmdGoalList(
     await printArchivedGoals(stateManager, archivedIds);
   } else {
     await printActiveGoals(stateManager, goalsDir);
-    console.log(`\nArchived goals: ${archivedIds.length} (use \`seedpulse goal list --archived\` to show)`);
+    console.log(`\nArchived goals: ${archivedIds.length} (use \`pulseed goal list --archived\` to show)`);
   }
 
   return 0;
@@ -170,7 +170,7 @@ export async function cmdStatus(
     console.log(`\n## Latest Execution Summary\n`);
     console.log(latest.content);
   } else {
-    console.log(`\n_No execution reports yet. Run \`seedpulse run --goal ${goalId}\` to start._`);
+    console.log(`\n_No execution reports yet. Run \`pulseed run --goal ${goalId}\` to start._`);
   }
 
   return 0;

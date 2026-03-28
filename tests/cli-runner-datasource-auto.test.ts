@@ -1,7 +1,7 @@
 /**
  * CLIRunner — auto DataSource registration tests
  *
- * Verifies that when `seedpulse goal add` negotiates a goal with file_existence
+ * Verifies that when `pulseed goal add` negotiates a goal with file_existence
  * dimensions, a FileExistenceDataSourceAdapter config is automatically saved
  * to the datasources directory so subsequent loop runs can observe mechanically.
  */
@@ -143,7 +143,7 @@ beforeEach(() => {
   tmpDir = makeTempDir();
   origApiKey = process.env.ANTHROPIC_API_KEY;
   process.env.ANTHROPIC_API_KEY = "test-api-key";
-  process.env.SEEDPULSE_LLM_PROVIDER = "anthropic";
+  process.env.PULSEED_LLM_PROVIDER = "anthropic";
 });
 
 afterEach(() => {
@@ -152,7 +152,7 @@ afterEach(() => {
   } else {
     process.env.ANTHROPIC_API_KEY = origApiKey;
   }
-  delete process.env.SEEDPULSE_LLM_PROVIDER;
+  delete process.env.PULSEED_LLM_PROVIDER;
   fs.rmSync(tmpDir, { recursive: true, force: true });
   vi.clearAllMocks();
 });

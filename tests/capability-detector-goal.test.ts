@@ -51,7 +51,7 @@ let stateManager: StateManager;
 let reportingEngine: ReportingEngine;
 
 beforeEach(() => {
-  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "seedpulse-capability-test-"));
+  tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "pulseed-capability-test-"));
   stateManager = new StateManager(tempDir);
   reportingEngine = new ReportingEngine(stateManager);
 });
@@ -251,7 +251,7 @@ describe("matchPluginsForGoal", () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "seedpulse-match-test-"));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pulseed-match-test-"));
     matchStateManager = new StateManager(tmpDir);
     matchReportingEngine = new ReportingEngine(matchStateManager);
   });

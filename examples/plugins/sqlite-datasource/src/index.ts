@@ -1,6 +1,6 @@
 // ─── SqliteDataSourceAdapter ───
 //
-// A SeedPulse data source plugin that queries a SQLite database.
+// A PulSeed data source plugin that queries a SQLite database.
 // Only SELECT statements are permitted; mutating SQL is rejected.
 
 import Database from "better-sqlite3";

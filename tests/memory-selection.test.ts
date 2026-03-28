@@ -67,7 +67,7 @@ let tmpDir: string;
 let memoryDir: string;
 
 beforeEach(() => {
-  tmpDir = makeTempDir("seedpulse-sel-test-");
+  tmpDir = makeTempDir("pulseed-sel-test-");
   memoryDir = path.join(tmpDir, "memory");
 });
 

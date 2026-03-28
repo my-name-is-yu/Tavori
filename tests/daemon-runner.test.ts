@@ -338,39 +338,39 @@ describe("DaemonRunner", () => {
   describe("generateCronEntry()", () => {
     it("should generate a sub-hourly cron entry for interval < 60 min", () => {
       const entry = DaemonRunner.generateCronEntry("my-goal", 15);
-      expect(entry).toBe("*/15 * * * * /usr/bin/env seedpulse run --goal my-goal");
+      expect(entry).toBe("*/15 * * * * /usr/bin/env pulseed run --goal my-goal");
     });
 
     it("should generate an hourly cron entry for interval = 60 min (1 hour)", () => {
       const entry = DaemonRunner.generateCronEntry("my-goal", 60);
-      expect(entry).toBe("0 */1 * * * /usr/bin/env seedpulse run --goal my-goal");
+      expect(entry).toBe("0 */1 * * * /usr/bin/env pulseed run --goal my-goal");
     });
 
     it("should generate a multi-hour cron entry for interval between 60 and 1440 min", () => {
       const entry = DaemonRunner.generateCronEntry("my-goal", 240);
-      expect(entry).toBe("0 */4 * * * /usr/bin/env seedpulse run --goal my-goal");
+      expect(entry).toBe("0 */4 * * * /usr/bin/env pulseed run --goal my-goal");
     });
 
     it("should generate a daily cron entry for interval >= 1440 min (1 day)", () => {
       const entry = DaemonRunner.generateCronEntry("my-goal", 1440);
-      expect(entry).toBe("0 0 * * * /usr/bin/env seedpulse run --goal my-goal");
+      expect(entry).toBe("0 0 * * * /usr/bin/env pulseed run --goal my-goal");
     });
 
     it("should treat interval > 1440 as daily", () => {
       const entry = DaemonRunner.generateCronEntry("my-goal", 2880);
-      expect(entry).toBe("0 0 * * * /usr/bin/env seedpulse run --goal my-goal");
+      expect(entry).toBe("0 0 * * * /usr/bin/env pulseed run --goal my-goal");
     });
 
     it("should use 60-minute default when no interval is provided", () => {
       const entry = DaemonRunner.generateCronEntry("goal-default");
-      expect(entry).toBe("0 */1 * * * /usr/bin/env seedpulse run --goal goal-default");
+      expect(entry).toBe("0 */1 * * * /usr/bin/env pulseed run --goal goal-default");
     });
 
     it("should treat interval <= 0 as 60 minutes", () => {
       const entry0 = DaemonRunner.generateCronEntry("goal-x", 0);
       const entryNeg = DaemonRunner.generateCronEntry("goal-x", -5);
-      expect(entry0).toBe("0 */1 * * * /usr/bin/env seedpulse run --goal goal-x");
-      expect(entryNeg).toBe("0 */1 * * * /usr/bin/env seedpulse run --goal goal-x");
+      expect(entry0).toBe("0 */1 * * * /usr/bin/env pulseed run --goal goal-x");
+      expect(entryNeg).toBe("0 */1 * * * /usr/bin/env pulseed run --goal goal-x");
     });
 
     it("should include the goalId verbatim in the cron entry", () => {
@@ -381,12 +381,12 @@ describe("DaemonRunner", () => {
 
     it("should generate correct entry for 30-minute interval", () => {
       const entry = DaemonRunner.generateCronEntry("g", 30);
-      expect(entry).toBe("*/30 * * * * /usr/bin/env seedpulse run --goal g");
+      expect(entry).toBe("*/30 * * * * /usr/bin/env pulseed run --goal g");
     });
 
     it("should generate correct entry for 1-minute interval", () => {
       const entry = DaemonRunner.generateCronEntry("g", 1);
-      expect(entry).toBe("*/1 * * * * /usr/bin/env seedpulse run --goal g");
+      expect(entry).toBe("*/1 * * * * /usr/bin/env pulseed run --goal g");
     });
 
     it("should throw for goalId containing spaces", () => {

@@ -31,20 +31,20 @@ async function readConfig(): Promise<Record<string, unknown>> {
 // ─── Setup / Teardown ───
 
 beforeEach(async () => {
-  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "seedpulse-setup-test-"));
-  process.env["SEEDPULSE_HOME"] = tmpDir;
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pulseed-setup-test-"));
+  process.env["PULSEED_HOME"] = tmpDir;
   // Clear relevant env vars
   delete process.env["OPENAI_API_KEY"];
   delete process.env["ANTHROPIC_API_KEY"];
-  delete process.env["SEEDPULSE_PROVIDER"];
-  delete process.env["SEEDPULSE_ADAPTER"];
-  delete process.env["SEEDPULSE_MODEL"];
-  // Reset module cache so PROVIDER_CONFIG_PATH re-evaluates with new SEEDPULSE_HOME
+  delete process.env["PULSEED_PROVIDER"];
+  delete process.env["PULSEED_ADAPTER"];
+  delete process.env["PULSEED_MODEL"];
+  // Reset module cache so PROVIDER_CONFIG_PATH re-evaluates with new PULSEED_HOME
   vi.resetModules();
 });
 
 afterEach(async () => {
-  delete process.env["SEEDPULSE_HOME"];
+  delete process.env["PULSEED_HOME"];
   try {
     await fsp.rm(tmpDir, { recursive: true, force: true });
   } catch {

@@ -1,4 +1,4 @@
-// ─── seedpulse goal subcommands — barrel re-export ───
+// ─── pulseed goal subcommands — barrel re-export ───
 // Write commands (state-modifying): goal-write.ts
 // Read commands (read-only):        goal-read.ts
 

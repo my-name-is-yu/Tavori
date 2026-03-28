@@ -10,7 +10,7 @@ describe("TrustManager — rate limit (§3.1)", () => {
   let manager: TrustManager;
 
   beforeEach(() => {
-    tmpDir = makeTempDir("seedpulse-trust-rate-");
+    tmpDir = makeTempDir("pulseed-trust-rate-");
     stateManager = new StateManager(tmpDir);
     manager = new TrustManager(stateManager);
     vi.useFakeTimers();

@@ -235,7 +235,7 @@ export class GitHubIssueDataSourceAdapter implements IDataSourceAdapter {
 
   private resolveLabel(config: DataSourceConfig): string | undefined {
     const mapping = config.dimension_mapping ?? {};
-    return mapping["_label"] ?? "seedpulse";
+    return mapping["_label"] ?? "pulseed";
   }
 
   /**

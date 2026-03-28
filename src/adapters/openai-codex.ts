@@ -69,7 +69,7 @@ export class OpenAICodexCLIAdapter implements IAdapter {
 
     // allowed_tools: codex-cli does not have a native tool-restriction flag.
     // Log a warning for observability; toolset constraint is enforced at the
-    // SeedPulse layer (ToolsetLock) rather than being delegated to the CLI.
+    // PulSeed layer (ToolsetLock) rather than being delegated to the CLI.
     if (task.allowed_tools && task.allowed_tools.length > 0) {
       this.logger?.warn(
         "[OpenAICodexCLIAdapter] allowed_tools is set but codex-cli does not support " +

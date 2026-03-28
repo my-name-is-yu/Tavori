@@ -24,7 +24,7 @@ LearnedPattern (registered)
     └── Task generation patterns      → Feedback to TaskLifecycle
 ```
 
-**Purpose of learning**: SeedPulse may pursue the same goal multiple times. Without learning, it would repeat the same mistakes every time. The learning pipeline is the mechanism to "put accumulated experience to use in the next loop."
+**Purpose of learning**: PulSeed may pursue the same goal multiple times. Without learning, it would repeat the same mistakes every time. The learning pipeline is the mechanism to "put accumulated experience to use in the next loop."
 
 ---
 

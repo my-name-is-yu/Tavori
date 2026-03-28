@@ -1,14 +1,14 @@
-# SeedPulse Brand Design Guide
+# PulSeed Brand Design Guide
 
 ## Overview
 
-SeedPulse is an AI agent orchestrator that gives existing agents the drive to persist. The brand sits at the intersection of a professional developer tool and a warm, approachable character-driven product — think GitHub's Mona Lisa, or Rust's Ferris. Playful mascot, serious infrastructure.
+PulSeed is an AI agent orchestrator that gives existing agents the drive to persist. The brand sits at the intersection of a professional developer tool and a warm, approachable character-driven product — think GitHub's Mona Lisa, or Rust's Ferris. Playful mascot, serious infrastructure.
 
 ---
 
 ## Mascot: Seedy
 
-Seedy is the heart of the SeedPulse brand. A cute, round cream/white seed with two solid black oval eyes and a green sprout with two leaves on top. The design is deliberately minimal and kawaii — nothing extraneous.
+Seedy is the heart of the PulSeed brand. A cute, round cream/white seed with two solid black oval eyes and a green sprout with two leaves on top. The design is deliberately minimal and kawaii — nothing extraneous.
 
 ### Anatomy
 
@@ -116,7 +116,7 @@ Base unit: `4px`. Use multiples: 4, 8, 12, 16, 24, 32, 48, 64.
 
 ## Logo Lockup
 
-The standard lockup is: **Seedy icon** + **"SeedPulse"** wordmark in Quicksand Bold, set in Sprout Green or Eye Black depending on background.
+The standard lockup is: **Seedy icon** + **"PulSeed"** wordmark in Quicksand Bold, set in Sprout Green or Eye Black depending on background.
 
 - **Horizontal lockup**: icon left, wordmark right, 12px gap.
 - **Stacked lockup**: icon above, wordmark below, 8px gap. Use when width is constrained.
@@ -163,12 +163,12 @@ The palette is designed to work in both modes without redesign:
 |---------|------|-------|
 | CLI success | `Goal reached. Seedy is proud.` | `LGTM bro!!!` |
 | CLI error | `Task failed after 3 retries. Check the adapter logs.` | `Uh oh, something broke :( :( :(` |
-| Docs intro | `SeedPulse gives your agents the drive to persist.` | `SeedPulse is AMAZING and will change everything!` |
+| Docs intro | `PulSeed gives your agents the drive to persist.` | `PulSeed is AMAZING and will change everything!` |
 | Stall warning | `Agent appears stalled. Escalating to next strategy.` | `Hmm, not sure what's happening here` |
 
 ### Key Brand Line
 
-> **"SeedPulse gives your agents the drive to persist."**
+> **"PulSeed gives your agents the drive to persist."**
 
 Secondary lines:
 - "Your agents think. Seedy makes sure they keep going."

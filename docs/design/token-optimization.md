@@ -1,6 +1,6 @@
 # Token Optimization Design
 
-> Token cost is the primary barrier to SeedPulse adoption. A single loop iteration makes 3-7 LLM calls, meaning a goal with 3 dimensions and 10 iterations costs 50-70 API calls before any real work is done. This document defines three independent optimization pillars that together reduce LLM token consumption by an estimated 60-80% without degrading observation quality or loop correctness.
+> Token cost is the primary barrier to PulSeed adoption. A single loop iteration makes 3-7 LLM calls, meaning a goal with 3 dimensions and 10 iterations costs 50-70 API calls before any real work is done. This document defines three independent optimization pillars that together reduce LLM token consumption by an estimated 60-80% without degrading observation quality or loop correctness.
 
 ---
 
@@ -485,7 +485,7 @@ The following are explicitly out of scope for this design:
 
 - **Prompt caching** (Anthropic `cache_control`, OpenAI prompt prefix caching): Valuable but provider-specific. Would require changes to the LLM client abstraction. Consider as a separate optimization.
 
-- **Context condensation / trajectory compression**: SeedPulse's LLM calls are stateless single-turn (no conversation history). Context condensation is unnecessary because there is no trajectory to compress.
+- **Context condensation / trajectory compression**: PulSeed's LLM calls are stateless single-turn (no conversation history). Context condensation is unnecessary because there is no trajectory to compress.
 
 - **Task/plan caching**: Caching successful task templates for reuse. Related to the knowledge transfer system (`knowledge-transfer.md`), not token optimization. Consider integrating with StrategyTemplateRegistry.
 

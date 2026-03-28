@@ -1,6 +1,6 @@
 # Drive Scoring Design
 
-How to quantify the priority judgment for "what to tackle next." SeedPulse defines three drive types, each of which reads the gap vector from a different angle. This document describes the calculation structure and design decisions behind that.
+How to quantify the priority judgment for "what to tackle next." PulSeed defines three drive types, each of which reads the gap vector from a different angle. This document describes the calculation structure and design decisions behind that.
 
 As a prerequisite, see `gap-calculation.md` for the gap calculation structure.
 
@@ -12,7 +12,7 @@ As a prerequisite, see `gap-calculation.md` for the gap calculation structure.
 
 "This gap is too large. It must be fixed."
 
-This is the most fundamental drive force. The larger the current gap, the higher the priority. However, dimensions that have been repeatedly attempted without progress receive a temporary penalty, preventing SeedPulse from endlessly hammering the same wall.
+This is the most fundamental drive force. The larger the current gap, the higher the priority. However, dimensions that have been repeatedly attempted without progress receive a temporary penalty, preventing PulSeed from endlessly hammering the same wall.
 
 ### Score Formula
 

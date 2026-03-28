@@ -1,6 +1,6 @@
 # Satisficing Design — Judging "Good Enough"
 
-> SeedPulse does not chase perfection. It judges "good enough" and stops.
+> PulSeed does not chase perfection. It judges "good enough" and stops.
 > This document defines the logic for determining "when and what constitutes good enough."
 
 ---
@@ -13,13 +13,13 @@ Satisficing is a decision strategy of stopping at a state that is "good enough" 
 
 Systems that aim for perfection diverge. "More tests." "More refactoring." "More documentation." — they get stuck in an endless improvement cycle. As AutoGPT demonstrated, agents that keep running without a goal are harmful.
 
-SeedPulse solves this problem structurally. **Stop when the threshold is exceeded.** That is the rule.
+PulSeed solves this problem structurally. **Stop when the threshold is exceeded.** That is the rule.
 
 ### When Satisficing Works
 
 Satisficing works when the definition of "good enough" is established in advance. Without a clear definition, satisficing cannot work — because there is no way to know when "enough" has been reached.
 
-In SeedPulse, when a goal is set, the advisor consults with the user to set thresholds. These thresholds become the definition of "good enough."
+In PulSeed, when a goal is set, the advisor consults with the user to set thresholds. These thresholds become the definition of "good enough."
 
 ---
 
@@ -80,7 +80,7 @@ Satisficing is not just a goal-level concern. Individual tasks (iterations) also
 
 ### Do Not Attack All Gaps at Once
 
-Even when multiple Gaps exist, SeedPulse selects a **manageable subset** to address.
+Even when multiple Gaps exist, PulSeed selects a **manageable subset** to address.
 
 There are three reasons.
 
@@ -118,7 +118,7 @@ Example: Suppose a single threshold of "progress: 90%" is used. Writing 20 files
 
 ### Setting Thresholds Across Multiple Dimensions
 
-SeedPulse manages multiple dimensions **each with independent thresholds**.
+PulSeed manages multiple dimensions **each with independent thresholds**.
 
 ```
 example_goal_thresholds {
@@ -149,7 +149,7 @@ The advisor assesses feasibility. "Is this threshold realistic?" "Is it appropri
 
 ### User Adjustments
 
-The user can change thresholds at any time. However, SeedPulse makes the impact of the change explicit.
+The user can change thresholds at any time. However, PulSeed makes the impact of the change explicit.
 
 ```
 Lowering a threshold (relaxing):
@@ -160,9 +160,9 @@ Raising a threshold (tightening):
   → Estimate and present the additional work needed to reach the new threshold
 ```
 
-### SeedPulse's Adjustment Proposals
+### PulSeed's Adjustment Proposals
 
-If SeedPulse judges from observation that "this threshold is unrealistic" or "it's actually too low," it can propose an adjustment to the user.
+If PulSeed judges from observation that "this threshold is unrealistic" or "it's actually too low," it can propose an adjustment to the user.
 
 It only proposes — it does not change thresholds autonomously. Threshold changes always require user approval.
 
@@ -279,7 +279,7 @@ In the MVP, when there is no explicit mapping definition, the overall completion
 
 ## Summary of Design Principles
 
-| Problem | SeedPulse's Solution |
+| Problem | PulSeed's Solution |
 |---------|-------------------|
 | Divergence from perfectionism | Stop when the threshold is exceeded (completion ≠ perfection) |
 | Premature completion on insufficient evidence | Progress ceiling rule based on confidence level |

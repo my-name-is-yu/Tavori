@@ -4,13 +4,13 @@ import * as path from "node:path";
 import * as os from "node:os";
 import { StateManager } from "../src/state-manager.js";
 import { DriveSystem } from "../src/drive/drive-system.js";
-import type { SeedPulseEvent, GoalSchedule } from "../src/types/drive.js";
+import type { PulSeedEvent, GoalSchedule } from "../src/types/drive.js";
 import type { Goal } from "../src/types/goal.js";
 import { makeTempDir } from "./helpers/temp-dir.js";
 import { makeGoal } from "./helpers/fixtures.js";
 import { randomUUID } from "node:crypto";
 
-function makeEvent(overrides: Partial<SeedPulseEvent> = {}): SeedPulseEvent {
+function makeEvent(overrides: Partial<PulSeedEvent> = {}): PulSeedEvent {
   return {
     type: "external",
     source: "test-source",
@@ -20,7 +20,7 @@ function makeEvent(overrides: Partial<SeedPulseEvent> = {}): SeedPulseEvent {
   };
 }
 
-function writeEventFile(eventsDir: string, fileName: string, event: SeedPulseEvent): void {
+function writeEventFile(eventsDir: string, fileName: string, event: PulSeedEvent): void {
   const filePath = path.join(eventsDir, fileName);
   fs.writeFileSync(filePath, JSON.stringify(event, null, 2), "utf-8");
 }
@@ -233,7 +233,7 @@ describe("DriveSystem", () => {
 
     it("returns empty array when events directory does not exist", async () => {
       // Create DriveSystem pointing to a dir that has no events subdir
-      const anotherTmp = fs.mkdtempSync(path.join(os.tmpdir(), "seedpulse-noevents-"));
+      const anotherTmp = fs.mkdtempSync(path.join(os.tmpdir(), "pulseed-noevents-"));
       try {
         const anotherSm = new StateManager(anotherTmp);
         const anotherDs = new DriveSystem(anotherSm, { baseDir: anotherTmp });

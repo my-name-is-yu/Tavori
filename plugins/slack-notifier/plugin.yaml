@@ -9,7 +9,7 @@ supported_events:
   - approval_needed
   - stall_detected
   - task_blocked
-description: "Send SeedPulse events to a Slack channel via webhook"
+description: "Send PulSeed events to a Slack channel via webhook"
 config_schema:
   webhook_url:
     type: string
@@ -24,6 +24,6 @@ config_schema:
     default: true
     description: "Mention @channel on critical events"
 entry_point: "dist/index.js"
-min_seedpulse_version: "0.1.0"
+min_pulseed_version: "0.1.0"
 permissions:
   network: true

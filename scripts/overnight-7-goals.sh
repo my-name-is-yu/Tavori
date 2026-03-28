@@ -19,19 +19,19 @@ TMP_DIR="$REPO_DIR/memory/.overnight-tmp-${DATE_TAG}-$$"
 mkdir -p "$TMP_DIR"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-# 7 curated goals aimed at improving SeedPulse itself.
-# Keep descriptions concrete and verification-oriented so SeedPulse can drive changes.
+# 7 curated goals aimed at improving PulSeed itself.
+# Keep descriptions concrete and verification-oriented so PulSeed can drive changes.
 GOALS=(
-  "Fix 'seedpulse suggest' so it returns actionable improvement goals for this repo. Ensure it uses repo context (--path .) and doesn't prematurely return empty. Align behavior with docs/design where applicable. Add/adjust tests."
+  "Fix 'pulseed suggest' so it returns actionable improvement goals for this repo. Ensure it uses repo context (--path .) and doesn't prematurely return empty. Align behavior with docs/design where applicable. Add/adjust tests."
   "Harden CLI UX around API/provider configuration: ensure error messages mention the correct env vars for OpenAI vs Anthropic vs Codex; add tests for missing/invalid provider config. Follow docs/design/provider spec."
-  "Stability: make 'seedpulse run' resilient to adapter failures/timeouts (clear reporting, non-zero exits, no silent success). Add tests to cover adapter error propagation."
+  "Stability: make 'pulseed run' resilient to adapter failures/timeouts (clear reporting, non-zero exits, no silent success). Add tests to cover adapter error propagation."
   "Docs/design alignment pass: pick one subsystem with drift (goal negotiation / observation / verification) and align implementation to docs/design. Add a regression test demonstrating the spec."
-  "Improve state integrity: detect and repair/avoid corrupted goal state files under ~/.seedpulse (e.g., partial writes). Add atomic write strategy or validation + recovery. Tests required."
+  "Improve state integrity: detect and repair/avoid corrupted goal state files under ~/.pulseed (e.g., partial writes). Add atomic write strategy or validation + recovery. Tests required."
   "TUI reliability: ensure TUI start doesn't crash without optional dependencies/config and handles missing goals gracefully. Add tests or a smoke test harness."
   "Performance/ergonomics: reduce unnecessary LLM calls in one core path (e.g., observation dedup/context) while preserving correctness. Add a unit test proving fewer calls in a mocked scenario."
 )
 
-say "# SeedPulse overnight loop (${DATE_TAG})" > "$REPORT"
+say "# PulSeed overnight loop (${DATE_TAG})" > "$REPORT"
 say "" >> "$REPORT"
 say "Started: ${START_TS}" >> "$REPORT"
 say "Repo: ${REPO_DIR}" >> "$REPORT"
@@ -101,7 +101,7 @@ for i in $(seq 1 7); do
   fi
   say "" >> "$REPORT"
 
-  # 2) Run SeedPulse for that goal (bounded iterations)
+  # 2) Run PulSeed for that goal (bounded iterations)
   set +e
   node dist/cli-runner.js run --goal "$GOAL_ID" --yes --max-iterations 12 >"$OUT_RUN" 2>&1
   RUN_CODE=$?
@@ -110,8 +110,8 @@ for i in $(seq 1 7); do
   FINAL_STATUS="$(grep -E "^Final status:" "$OUT_RUN" | head -n 1 | sed -E 's/^Final status:\s+//' || true)"
   TOTAL_ITERS="$(grep -E "^Total iterations:" "$OUT_RUN" | head -n 1 | sed -E 's/^Total iterations:\s+//' || true)"
 
-  say "## SeedPulse run" >> "$REPORT"
-  say "- command: seedpulse run --goal ${GOAL_ID} --yes --max-iterations 12" >> "$REPORT"
+  say "## PulSeed run" >> "$REPORT"
+  say "- command: pulseed run --goal ${GOAL_ID} --yes --max-iterations 12" >> "$REPORT"
   say "- exit: ${RUN_CODE}" >> "$REPORT"
   [[ -n "$FINAL_STATUS" ]] && say "- final_status: ${FINAL_STATUS}" >> "$REPORT"
   [[ -n "$TOTAL_ITERS" ]] && say "- total_iterations: ${TOTAL_ITERS}" >> "$REPORT"
@@ -136,7 +136,7 @@ for i in $(seq 1 7); do
 
   say "" >> "$REPORT"
 
-  # 3) Verify repo health after SeedPulse-run-driven changes
+  # 3) Verify repo health after PulSeed-run-driven changes
   set +e
   npm run build >"$OUT_BUILD" 2>&1
   BUILD_CODE=$?

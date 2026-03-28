@@ -118,7 +118,7 @@ function makeTaskGenerationResponse(): string {
       work_description: "Add comprehensive API usage examples to README.md",
       rationale: "The quality dimension is below threshold due to missing API documentation",
       approach:
-        "Write 3 real-world usage examples covering core SeedPulse APIs and add them to README",
+        "Write 3 real-world usage examples covering core PulSeed APIs and add them to README",
       success_criteria: [
         {
           description: "README.md contains at least 3 API usage examples",

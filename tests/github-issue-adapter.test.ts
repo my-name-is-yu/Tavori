@@ -105,12 +105,12 @@ describe("GitHubIssueAdapter.parsePrompt", () => {
   });
 
   it("deduplicates labels when JSON and defaults overlap", () => {
-    const adapter2 = new GitHubIssueAdapter({ defaultLabels: ["seedpulse"] });
-    const prompt = "```github-issue\n{\"title\":\"T\",\"body\":\"B\",\"labels\":[\"seedpulse\"]}\n```";
+    const adapter2 = new GitHubIssueAdapter({ defaultLabels: ["pulseed"] });
+    const prompt = "```github-issue\n{\"title\":\"T\",\"body\":\"B\",\"labels\":[\"pulseed\"]}\n```";
     const result = adapter2.parsePrompt(prompt);
 
-    const seedpulseCount = result.labels.filter((l) => l === "seedpulse").length;
-    expect(seedpulseCount).toBe(1);
+    const pulseedCount = result.labels.filter((l) => l === "pulseed").length;
+    expect(pulseedCount).toBe(1);
   });
 });
 
@@ -172,7 +172,7 @@ describe("GitHubIssueAdapter.execute", () => {
 
   afterEach(() => {
     vi.useRealTimers();
-    delete process.env["SEEDPULSE_GITHUB_REPO"];
+    delete process.env["PULSEED_GITHUB_REPO"];
   });
 
   it("returns success result with issue URL when gh CLI exits with code 0", async () => {
@@ -244,8 +244,8 @@ describe("GitHubIssueAdapter.execute", () => {
     expect(result.output).toMatch(/dry.?run/i);
   });
 
-  it("uses SEEDPULSE_GITHUB_REPO env var when config.repo is empty", async () => {
-    process.env["SEEDPULSE_GITHUB_REPO"] = "env-owner/env-repo";
+  it("uses PULSEED_GITHUB_REPO env var when config.repo is empty", async () => {
+    process.env["PULSEED_GITHUB_REPO"] = "env-owner/env-repo";
     const adapter = new GitHubIssueAdapter();
     const dedupChild = makeDedupChild();
     const child = makeFakeChild();
@@ -267,8 +267,8 @@ describe("GitHubIssueAdapter.execute", () => {
     expect(args.join(" ")).toContain("env-owner/env-repo");
   });
 
-  it("config.repo takes priority over SEEDPULSE_GITHUB_REPO env var", async () => {
-    process.env["SEEDPULSE_GITHUB_REPO"] = "env-owner/env-repo";
+  it("config.repo takes priority over PULSEED_GITHUB_REPO env var", async () => {
+    process.env["PULSEED_GITHUB_REPO"] = "env-owner/env-repo";
     const adapter = new GitHubIssueAdapter({ repo: "config-owner/config-repo" });
     const dedupChild = makeDedupChild();
     const child = makeFakeChild();
@@ -292,7 +292,7 @@ describe("GitHubIssueAdapter.execute", () => {
   it("passes labels as multiple --label args to gh", async () => {
     const adapter = new GitHubIssueAdapter({
       repo: "owner/repo",
-      defaultLabels: ["seedpulse", "automated"],
+      defaultLabels: ["pulseed", "automated"],
     });
     const dedupChild = makeDedupChild();
     const child = makeFakeChild();
@@ -320,7 +320,7 @@ describe("GitHubIssueAdapter.execute", () => {
   });
 
   it("auto-detects repo when config.repo is empty and env var is unset", async () => {
-    delete process.env["SEEDPULSE_GITHUB_REPO"];
+    delete process.env["PULSEED_GITHUB_REPO"];
     const adapter = new GitHubIssueAdapter();
 
     // Spawn order: dedup check, then gh repo view (auto-detect), then gh issue create
@@ -458,7 +458,7 @@ describe("GitHubIssueAdapter.execute dedup", () => {
   });
 
   afterEach(() => {
-    delete process.env["SEEDPULSE_GITHUB_REPO"];
+    delete process.env["PULSEED_GITHUB_REPO"];
   });
 
   it("skips issue creation when a similar open issue exists", async () => {
@@ -653,7 +653,7 @@ describe("GitHubIssueAdapter.execute error classification", () => {
   });
 
   afterEach(() => {
-    delete process.env["SEEDPULSE_GITHUB_REPO"];
+    delete process.env["PULSEED_GITHUB_REPO"];
   });
 
   it("classifies 'gh not found' spawn error with helpful message", async () => {
@@ -701,7 +701,7 @@ describe("GitHubIssueAdapter.execute error classification", () => {
   });
 
   it("returns error when repo auto-detection fails completely", async () => {
-    delete process.env["SEEDPULSE_GITHUB_REPO"];
+    delete process.env["PULSEED_GITHUB_REPO"];
     const adapter = new GitHubIssueAdapter();
 
     // dedup child, then detect child (gh repo view), then git remote — both fail

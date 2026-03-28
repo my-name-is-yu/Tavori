@@ -1,4 +1,4 @@
-// ─── seedpulse goal write commands (state-modifying) ───
+// ─── pulseed goal write commands (state-modifying) ───
 
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
@@ -136,7 +136,7 @@ export async function cmdGoalAdd(
     console.log(`Goal registered (unrefined — refinement failed).`);
     console.log(`Goal ID:    ${goalId}`);
     console.log(`Title:      ${stubGoal.title}`);
-    console.log(`\nTo run the loop: seedpulse run --goal ${goalId}`);
+    console.log(`\nTo run the loop: pulseed run --goal ${goalId}`);
     return 0;
   }
 
@@ -156,7 +156,7 @@ export async function cmdGoalAdd(
   printRefineResult(result);
 
   const runId = result.leaf ? result.goal.id : goalId;
-  console.log(`\nTo run the loop: seedpulse run --goal ${runId}${!result.leaf ? " --tree" : ""}`);
+  console.log(`\nTo run the loop: pulseed run --goal ${runId}${!result.leaf ? " --tree" : ""}`);
   return 0;
 }
 
@@ -225,7 +225,7 @@ async function cmdGoalAddLegacyNegotiate(
       }
     }
 
-    console.log(`\nTo run the loop: seedpulse run --goal ${goal.id}`);
+    console.log(`\nTo run the loop: pulseed run --goal ${goal.id}`);
     return 0;
   } catch (err) {
     if (err instanceof EthicsRejectedError) {
@@ -267,7 +267,7 @@ export async function cmdGoalReset(stateManager: StateManager, goalId: string): 
   console.log(`Goal "${goalId}" reset to active.`);
   console.log(`  Status:      active`);
   console.log(`  Dimensions:  ${resetDimensions.length} dimension(s) cleared`);
-  console.log(`\nRun \`seedpulse run --goal ${goalId}\` to restart the loop.`);
+  console.log(`\nRun \`pulseed run --goal ${goalId}\` to restart the loop.`);
 
   return 0;
 }
@@ -360,7 +360,7 @@ export async function cmdCleanup(stateManager: StateManager): Promise<number> {
     for (const f of staleReports) {
       console.log(`  ${f}`);
     }
-    console.log("(These can be removed manually from ~/.seedpulse/reports/)");
+    console.log("(These can be removed manually from ~/.pulseed/reports/)");
   }
 
   // Deduplicate datasources

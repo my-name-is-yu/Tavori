@@ -1,5 +1,5 @@
 // ─── OpenClawAgentAdapter ───
-// Wraps OpenClaw's Pi Agent as a SeedPulse IAdapter.
+// Wraps OpenClaw's Pi Agent as a PulSeed IAdapter.
 // CoreLoop sends tasks by posting messages and polling for new assistant replies.
 
 // Minimal local type definitions (plugin uses peerDependencies, not relative paths)

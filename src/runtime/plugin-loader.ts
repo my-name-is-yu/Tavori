@@ -22,10 +22,10 @@ import type { NotifierRegistry } from "./notifier-registry.js";
 // ─── PluginLoader ───
 
 /**
- * Discovers, loads, validates, and registers plugins from ~/.seedpulse/plugins/.
+ * Discovers, loads, validates, and registers plugins from ~/.pulseed/plugins/.
  *
  * Design principles:
- *  - Plugin load failures never crash SeedPulse. Every error is caught, logged,
+ *  - Plugin load failures never crash PulSeed. Every error is caught, logged,
  *    and returned as an error-state PluginState.
  *  - Supports both plugin.yaml and plugin.json manifest formats.
  *  - Routes each plugin to the correct registry based on manifest.type.
@@ -82,10 +82,10 @@ export class PluginLoader {
     const manifest = await this.loadManifest(pluginDir);
 
     // 1b. Semver compatibility check
-    const seedpulseVersion = getSeedPulseVersion();
-    const minVer = manifest.min_seedpulse_version;
-    const maxVer = manifest.max_seedpulse_version;
-    if (!satisfiesRange(seedpulseVersion, minVer, maxVer)) {
+    const pulseedVersion = getPulseedVersion();
+    const minVer = manifest.min_pulseed_version;
+    const maxVer = manifest.max_pulseed_version;
+    if (!satisfiesRange(pulseedVersion, minVer, maxVer)) {
       const range = [
         minVer ? `>=${minVer}` : "",
         maxVer ? `<=${maxVer}` : "",
@@ -93,9 +93,9 @@ export class PluginLoader {
         .filter(Boolean)
         .join(", ");
       this.logger?.warn(
-        `[PluginLoader] Skipping incompatible plugin "${manifest.name}": requires SeedPulse ${range}, got ${seedpulseVersion}`
+        `[PluginLoader] Skipping incompatible plugin "${manifest.name}": requires PulSeed ${range}, got ${pulseedVersion}`
       );
-      return this.buildIncompatibleState(manifest, seedpulseVersion, range);
+      return this.buildIncompatibleState(manifest, pulseedVersion, range);
     }
 
     // 2. Dynamically import the entry point
@@ -266,12 +266,12 @@ export class PluginLoader {
     return state;
   }
 
-  buildIncompatibleState(manifest: PluginManifest, seedpulseVersion: string, range: string): PluginState {
+  buildIncompatibleState(manifest: PluginManifest, pulseedVersion: string, range: string): PluginState {
     const state = PluginStateSchema.parse({
       name: manifest.name,
       manifest,
       status: "incompatible",
-      error_message: `Requires SeedPulse ${range}, got ${seedpulseVersion}`,
+      error_message: `Requires PulSeed ${range}, got ${pulseedVersion}`,
       loaded_at: new Date().toISOString(),
       trust_score: 0,
       usage_count: 0,
@@ -332,7 +332,7 @@ export class PluginLoader {
     const updated = PluginStateSchema.parse({ ...existing, ...updates });
     this.pluginStates.set(pluginName, updated);
 
-    // Persist to disk: ~/.seedpulse/plugins/<name>/state.json
+    // Persist to disk: ~/.pulseed/plugins/<name>/state.json
     const statePath = path.join(this.pluginsDir, pluginName, "state.json");
     await writeJsonFileAtomic(statePath, updated);
   }
@@ -354,23 +354,23 @@ export class PluginLoader {
 
 // ─── Module-level helpers ───
 
-// ─── SeedPulse version (read once from package.json) ───
+// ─── PulSeed version (read once from package.json) ───
 
-let _seedpulseVersion: string | undefined;
+let _pulseedVersion: string | undefined;
 
-function getSeedPulseVersion(): string {
-  if (_seedpulseVersion !== undefined) return _seedpulseVersion;
+function getPulseedVersion(): string {
+  if (_pulseedVersion !== undefined) return _pulseedVersion;
   try {
     const pkgPath = path.resolve(
       path.dirname(url.fileURLToPath(import.meta.url)),
       "../../package.json"
     );
     const pkg = JSON.parse(fsSync.readFileSync(pkgPath, "utf-8")) as { version: string };
-    _seedpulseVersion = pkg.version;
+    _pulseedVersion = pkg.version;
   } catch {
-    _seedpulseVersion = "0.0.0";
+    _pulseedVersion = "0.0.0";
   }
-  return _seedpulseVersion;
+  return _pulseedVersion;
 }
 
 // ─── Semver utilities (no external deps) ───

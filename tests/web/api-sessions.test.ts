@@ -27,7 +27,7 @@ const { GET } = await import('../../web/src/app/api/sessions/route.js');
 
 describe('GET /api/sessions', () => {
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'seedpulse-web-sessions-'));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pulseed-web-sessions-'));
   });
 
   afterEach(() => {
@@ -42,7 +42,7 @@ describe('GET /api/sessions', () => {
   });
 
   it('returns sessions from JSON files', async () => {
-    const sessionsDir = path.join(tmpDir, '.seedpulse', 'sessions');
+    const sessionsDir = path.join(tmpDir, '.pulseed', 'sessions');
     fs.mkdirSync(sessionsDir, { recursive: true });
 
     const session1 = {
@@ -70,7 +70,7 @@ describe('GET /api/sessions', () => {
   });
 
   it('skips non-JSON files', async () => {
-    const sessionsDir = path.join(tmpDir, '.seedpulse', 'sessions');
+    const sessionsDir = path.join(tmpDir, '.pulseed', 'sessions');
     fs.mkdirSync(sessionsDir, { recursive: true });
 
     fs.writeFileSync(path.join(sessionsDir, 's1.json'), JSON.stringify({ id: 's1' }));
@@ -83,7 +83,7 @@ describe('GET /api/sessions', () => {
   });
 
   it('skips malformed JSON files', async () => {
-    const sessionsDir = path.join(tmpDir, '.seedpulse', 'sessions');
+    const sessionsDir = path.join(tmpDir, '.pulseed', 'sessions');
     fs.mkdirSync(sessionsDir, { recursive: true });
 
     fs.writeFileSync(path.join(sessionsDir, 'good.json'), JSON.stringify({ id: 'good' }));

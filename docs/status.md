@@ -150,7 +150,7 @@ Phase 3 is not about adding new features — it focuses on improving codebase qu
 
 ## Milestone 10: Automatic Goal Generation (complete)
 - `src/goal/goal-negotiator.ts` extended — `suggestGoals()`, `filterSuggestions()`
-- `src/cli-runner.ts` extended — `seedpulse suggest`, `seedpulse improve [path]` commands
+- `src/cli-runner.ts` extended — `pulseed suggest`, `pulseed improve [path]` commands
 - Status: complete
 
 ## Milestone 11: Autonomous Strategy Selection + Execution Quality (complete)
@@ -166,11 +166,11 @@ Phase 3 is not about adding new features — it focuses on improving codebase qu
 
 ### Implementation Modules
 - `src/types/plugin.ts` — plugin manifest, INotifier interface, NotificationEvent type definitions (Zod schemas)
-- `src/runtime/plugin-loader.ts` — dynamic plugin loading from `~/.seedpulse/plugins/`, manifest validation, auto-registration into AdapterRegistry/DataSourceRegistry/NotifierRegistry
+- `src/runtime/plugin-loader.ts` — dynamic plugin loading from `~/.pulseed/plugins/`, manifest validation, auto-registration into AdapterRegistry/DataSourceRegistry/NotifierRegistry
 - `src/runtime/notifier-registry.ts` — CRUD management of INotifier plugins with eventType-based routing
 - `src/runtime/notification-dispatcher.ts` extended — routing integration with NotifierRegistry
 - `src/runtime/daemon-runner.ts` extended — graceful SIGTERM/SIGINT shutdown, crash recovery, log rotation
-- `src/runtime/event-server.ts` extended — real-time file watcher for `~/.seedpulse/events/` (fs.watch)
+- `src/runtime/event-server.ts` extended — real-time file watcher for `~/.pulseed/events/` (fs.watch)
 - `plugins/slack-notifier/` — sample plugin (Slack Webhook implementation, `plugin.yaml` + `src/index.ts`)
 
 ### Test Validation

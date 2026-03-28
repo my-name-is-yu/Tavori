@@ -202,7 +202,7 @@ Register as MetaPattern in CrossGoalKnowledgeBase
 
 ### 7.2 Applying Meta-Patterns
 
-When a new goal is added, search the CrossGoalKnowledgeBase for similar meta-patterns and inject them into the session context. This allows SeedPulse to reference "what worked for similar goals in the past" from the very beginning.
+When a new goal is added, search the CrossGoalKnowledgeBase for similar meta-patterns and inject them into the session context. This allows PulSeed to reference "what worked for similar goals in the past" from the very beginning.
 
 ---
 
@@ -256,7 +256,7 @@ When a new goal is added, search the CrossGoalKnowledgeBase for similar meta-pat
 
 ## External Reference: claude-mem
 
-> Source: [claude-mem](https://github.com/thedotmack/claude-mem) — A library for injecting memory across sessions. The following insights are reflected in the SeedPulse M16 design.
+> Source: [claude-mem](https://github.com/thedotmack/claude-mem) — A library for injecting memory across sessions. The following insights are reflected in the PulSeed M16 design.
 
 ### A. Structured Field Design for session_summaries (Data Structure Pattern)
 
@@ -299,7 +299,7 @@ Improved approach (Progressive Disclosure):
   Step 3: Fetch full text only for the narrowed candidates      ← Only what's needed
 ```
 
-This progressive approach allows SeedPulse to consider a wide set of candidates and select the optimal knowledge even when the context budget is tight.
+This progressive approach allows PulSeed to consider a wide set of candidates and select the optimal knowledge even when the context budget is tight.
 
 ### C. Small but Useful Design Patterns
 
@@ -309,12 +309,12 @@ This progressive approach allows SeedPulse to consider a wide set of candidates 
 | `concepts` JSON array | Schema-independent concept tags | Extend LearnedPattern's `domain_tags` to improve cross-goal matching accuracy |
 | `timeline` pattern | Chronological retrieval around an anchor ID | Efficiently retrieve what happened around a strategy change (stall detection → strategy switch → recovery) |
 
-### D. What claude-mem Does Not Cover (Areas Requiring SeedPulse-Specific Design)
+### D. What claude-mem Does Not Cover (Areas Requiring PulSeed-Specific Design)
 
-claude-mem specializes in memory injection between single sessions; the following require original SeedPulse design.
+claude-mem specializes in memory injection between single sessions; the following require original PulSeed design.
 
 | Feature | Reason |
 |---------|--------|
-| Cross-goal knowledge transfer | claude-mem handles single-session injection only. SeedPulse runs multiple goals in parallel and in series |
-| Transfer confidence score learning | The mechanism to update confidence by feeding back transfer effectiveness (§6.2) is unique to SeedPulse |
-| Dynamic budget enforcement | claude-mem's TokenCalculator only calculates costs without enforcing budgets. SeedPulse needs priority-based reduction when budget is exceeded |
+| Cross-goal knowledge transfer | claude-mem handles single-session injection only. PulSeed runs multiple goals in parallel and in series |
+| Transfer confidence score learning | The mechanism to update confidence by feeding back transfer effectiveness (§6.2) is unique to PulSeed |
+| Dynamic budget enforcement | claude-mem's TokenCalculator only calculates costs without enforcing budgets. PulSeed needs priority-based reduction when budget is exceeded |

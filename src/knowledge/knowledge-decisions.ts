@@ -27,7 +27,7 @@ export interface DecisionDeps {
 // ─── Decision History functions ───
 
 /**
- * Save a DecisionRecord to ~/.seedpulse/decisions/<goalId>-<timestamp>.json
+ * Save a DecisionRecord to ~/.pulseed/decisions/<goalId>-<timestamp>.json
  * For completed records (outcome !== "pending"), enriches with LLM-extracted
  * what_worked/what_failed/suggested_next before saving.
  */

@@ -31,7 +31,7 @@ LLMs are pulled by their current context. They tend to drift toward "recently di
     ↓ Articulation of success criteria and scope boundaries
 ```
 
-"Which dimension to address" is determined mechanically by a number (drive score). The LLM's job is only to specify "how to address it." This lets SeedPulse leverage the LLM's creativity while keeping authority over prioritization in code.
+"Which dimension to address" is determined mechanically by a number (drive score). The LLM's job is only to specify "how to address it." This lets PulSeed leverage the LLM's creativity while keeping authority over prioritization in code.
 
 ### Overview of Selection Logic
 
@@ -194,13 +194,13 @@ A task must be sized so that it "can be completed in a single execution session.
 
 ## 4. Execution
 
-The task is handed off to the execution layer (agent, API, human, etc.). SeedPulse does **not intervene** during execution.
+The task is handed off to the execution layer (agent, API, human, etc.). PulSeed does **not intervene** during execution.
 
-### What SeedPulse Passes
+### What PulSeed Passes
 
 At execution start, a context is assembled containing the task's scope, success criteria, and constraints, and passed to the executor (see `runtime.md` §3). Information passed is limited to the "minimum necessary to complete this task." The full context of the goal is not needed.
 
-### What SeedPulse Monitors
+### What PulSeed Monitors
 
 ```
 execution_state {
@@ -211,7 +211,7 @@ execution_state {
 }
 ```
 
-This is all SeedPulse checks. It detects three types of state changes — "progress is not visible," "timeout is approaching," "abnormal termination" — and responds accordingly. It does not intervene in the execution itself.
+This is all PulSeed checks. It detects three types of state changes — "progress is not visible," "timeout is approaching," "abnormal termination" — and responds accordingly. It does not intervene in the execution itself.
 
 ### Non-Intervention During Execution Principle
 
@@ -221,7 +221,7 @@ This prevents contaminating the executor's context. Inserting "actually, fix thi
 
 ## 5. Verification (3-Layer Structure)
 
-After execution completes, SeedPulse performs a 3-layer verification. This structure corresponds to the "result verification" described in `runtime.md` §1.
+After execution completes, PulSeed performs a 3-layer verification. This structure corresponds to the "result verification" described in `runtime.md` §1.
 
 ### Layer 1: Mechanical Verification
 
@@ -231,11 +231,11 @@ mechanical_checks: Check[]    // automated, objective checks
 
 Test execution results, file existence checks, build success/failure, API response status. This has the highest confidence. It is the kind of evidence that cannot lie.
 
-Mechanical verification is performed **in a separate process from the execution session**. Even if the executor reports "tests passed," SeedPulse verifies this independently.
+Mechanical verification is performed **in a separate process from the execution session**. Even if the executor reports "tests passed," PulSeed verifies this independently.
 
 #### Layer 1 Execution Mechanism
 
-Layer 1 is executed by SeedPulse launching a dedicated **verification session** (completely separate from the execution session).
+Layer 1 is executed by PulSeed launching a dedicated **verification session** (completely separate from the execution session).
 
 What the verification session receives:
 - Task definition (success criteria + scope boundary)
@@ -322,7 +322,7 @@ verification_result {
 
 ## 6. Failure Response Decision Logic
 
-When a task does not fully succeed, SeedPulse selects a response from three options.
+When a task does not fully succeed, PulSeed selects a response from three options.
 
 ### Decision Flow
 
@@ -397,13 +397,13 @@ When a revert session is launched for a task judged `reversible` but the revert 
 state_integrity: "uncertain"   // manual observation required
 ```
 
-For dimensions with `state_integrity: "uncertain"` set, SeedPulse does not autonomously select and execute the next task. That dimension is paused until a human manually confirms and updates the state, and returns `state_integrity` to `"ok"`.
+For dimensions with `state_integrity: "uncertain"` set, PulSeed does not autonomously select and execute the next task. That dimension is paused until a human manually confirms and updates the state, and returns `state_integrity` to `"ok"`.
 
 ### escalate: Request Human Intervention
 
 Applicable conditions:
 - The same type of task has failed 3 or more times
-- SeedPulse does not have the necessary permissions or capabilities (production environment access, legal judgment, etc.)
+- PulSeed does not have the necessary permissions or capabilities (production environment access, legal judgment, etc.)
 - The premises may be wrong and the goal itself needs reconsideration
 
 Processing:
@@ -417,7 +417,7 @@ Processing:
 
 ## 7. Task Completion → Continuing the Loop
 
-When a task is completed (or ultimately processed), SeedPulse immediately launches the next loop.
+When a task is completed (or ultimately processed), PulSeed immediately launches the next loop.
 
 ```
 Task completed

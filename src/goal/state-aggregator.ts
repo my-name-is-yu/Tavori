@@ -127,7 +127,7 @@ export class StateAggregator {
     const clampedGap = Math.min(1, Math.max(0, aggregatedGap));
 
     // Persist aggregated progress back to the parent goal so that
-    // `seedpulse status --goal <id>` shows progress rather than "not yet measured".
+    // `pulseed status --goal <id>` shows progress rather than "not yet measured".
     if (childIds.length > 0) {
       const freshParent = await this.stateManager.loadGoal(parentId);
       if (freshParent !== null && freshParent.dimensions.length > 0) {

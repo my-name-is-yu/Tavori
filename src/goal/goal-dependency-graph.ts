@@ -32,7 +32,7 @@ const AutoDetectResponseSchema = z.array(AutoDetectItemSchema);
  *   - synergy: progress on goal A helps goal B
  *   - conflict: goals A and B have incompatible objectives
  *
- * Persistence: ~/.seedpulse/dependency-graph.json (via StateManager.readRaw/writeRaw)
+ * Persistence: ~/.pulseed/dependency-graph.json (via StateManager.readRaw/writeRaw)
  */
 export class GoalDependencyGraph {
   private stateManager: StateManager;

@@ -10,7 +10,7 @@ supported_events:
   - approval_needed
   - stall_detected
   - trust_change
-description: "Send SeedPulse events to PagerDuty via Events API v2"
+description: "Send PulSeed events to PagerDuty via Events API v2"
 config_schema:
   routing_key:
     type: string
@@ -19,12 +19,12 @@ config_schema:
   source:
     type: string
     required: false
-    description: "Event source identifier (defaults to 'seedpulse')"
+    description: "Event source identifier (defaults to 'pulseed')"
   component:
     type: string
     required: false
     description: "Component name to include in the event"
 entry_point: "src/index.ts"
-min_seedpulse_version: "0.1.0"
+min_pulseed_version: "0.1.0"
 permissions:
   network: true

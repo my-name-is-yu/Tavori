@@ -13,12 +13,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { EventServer } from "../src/runtime/event-server.js";
-import type { SeedPulseEvent } from "../src/types/drive.js";
+import type { PulSeedEvent } from "../src/types/drive.js";
 import { makeTempDir } from "./helpers/temp-dir.js";
 
 // ─── Helpers ───
 
-const validEvent: SeedPulseEvent = {
+const validEvent: PulSeedEvent = {
   type: "external",
   source: "test-watcher",
   timestamp: new Date().toISOString(),
@@ -127,7 +127,7 @@ describe("file watcher — detects new JSON files", () => {
     await waitFor(() => mockDriveSystem.writeEvent.mock.calls.length > 0, 8000);
 
     expect(mockDriveSystem.writeEvent).toHaveBeenCalledOnce();
-    const called = mockDriveSystem.writeEvent.mock.calls[0][0] as SeedPulseEvent;
+    const called = mockDriveSystem.writeEvent.mock.calls[0][0] as PulSeedEvent;
     expect(called.type).toBe("external");
     expect(called.source).toBe("test-watcher");
   });
@@ -150,7 +150,7 @@ describe("file watcher — detects new JSON files", () => {
     const eventsDir = path.join(tmpDir, "events");
     server.startFileWatcher();
 
-    const event: SeedPulseEvent = {
+    const event: PulSeedEvent = {
       type: "internal",
       source: "core-loop",
       timestamp: "2026-03-17T00:00:00.000Z",
@@ -160,7 +160,7 @@ describe("file watcher — detects new JSON files", () => {
 
     await waitFor(() => mockDriveSystem.writeEvent.mock.calls.length > 0, 8000);
 
-    const called = mockDriveSystem.writeEvent.mock.calls[0][0] as SeedPulseEvent;
+    const called = mockDriveSystem.writeEvent.mock.calls[0][0] as PulSeedEvent;
     expect(called.type).toBe("internal");
     expect(called.source).toBe("core-loop");
     expect(called.data).toEqual({ reason: "stall" });

@@ -1,6 +1,6 @@
 // ─── WebSocketDataSourceAdapter ───
 //
-// A SeedPulse data source plugin that subscribes to a WebSocket stream.
+// A PulSeed data source plugin that subscribes to a WebSocket stream.
 // Uses a latest-value cache keyed by dimension_name. Auto-reconnects with
 // exponential backoff (1s → 2s → 4s … max 30s).
 
