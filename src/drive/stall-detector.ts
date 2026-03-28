@@ -18,6 +18,14 @@ const BASE_DEFAULT_N = 5;
 // Improvements smaller than this are treated as noise (no reset).
 const MIN_IMPROVEMENT_DELTA = 0.05;
 
+// ─── Achieved-dimension gap threshold ───
+// When ALL recent window entries are at or below this value, the dimension is
+// considered achieved (satisficed) and should not be flagged as stalled.
+// Aligned with SatisficingJudge: a gap this small means the dimension value
+// effectively meets its threshold. Kept separate from MIN_IMPROVEMENT_DELTA
+// because the two concepts are distinct: noise vs. completion.
+const ACHIEVED_GAP_THRESHOLD = 0.02;
+
 // ─── Time thresholds ───
 
 const DEFAULT_DURATION_HOURS_BY_CATEGORY: Record<string, number> = {
@@ -126,6 +134,11 @@ export class StallDetector {
     const oldest = recent[0].normalized_gap;
     const latest = recent[recent.length - 1].normalized_gap;
 
+    // Achieved dimensions (all window entries near zero) are not stalled — they're done.
+    // Checking the full window prevents a single noisy data point from suppressing a real stall.
+    const isAchieved = recent.every(e => e.normalized_gap <= ACHIEVED_GAP_THRESHOLD);
+    if (isAchieved) return null;
+
     // "No improvement" = latest gap has not decreased by at least MIN_IMPROVEMENT_DELTA
     // Trivial improvements (< 0.05) are treated as noise and do not reset stall detection.
     if (oldest - latest >= MIN_IMPROVEMENT_DELTA) {
@@ -219,6 +232,7 @@ export class StallDetector {
     }
 
     let zeroProgressCount = 0;
+    let achievedCount = 0;
 
     for (const [, gapHistory] of allDimensionGaps) {
       if (gapHistory.length < loopThreshold + 1) {
@@ -235,10 +249,23 @@ export class StallDetector {
       const oldest = recent[0].normalized_gap;
       const latest = recent[recent.length - 1].normalized_gap;
 
+      // Skip achieved dimensions — they're done, not stalled.
+      // A near-complete goal must not be flagged as "goal_infeasible".
+      const isAchieved = recent.every(e => e.normalized_gap <= ACHIEVED_GAP_THRESHOLD);
+      if (isAchieved) {
+        achievedCount++;
+        continue;
+      }
+
       if (oldest - latest >= MIN_IMPROVEMENT_DELTA) {
         // At least one dimension improved meaningfully — not a global stall
         return null;
       }
+    }
+
+    // If all dimensions are achieved (or zero-progress with all achieved), no stall
+    if (achievedCount + zeroProgressCount === allDimensionGaps.size && achievedCount > 0) {
+      return null;
     }
 
     // Only trigger zero-progress global stall if ALL dimensions are zero-progress
@@ -255,7 +282,7 @@ export class StallDetector {
       });
     }
 
-    // All dimensions are non-improving (normal stall path)
+    // All remaining (non-achieved) dimensions are non-improving (normal stall path)
     return StallReportSchema.parse({
       stall_type: "global_stall",
       goal_id: goalId,
