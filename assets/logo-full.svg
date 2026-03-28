@@ -40,6 +40,6 @@
   <circle cx="39.5" cy="71" r="1.6" fill="#FFFFFF" opacity="0.75"/>
   <circle cx="57.5" cy="71" r="1.6" fill="#FFFFFF" opacity="0.75"/>
 
-  <!-- Text: "Seed" + "Pulse" -->
-  <text x="96" y="72" font-family="sans-serif" font-weight="700" font-size="40" letter-spacing="-0.5"><tspan fill="#1A1A1A">Seed</tspan><tspan fill="#4CAF50">Pulse</tspan></text>
+  <!-- Text: "Pul" + "Seed" -->
+  <text x="96" y="72" font-family="sans-serif" font-weight="700" font-size="40" letter-spacing="-0.5"><tspan fill="#1A1A1A">Pul</tspan><tspan fill="#4CAF50">Seed</tspan></text>
 </svg>
