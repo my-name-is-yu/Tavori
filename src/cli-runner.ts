@@ -52,6 +52,7 @@ import { cmdSuggest, cmdImprove } from "./cli/commands/suggest.js";
 import { cmdSetup } from "./cli/commands/setup.js";
 import { cmdKnowledgeList, cmdKnowledgeSearch, cmdKnowledgeStats } from "./cli/commands/knowledge.js";
 import { printUsage, formatOperationError } from "./cli/utils.js";
+import { ensureProviderConfig } from "./cli/ensure-api-key.js";
 
 const logger = getCliLogger();
 
@@ -104,6 +105,7 @@ export class CLIRunner {
     await this.init();
 
     if (argv.length === 0) {
+      await ensureProviderConfig();
       printUsage();
       return 1;
     }
