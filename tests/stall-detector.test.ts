@@ -818,3 +818,83 @@ describe("zero-progress early detection", () => {
     expect(result!.stall_type).toBe("dimension_stall");
   });
 });
+
+// ─── Achieved-dimension guard (ACHIEVED_GAP_THRESHOLD) ───
+
+describe("achieved-dimension guard", () => {
+  // checkDimensionStall tests
+
+  it("returns null when full window is at or below achieved threshold (0.02)", () => {
+    // All 6 entries <= 0.02 → dimension is achieved → not a stall
+    const history = makeGapHistory([0.02, 0.01, 0.01, 0.02, 0.00, 0.01]);
+    const result = detector.checkDimensionStall("goal-1", "dim-a", history);
+    expect(result).toBeNull();
+  });
+
+  it("returns null when full window is exactly at threshold (0.02)", () => {
+    // Boundary: exactly 0.02 for all entries → achieved
+    const history = makeGapHistory([0.02, 0.02, 0.02, 0.02, 0.02, 0.02]);
+    const result = detector.checkDimensionStall("goal-1", "dim-a", history);
+    expect(result).toBeNull();
+  });
+
+  it("does NOT skip when dimension is just above threshold (0.03 > 0.02)", () => {
+    // Latest is 0.03 — just above threshold; still checked for stall
+    const history = makeGapHistory([0.03, 0.03, 0.03, 0.03, 0.03, 0.03]);
+    const result = detector.checkDimensionStall("goal-1", "dim-a", history);
+    expect(result).not.toBeNull();
+    expect(result!.stall_type).toBe("dimension_stall");
+  });
+
+  it("does NOT skip when oscillating around threshold (some above, some below)", () => {
+    // Entries alternate between 0.01 (below) and 0.05 (above) — not all achieved
+    const history = makeGapHistory([0.01, 0.05, 0.01, 0.05, 0.01, 0.05]);
+    const result = detector.checkDimensionStall("goal-1", "dim-a", history);
+    // Not all below threshold, so guard does not fire — check for stall normally
+    // oldest=0.01, latest=0.05 → no improvement → stall
+    expect(result).not.toBeNull();
+    expect(result!.stall_type).toBe("dimension_stall");
+  });
+
+  it("does NOT skip when only the latest entry is below threshold", () => {
+    // Only last entry is 0.01; earlier entries are 0.50 — not full-window achieved
+    const history = makeGapHistory([0.50, 0.50, 0.50, 0.50, 0.50, 0.01]);
+    // oldest=0.50, latest=0.01 → improvement of 0.49 >= MIN_IMPROVEMENT_DELTA → null (improving)
+    const result = detector.checkDimensionStall("goal-1", "dim-a", history);
+    expect(result).toBeNull(); // null because of meaningful improvement, not achieved guard
+  });
+
+  // checkGlobalStall tests
+
+  it("checkGlobalStall: returns null when all dimensions are achieved", () => {
+    // Both dimensions have all-window gaps <= 0.02 → both achieved → no global stall
+    const dims = new Map([
+      ["dim-a", makeGapHistory([0.01, 0.01, 0.01, 0.01, 0.01, 0.01])],
+      ["dim-b", makeGapHistory([0.02, 0.02, 0.02, 0.02, 0.02, 0.02])],
+    ]);
+    const result = detector.checkGlobalStall("goal-1", dims);
+    expect(result).toBeNull();
+  });
+
+  it("checkGlobalStall: returns null when one dim achieved, one improving", () => {
+    // dim-a achieved, dim-b improving — no global stall
+    const dims = new Map([
+      ["dim-a", makeGapHistory([0.01, 0.01, 0.01, 0.01, 0.01, 0.01])],
+      ["dim-b", makeGapHistory([0.50, 0.45, 0.40, 0.35, 0.30, 0.20])], // improving by 0.30
+    ]);
+    const result = detector.checkGlobalStall("goal-1", dims);
+    expect(result).toBeNull();
+  });
+
+  it("checkGlobalStall: returns global_stall when one dim achieved, one flat (non-achieved)", () => {
+    // dim-a achieved; dim-b flat at 0.5 → non-achieved, non-improving → global stall
+    const dims = new Map([
+      ["dim-a", makeGapHistory([0.01, 0.01, 0.01, 0.01, 0.01, 0.01])],
+      ["dim-b", makeGapHistory([0.50, 0.50, 0.50, 0.50, 0.50, 0.50])],
+    ]);
+    const result = detector.checkGlobalStall("goal-1", dims);
+    expect(result).not.toBeNull();
+    expect(result!.stall_type).toBe("global_stall");
+    expect(result!.suggested_cause).toBe("goal_infeasible");
+  });
+});
