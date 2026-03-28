@@ -61,6 +61,11 @@ export const TaskSchema = z.object({
   heartbeat_at: z.string().datetime().nullable().default(null),
 
   created_at: z.string(),
+
+  // Persisted execution/verification results
+  execution_output: z.string().optional(),
+  verification_verdict: VerdictEnum.optional(),
+  verification_evidence: z.array(z.string()).optional(),
 });
 export type Task = z.infer<typeof TaskSchema>;
 

@@ -460,6 +460,8 @@ export async function handleVerdict(
         consecutive_failure_count: 0,
         status: "completed" as const,
         completed_at: now,
+        verification_verdict: verificationResult.verdict,
+        verification_evidence: verificationResult.evidence?.map((e) => e.description ?? String(e)) ?? [],
       };
       await deps.stateManager.writeRaw(
         `tasks/${task.goal_id}/${task.id}.json`,
@@ -535,8 +537,13 @@ export async function handleVerdict(
             await deps.stateManager.writeRaw(`goals/${task.goal_id}/goal.json`, goal);
           }
         }
-        await appendTaskHistory(deps, task.goal_id, task);
-        return { action: "keep", task };
+        const partialTask = {
+          ...task,
+          verification_verdict: verificationResult.verdict,
+          verification_evidence: verificationResult.evidence?.map((e) => e.description ?? String(e)) ?? [],
+        };
+        await appendTaskHistory(deps, task.goal_id, partialTask);
+        return { action: "keep", task: partialTask };
       }
       // Direction wrong — delegate to handleFailure
       return handleFailure(deps, task, verificationResult);
@@ -562,6 +569,8 @@ export async function handleFailure(
   const updatedTask = {
     ...task,
     consecutive_failure_count: task.consecutive_failure_count + 1,
+    verification_verdict: verificationResult.verdict,
+    verification_evidence: verificationResult.evidence?.map((e) => e.description ?? String(e)) ?? [],
   };
 
   // Record failure with TrustManager

@@ -219,6 +219,7 @@ export async function executeTask(
     status: newStatus,
     completed_at: now,
     ...(newStatus === "timed_out" ? { timeout_at: now } : {}),
+    execution_output: result.output ? result.output.slice(0, 2000) : undefined,
   };
   await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, updatedTask);
 

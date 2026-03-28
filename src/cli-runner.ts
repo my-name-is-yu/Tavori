@@ -22,6 +22,8 @@
 //   pulseed knowledge list             List all shared knowledge entries
 //   pulseed knowledge search <query>   Search knowledge entries by keyword
 //   pulseed knowledge stats            Show knowledge base statistics
+//   pulseed task list --goal <id>      List tasks for a goal
+//   pulseed task show <taskId> --goal <id>  Show task details
 
 import { parseArgs } from "node:util";
 
@@ -51,6 +53,7 @@ import { cmdStart, cmdStop, cmdCron } from "./cli/commands/daemon.js";
 import { cmdSuggest, cmdImprove } from "./cli/commands/suggest.js";
 import { cmdSetup } from "./cli/commands/setup.js";
 import { cmdKnowledgeList, cmdKnowledgeSearch, cmdKnowledgeStats } from "./cli/commands/knowledge.js";
+import { cmdTaskList, cmdTaskShow } from "./cli/commands/task-read.js";
 import { printUsage, formatOperationError } from "./cli/utils.js";
 import { ensureProviderConfig } from "./cli/ensure-api-key.js";
 
@@ -431,6 +434,27 @@ export class CLIRunner {
 
       logger.error(`Unknown knowledge subcommand: "${knowledgeSubcommand}"`);
       logger.error("Available: knowledge list, knowledge search, knowledge stats");
+      return 1;
+    }
+
+    if (subcommand === "task") {
+      const taskSubcommand = argv[1];
+
+      if (!taskSubcommand) {
+        logger.error("Error: task subcommand required. Available: task list, task show");
+        return 1;
+      }
+
+      if (taskSubcommand === "list") {
+        return await cmdTaskList(this.stateManager, argv.slice(2));
+      }
+
+      if (taskSubcommand === "show") {
+        return await cmdTaskShow(this.stateManager, argv.slice(2));
+      }
+
+      logger.error(`Unknown task subcommand: "${taskSubcommand}"`);
+      logger.error("Available: task list, task show");
       return 1;
     }
 
