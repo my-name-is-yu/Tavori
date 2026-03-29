@@ -4,59 +4,52 @@
  */
 
 import type { Goal } from "../types/goal.js";
-import { computeRawGap, normalizeGap } from "../drive/gap-calculator.js";
+import {
+  calculateDimensionGap,
+  aggregateGaps,
+} from "../drive/gap-calculator.js";
 
 /** Preferred difficulty band for curriculum-based selection. */
 export const MEDIUM_BAND = { min: 0.3, max: 0.7 };
 
+/** Goals with aggregated gap below this threshold are treated as medium difficulty to avoid starvation. */
+export const NEAR_COMPLETE_GAP_THRESHOLD = 0.1;
+
 /**
  * Estimate difficulty for a single goal.
- * difficulty = aggregatedGap × (1 - aggregatedConfidence), clamped to [0, 1].
- * Returns 0.5 (medium) when dimensions is empty.
+ * difficulty = aggregatedGap × (1 - minConfidence), clamped to [0, 1].
+ * Uses calculateDimensionGap for consistent gap computation, aggregateGaps for aggregation.
+ * Returns 0.5 (medium) when dimensions is empty or goal is near-complete.
  */
 export function estimateDifficulty(goal: Goal): number {
   const dims = goal.dimensions;
   if (dims.length === 0) return 0.5;
 
-  // Compute normalized gap per dimension
-  const gapValues: number[] = [];
-  const weights: number[] = [];
-  const confidences: number[] = [];
+  const weightedGaps = dims.map((d) =>
+    calculateDimensionGap(
+      {
+        name: d.name,
+        current_value: d.current_value,
+        threshold: d.threshold,
+        confidence: d.confidence,
+        uncertainty_weight: d.uncertainty_weight,
+      },
+      goal.uncertainty_weight
+    )
+  );
 
-  for (const d of dims) {
-    let normalizedGap: number;
-    if (d.current_value === null) {
-      normalizedGap = 1.0;
-    } else {
-      const raw = computeRawGap(d.current_value, d.threshold);
-      normalizedGap = normalizeGap(raw, d.threshold, d.current_value);
-    }
-    gapValues.push(Math.min(1, Math.max(0, normalizedGap)));
-    weights.push(d.weight ?? 1.0);
-    confidences.push(d.confidence);
-  }
+  // Use normalized_gap (pre-uncertainty-weighting) so the confidence multiplier
+  // below applies uniformly, including for null current_value (which yields 1.0).
+  const gapValues = weightedGaps.map((wg) => wg.normalized_gap);
+  const weights = dims.map((d) => d.weight ?? 1.0);
+  const minConfidence = Math.min(...dims.map((d) => d.confidence));
 
-  // Aggregate gap by goal's gap_aggregation setting
-  let aggregatedGap: number;
-  const agg = goal.gap_aggregation;
-  if (agg === "max") {
-    aggregatedGap = Math.max(...gapValues);
-  } else if (agg === "weighted_avg") {
-    const totalWeight = weights.reduce((s, w) => s + w, 0);
-    if (totalWeight === 0) {
-      aggregatedGap = 0;
-    } else {
-      aggregatedGap = gapValues.reduce((s, g, i) => s + g * weights[i], 0) / totalWeight;
-    }
-  } else {
-    // "sum" — capped at 1
-    aggregatedGap = Math.min(1, gapValues.reduce((s, g) => s + g, 0));
-  }
+  const aggregatedGap = aggregateGaps(gapValues, goal.gap_aggregation, weights);
 
-  // Aggregate confidence: most conservative (minimum)
-  const aggregatedConfidence = Math.min(...confidences);
+  // Near-complete goals (gap < threshold) should not be starved — treat as medium difficulty
+  if (aggregatedGap < NEAR_COMPLETE_GAP_THRESHOLD) return 0.5;
 
-  const difficulty = aggregatedGap * (1 - aggregatedConfidence);
+  const difficulty = aggregatedGap * (1 - minConfidence);
   return Math.min(1, Math.max(0, difficulty));
 }
 
