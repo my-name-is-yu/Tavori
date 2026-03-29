@@ -82,7 +82,7 @@ Used across CLI output, TUI, documentation, and error pages.
 | Headings | Quicksand | Round letterforms echo Seedy's shape; weights 500–700 |
 | Body | Inter | Clean, neutral, excellent at small sizes |
 | Code / Monospace | JetBrains Mono | CLI output, code blocks, inline code |
-| Japanese | Rounded Mplus 1c | 丸ゴシック — keeps the round, friendly feel in Japanese contexts |
+| Japanese | Rounded Mplus 1c | Rounded gothic style — keeps the round, friendly feel in Japanese contexts |
 
 ### Scale (rem, base 16px)
 

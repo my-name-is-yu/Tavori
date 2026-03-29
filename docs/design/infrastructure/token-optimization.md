@@ -33,7 +33,7 @@ DriveScorer and SatisficingJudge are fully deterministic (zero LLM calls). Gap c
 
 ---
 
-## 2. Pillar 1: Staged Observation (段階的観測)
+## 2. Pillar 1: Staged Observation
 
 ### Problem
 
@@ -139,7 +139,7 @@ The confidence decay (0.95x per skip) ensures that after ~20 consecutive skips, 
 
 ---
 
-## 3. Pillar 2: State Diff + Loop Skip (状態diff + ループスキップ)
+## 3. Pillar 2: State Diff + Loop Skip
 
 ### Problem
 
@@ -250,7 +250,7 @@ For a stable goal (e.g., monitoring/maintenance), most iterations may be skippab
 
 ---
 
-## 4. Pillar 3: 2-Model Routing (2モデルルーティング)
+## 4. Pillar 3: 2-Model Routing
 
 ### Problem
 

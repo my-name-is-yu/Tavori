@@ -120,22 +120,6 @@ In MVP, "scheduling" is the user's (or system cron's) responsibility. PulSeed do
 - Users approve/reject tasks via the approval overlay (`ApprovalOverlay`) on screen. Approval decisions are returned to `TaskLifecycle`'s `approvalFn` via a Promise (same interface as the CLI version's readline reading)
 
 ```
-src/tui/
-├── entry.ts              — DI wiring + Ink render (startTUI() entry point)
-├── app.tsx               — Root component, view switching
-├── use-loop.ts           — LoopState management, CoreLoop start/stop (custom hook)
-├── dashboard.tsx         — Goal and dimension progress display
-├── chat.tsx              — Chat interface
-├── approval-overlay.tsx  — Task approval UI (via CoreLoop→TaskLifecycle→approvalFn)
-├── help-overlay.tsx      — Help display
-├── report-view.tsx       — Report display
-├── actions.ts            — TUI action definitions (command parsing and execution)
-├── intent-recognizer.ts  — User input intent recognition
-├── markdown-renderer.ts  — Markdown rendering
-└── types/                — TUI-specific type definitions
-```
-
-```
 pulseed tui
   ↓
 entry.ts (DI wiring + Ink render)
@@ -246,7 +230,7 @@ The concept of "continuing from the previous session" doesn't exist. Each sessio
 
 ### Context Assembly
 
-> For the specific algorithm for context selection (priority-based inclusion rules, exclusion rules per session type, MVP's fixed top-4 method), see `design/session-and-context.md` §4. This section describes only the overview.
+> For the specific algorithm for context selection (priority-based inclusion rules, exclusion rules per session type, MVP's fixed top-4 method), see `design/execution/session-and-context.md` §4. This section describes only the overview.
 
 When launching a session, PulSeed assembles and passes only the information that session needs.
 
@@ -307,13 +291,13 @@ PulSeed's information is divided into three layers.
 
 **Goal State**: The goal tree, state vectors, and progress records saved in persistent files. Maintains consistency across sessions. Loaded into the session's working memory as needed. This is PulSeed's "medium-term memory."
 
-**Experience Log**: Records of state → action → result. The data that serves as the foundation for learning. Recent raw logs are kept as Short-term Memory in `~/.pulseed/memory/short-term/`, and when they exceed the retention period, they are compressed into patterns and lessons in Long-term Memory (`~/.pulseed/memory/long-term/`) via LLM summarization. Long-term lessons can be referenced across goals and are selectively injected into Working Memory as priority 6 in `session-and-context.md` §4. Therefore, "not referenced in individual sessions" applies only to raw logs (Short-term raw JSON); compressed lessons do enter session context. See `design/memory-lifecycle.md` for details.
+**Experience Log**: Records of state → action → result. The data that serves as the foundation for learning. Recent raw logs are kept as Short-term Memory in `~/.pulseed/memory/short-term/`, and when they exceed the retention period, they are compressed into patterns and lessons in Long-term Memory (`~/.pulseed/memory/long-term/`) via LLM summarization. Long-term lessons can be referenced across goals and are selectively injected into Working Memory as priority 6 in `design/execution/session-and-context.md` §4. Therefore, "not referenced in individual sessions" applies only to raw logs (Short-term raw JSON); compressed lessons do enter session context. See `design/knowledge/memory-lifecycle.md` for details.
 
 The key point of this hierarchy is that most information lives outside the context window. The context window is a window that holds only "what's needed right now" — it is not the place to store all of PulSeed's knowledge.
 
 ### Memory Lifecycle
 
-`design/memory-lifecycle.md` defines the specific implementation of the 3-layer memory model.
+`design/knowledge/memory-lifecycle.md` defines the specific implementation of the 3-layer memory model.
 
 ```
 ~/.pulseed/memory/

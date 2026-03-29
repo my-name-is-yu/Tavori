@@ -90,8 +90,6 @@ Each node has its own state, completion criteria, and satisficing threshold. The
 Example: live happily with dog → continuous health monitoring → build monitoring code → analyze sensor data
 Example: 2x revenue → halve churn rate → improve onboarding → implement tutorial
 
-> **Implementation status (Stage 14 complete)**: Implemented as the `GoalTreeManager` class in `src/goal-tree-manager.ts`. Supports N-level decomposition, validation, pruning, and reconstruction. `StateAggregator` in `src/state-aggregator.ts` aggregates child node states and controls completion cascades. `TreeLoopOrchestrator` in `src/tree-loop-orchestrator.ts` runs each node's independent loop in parallel. Launchable from the CLI with the `--tree` option.
-
 ### 5.3 Capability Registry (Dynamic Capability Management)
 
 PulSeed doesn't start with all capabilities. Each time a user grants permissions, tools, or data sources, what it can do expands.
@@ -111,8 +109,6 @@ It generates hypotheses, prioritizes them, experiments, measures effectiveness, 
 ### 5.5 Portfolio Management
 
 Multiple strategies are run in parallel and managed as a portfolio. Focus on what's working, cut what isn't. Not sequential execution, but optimization of resource allocation.
-
-> **Implementation status (Stage 14 complete)**: `CrossGoalPortfolio` in `src/cross-goal-portfolio.ts` implements cross-goal priority calculation, resource allocation, and rebalancing. `StrategyTemplateRegistry` in `src/strategy-template-registry.ts` manages strategy templates and applies them to similar situations. `KnowledgeTransfer` in `src/knowledge-transfer.ts` handles cross-goal knowledge and strategy transfer and meta-pattern extraction.
 
 ### 5.6 Time Horizon and Milestones
 

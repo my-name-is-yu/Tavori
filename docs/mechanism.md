@@ -122,7 +122,7 @@ The combination of these three drive forces means that even for the same goal, t
 
 When possible, run multiple strategies in parallel. Rather than betting everything on one hypothesis, spread the investment. Concentrate on strategies where results are visible; cut strategies where they're not.
 
-The **PortfolioManager** implemented in Stage 9 is the concrete implementation of this approach. Each strategy is modeled as an explicit entity (`Strategy`) and managed as a state machine: `candidate → active → evaluating → suspended → completed → terminated`. Resource allocation ratios are automatically readjusted (rebalanced) based on effectiveness measurement results. See `design/portfolio-management.md` for details.
+The **PortfolioManager** implemented in Stage 9 is the concrete implementation of this approach. Each strategy is modeled as an explicit entity (`Strategy`) and managed as a state machine: `candidate → active → evaluating → suspended → completed → terminated`. Resource allocation ratios are automatically readjusted (rebalanced) based on effectiveness measurement results. See `design/execution/portfolio-management.md` for details.
 
 #### "Waiting" as a Strategy
 
@@ -182,7 +182,7 @@ When a knowledge deficiency is detected, a task with the dedicated category `tas
 
 Acquired knowledge is immediately utilized from the next loop. By SessionManager injecting the content of `domain_knowledge.json` into subsequent loop contexts, knowledge becomes referenceable across all task types (observation, gap analysis, strategy selection, task generation). This closes the research→utilization cycle within the core loop.
 
-See `design/knowledge-acquisition.md` for details.
+See `design/knowledge/knowledge-acquisition.md` for details.
 
 ---
 
@@ -210,7 +210,7 @@ Upon receiving a goal, PulSeed first evaluates feasibility in 6 steps. The hones
 
 **Negotiation flow:**
 
-0. **Ethics/Legal Gate** — Determines whether the goal's purpose and means are ethically and legally permissible. If rejected, no subsequent steps are taken (see `design/goal-ethics.md` for details).
+0. **Ethics/Legal Gate** — Determines whether the goal's purpose and means are ethically and legally permissible. If rejected, no subsequent steps are taken (see `design/goal/goal-ethics.md` for details).
 1. **Goal Reception** — Interprets the vague natural-language goal. Doesn't require a precise definition from the start.
 2. **Dimension Decomposition Probe** — LLM decomposes the goal into multiple measurable dimensions (e.g., revenue, customer count, churn rate).
 3. **Baseline Observation** — Executes the first observation cycle to establish current values and observation confidence for each dimension.
@@ -221,7 +221,7 @@ Upon receiving a goal, PulSeed first evaluates feasibility in 6 steps. The hones
 
 **Renegotiation**: Renegotiation occurs after stall detection, when new information during execution causes premise changes, or upon explicit user request for re-evaluation. Once a target is agreed upon, it is pursued with full effort.
 
-See `design/goal-negotiation.md` for details.
+See `design/goal/goal-negotiation.md` for details.
 
 ### Goal Decomposition
 
@@ -263,7 +263,7 @@ When a stall is detected, PulSeed responds autonomously.
 
 Not leaving stalls unaddressed is itself an important function of PulSeed.
 
-Note that when the cause of the stall is the unrealistic nature of the goal itself or changes in premises, stall detection triggers goal renegotiation. See `design/goal-negotiation.md` §6 for renegotiation details.
+Note that when the cause of the stall is the unrealistic nature of the goal itself or changes in premises, stall detection triggers goal renegotiation. See `design/goal/goal-negotiation.md` §6 for renegotiation details.
 
 ---
 
@@ -275,7 +275,7 @@ PulSeed learns from experience.
 
 Every loop is recorded as a log of "observed state → chosen strategy → execution result." As this log accumulates, the pattern of "what approach worked in what situation" becomes visible.
 
-This accumulation is implemented as a **3-layer memory model**. Working Memory (information referenced in the current loop), Short-term Memory (experience logs from the most recent loops), and Long-term Memory (patterns and knowledge retained beyond goals) operate in coordination. See `design/memory-lifecycle.md` for details.
+This accumulation is implemented as a **3-layer memory model**. Working Memory (information referenced in the current loop), Short-term Memory (experience logs from the most recent loops), and Long-term Memory (patterns and knowledge retained beyond goals) operate in coordination. See `design/knowledge/memory-lifecycle.md` for details.
 
 ### Improving Discovery Accuracy
 
@@ -291,8 +291,6 @@ Accumulated experience improves each step of the loop.
 When all goals are satisfied, PulSeed doesn't stop — it proposes new goals. This emerges from accumulated experience. From past patterns, it notices "there's still room for improvement in this domain" or "this approach might be effective in another context" and proposes to the user.
 
 Curiosity is always just a proposal. If the user doesn't accept it, it isn't pursued.
-
-> **Implementation status (Stage 11C)**: Implemented as the `CuriosityEngine` class in `src/curiosity-engine.ts`. Evaluates 5 trigger conditions (goal completion, prolonged stall, knowledge gap detected, unexplored area discovered, high pattern similarity) and uses LLM to generate new goal candidates. Includes a learning feedback loop (proposal → user response → score update) and resource budget management to suppress the number of LLM calls. Integrated as an optional dependency to CoreLoop; when CuriosityEngine is not injected, the curiosity phase is skipped without affecting existing loop behavior.
 
 ### Learning Pipeline
 
@@ -345,26 +343,6 @@ The learning pipeline runs at the following timings.
 | **Stall detected** | Recent experience logs related to the stall | Identify stall cause patterns and devise countermeasures |
 | **Periodic review** | Experience logs for specified period | Regular review. Detecting gradual changes |
 
-> **Stage 14E implementation status**: All 4 triggers above are implemented in the `LearningPipeline` class in `src/learning-pipeline.ts`. Cross-goal pattern sharing is realized via semantic similarity matching with `VectorIndex`, automatically transferring strategy patterns that were effective for one goal to similar goals.
-
-#### Stage 8 and Beyond / Stage 14 Implementation Status
-
-| Item | Implementation Status |
-|------|----------------------|
-| Analysis triggers | In addition to goal completion and stall detection, **also fires mid-core-loop due to knowledge deficiency signals**. Knowledge deficiencies detected during gap recognition or strategy selection immediately generate `KnowledgeAcquisitionTask` |
-| Feedback destinations | Not limited to strategy selection — **reflected in all task types via SessionManager context injection**. Knowledge persisted in `domain_knowledge.json` is also referenceable during observation, gap analysis, and task generation in subsequent loops |
-| Pattern accumulation | PortfolioManager maintains an effectiveness tracking log for each strategy, and that data is passed to StrategyManager. Strategy pattern sharing across similar domains (not just within a goal) is also in scope |
-| Memory structure | Implemented as a **3-layer memory model** (Working / Short-term / Long-term). See `design/memory-lifecycle.md` for details |
-| EthicsGate Layer 1 (Stage 11A) | Implemented as a rule-based blocklist check that doesn't call LLM. Immediately evaluates 6 categories (violence, fraud, privacy violation, legally prohibited acts, discrimination, other serious risks) and is placed at the very front of goal negotiation with zero inspection cost |
-| CharacterConfigManager (Stage 11B) | Implemented in `src/character-config.ts`. Manages 4-axis parameters (curiosity, caution, sociability, patience) in a file-based manner, dynamically adjusting thresholds of each module (SatisficingJudge, CuriosityEngine, etc.) from persona settings |
-| CuriosityEngine (Stage 11C) | Implemented in `src/curiosity-engine.ts`. Has 5 trigger types, LLM-based goal proposal generation, learning feedback, and resource budget management, integrated as an optional dependency to CoreLoop |
-
-The expansion of analysis triggers and the widening of feedback destinations means the learning pipeline is no longer merely "a review after goal completion." Knowledge acquisition and utilization are woven into the core loop, creating a structure where discovery accuracy increases as the loop runs.
-
-> **Stage 12 (complete)**: Added semantic embedding infrastructure. `EmbeddingClient` (OpenAI/Ollama abstraction), `VectorIndex` (cosine similarity search), `KnowledgeGraph` (concept nodes and relationship edge management), `GoalDependencyGraph` (DAG dependencies, LLM auto-detection). Cross-cutting infrastructure supporting semantic search in KnowledgeManager, CuriosityEngine, and MemoryLifecycleManager.
-
-> **Stage 14 (complete)**: Implemented cross-goal portfolio and learning. `GoalTreeManager` (recursive N-level goal tree decomposition, aggregation, pruning), `StateAggregator` (child node state aggregation, completion cascade), `TreeLoopOrchestrator` (each node's independent loop, parallel execution control), `CrossGoalPortfolio` (cross-goal priority calculation, resource allocation, rebalancing), `StrategyTemplateRegistry` (strategy template management, application to similar situations), `LearningPipeline` (4-trigger learning, cross-goal pattern sharing), `KnowledgeTransfer` (cross-goal knowledge transfer, meta-pattern extraction). 2663 tests passing (53 test files).
-
 ---
 
 ## 5. Integration with Existing Systems
@@ -373,7 +351,7 @@ PulSeed is an engine that discovers "what should be done." For everything else, 
 
 ### Execution
 
-Executing tasks is not PulSeed's job. What PulSeed does is judge "what should be executed" and select "who to delegate to." Various AI agents (CLI type, API type, custom adapters), human actions. The optimal delegation target is chosen based on the nature of the goal and task. See `design/execution-boundary.md` for the detailed delegation model.
+Executing tasks is not PulSeed's job. What PulSeed does is judge "what should be executed" and select "who to delegate to." Various AI agents (CLI type, API type, custom adapters), human actions. The optimal delegation target is chosen based on the nature of the goal and task. See `design/goal/execution-boundary.md` for the detailed delegation model.
 
 ### Persistent Infrastructure
 
@@ -438,4 +416,4 @@ Everything related to execution is delegated.
 
 Expressions like "PulSeed wrote the code" or "PulSeed built the system" are shorthand. More precisely, they mean "PulSeed instructed an agent to implement the code and verified the results" and "PulSeed delegated construction tasks to a group of agents and confirmed the integration."
 
-PulSeed is an entity that thinks, not an entity that acts. See `design/execution-boundary.md` for details.
+PulSeed is an entity that thinks, not an entity that acts. See `design/goal/execution-boundary.md` for details.

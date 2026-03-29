@@ -1,4 +1,4 @@
-# Local LLM Testing Guide (for Older MacBooks)
+# Local LLM Testing Guide
 
 ## Prerequisites
 
@@ -47,7 +47,7 @@ OLLAMA_HOST=0.0.0.0 ollama serve
 ### Common Environment Variables
 
 ```bash
-export TAVORI_LLM_PROVIDER=ollama
+export PULSEED_LLM_PROVIDER=ollama
 export ANTHROPIC_API_KEY=dummy
 ```
 
@@ -127,7 +127,7 @@ ifconfig | grep "inet "
 curl http://<older-mac-ip>:11434/v1/models
 
 # Run PulSeed from your development machine
-TAVORI_LLM_PROVIDER=ollama \
+PULSEED_LLM_PROVIDER=ollama \
 OLLAMA_BASE_URL=http://<older-mac-ip>:11434 \
 node dist/cli-runner.js run
 ```

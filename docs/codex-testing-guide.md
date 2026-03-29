@@ -40,7 +40,7 @@ The first time you run Codex CLI, it requires OAuth authentication via your brow
 ### Required
 
 ```bash
-export TAVORI_LLM_PROVIDER=openai
+export PULSEED_LLM_PROVIDER=openai
 export OPENAI_API_KEY=sk-...
 ```
 
@@ -66,7 +66,7 @@ Create a `.env` file at the project root (**confirm it is in .gitignore**):
 
 ```bash
 # .env
-TAVORI_LLM_PROVIDER=openai
+PULSEED_LLM_PROVIDER=openai
 OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxx
 OPENAI_MODEL=gpt-5.4-mini
 
@@ -99,7 +99,7 @@ npx pulseed <subcommand>
 ### Step 1: Verify the Connection
 
 ```bash
-TAVORI_LLM_PROVIDER=openai \
+PULSEED_LLM_PROVIDER=openai \
 OPENAI_API_KEY=sk-... \
 node dist/cli-runner.js status
 ```
@@ -109,7 +109,7 @@ If the command starts without errors and displays the goal list (even if empty),
 ### Step 2: Add a Goal
 
 ```bash
-TAVORI_LLM_PROVIDER=openai \
+PULSEED_LLM_PROVIDER=openai \
 OPENAI_API_KEY=sk-... \
 node dist/cli-runner.js goal add "Create a file hello.txt and write 'Hello, PulSeed!' in it"
 ```
@@ -124,7 +124,7 @@ node dist/cli-runner.js goal list
 ### Step 3: Run One Core Loop Cycle
 
 ```bash
-TAVORI_LLM_PROVIDER=openai \
+PULSEED_LLM_PROVIDER=openai \
 OPENAI_API_KEY=sk-... \
 node dist/cli-runner.js run
 ```
@@ -153,7 +153,7 @@ Example goal JSON (`goal-codex-test.json`):
 Run:
 
 ```bash
-TAVORI_LLM_PROVIDER=openai \
+PULSEED_LLM_PROVIDER=openai \
 OPENAI_API_KEY=sk-... \
 node dist/cli-runner.js run
 ```
@@ -240,7 +240,7 @@ You can switch providers simply by changing environment variables.
 ### Use OpenAI
 
 ```bash
-export TAVORI_LLM_PROVIDER=openai
+export PULSEED_LLM_PROVIDER=openai
 export OPENAI_API_KEY=sk-...
 # OPENAI_MODEL=gpt-5.4-mini  # omit to use default
 ```
@@ -248,7 +248,7 @@ export OPENAI_API_KEY=sk-...
 ### Switch Back to Anthropic (Default)
 
 ```bash
-unset TAVORI_LLM_PROVIDER
+unset PULSEED_LLM_PROVIDER
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
@@ -258,12 +258,12 @@ export ANTHROPIC_API_KEY=sk-ant-...
 # .env — uncomment the provider you want to use, then run: source .env
 
 # --- OpenAI ---
-TAVORI_LLM_PROVIDER=openai
+PULSEED_LLM_PROVIDER=openai
 OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxx
 OPENAI_MODEL=gpt-5.4-mini
 
 # --- Anthropic (default) ---
-# TAVORI_LLM_PROVIDER=
+# PULSEED_LLM_PROVIDER=
 # ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxxxxx
 ```
 

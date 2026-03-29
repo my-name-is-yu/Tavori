@@ -13,7 +13,7 @@
 
 Set a goal. PulSeed observes the world, finds the gap, generates the next task, delegates it to any AI agent, verifies the result, and loops — until done.
 
-The project is documented for local use; follow the Quick Start steps to run PulSeed from source or as an installed CLI.
+The project is documented for local use; follow the Quick Start steps to run PulSeed from source or as an installed CLI. For a guided walkthrough, see [Getting Started](docs/getting-started.md).
 
 <br/>
 </div>
@@ -72,7 +72,7 @@ PulSeed is a **task discovery engine**. You give it a long-term goal — "double
 
 PulSeed observes current coverage, identifies untested modules, delegates test writing to a coding agent, and verifies results with actual test runs.
 
-*Demo coming soon* · [Example goal config](docs/design/goal-negotiation.md)
+See [docs/usecase.md](docs/usecase.md) for full walkthroughs · [Example goal config](docs/design/goal-negotiation.md)
 
 ### Revenue Target
 
@@ -80,7 +80,7 @@ PulSeed observes current coverage, identifies untested modules, delegates test w
 
 PulSeed tracks revenue metrics, identifies growth opportunities, delegates research and implementation tasks, and measures real outcomes.
 
-*Demo coming soon*
+See [docs/usecase.md](docs/usecase.md) for full walkthroughs.
 
 ### Health Monitoring
 
@@ -88,7 +88,7 @@ PulSeed tracks revenue metrics, identifies growth opportunities, delegates resea
 
 PulSeed monitors health indicators, schedules vet checkups, tracks nutrition, and escalates to you when human judgment is needed.
 
-*Demo coming soon*
+See [docs/usecase.md](docs/usecase.md) for full walkthroughs.
 
 ### OpenClaw Integration
 
@@ -96,7 +96,7 @@ PulSeed monitors health indicators, schedules vet checkups, tracks nutrition, an
 
 PulSeed detects the goal in your OpenClaw conversation, spawns agent sessions, tracks file-by-file migration progress, and auto-completes when done.
 
-*Demo coming soon* — ClawCon 2026
+See [docs/usecase.md](docs/usecase.md) for full walkthroughs.
 
 ## How It Works
 
@@ -117,36 +117,7 @@ For detailed architecture, see [docs/architecture-map.md](docs/architecture-map.
 
 ## Loop-Stall Prevention
 
-PulSeed runs the `Observe → Gap → Score → Task → Execute → Verify → Loop` cycle until the goal is complete or until the orchestrator must stop because progress cannot be made.
-
-### Loop-Stall Prevention and Measurement
-
-1. A **stall** is a run that exits because the orchestrator cannot make further measurable progress on the current goal node.
-2. **Stall rate** is calculated as `stall_rate = stalled_runs / total_runs`, where `stalled_runs` is the number of runs that exited due to stall and `total_runs` is the number of finished runs in the same measurement window.
-3. The **median observation-delegate-verify loop count for completed goals** is the median, across completed goals, of the number of `Observe → Delegate → Verify` cycles executed before each goal reaches completion.
-4. The **changed-path regression rule** is: any change that affects stall behavior, loop stopping, goal-node progression, or verification outcomes must be covered by `npm run test:changed`, and that command must not introduce new stall-related failures.
-
-The operator should stop the loop when any of these conditions is true:
-
-1. The goal is complete, meaning the observed dimensions meet their thresholds with sufficient evidence.
-2. `Verify` returns the same outcome for the same goal node after a changed task plan, and the next `Observe` still does not move the state.
-3. The loop has repeated without new measurable progress for the same goal node, even after trying a different task, scope, or decomposition path.
-4. The result is no longer testable or observable enough to justify another observe-delegate-verify cycle.
-
-When a stall is detected, the orchestrator should not keep replaying the same observe/delegate/verify shape. It should record the stall, change the plan or decomposition, and stop treating repetition as progress.
-
-### Operator Checklist
-
-- Record the loop count for each completed goal.
-- Stop after repeated no-progress observations for the same goal node.
-- Run `npm run test:changed` for stall-related changes before considering the change complete.
-- Treat any stall-related failure as blocking.
-
-### Changed-Path Verification
-
-```bash
-npm run test:changed
-```
+SeedPulse includes built-in stall detection to prevent loops from spinning without progress. When repeated cycles produce no measurable movement on a goal node, the orchestrator records the stall, changes the plan, and stops treating repetition as progress. See [Stall Detection Design](docs/design/stall-detection.md) for details.
 
 ## Supported Adapters
 
@@ -222,31 +193,6 @@ npm test
 ```
 
 State: `~/.pulseed/` · Reports: `~/.pulseed/reports/` · Ethics logs: `~/.pulseed/ethics/`
-
-Regression note: `tests/refine.test.ts` now covers `refine()` normalization for supported inputs, malformed payload handling, and propagated refinement failures.
-Verify it with:
-
-```bash
-npx vitest run tests/refine.test.ts
-```
-
-Regression note: `tests/unit/goalNegotiator.test.ts` covers the `gatherNegotiationContext` workspace fixture cleanup path.
-Use it to verify the workspace scan fixture remains visible during cleanup-path changes.
-
-Run the focused verification command:
-
-```bash
-npx vitest run tests/unit/goalNegotiator.test.ts
-```
-
-Regression note: `tests/core-loop-orchestrator-regression.test.ts` covers the main loop orchestrator decision points across live and `dryRun` modes in 12 scenarios, including score overrides, delegation, verification, loop termination, three failure paths, and two side-effect suppression checks. Each scenario asserts the returned termination reason (`finalStatus`), the emitted action or failure state, and the visible side effects.
-Use it to verify orchestrator changes without waiting for the full suite.
-
-Run the focused verification command:
-
-```bash
-npx vitest run tests/core-loop-orchestrator-regression.test.ts
-```
 
 ## Contributing
 

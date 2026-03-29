@@ -8,8 +8,8 @@ PulSeed — AI agent orchestrator that gives existing agents the drive to persis
 
 ## Status
 
-Implementation Phase — Stage 1-14 + Milestone 1-18 complete (4061 tests, 179 test files). Phase 3 (開発基盤整備) + OSS最適化 #112-#146 全35件完了。
-See `docs/status.md` for stage-by-stage details.
+Implementation Phase — Stage 1-14 + Milestone 1-18 complete (4061 tests, 179 test files). Phase 3 (dev infrastructure) + OSS optimization #112-#146 all 35 items complete.
+See `docs/archive/status.md` for stage-by-stage details.
 
 ## Core Concept
 
@@ -22,7 +22,7 @@ See `docs/status.md` for stage-by-stage details.
 ## Tech Stack
 
 - Node.js 20+, TypeScript 5.3+
-- LLM SDK（Anthropic/OpenAI等）(for LLM calls)
+- LLM SDK (Anthropic/OpenAI etc.) (for LLM calls)
 - Zod (schema validation)
 - State persistence: file-based JSON (~/.pulseed/)
 - Test: vitest
@@ -37,16 +37,16 @@ npx vitest run
 
 ## Architecture
 
-See `memory/archive/impl-roadmap-research.md` for module dependency graph and implementation order. For full stage-by-stage details, see `docs/status.md`.
+See `memory/archive/impl-roadmap-research.md` for module dependency graph and implementation order. For full stage-by-stage details, see `docs/archive/status.md`.
 
-## モジュール境界マップ
+## Module Boundary Map
 
-`docs/module-map.md` に全モジュールの責務・主要export・依存関係・対応テストファイルをまとめている。
-変更対象ファイルの特定に使用すること。
+`docs/archive/module-map.md` contains all module responsibilities, primary exports, dependencies, and corresponding test files.
+Use it to identify files affected by a change.
 
-## 開発基盤整備計画
+## Dev Infrastructure Plan
 
-`docs/design/phase3-plan.md` に残りのファイル分割計画（柱1）、テスト効率化計画（柱3）をまとめている。
+`docs/archive/phase3-plan.md` contains the remaining file splitting plan (pillar 1) and test efficiency plan (pillar 3).
 
 ### Implementation Layers (bottom-up)
 
@@ -61,7 +61,7 @@ See `memory/archive/impl-roadmap-research.md` for module dependency graph and im
 - Layer 8: KnowledgeManager (cross-cutting, injected into Layer 3-4)
 - Layer 9: PortfolioManager (orchestrates parallel strategies between DriveScorer and TaskLifecycle)
 - Layer 10: DaemonRunner, PIDManager, Logger, EventServer, NotificationDispatcher, MemoryLifecycleManager
-- Layer 11: CuriosityEngine, CharacterConfigManager (好奇心・倫理強化・キャラクター, cross-cutting)
+- Layer 11: CuriosityEngine, CharacterConfigManager (curiosity, ethics, character — cross-cutting)
 - Layer 12: EmbeddingClient, VectorIndex, KnowledgeGraph, GoalDependencyGraph (semantic embedding infrastructure, cross-cutting)
 - Layer 13: CapabilityDetector (extended), DataSourceAdapter (Stage 13 autonomous capability acquisition, cross-cutting)
 - Layer 14: GoalTreeManager, StateAggregator, TreeLoopOrchestrator, CrossGoalPortfolio, StrategyTemplateRegistry, LearningPipeline, KnowledgeTransfer (cross-goal portfolio, learning, knowledge transfer)
@@ -72,20 +72,26 @@ See `memory/archive/impl-roadmap-research.md` for module dependency graph and im
 - `docs/vision.md` — why PulSeed exists
 - `docs/mechanism.md` — core loop and orchestration
 - `docs/runtime.md` — process model and execution
-- `docs/design/` — detailed design for each subsystem (23 files)
+- `docs/design/` — detailed design for each subsystem, organized by category:
+  - **core/**: drive-system, drive-scoring, gap-calculation, state-vector, observation, stall-detection, satisficing
+  - **goal/**: goal-negotiation, goal-refinement-pipeline, goal-tree, goal-ethics, execution-boundary
+  - **knowledge/**: hierarchical-memory, memory-lifecycle, knowledge-acquisition, knowledge-transfer, learning-pipeline, hypothesis-verification
+  - **execution/**: task-lifecycle, session-and-context, portfolio-management, multi-agent-delegation, data-source
+  - **infrastructure/**: llm-fault-tolerance, token-optimization, prompt-context-architecture, plugin-architecture, plugin-development-guide, reporting, web-ui
+  - **personality/**: character, curiosity, trust-and-safety, brand
 
 Design docs are the source of truth for implementation. When in doubt, read the relevant design doc.
 
 ## Key Constraints
 
-- **テスト失敗時はコードのバグを先に疑う** — テストが落ちたとき、テストを修正する前に必ずプロダクションコード側にバグがないか検証すること。テストは仕様の表現であり、安易にテストを書き換えると本物のバグを見逃す
+- **When tests fail, suspect production code first** — before modifying a failing test, always verify whether the production code has a bug. Tests express the spec; casually rewriting tests hides real bugs
 - Evidence-based progress observation (never count tool calls as progress)
 - Irreversible actions always require human approval regardless of trust/confidence
 - Trust balance: asymmetric (failure penalty > success reward), [-100,+100], Δs=+3, Δf=-10
 - Satisficing: stop when "good enough," don't pursue perfection
 - Confidence adjustment applies ONLY in gap-calculation §3 (no triple-application)
-- **LLM応答はZodパース前にサニタイズ** — LLMがenum外の値を返すことがある（例: threshold_typeに"exact"）。catchブロックでエラーを握りつぶさず、必ずログ出力すること
-- **Dogfooding推奨モデル**: gpt-5.3-codex（gpt-4o-miniより観測精度・収束速度が大幅に優れる。`~/.pulseed/provider.json`で設定）
+- **Sanitize LLM responses before Zod parsing** — LLMs may return values outside defined enums (e.g., "exact" for threshold_type). Never swallow errors in catch blocks; always log them
+- **Recommended dogfooding model**: gpt-5.3-codex (significantly better observation accuracy and convergence speed than gpt-4o-mini; configure in `~/.pulseed/provider.json`)
 - **KEEP THE FILES SHORT**: If the code exceeds 500 lines, consider splitting it into multiple files.
 - **KEEP THE CODE SIMPLE**: Do not overcomplicate it. Keep it as simple as possible.
-- **バグ・改善点は即issue起票** — 作業中にバグ、セキュリティ問題、コード品質の改善点を見つけた場合、ユーザーの許可を待たずに `gh issue create` でissueを起票すること。修正は別途判断するが、記録は即座に行う
+- **File issues immediately for bugs and improvements** — when you find bugs, security issues, or code quality problems during work, create a GitHub issue with `gh issue create` without waiting for user permission. Fixes are decided separately, but recording is immediate
