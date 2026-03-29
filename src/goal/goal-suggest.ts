@@ -184,13 +184,15 @@ export async function suggestGoals(
         { temperature: 0.3 }
       );
       rawContent = response.content;
-    } catch {
+    } catch (err) {
+      options?.logger?.warn(`[suggestGoals] LLM call failed: ${err}`);
       return [];
     }
 
     try {
       suggestions = llmClient.parseJSON(rawContent, GoalSuggestionListSchema);
-    } catch {
+    } catch (err) {
+      options?.logger?.warn(`[suggestGoals] Failed to parse LLM response as GoalSuggestionList: ${err}`);
       return [];
     }
   }

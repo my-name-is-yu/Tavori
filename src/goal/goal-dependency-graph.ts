@@ -308,7 +308,8 @@ Return empty array [] if no dependencies found.`;
         }
       }
       return edges;
-    } catch {
+    } catch (err) {
+      console.warn(`[GoalDependencyGraph] autoDetectDependencies failed: ${String(err)}`);
       return [];
     }
   }

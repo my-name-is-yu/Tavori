@@ -343,7 +343,9 @@ export async function observeWithLLM(
         );
       }
     }
-  } catch { /* keep original score if threshold parsing fails */ }
+  } catch (err) {
+    logger?.warn(`[ObservationEngine] Failed to parse thresholdDescription JSON, using raw score: ${String(err)}`);
+  }
 
   const entry = ObservationLogEntrySchema.parse({
     observation_id: randomUUID(),

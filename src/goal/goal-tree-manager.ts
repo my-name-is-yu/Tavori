@@ -414,7 +414,8 @@ export class GoalTreeManager {
         let preprocessed: unknown;
         try {
           preprocessed = JSON.parse(subgoalResponse.content);
-        } catch {
+        } catch (err) {
+          this.logger?.warn(`[GoalTreeManager] Failed to pre-parse subgoal LLM response as JSON: ${err}`);
           preprocessed = null;
         }
         if (Array.isArray(preprocessed)) {

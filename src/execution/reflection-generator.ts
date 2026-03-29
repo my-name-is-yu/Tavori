@@ -164,8 +164,8 @@ export async function getReflectionsForGoal(
         created_at: entry.acquired_at,
       });
       reflections.push(note);
-    } catch {
-      // skip malformed entries
+    } catch (err) {
+      console.warn(`[ReflectionGenerator] getReflectionsForGoal: skipping malformed entry ${entry.entry_id}: ${String(err)}`);
     }
   }
 
