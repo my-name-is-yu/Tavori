@@ -2,7 +2,7 @@
 
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
-import { getReportsDir } from "../../utils/paths.js";
+import { getReportsDir, getDatasourcesDir } from "../../utils/paths.js";
 import { readJsonFile } from "../../utils/json-io.js";
 
 import { StateManager } from "../../state-manager.js";
@@ -361,6 +361,35 @@ export async function cmdCleanup(stateManager: StateManager): Promise<number> {
       console.log(`  ${f}`);
     }
     console.log("(These can be removed manually from ~/.pulseed/reports/)");
+  }
+
+  // Remove orphaned datasources (scoped to deleted goals)
+  const datasourcesDir = getDatasourcesDir(baseDir);
+  let datasourcesDirExists = false;
+  try { await fsp.access(datasourcesDir); datasourcesDirExists = true; } catch { /* not found */ }
+
+  if (datasourcesDirExists) {
+    let orphanedCount = 0;
+    try {
+      const dsFiles = (await fsp.readdir(datasourcesDir)).filter((f) => f.endsWith(".json"));
+      for (const file of dsFiles) {
+        const filePath = path.join(datasourcesDir, file);
+        try {
+          const raw = JSON.parse(await fsp.readFile(filePath, "utf-8")) as { scope_goal_id?: string };
+          if (raw.scope_goal_id && !activeGoalIds.has(raw.scope_goal_id)) {
+            await fsp.unlink(filePath);
+            orphanedCount++;
+          }
+        } catch (err) {
+          getCliLogger().error(formatOperationError(`read datasource "${file}"`, err));
+        }
+      }
+    } catch (err) {
+      getCliLogger().error(formatOperationError(`scan datasources directory "${datasourcesDir}"`, err));
+    }
+    if (orphanedCount > 0) {
+      console.log(`\nRemoved ${orphanedCount} orphaned datasource(s) for deleted goals.`);
+    }
   }
 
   // Deduplicate datasources

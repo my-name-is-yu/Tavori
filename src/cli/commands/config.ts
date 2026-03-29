@@ -411,7 +411,8 @@ export async function cmdDatasourceDedup(stateManager: StateManager): Promise<nu
       const dimMapping = cfg["dimension_mapping"];
       dims = dimMapping ? Object.keys(dimMapping as Record<string, unknown>).sort() : [];
     }
-    return `${type}::${dims.join(",")}`;
+    const scopeGoalId = (cfg["scope_goal_id"] as string | undefined) ?? "";
+    return `${type}::${dims.join(",")}::${scopeGoalId}`;
   }
 
   // Group by dedup key; first entry (oldest by sorted filename) is the keeper

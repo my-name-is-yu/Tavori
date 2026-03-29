@@ -330,6 +330,8 @@ export class CoreLoop {
     // Default result (filled in progressively)
     const result: LoopIterationResult = makeEmptyIterationResult(goalId, loopIndex);
 
+    this.logger?.info(`[CoreLoop] iteration ${loopIndex + 1} starting`, { goalId, loopIndex });
+
     // 1. Load goal + tree aggregation
     const loadedGoal = await loadGoalWithAggregation(ctx, goalId, result, startTime);
     if (!loadedGoal) return result;
