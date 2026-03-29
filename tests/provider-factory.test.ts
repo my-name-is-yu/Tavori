@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ─── Mock heavy dependencies so no real clients are constructed ───
 
@@ -47,6 +47,7 @@ vi.mock("../src/llm/provider-config.js", () => ({
 }));
 
 import { buildLLMClient } from "../src/llm/provider-factory.js";
+import { LLMClient } from "../src/llm/llm-client.js";
 
 // ─── Tests ───
 
@@ -87,6 +88,24 @@ describe("buildLLMClient — early API key validation", () => {
       });
 
       await expect(buildLLMClient()).resolves.not.toThrow();
+    });
+
+    it("passes config.model to LLMClient constructor", async () => {
+      const MockedLLMClient = vi.mocked(LLMClient);
+      MockedLLMClient.mockClear();
+
+      mockLoadProviderConfig.mockResolvedValue({
+        provider: "anthropic",
+        model: "claude-opus-4-5",
+        adapter: "claude_api",
+        api_key: "sk-ant-test",
+      });
+
+      await buildLLMClient();
+
+      expect(MockedLLMClient).toHaveBeenCalledOnce();
+      // constructor: (apiKey, guardrailRunner, lightModel, model)
+      expect(MockedLLMClient).toHaveBeenCalledWith("sk-ant-test", undefined, undefined, "claude-opus-4-5");
     });
   });
 

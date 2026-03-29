@@ -77,7 +77,7 @@ export async function buildLLMClient(): Promise<ILLMClient> {
           "ANTHROPIC_API_KEY is not set.\nSet it via: export ANTHROPIC_API_KEY=sk-ant-..."
         );
       }
-      return new LLMClient(config.api_key, undefined, config.light_model);
+      return new LLMClient(config.api_key, undefined, config.light_model, config.model);
 
     default:
       // Unknown provider falls back to OpenAI

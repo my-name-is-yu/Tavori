@@ -63,8 +63,9 @@ export { extractJSON, DEFAULT_MAX_TOKENS };
 export class LLMClient extends BaseLLMClient implements ILLMClient {
   private readonly client: Anthropic;
   private guardrailRunner?: GuardrailRunner;
+  private readonly defaultModel: string;
 
-  constructor(apiKey: string, guardrailRunner?: GuardrailRunner, lightModel?: string) {
+  constructor(apiKey: string, guardrailRunner?: GuardrailRunner, lightModel?: string, model?: string) {
     super();
     if (!apiKey) {
       throw new LLMError(
@@ -74,6 +75,7 @@ export class LLMClient extends BaseLLMClient implements ILLMClient {
     this.client = new Anthropic({ apiKey });
     this.guardrailRunner = guardrailRunner;
     this.lightModel = lightModel;
+    this.defaultModel = model ?? DEFAULT_MODEL;
   }
 
   /**
@@ -84,7 +86,7 @@ export class LLMClient extends BaseLLMClient implements ILLMClient {
     messages: LLMMessage[],
     options?: LLMRequestOptions
   ): Promise<LLMResponse> {
-    const model = this.resolveEffectiveModel(options?.model ?? DEFAULT_MODEL, options?.model_tier);
+    const model = this.resolveEffectiveModel(options?.model ?? this.defaultModel, options?.model_tier);
     const max_tokens = options?.max_tokens ?? DEFAULT_MAX_TOKENS;
     const temperature = options?.temperature ?? DEFAULT_TEMPERATURE;
     let system = options?.system;

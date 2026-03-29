@@ -90,9 +90,11 @@ rm -rf ~/.pulseed
 {
   "provider": "openai | anthropic | ollama",
   "model": "<model-name>",
-  "apiKey": "<your-api-key>"
+  "api_key": "<your-api-key>"
 }
 ```
+
+The `model` field is respected by **all providers** (openai, anthropic, and ollama). If omitted, each provider falls back to its default model.
 
 ### OpenAI example
 
@@ -100,7 +102,7 @@ rm -rf ~/.pulseed
 {
   "provider": "openai",
   "model": "gpt-5.4-mini",
-  "apiKey": "sk-..."
+  "api_key": "sk-..."
 }
 ```
 
@@ -110,13 +112,13 @@ rm -rf ~/.pulseed
 {
   "provider": "anthropic",
   "model": "claude-opus-4-5",
-  "apiKey": "sk-ant-..."
+  "api_key": "sk-ant-..."
 }
 ```
 
 ### Ollama (local LLM) example
 
-No API key is needed. The `baseUrl` field overrides the default `http://localhost:11434`.
+No API key is needed. The `base_url` field overrides the default `http://localhost:11434`.
 
 ```json
 {
@@ -131,7 +133,7 @@ To connect to Ollama on a remote machine:
 {
   "provider": "ollama",
   "model": "qwen3:4b",
-  "baseUrl": "http://192.168.1.50:11434"
+  "base_url": "http://192.168.1.50:11434"
 }
 ```
 
