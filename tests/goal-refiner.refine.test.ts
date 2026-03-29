@@ -229,7 +229,7 @@ describe("GoalRefiner.refine()", () => {
     {
       name: "non-JSON text",
       response: "this is not json at all",
-      expectedReason: "LLM call failed",
+      expectedReason: "LLM parse failure",
     },
   ])("normalizes malformed payloads from $name", async ({ response, expectedReason }) => {
     const childId = randomUUID();

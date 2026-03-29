@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { z } from "zod";
 import { MockLLMClient, LLMClient } from "../src/llm/llm-client.js";
 import type { ILLMClient } from "../src/llm/llm-client.js";
+import { extractJSON } from "../src/llm/base-llm-client.js";
 
 // ─── MockLLMClient ───
 
@@ -169,6 +170,129 @@ describe("MockLLMClient", () => {
     });
   });
 
+  // ─── extractJSON — prose + brace matching ───
+
+  describe("extractJSON — prose and brace matching", () => {
+    it("returns raw JSON as-is (fast path)", () => {
+      const input = '{"key": "value"}';
+      expect(extractJSON(input)).toBe(input);
+    });
+
+    it("extracts JSON from leading prose", () => {
+      const input = 'Here is the result: {"key": "value"}';
+      expect(extractJSON(input)).toBe('{"key": "value"}');
+    });
+
+    it("extracts JSON with trailing text", () => {
+      const input = '{"key": "value"} That is all.';
+      expect(extractJSON(input)).toBe('{"key": "value"}');
+    });
+
+    it("extracts JSON with both leading and trailing text", () => {
+      const input = 'Sure! {"key": "value"} Hope that helps!';
+      expect(extractJSON(input)).toBe('{"key": "value"}');
+    });
+
+    it("extracts array JSON with leading prose", () => {
+      const input = 'The result is [1, 2, 3] as expected.';
+      expect(extractJSON(input)).toBe('[1, 2, 3]');
+    });
+  });
+
+  // ─── parseJSON — logging on failure ───
+
+  describe("parseJSON — logging on failure", () => {
+    let mock: MockLLMClient;
+
+    beforeEach(() => {
+      mock = new MockLLMClient([]);
+    });
+
+    it("logs to console.warn and throws on completely invalid text", () => {
+      const schema = z.object({ x: z.number() });
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        expect(() => mock.parseJSON("completely invalid text no braces", schema)).toThrow();
+        expect(warnSpy).toHaveBeenCalledOnce();
+        const warnArg: string = warnSpy.mock.calls[0][0] as string;
+        expect(warnArg).toContain("[parseJSON]");
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it("logs to console.warn and throws when valid JSON fails Zod schema", () => {
+      const schema = z.object({ count: z.number() });
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        expect(() => mock.parseJSON('{"count": "not-a-number"}', schema)).toThrow();
+        expect(warnSpy).toHaveBeenCalledOnce();
+        const warnArg: string = warnSpy.mock.calls[0][0] as string;
+        expect(warnArg).toContain("[parseJSON]");
+        expect(warnArg).toContain("validation failed");
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+  });
+
+  // ─── parseJSON — prose extraction integration ───
+
+  describe("parseJSON — prose extraction integration", () => {
+    let mock: MockLLMClient;
+
+    beforeEach(() => {
+      mock = new MockLLMClient([]);
+    });
+
+    it("parses JSON preceded by leading prose", () => {
+      const schema = z.object({ key: z.string() });
+      const result = mock.parseJSON('Here is the result: {"key": "value"}', schema);
+      expect(result.key).toBe("value");
+    });
+
+    it("parses JSON with trailing text after closing brace", () => {
+      const schema = z.object({ status: z.string() });
+      const result = mock.parseJSON('{"status": "ok"} That is the answer.', schema);
+      expect(result.status).toBe("ok");
+    });
+
+    it("parses JSON with both leading and trailing prose", () => {
+      const schema = z.object({ value: z.number() });
+      const result = mock.parseJSON('Sure thing! {"value": 42} Done.', schema);
+      expect(result.value).toBe(42);
+    });
+
+    it("parses array JSON with leading prose", () => {
+      const schema = z.array(z.string());
+      const result = mock.parseJSON('The tags are ["foo", "bar", "baz"] as requested.', schema);
+      expect(result).toEqual(["foo", "bar", "baz"]);
+    });
+  });
+
+  // ─── parseJSON — sanitizer integration ───
+
+  describe("parseJSON — sanitizer integration", () => {
+    let mock: MockLLMClient;
+
+    beforeEach(() => {
+      mock = new MockLLMClient([]);
+    });
+
+    it("handles trailing commas via sanitizer", () => {
+      const schema = z.object({ name: z.string(), value: z.number() });
+      const result = mock.parseJSON('{"name": "test", "value": 42,}', schema);
+      expect(result.name).toBe("test");
+      expect(result.value).toBe(42);
+    });
+
+    it("handles NaN values via sanitizer (replaces with null)", () => {
+      const schema = z.object({ score: z.number().nullable() });
+      const result = mock.parseJSON('{"score": NaN}', schema);
+      expect(result.score).toBeNull();
+    });
+  });
+
   // ─── ILLMClient interface conformance ───
 
   describe("ILLMClient interface conformance", () => {
@@ -176,6 +300,97 @@ describe("MockLLMClient", () => {
       const client: ILLMClient = new MockLLMClient(["response"]);
       expect(typeof client.sendMessage).toBe("function");
       expect(typeof client.parseJSON).toBe("function");
+    });
+  });
+
+  // ─── parseJSON — retry behavior ───
+
+  describe("parseJSON — retry behavior", () => {
+    const schema = z.object({ value: z.number() });
+    const validContent = JSON.stringify({ value: 42 });
+    const invalidContent = "this is not json at all";
+    const originalMessages = [{ role: "user", content: "Give me a number as JSON." }];
+
+    it("fails immediately without retry when no options provided", async () => {
+      const mock = new MockLLMClient([]);
+      const callLLMRawSpy = vi.spyOn(mock as unknown as { callLLMRaw: () => Promise<string> }, "callLLMRaw");
+
+      expect(() => mock.parseJSON(invalidContent, schema)).toThrow();
+      expect(callLLMRawSpy).not.toHaveBeenCalled();
+    });
+
+    it("succeeds on retry when first content is invalid but retry returns valid JSON", async () => {
+      const mock = new MockLLMClient([]);
+      vi.spyOn(mock as unknown as { callLLMRaw: (msgs: unknown[], sys?: string) => Promise<string> }, "callLLMRaw")
+        .mockResolvedValueOnce(validContent);
+
+      const result = await mock.parseJSON(invalidContent, schema, {
+        retry: { messages: originalMessages },
+      });
+
+      expect(result.value).toBe(42);
+    });
+
+    it("throws when retry is provided but both attempts return invalid JSON", async () => {
+      const mock = new MockLLMClient([]);
+      vi.spyOn(mock as unknown as { callLLMRaw: (msgs: unknown[], sys?: string) => Promise<string> }, "callLLMRaw")
+        .mockResolvedValueOnce("still not json");
+
+      await expect(
+        mock.parseJSON(invalidContent, schema, {
+          retry: { messages: originalMessages },
+        })
+      ).rejects.toThrow();
+    });
+
+    it("does not call callLLMRaw when first parse succeeds", async () => {
+      const mock = new MockLLMClient([]);
+      const callLLMRawSpy = vi.spyOn(mock as unknown as { callLLMRaw: () => Promise<string> }, "callLLMRaw");
+
+      const result = await mock.parseJSON(validContent, schema, {
+        retry: { messages: originalMessages },
+      });
+
+      expect(result.value).toBe(42);
+      expect(callLLMRawSpy).not.toHaveBeenCalled();
+    });
+
+    it("passes systemPrompt to callLLMRaw on retry", async () => {
+      const mock = new MockLLMClient([]);
+      const callLLMRawSpy = vi.spyOn(
+        mock as unknown as { callLLMRaw: (msgs: unknown[], sys?: string) => Promise<string> },
+        "callLLMRaw"
+      ).mockResolvedValueOnce(validContent);
+
+      await mock.parseJSON(invalidContent, schema, {
+        retry: { messages: originalMessages, systemPrompt: "Respond with JSON only." },
+      });
+
+      expect(callLLMRawSpy).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ role: "user", content: expect.stringContaining("not valid JSON") }),
+        ]),
+        "Respond with JSON only."
+      );
+    });
+
+    it("logs warn on first failure and retry failure", async () => {
+      const mock = new MockLLMClient([]);
+      vi.spyOn(mock as unknown as { callLLMRaw: (msgs: unknown[], sys?: string) => Promise<string> }, "callLLMRaw")
+        .mockResolvedValueOnce("also invalid");
+
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        await expect(
+          mock.parseJSON(invalidContent, schema, { retry: { messages: originalMessages } })
+        ).rejects.toThrow();
+
+        const warnMessages = warnSpy.mock.calls.map((c) => c[0] as string);
+        expect(warnMessages.some((m) => m.includes("first attempt failed, retrying"))).toBe(true);
+        expect(warnMessages.some((m) => m.includes("retry also failed"))).toBe(true);
+      } finally {
+        warnSpy.mockRestore();
+      }
     });
   });
 });

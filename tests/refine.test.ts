@@ -250,7 +250,7 @@ describe("refine()", () => {
       response: "this is not json at all",
     },
   ])("normalizes malformed payloads from $name into the canonical failure shape", async ({ response }) => {
-    const expectedReason = response === "this is not json at all" ? "LLM call failed" : "LLM parse failure";
+    const expectedReason = "LLM parse failure";
     const childId = randomUUID();
     const childGoal = makeGoal({
       id: childId,

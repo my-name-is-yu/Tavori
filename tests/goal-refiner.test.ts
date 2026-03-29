@@ -268,7 +268,7 @@ describe("GoalRefiner", () => {
     {
       name: "non-JSON text",
       response: "this is not json at all",
-      expectedReason: "LLM call failed",
+      expectedReason: "LLM parse failure",
     },
   ] as const;
 

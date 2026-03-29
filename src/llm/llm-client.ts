@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { ZodSchema } from "zod";
 import { sleep } from "../utils/sleep.js";
 import { BaseLLMClient, DEFAULT_MAX_TOKENS, DEFAULT_LLM_TIMEOUT_MS, MAX_RETRY_ATTEMPTS, RETRY_DELAYS_MS, extractJSON } from "./base-llm-client.js";
-import type { ModelTier } from "./base-llm-client.js";
+import type { ModelTier, ParseJSONMessage, ParseJSONOptions } from "./base-llm-client.js";
 import { LLMError } from "../utils/errors.js";
 import { GuardrailRunner } from "../guardrail-runner.js";
 
@@ -41,6 +41,7 @@ export interface ILLMClient {
     options?: LLMRequestOptions
   ): Promise<LLMResponse>;
   parseJSON<T>(content: string, schema: ZodSchema<T>): T;
+  parseJSON<T>(content: string, schema: ZodSchema<T>, options: ParseJSONOptions): Promise<T>;
 }
 
 // ─── Constants ───
@@ -179,6 +180,18 @@ export class LLMClient extends BaseLLMClient implements ILLMClient {
 
     return result;
   }
+
+  /**
+   * Low-level LLM call used by parseJSON retry logic.
+   * Sends messages and returns the raw response text.
+   */
+  protected async callLLMRaw(messages: ParseJSONMessage[], systemPrompt?: string): Promise<string> {
+    const llmMessages = messages
+      .filter((m) => m.role === "user" || m.role === "assistant")
+      .map((m) => ({ role: m.role as "user" | "assistant", content: m.content }));
+    const response = await this.sendMessage(llmMessages, systemPrompt ? { system: systemPrompt } : undefined);
+    return response.content;
+  }
 }
 
 // ─── MockLLMClient ───
@@ -223,5 +236,10 @@ export class MockLLMClient extends BaseLLMClient implements ILLMClient {
       },
       stop_reason: "end_turn",
     };
+  }
+
+  protected async callLLMRaw(_messages: ParseJSONMessage[], _systemPrompt?: string): Promise<string> {
+    const response = await this.sendMessage([]);
+    return response.content;
   }
 }

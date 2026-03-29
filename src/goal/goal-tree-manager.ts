@@ -15,7 +15,6 @@ import type {
   ConcretenessScore,
 } from "../types/goal-tree.js";
 import { scoreConcreteness as _scoreConcreteness } from "./goal-tree-quality.js";
-import { sanitizeThresholdTypes, sanitizeThresholdValues } from "./refiner-prompts.js";
 import { buildThreshold } from "./goal-validation.js";
 
 // ─── LLM Response Schemas ───
@@ -409,14 +408,12 @@ export class GoalTreeManager {
           [{ role: "user", content: subgoalPrompt }],
           { temperature: 0 }
         );
-        // Sanitize threshold_type values before schema validation --
-        // LLMs sometimes return "exact", "scale", "qualitative" etc.
-        const rawContent = subgoalResponse.content;
-        let sanitized = sanitizeThresholdValues(sanitizeThresholdTypes(rawContent));
-        // Sanitize hypothesis field: LLMs may use "title", "description", "goal", etc.
+        // Normalize hypothesis field: LLMs may use "title", "description", "goal", etc.
+        // Pre-parse to fix missing hypothesis keys before passing to parseJSON.
+        let contentToPass = subgoalResponse.content;
         let preprocessed: unknown;
         try {
-          preprocessed = JSON.parse(sanitized);
+          preprocessed = JSON.parse(subgoalResponse.content);
         } catch {
           preprocessed = null;
         }
@@ -439,9 +436,9 @@ export class GoalTreeManager {
               (item as Record<string, unknown>).hypothesis = String(alt);
             }
           }
-          sanitized = JSON.stringify(preprocessed);
+          contentToPass = JSON.stringify(preprocessed);
         }
-        const parsed = this.llmClient.parseJSON(sanitized, SubgoalsResponseSchema);
+        const parsed = this.llmClient.parseJSON(contentToPass, SubgoalsResponseSchema);
         subgoalSpecs = parsed.map((sg: (typeof parsed)[number]) => {
           // Derive hypothesis from dimensions or parent goal title when the LLM omitted it
           let hypothesis = sg.hypothesis;

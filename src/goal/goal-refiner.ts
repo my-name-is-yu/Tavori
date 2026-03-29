@@ -26,7 +26,7 @@ import type {
   LeafDimension,
   RefineResult,
 } from "../types/goal-refiner.js";
-import { buildLeafTestPrompt, sanitizeThresholdTypes, sanitizeThresholdValues } from "./refiner-prompts.js";
+import { buildLeafTestPrompt } from "./refiner-prompts.js";
 import { evaluateQualitatively, DEFAULT_TIME_HORIZON_DAYS } from "./negotiator-steps.js";
 
 // ─── Conversion helpers ───
@@ -232,14 +232,12 @@ export class GoalRefiner {
       );
       tokensUsed += (response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 1000);
 
-      const sanitized = sanitizeThresholdValues(sanitizeThresholdTypes(response.content));
-      const parsed = LeafTestResultSchema.safeParse(JSON.parse(sanitized));
-      if (!parsed.success) {
-        console.error("[GoalRefiner] LeafTestResult parse error:", parsed.error.message);
+      try {
+        leafTestResult = this.llmClient.parseJSON(response.content, LeafTestResultSchema);
+      } catch (parseErr) {
+        console.error("[GoalRefiner] LeafTestResult parse error:", parseErr instanceof Error ? parseErr.message : String(parseErr));
         // Treat parse failure as non-measurable: decompose
         leafTestResult = { is_measurable: false, dimensions: null, reason: "LLM parse failure" };
-      } else {
-        leafTestResult = parsed.data;
       }
     } catch (err) {
       console.error("[GoalRefiner] Leaf test LLM call failed:", err);
