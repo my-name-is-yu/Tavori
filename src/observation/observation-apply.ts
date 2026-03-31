@@ -28,7 +28,11 @@ export async function applyObservation(
   }
 
   const safeName = normalizeDimensionName(entry.dimension_name);
-  const dimIndex = goal.dimensions.findIndex((d) => d.name === safeName);
+  let dimIndex = goal.dimensions.findIndex((d) => d.name === safeName);
+  // Fallback: try exact name if normalization changed it and didn't match
+  if (dimIndex === -1 && safeName !== entry.dimension_name) {
+    dimIndex = goal.dimensions.findIndex((d) => d.name === entry.dimension_name);
+  }
   if (dimIndex === -1) {
     throw new Error(
       `applyObservation: dimension "${entry.dimension_name}" not found in goal "${goalId}"`
