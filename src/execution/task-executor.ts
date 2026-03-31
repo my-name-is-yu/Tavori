@@ -167,6 +167,9 @@ export async function executeTask(
           "[TaskLifecycle] Adapter reported success but no files were modified",
           { taskId: task.id }
         );
+        result.success = false;
+        result.error = "No files were modified";
+        result.stopped_reason = "completed";
       }
 
       if (changedFiles.length > 0) {

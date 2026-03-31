@@ -84,6 +84,9 @@ Gap Analysis:
 - Generate specific, actionable issues only\n`;
   } else if (adapterType === "openai_codex_cli" || adapterType === "claude_code_cli") {
     adapterSection = `\nExecution context: CLI code agent in sandbox.
+You MUST produce implementation tasks that modify or create files.
+The executing agent will run in a code sandbox with full file access.
+Tasks should involve writing code, fixing bugs, adding tests, or editing configuration — NOT analysis or planning.
 Constraints:
 - No git commit/push/merge operations
 - Success criteria must use file checks only (e.g., "file X exists")
