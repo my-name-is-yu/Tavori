@@ -221,6 +221,84 @@ describe("createWorkspaceContextProvider — relative path exact match", () => {
   });
 });
 
+describe("createWorkspaceContextProvider — small workspace fast path", () => {
+  let tmpWorkDir: string;
+
+  beforeEach(() => {
+    tmpWorkDir = fs.mkdtempSync(path.join(os.tmpdir(), "pulseed-ws-small-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpWorkDir, { recursive: true, force: true });
+  });
+
+  it("includes all files when workspace has a single file (hello.ts)", async () => {
+    fs.writeFileSync(path.join(tmpWorkDir, "hello.ts"), "console.log('hello');", "utf-8");
+
+    const provider = createWorkspaceContextProvider(
+      { workDir: tmpWorkDir },
+      () => "Make the greeting more friendly"
+    );
+
+    const result = await provider("goal-small-1", "output quality");
+    expect(result).toContain("hello.ts");
+    expect(result).toContain("console.log('hello')");
+  });
+
+  it("includes all files when workspace has <= 10 files, even with no keyword match", async () => {
+    // Create 5 files with names unrelated to the dimension name
+    for (let i = 1; i <= 5; i++) {
+      fs.writeFileSync(path.join(tmpWorkDir, `file${i}.ts`), `export const v${i} = ${i};`, "utf-8");
+    }
+
+    const provider = createWorkspaceContextProvider(
+      { workDir: tmpWorkDir },
+      () => "Check correctness"
+    );
+
+    const result = await provider("goal-small-2", "xyzzy dimension");
+    for (let i = 1; i <= 5; i++) {
+      expect(result).toContain(`file${i}.ts`);
+      expect(result).toContain(`export const v${i} = ${i}`);
+    }
+  });
+
+  it("falls back to keyword matching when workspace has more than 10 files", async () => {
+    // Create 11 files — 1 matching keyword, 10 unrelated
+    for (let i = 1; i <= 10; i++) {
+      fs.writeFileSync(path.join(tmpWorkDir, `unrelated${i}.ts`), `// file ${i}`, "utf-8");
+    }
+    fs.writeFileSync(path.join(tmpWorkDir, "quality-check.ts"), "export function qualityCheck() {}", "utf-8");
+
+    const provider = createWorkspaceContextProvider(
+      { workDir: tmpWorkDir },
+      () => "Check quality"
+    );
+
+    const result = await provider("goal-small-3", "quality");
+    // With >10 files, keyword matching kicks in; quality-check.ts should match
+    expect(result).toContain("quality-check.ts");
+    // Not all unrelated files should be included (keyword match is selective)
+    // At least the matched file is present
+    expect(result).toContain("export function qualityCheck");
+  });
+
+  it("respects maxCharsPerFile in small workspace fast path", async () => {
+    fs.writeFileSync(path.join(tmpWorkDir, "big.ts"), "x".repeat(10000), "utf-8");
+
+    const provider = createWorkspaceContextProvider(
+      { workDir: tmpWorkDir, maxCharsPerFile: 100 },
+      () => "Check content"
+    );
+
+    const result = await provider("goal-small-4", "content");
+    expect(result).toContain("big.ts");
+    // Content should be truncated to maxCharsPerFile
+    expect(result).toContain("x".repeat(100));
+    expect(result).not.toContain("x".repeat(101));
+  });
+});
+
 describe("createWorkspaceContextProvider — existing workspace behavior unchanged", () => {
   let tmpWorkDir: string;
 

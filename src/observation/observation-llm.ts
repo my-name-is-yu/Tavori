@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { execFile as execFileCb } from "child_process";
 import { promisify } from "util";
+import * as fsPromises from "node:fs/promises";
+import * as nodePath from "node:path";
 import { ObservationLogEntrySchema } from "../types/state.js";
 
 const execFile = promisify(execFileCb);
@@ -57,6 +59,50 @@ export async function fetchGitDiffContext(options: ObservationEngineOptions, max
   }
 
   return parts.join("\n\n");
+}
+
+const READABLE_EXTENSIONS = new Set([
+  ".ts", ".js", ".tsx", ".jsx", ".py", ".json", ".yaml", ".yml", ".toml", ".md", ".txt",
+]);
+
+/**
+ * Read up to 10 files from workspacePath (top-level only) and return their
+ * contents formatted as === File: <name> ===\n<content>\n blocks.
+ * Filters to common code/config extensions. Caps total output at maxChars.
+ */
+export async function readWorkspaceFiles(workspacePath: string, maxChars = 3000): Promise<string> {
+  let entries: fsPromises.Dirent[];
+  try {
+    entries = await fsPromises.readdir(workspacePath, { withFileTypes: true });
+  } catch {
+    return "";
+  }
+
+  const files = entries
+    .filter((e) => e.isFile() && READABLE_EXTENSIONS.has(nodePath.extname(e.name).toLowerCase()))
+    .map((e) => e.name);
+  const parts: string[] = [];
+  let totalChars = 0;
+
+  for (const file of files.slice(0, 10)) {
+    if (totalChars >= maxChars) break;
+    const filePath = nodePath.join(workspacePath, file);
+    let content: string;
+    try {
+      content = await fsPromises.readFile(filePath, "utf8");
+    } catch {
+      continue;
+    }
+    const header = `=== File: ${file} ===\n`;
+    const remaining = maxChars - totalChars - header.length - 1; // -1 for trailing \n
+    if (remaining <= 0) break;
+    const truncated = content.length > remaining ? content.slice(0, remaining) + "\n...(truncated)" : content;
+    const block = `${header}${truncated}\n`;
+    parts.push(block);
+    totalChars += block.length;
+  }
+
+  return parts.join("\n");
 }
 
 /**
@@ -128,6 +174,18 @@ export async function observeWithLLM(
       resolvedContext = gitCtx;
       logger?.info(
         `[ObservationEngine] No contextProvider output — using git diff fallback for "${dimensionLabel}"`
+      );
+    }
+  }
+
+  // Second fallback: if both contextProvider and git diff returned empty,
+  // read workspace files directly so the LLM has actual evidence to evaluate.
+  if ((!resolvedContext || resolvedContext.trim().length === 0) && workspacePath) {
+    const filesCtx = await readWorkspaceFiles(workspacePath, 3000);
+    if (filesCtx.trim().length > 0) {
+      resolvedContext = filesCtx;
+      logger?.info(
+        `[ObservationEngine] No git diff context — using workspace file fallback for "${dimensionLabel}"`
       );
     }
   }
