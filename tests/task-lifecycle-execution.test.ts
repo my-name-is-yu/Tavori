@@ -130,6 +130,10 @@ describe("TaskLifecycle", async () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  // Default mock execFileSyncFn: simulates "some-file.ts" as a changed file
+  // so the post-execution scope check sees a modification and does not force success=false.
+  const mockExecFileSync = (_cmd: string, _args: string[], _opts: { cwd: string; encoding: "utf-8" }): string => "some-file.ts";
+
   function createLifecycle(
     llmClient: ILLMClient,
     options?: {
@@ -147,7 +151,7 @@ describe("TaskLifecycle", async () => {
       trustManager,
       strategyManager,
       stallDetector,
-      options
+      { execFileSyncFn: mockExecFileSync, ...options }
     );
   }
 

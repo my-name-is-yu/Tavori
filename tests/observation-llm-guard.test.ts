@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
-import { observeWithLLM } from "../src/observation/observation-llm.js";
+import * as nodePath from "node:path";
+import { observeWithLLM, readWorkspaceFiles } from "../src/observation/observation-llm.js";
 import { LLMObservationResponseSchema } from "../src/observation/observation-helpers.js";
 import type { ILLMClient } from "../src/llm/llm-client.js";
 import type { ObservationLogEntry } from "../src/types/state.js";
@@ -375,5 +376,151 @@ describe("Root Cause B: confidence tier when sourceAvailable=false", () => {
     expect(entry.layer).toBe("self_report");
     expect(entry.confidence).toBe(0.10);
     expect(entry.method.confidence_tier).toBe("self_report");
+  });
+});
+
+// ─── readWorkspaceFiles helper ─────────────────────────────────────────────
+
+describe("readWorkspaceFiles", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTempDir("pulseed-rwf-");
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("returns formatted content for readable files", async () => {
+    fs.writeFileSync(nodePath.join(tmpDir, "index.ts"), "const x = 1;");
+    fs.writeFileSync(nodePath.join(tmpDir, "README.md"), "# Hello");
+
+    const result = await readWorkspaceFiles(tmpDir, 3000);
+
+    expect(result).toContain("=== File: index.ts ===");
+    expect(result).toContain("const x = 1;");
+    expect(result).toContain("=== File: README.md ===");
+    expect(result).toContain("# Hello");
+  });
+
+  it("ignores files with non-readable extensions", async () => {
+    fs.writeFileSync(nodePath.join(tmpDir, "binary.bin"), "data");
+    fs.writeFileSync(nodePath.join(tmpDir, "image.png"), "data");
+    fs.writeFileSync(nodePath.join(tmpDir, "index.ts"), "const x = 1;");
+
+    const result = await readWorkspaceFiles(tmpDir, 3000);
+
+    expect(result).not.toContain("binary.bin");
+    expect(result).not.toContain("image.png");
+    expect(result).toContain("index.ts");
+  });
+
+  it("returns empty string for non-existent directory", async () => {
+    const result = await readWorkspaceFiles("/nonexistent/path/xyz", 3000);
+    expect(result).toBe("");
+  });
+
+  it("truncates content when maxChars is exceeded", async () => {
+    const longContent = "x".repeat(5000);
+    fs.writeFileSync(nodePath.join(tmpDir, "big.ts"), longContent);
+
+    const result = await readWorkspaceFiles(tmpDir, 200);
+
+    expect(result.length).toBeLessThanOrEqual(250); // tighter bound now that header is accounted for
+    expect(result).toContain("...(truncated)");
+  });
+
+  it("reads at most 10 files", async () => {
+    for (let i = 0; i < 15; i++) {
+      fs.writeFileSync(nodePath.join(tmpDir, `file${i}.ts`), `const v${i} = ${i};`);
+    }
+
+    const result = await readWorkspaceFiles(tmpDir, 100000);
+    const matches = result.match(/=== File:/g) ?? [];
+    expect(matches.length).toBeLessThanOrEqual(10);
+  });
+});
+
+// ─── Workspace file fallback (second fallback) ─────────────────────────────
+
+describe("Workspace file fallback: reads files when git diff is empty", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTempDir("pulseed-ws-fallback-");
+    noopApply.mockReset();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("uses workspace files as context when git diff is empty and workspacePath is provided", async () => {
+    // Write a source file into the temp workspace
+    fs.writeFileSync(nodePath.join(tmpDir, "main.ts"), "export const ready = true;");
+
+    const gitContextFetcher = vi.fn().mockReturnValue(""); // git diff returns empty
+    const mockLLMClient = createMockLLMClient(0.9, "workspace looks ready");
+    const logger = makeLogger();
+
+    const entry = await observeWithLLM(
+      "goal-ws-fallback",
+      "dim1",
+      "Check if workspace is ready",
+      "Readiness",
+      JSON.stringify({ type: "min", value: 0.8 }),
+      mockLLMClient,
+      { gitContextFetcher },
+      noopApply,
+      undefined,  // no workspaceContext
+      null,
+      true,       // dryRun
+      logger,
+      undefined,  // dimensionHistory
+      undefined,  // gateway
+      null,       // currentValue
+      undefined,  // sourceAvailable
+      tmpDir      // workspacePath pointing to temp dir with files
+    );
+
+    // Should have used workspace files — context was available → independent_review
+    expect(entry.confidence).toBe(0.70);
+    expect(entry.layer).toBe("independent_review");
+    expect(logger.info).toHaveBeenCalledWith(
+      expect.stringContaining("workspace file fallback")
+    );
+  });
+
+  it("falls through to WARNING path when git diff empty and no workspacePath", async () => {
+    const gitContextFetcher = vi.fn().mockReturnValue("");
+    const mockLLMClient = createMockLLMClient(0.0, "no evidence");
+    const logger = makeLogger();
+
+    const entry = await observeWithLLM(
+      "goal-no-fallback",
+      "dim1",
+      "Check readiness",
+      "Readiness",
+      JSON.stringify({ type: "min", value: 0.8 }),
+      mockLLMClient,
+      { gitContextFetcher },
+      noopApply,
+      undefined,  // no workspaceContext
+      null,
+      true,       // dryRun
+      logger,
+      undefined,  // dimensionHistory
+      undefined,  // gateway
+      null,       // currentValue
+      undefined,  // sourceAvailable
+      undefined   // no workspacePath
+    );
+
+    // No context available at all → self_report or independent_review with low confidence
+    expect(entry.confidence).toBeLessThan(0.70);
+    expect(logger.info).not.toHaveBeenCalledWith(
+      expect.stringContaining("workspace file fallback")
+    );
   });
 });

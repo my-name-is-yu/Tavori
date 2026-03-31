@@ -213,6 +213,10 @@ describe("TaskLifecycle guardrail integration", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  // Default mock execFileSyncFn: simulates a changed file so the post-execution
+  // scope check does not force success=false when no real git repo is available.
+  const mockExecFileSync = (_cmd: string, _args: string[], _opts: { cwd: string; encoding: "utf-8" }): string => "some-file.ts";
+
   function createLifecycle(
     llmClient: ILLMClient,
     guardrailRunner?: GuardrailRunner
@@ -225,7 +229,7 @@ describe("TaskLifecycle guardrail integration", () => {
       trustManager,
       strategyManager,
       stallDetector,
-      { guardrailRunner }
+      { guardrailRunner, execFileSyncFn: mockExecFileSync }
     );
   }
 

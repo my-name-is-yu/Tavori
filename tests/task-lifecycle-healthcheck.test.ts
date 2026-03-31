@@ -112,6 +112,10 @@ describe("TaskLifecycle — post-execution health check", () => {
     vi.restoreAllMocks();
   });
 
+  // Default mock execFileSyncFn: simulates a changed file so the post-execution
+  // scope check does not force success=false when no real git repo is available.
+  const mockExecFileSync = (_cmd: string, _args: string[], _opts: { cwd: string; encoding: "utf-8" }): string => "some-file.ts";
+
   function createLifecycle(options?: {
     healthCheckEnabled?: boolean;
     approvalFn?: (task: Task) => Promise<boolean>;
@@ -126,7 +130,7 @@ describe("TaskLifecycle — post-execution health check", () => {
       trustManager,
       strategyManager,
       stallDetector,
-      options
+      { execFileSyncFn: mockExecFileSync, ...options }
     );
   }
 
@@ -211,6 +215,7 @@ describe("TaskLifecycle — post-execution health check", () => {
       {
         healthCheckEnabled: true,
         approvalFn: async () => true,
+        execFileSyncFn: mockExecFileSync,
       }
     );
 

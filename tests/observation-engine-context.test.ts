@@ -97,8 +97,9 @@ describe("createWorkspaceContextProvider", () => {
   });
 
   it("respects maxFiles limit for keyword-matched files", async () => {
-    // Create many files that all match the keyword "metric"
-    for (let i = 0; i < 10; i++) {
+    // Create enough files to exceed the small-workspace fast path (>10),
+    // so keyword-based filtering is used and the maxFiles cap is respected.
+    for (let i = 0; i < 12; i++) {
       fs.writeFileSync(path.join(tmpDir, `metric-module-${i}.ts`), `export const m${i} = ${i};`);
     }
 

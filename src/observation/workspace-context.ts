@@ -88,6 +88,8 @@ const STOPWORDS = new Set([
 
 const EXCLUDE_DIRS = new Set(["node_modules", ".git", "dist", "coverage", ".DS_Store"]);
 
+const SMALL_WORKSPACE_FILE_LIMIT = 10;
+
 function extractKeywords(text: string): string[] {
   return text
     .toLowerCase()
@@ -200,6 +202,18 @@ export function createWorkspaceContextProvider(
     // Collect all files (depth 3)
     const allFiles: string[] = [];
     await collectFiles(workDir, workDir, 0, allFiles);
+
+    // Small workspace fast path: include ALL files when total count is small
+    if (allFiles.length <= SMALL_WORKSPACE_FILE_LIMIT) {
+      for (const fp of allFiles) {
+        const rel = path.relative(workDir, fp);
+        const content = await readFileSection(fp, maxCharsPerFile);
+        if (content) {
+          parts.push(`## ${rel}\n\`\`\`\n${content}\n\`\`\``);
+        }
+      }
+      return parts.join("\n\n");
+    }
 
     // Separate already-included from candidates
     const alwaysSet = new Set(alwaysIncludePaths);
