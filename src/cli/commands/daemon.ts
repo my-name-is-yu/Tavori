@@ -1,6 +1,11 @@
-// ─── pulseed daemon commands (start, stop, cron) ───
+// ─── pulseed daemon commands (start, stop, cron, status) ───
 
 import { parseArgs } from "node:util";
+import { spawn } from "node:child_process";
+import * as path from "node:path";
+import { readJsonFileOrNull } from "../../utils/json-io.js";
+import { DaemonStateSchema } from "../../types/daemon.js";
+import type { DaemonState } from "../../types/daemon.js";
 
 import { StateManager } from "../../state-manager.js";
 import { CharacterConfigManager } from "../../traits/character-config.js";
@@ -17,7 +22,7 @@ export async function cmdStart(
   characterConfigManager: CharacterConfigManager,
   args: string[]
 ): Promise<void> {
-  let values: { "api-key"?: string; config?: string; goal?: string[] };
+  let values: { "api-key"?: string; config?: string; goal?: string[]; detach?: boolean };
   try {
     ({ values } = parseArgs({
       args,
@@ -25,9 +30,10 @@ export async function cmdStart(
         "api-key": { type: "string" },
         config: { type: "string" },
         goal: { type: "string", multiple: true },
+        detach: { type: "boolean", short: "d" },
       },
       strict: false,
-    }) as { values: { "api-key"?: string; config?: string; goal?: string[] } });
+    }) as { values: { "api-key"?: string; config?: string; goal?: string[]; detach?: boolean } });
   } catch (err) {
     getCliLogger().error(formatOperationError("parse start command arguments", err));
     values = {};
@@ -38,6 +44,30 @@ export async function cmdStart(
   if (goalIds.length === 0) {
     getCliLogger().error("Error: at least one --goal is required for daemon mode");
     process.exit(1);
+  }
+
+  // --detach: spawn a detached child and exit immediately
+  if (values.detach) {
+    const scriptPath = process.argv[1]!;
+    // Reconstruct args from parsed values (never include --detach)
+    const childArgs = ["start"];
+    for (const g of goalIds) childArgs.push("--goal", g);
+
+    const child = spawn(process.execPath, [scriptPath, ...childArgs], {
+      detached: true,
+      stdio: "ignore",
+    });
+    child.on("error", (err) => {
+      console.error(`Failed to start daemon: ${err.message}`);
+      process.exit(1);
+    });
+    child.unref();
+    if (child.pid == null) {
+      console.error("Failed to start daemon: no PID assigned");
+      process.exit(1);
+    }
+    console.log(`Daemon started in background (PID: ${child.pid})`);
+    process.exit(0);
   }
 
   const deps = await buildDeps(stateManager, characterConfigManager);
@@ -63,6 +93,60 @@ export async function cmdStart(
 
   logger.info(`Starting PulSeed daemon for goals: ${goalIds.join(", ")}`);
   await daemon.start(goalIds);
+}
+
+export async function cmdDaemonStatus(_args: string[]): Promise<void> {
+  const baseDir = getPulseedDirPath();
+  const statePath = path.join(baseDir, "daemon-state.json");
+
+  const raw = await readJsonFileOrNull(statePath);
+  if (raw === null) {
+    console.log("No daemon state found");
+    return;
+  }
+  const parsed = DaemonStateSchema.safeParse(raw);
+  if (!parsed.success) {
+    console.error(`Invalid daemon state: ${parsed.error.message}`);
+    return;
+  }
+  const data: DaemonState = parsed.data;
+
+  // Check if the PID is actually running
+  let alive = false;
+  try {
+    process.kill(data.pid, 0);
+    alive = true;
+  } catch {
+    alive = false;
+  }
+
+  const status = alive ? "running" : "stopped";
+  const lines: string[] = [
+    `Status:      ${status}`,
+    `PID:         ${data.pid}`,
+    `Active goals: ${data.active_goals.join(", ") || "(none)"}`,
+    `Loop count:  ${data.loop_count}`,
+    `Crash count: ${data.crash_count}`,
+  ];
+
+  if (data.started_at) {
+    const uptimeMs = alive ? Date.now() - new Date(data.started_at).getTime() : null;
+    lines.push(`Started at:  ${data.started_at}`);
+    if (uptimeMs !== null) {
+      const uptimeSec = Math.floor(uptimeMs / 1000);
+      lines.push(`Uptime:      ${uptimeSec}s`);
+    }
+  }
+
+  if (data.last_loop_at) {
+    lines.push(`Last loop:   ${data.last_loop_at}`);
+  }
+
+  if (data.last_error) {
+    lines.push(`Last error:  ${data.last_error}`);
+  }
+
+  console.log(lines.join("\n"));
 }
 
 export async function cmdStop(_args: string[]): Promise<void> {

@@ -49,7 +49,7 @@ import {
   cmdCapabilityList,
   cmdCapabilityRemove,
 } from "./cli/commands/config.js";
-import { cmdStart, cmdStop, cmdCron } from "./cli/commands/daemon.js";
+import { cmdStart, cmdStop, cmdCron, cmdDaemonStatus } from "./cli/commands/daemon.js";
 import { cmdSuggest, cmdImprove } from "./cli/commands/suggest.js";
 import { cmdSetup } from "./cli/commands/setup.js";
 import { cmdKnowledgeList, cmdKnowledgeSearch, cmdKnowledgeStats } from "./cli/commands/knowledge.js";
@@ -279,6 +279,19 @@ export class CLIRunner {
     if (subcommand === "start") {
       await cmdStart(this.stateManager, this.characterConfigManager, argv.slice(1));
       return 0;
+    }
+
+    if (subcommand === "daemon") {
+      const daemonSubcommand = argv[1];
+
+      if (daemonSubcommand === "status") {
+        await cmdDaemonStatus(argv.slice(2));
+        return 0;
+      }
+
+      logger.error(`Unknown daemon subcommand: "${daemonSubcommand ?? ""}"`);
+      logger.error("Available: daemon status");
+      return 1;
     }
 
     if (subcommand === "stop") {

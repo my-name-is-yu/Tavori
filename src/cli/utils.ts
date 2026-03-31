@@ -43,6 +43,7 @@ Usage:
   pulseed tui                          Launch the interactive TUI
   pulseed start --goal <id>            Start daemon mode for one or more goals
   pulseed stop                         Stop the running daemon
+  pulseed daemon status                Show running daemon status
   pulseed cron --goal <id>             Print crontab entry for a goal
   pulseed config character             Show or update character configuration
   pulseed datasource add <type>        Register a new data source (file | http_api)
@@ -66,6 +67,10 @@ Options (pulseed run):
   --adapter <type>                    Adapter: claude_api | claude_code_cli | github_issue (default: claude_api)
   --tree                              Enable tree mode (iterate across all tree nodes)
   --yes, -y                           Auto-approve all tasks (skip approval prompts)
+
+Options (pulseed start):
+  --goal <id>                         Goal ID to run (repeatable, required)
+  --detach, -d                        Run daemon in background (detached process)
 
 Options (pulseed improve):
   --auto                              Full auto mode (select best suggestion, run loop)
