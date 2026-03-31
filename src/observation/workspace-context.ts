@@ -226,6 +226,18 @@ export function createWorkspaceContextProvider(
       return parts.join("\n\n");
     }
 
+    // Small workspace fast path: include ALL files when total count is small
+    if (allFiles.length <= SMALL_WORKSPACE_FILE_LIMIT) {
+      for (const fp of allFiles) {
+        const rel = path.relative(workDir, fp);
+        const content = await readFileSection(fp, maxCharsPerFile);
+        if (content) {
+          parts.push(`## ${rel}\n\`\`\`\n${content}\n\`\`\``);
+        }
+      }
+      return parts.join("\n\n");
+    }
+
     // Separate already-included from candidates
     const alwaysSet = new Set(alwaysIncludePaths);
     const pathMatchSet = new Set(pathMatchedPaths);
