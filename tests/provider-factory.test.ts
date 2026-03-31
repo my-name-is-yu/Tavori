@@ -147,14 +147,14 @@ describe("buildLLMClient — early API key validation", () => {
   // ── openai with codex adapter ─────────────────────────────────────────────
 
   describe("provider: openai with openai_codex_cli adapter", () => {
-    it("throws when api_key is absent", async () => {
+    it("succeeds when api_key is absent (CodexLLMClient uses codex CLI auth)", async () => {
       mockLoadProviderConfig.mockResolvedValue({
         provider: "openai",
         model: "gpt-5.4-mini",
         adapter: "openai_codex_cli",
       });
 
-      await expect(buildLLMClient()).rejects.toThrow(/OPENAI_API_KEY is not set/);
+      await expect(buildLLMClient()).resolves.not.toThrow();
     });
 
     it("succeeds when api_key is present", async () => {

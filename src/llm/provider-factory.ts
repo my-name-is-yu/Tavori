@@ -37,13 +37,10 @@ export async function buildLLMClient(): Promise<ILLMClient> {
 
   switch (config.provider) {
     case "openai": {
-      // Use CodexLLMClient when adapter is openai_codex_cli
+      // Use CodexLLMClient when adapter is openai_codex_cli.
+      // CodexLLMClient shells out to the codex CLI which handles auth internally,
+      // so no api_key check is needed here.
       if (config.adapter === "openai_codex_cli") {
-        if (!config.api_key) {
-          throw new LLMError(
-            "OPENAI_API_KEY is not set.\nSet it via: export OPENAI_API_KEY=sk-..."
-          );
-        }
         return new CodexLLMClient({
           cliPath: config.codex_cli_path,
           model: config.model,

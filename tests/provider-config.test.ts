@@ -180,15 +180,28 @@ describe("validateProviderConfig", () => {
     );
   });
 
-  it("reports error when api_key is missing for openai", () => {
+  it("reports error when api_key is missing for openai (openai_api adapter)", () => {
+    const result = validateProviderConfig({
+      provider: "openai",
+      model: "gpt-5.4-mini",
+      adapter: "openai_api",
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContainEqual(
+      expect.stringContaining("API key required")
+    );
+  });
+
+  it("does not report error when api_key is missing for openai_codex_cli adapter", () => {
     const result = validateProviderConfig({
       provider: "openai",
       model: "gpt-5.4-mini",
       adapter: "openai_codex_cli",
     });
 
-    expect(result.valid).toBe(false);
-    expect(result.errors).toContainEqual(
+    // openai_codex_cli uses OAuth, so api_key is not required
+    expect(result.errors).not.toContainEqual(
       expect.stringContaining("API key required")
     );
   });

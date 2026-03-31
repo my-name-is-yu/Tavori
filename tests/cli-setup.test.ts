@@ -194,11 +194,11 @@ describe("cmdSetup API key detection", () => {
     expect(config.api_key).toBe("sk-ant-env-key-5678");
   });
 
-  it("returns error when no API key is available for openai", async () => {
+  it("returns error when no API key is available for openai_api adapter", async () => {
     const { cmdSetup } = await import("../src/cli/commands/setup.js");
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const result = await cmdSetup(["--provider", "openai"]);
+    const result = await cmdSetup(["--provider", "openai", "--adapter", "openai_api"]);
 
     expect(result).toBe(1);
     expect(consoleSpy).toHaveBeenCalledWith(

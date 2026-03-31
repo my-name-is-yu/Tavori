@@ -6,8 +6,42 @@
 
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
+import * as os from "node:os";
 import { getPulseedDirPath } from "../utils/paths.js";
 import { writeJsonFileAtomic } from "../utils/json-io.js";
+
+// ─── OAuth Token Helpers ───
+
+/** Check if a JWT access token is expired. Returns true if malformed or expired. */
+export function isJwtExpired(token: string): boolean {
+  try {
+    const parts = token.split(".");
+    if (parts.length < 3) return true; // not a JWT
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString());
+    if (typeof payload.exp !== "number") return true;
+    return payload.exp < Math.floor(Date.now() / 1000);
+  } catch {
+    return true; // malformed → treat as expired
+  }
+}
+
+/** Read the OAuth access_token from ~/.codex/auth.json (written by `codex auth login`). */
+export async function readCodexOAuthToken(): Promise<string | undefined> {
+  const authPath = path.join(os.homedir(), ".codex", "auth.json");
+  try {
+    const raw = await fsp.readFile(authPath, "utf-8");
+    const auth = JSON.parse(raw);
+    const token = auth?.tokens?.access_token;
+    if (typeof token !== "string" || !token) return undefined;
+    if (isJwtExpired(token)) {
+      console.warn("[provider-config] ~/.codex/auth.json token expired. Run `codex` to refresh.");
+      return undefined;
+    }
+    return token;
+  } catch {
+    return undefined;
+  }
+}
 
 // ─── Model Registry ───
 
@@ -191,7 +225,7 @@ export function validateProviderConfig(config: ProviderConfig): ValidationResult
   }
 
   // Check required api_key
-  if ((config.provider === "openai" || config.provider === "anthropic") && !config.api_key) {
+  if (!config.api_key && config.adapter !== "openai_codex_cli" && (config.provider === "openai" || config.provider === "anthropic")) {
     const envName = config.provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY";
     errors.push(`API key required for provider "${config.provider}". Set ${envName} or add api_key to config.`);
   }
@@ -331,7 +365,13 @@ export async function loadProviderConfig(): Promise<ProviderConfig> {
     model = fallback;
   }
 
-  const api_key = resolveApiKey(fileConfig.api_key, provider);
+  let api_key = resolveApiKey(fileConfig.api_key, provider);
+
+  // Fallback: read OAuth token from ~/.codex/auth.json when no API key is configured
+  if (!api_key && provider === "openai" && adapter === "openai_codex_cli") {
+    api_key = await readCodexOAuthToken();
+  }
+
   const base_url = resolveBaseUrl(fileConfig.base_url, provider);
 
   const config: ProviderConfig = { provider, model, adapter };
