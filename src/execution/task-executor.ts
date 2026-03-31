@@ -160,7 +160,21 @@ export async function executeTask(
         encoding: "utf-8",
       }).trim();
 
-      const changedFiles = diffOutput ? diffOutput.split("\n") : [];
+      // Also detect new (untracked) files — git diff alone misses them
+      let untrackedOutput = "";
+      try {
+        untrackedOutput = execFileSyncFn("git", ["ls-files", "--others", "--exclude-standard"], {
+          cwd: process.cwd(),
+          encoding: "utf-8",
+        }).trim();
+      } catch {
+        // git ls-files failure is non-fatal
+      }
+
+      const changedFiles = [
+        ...(diffOutput ? diffOutput.split("\n") : []),
+        ...(untrackedOutput ? untrackedOutput.split("\n") : []),
+      ];
       result.filesChanged = changedFiles.length > 0;
       if (!result.filesChanged) {
         logger?.warn(
