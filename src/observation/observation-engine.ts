@@ -344,7 +344,10 @@ export class ObservationEngine {
                 JSON.stringify(dim.threshold),
                 ctx,
                 null, // no previousScore — bypass jump suppression for cross-validation
-                true // dryRun — do NOT write to state
+                true, // dryRun — do NOT write to state
+                undefined,
+                undefined,
+                workspacePath
               );
               const llmValue = typeof llmEntry.extracted_value === "number" ? llmEntry.extracted_value : 0;
               const result = this.crossValidate(goalId, dim.name, mechanicalValue, llmValue);
@@ -444,7 +447,8 @@ export class ObservationEngine {
             previousScore,
             undefined, // dryRun
             typeof dim.current_value === "number" ? dim.current_value : null,
-            !!dataSource
+            !!dataSource,
+            workspacePath
           );
           continue;
         } catch (err) {
@@ -559,7 +563,8 @@ export class ObservationEngine {
     previousScore?: number | null,
     dryRun?: boolean,
     currentValue?: number | null,
-    sourceAvailable?: boolean
+    sourceAvailable?: boolean,
+    workspacePath?: string
   ): Promise<ObservationLogEntry> {
     if (!this.llmClient) {
       throw new Error("observeWithLLM: llmClient is not configured");
@@ -580,7 +585,8 @@ export class ObservationEngine {
       undefined, // dimensionHistory
       undefined, // gateway
       currentValue,
-      sourceAvailable
+      sourceAvailable,
+      workspacePath
     );
   }
 

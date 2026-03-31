@@ -21,17 +21,19 @@ import type { IPromptGateway } from "../prompt/gateway.js";
  *
  * @param options   Engine options (may contain gitContextFetcher override).
  * @param maxChars  Maximum characters to return (default: 3000).
+ * @param cwd       Working directory for git commands (defaults to process.cwd()).
  */
-export async function fetchGitDiffContext(options: ObservationEngineOptions, maxChars = 3000): Promise<string> {
+export async function fetchGitDiffContext(options: ObservationEngineOptions, maxChars = 3000, cwd?: string): Promise<string> {
   // Allow test injection via options
   if (options.gitContextFetcher) {
     return options.gitContextFetcher(maxChars);
   }
 
+  const execOptions = { timeout: 10000, encoding: "utf8" as const, ...(cwd ? { cwd } : {}) };
   const parts: string[] = [];
 
   try {
-    const { stdout: stat } = await execFile("git", ["diff", "--stat"], { timeout: 10000, encoding: "utf8" });
+    const { stdout: stat } = await execFile("git", ["diff", "--stat"], execOptions);
     if (stat.trim()) {
       parts.push("[git diff --stat]");
       parts.push(stat.trim());
@@ -41,7 +43,7 @@ export async function fetchGitDiffContext(options: ObservationEngineOptions, max
   }
 
   try {
-    const { stdout: diff } = await execFile("git", ["diff"], { timeout: 10000, encoding: "utf8" });
+    const { stdout: diff } = await execFile("git", ["diff"], execOptions);
     if (diff.trim()) {
       parts.push("[git diff]");
       // Reserve space: subtract what we've already accumulated
@@ -93,6 +95,7 @@ function inferDirection(history: Array<{ value: number }>): string {
  * @param dryRun             If true, do not write to state.
  * @param logger             Optional logger.
  * @param dimensionHistory   Optional history of prior observations for this dimension.
+ * @param workspacePath      Optional workspace directory for git diff fallback.
  */
 export async function observeWithLLM(
   goalId: string,
@@ -110,7 +113,8 @@ export async function observeWithLLM(
   dimensionHistory?: Array<{ value: number; timestamp?: string; date?: string }>,
   gateway?: IPromptGateway,
   currentValue?: number | null,
-  sourceAvailable?: boolean
+  sourceAvailable?: boolean,
+  workspacePath?: string
 ): Promise<ObservationLogEntry> {
   logger?.info(
     `[ObservationEngine] LLM observation for dimension "${dimensionLabel}" (goal: ${goalId})`
@@ -119,7 +123,7 @@ export async function observeWithLLM(
   // Resolve workspace context: use provided context, fall back to git diff, or warn.
   let resolvedContext = workspaceContext;
   if (!resolvedContext || resolvedContext.trim().length === 0) {
-    const gitCtx = await fetchGitDiffContext(options, 3000);
+    const gitCtx = await fetchGitDiffContext(options, 3000, workspacePath);
     if (gitCtx.trim().length > 0) {
       resolvedContext = gitCtx;
       logger?.info(

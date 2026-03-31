@@ -196,23 +196,14 @@ export async function autoRegisterFileExistenceDataSources(
   stateManager: StateManager,
   dimensions: Array<{ name: string; label?: string }>,
   goalDescription: string,
-  goalId: string
+  goalId: string,
+  constraints?: string[]
 ): Promise<void> {
   try {
     const fileExistenceDims = dimensions.filter((d) =>
       /_exists$|_file$|file_existence/.test(d.name)
     );
     if (fileExistenceDims.length === 0) return;
-
-    const nonFileExistenceDims = dimensions.filter((d) =>
-      !/_exists$|_file$|file_existence/.test(d.name)
-    );
-    if (nonFileExistenceDims.length >= 1) {
-      getCliLogger().info(
-        `[auto] Skipping FileExistenceDataSource auto-registration: goal has ${nonFileExistenceDims.length} non-FileExistence dimensions that should take priority`
-      );
-      return;
-    }
 
     const filePathPattern = /\b([\w.\-/]+\.\w{1,10})\b/g;
     const candidateFiles: string[] = [];
@@ -275,13 +266,17 @@ export async function autoRegisterFileExistenceDataSources(
       return;
     }
 
+    const workspacePath = constraints
+      ?.find((c) => c.startsWith("workspace_path:"))
+      ?.slice("workspace_path:".length) ?? process.cwd();
+
     const dimKeys = Object.keys(dimensionMapping).sort().join("_");
     const id = `ds_auto_${goalId}_${dimKeys}`;
     const config = {
       id,
       name: `auto:file_existence (${Object.values(dimensionMapping).join(", ")})`,
       type: "file_existence",
-      connection: { path: process.cwd() },
+      connection: { path: workspacePath },
       dimension_mapping: dimensionMapping,
       scope_goal_id: goalId,
       enabled: true,

@@ -160,17 +160,28 @@ export class CLIRunner {
       const goalId = goalIds[0];
 
       // Add workspace_path constraint to goal if --workspace is provided
-      if (values.workspace) {
+      let resolvedWorkspace = values.workspace;
+      if (resolvedWorkspace) {
         const goal = await this.stateManager.loadGoal(goalId);
         if (goal) {
           const wpPrefix = "workspace_path:";
           const existingIdx = goal.constraints.findIndex((c) => c.startsWith(wpPrefix));
           if (existingIdx >= 0) {
-            goal.constraints[existingIdx] = `${wpPrefix}${values.workspace}`;
+            goal.constraints[existingIdx] = `${wpPrefix}${resolvedWorkspace}`;
           } else {
-            goal.constraints.push(`${wpPrefix}${values.workspace}`);
+            goal.constraints.push(`${wpPrefix}${resolvedWorkspace}`);
           }
           await this.stateManager.saveGoal(goal);
+        }
+      } else {
+        // No --workspace flag: check if goal already has workspace_path constraint
+        const goal = await this.stateManager.loadGoal(goalId);
+        if (goal) {
+          const wpPrefix = "workspace_path:";
+          const existing = goal.constraints.find((c) => c.startsWith(wpPrefix));
+          if (existing) {
+            resolvedWorkspace = existing.slice(wpPrefix.length);
+          }
         }
       }
 
@@ -197,7 +208,7 @@ export class CLIRunner {
         globalYes || values.yes,
         values.verbose,
         activeCoreLoopRef,
-        values.workspace,
+        resolvedWorkspace,
       );
       this.activeCoreLoop = activeCoreLoopRef.value;
       return result;
