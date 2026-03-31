@@ -53,7 +53,9 @@
     "test:changed": "vitest run --changed",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "tui": "node dist/tui/entry.js"
+    "tui": "node dist/tui/entry.js",
+    "test:remote": "bash scripts/test-remote.sh",
+    "test:remote:coverage": "bash scripts/test-remote.sh --coverage"
   },
   "engines": {
     "node": ">=20"
