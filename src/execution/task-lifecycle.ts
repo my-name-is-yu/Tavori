@@ -264,8 +264,9 @@ export class TaskLifecycle {
     try {
       const goal = await this.stateManager.loadGoal(goalId);
       goalDimensions = goal?.dimensions ?? undefined;
-    } catch {
+    } catch (err) {
       // If goal load fails, fall back to unweighted selection
+      this.logger?.warn(`[TaskLifecycle] Failed to load goal "${goalId}" for dimension selection, using unweighted fallback: ${err instanceof Error ? err.message : String(err)}`);
     }
     const targetDimension = this.selectTargetDimension(gapVector, driveContext, goalDimensions);
 
@@ -278,8 +279,9 @@ export class TaskLifecycle {
           const snippetText = contextSnippets.join("\n");
           enrichedKnowledgeContext = knowledgeContext ? `${knowledgeContext}\n${snippetText}` : snippetText;
         }
-      } catch {
+      } catch (err) {
         // non-fatal: proceed without enrichment
+        this.logger?.warn(`[TaskLifecycle] Knowledge transfer candidate detection failed (proceeding without enrichment): ${err instanceof Error ? err.message : String(err)}`);
       }
     }
 
@@ -293,8 +295,9 @@ export class TaskLifecycle {
             ? `${enrichedKnowledgeContext}\n${reflectionText}`
             : reflectionText;
         }
-      } catch {
+      } catch (err) {
         // non-fatal: proceed without reflections
+        this.logger?.warn(`[TaskLifecycle] Failed to load past reflections (proceeding without): ${err instanceof Error ? err.message : String(err)}`);
       }
     }
 

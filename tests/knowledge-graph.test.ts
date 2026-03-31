@@ -365,3 +365,37 @@ describe("clear", () => {
     expect(graph2.nodeCount).toBe(0);
   });
 });
+
+// ═══════════════════════════════════════════════════════
+// _load() branch coverage
+// ═══════════════════════════════════════════════════════
+
+describe("_load via KnowledgeGraph.create", () => {
+  it("starts empty when file does not exist (create on nonexistent path)", async () => {
+    const g = await KnowledgeGraph.create(path.join(tempDir, "no-such-file.json"));
+    expect(g.nodeCount).toBe(0);
+    expect(g.edgeCount).toBe(0);
+  });
+
+  it("recovers from corrupt JSON — starts fresh", async () => {
+    const filePath = path.join(tempDir, "corrupt.json");
+    // Write corrupt JSON
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(filePath, "{ this is not valid json !!! ", "utf-8");
+
+    const g = await KnowledgeGraph.create(filePath);
+    expect(g.nodeCount).toBe(0);
+    expect(g.edgeCount).toBe(0);
+  });
+
+  it("handles file with null nodes/edges arrays gracefully", async () => {
+    const filePath = path.join(tempDir, "null-arrays.json");
+    const { writeFileSync } = await import("node:fs");
+    // nodes and edges are missing — ?? [] fallback
+    writeFileSync(filePath, JSON.stringify({}), "utf-8");
+
+    const g = await KnowledgeGraph.create(filePath);
+    expect(g.nodeCount).toBe(0);
+    expect(g.edgeCount).toBe(0);
+  });
+});

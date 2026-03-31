@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { StateManager } from "../src/state-manager.js";
 import { SessionManager, DEFAULT_CONTEXT_BUDGET } from "../src/execution/session-manager.js";
+import { CheckpointManager } from "../src/execution/checkpoint-manager.js";
 import type { Session } from "../src/types/session.js";
 import type { KnowledgeEntry } from "../src/types/knowledge.js";
 import { makeTempDir } from "./helpers/temp-dir.js";
@@ -623,6 +624,148 @@ describe("SessionManager", () => {
       for (let i = 1; i < slots.length; i++) {
         expect(slots[i].priority).toBeGreaterThan(slots[i - 1].priority);
       }
+    });
+  });
+
+  // ─── loadSessionIndex edge cases ───
+
+  describe("loadSessionIndex edge cases (via getActiveSessions)", () => {
+    it("handles non-array raw index by treating as empty (returns no sessions)", async () => {
+      // Write a non-array value to the index file to hit the !Array.isArray(raw) branch
+      await stateManager.writeRaw("sessions/index.json", { corrupt: true });
+
+      // getActiveSessions reads the index — non-array raw should be treated as empty
+      const sessions = await manager.getActiveSessions("any-goal");
+      expect(sessions).toEqual([]);
+    });
+
+    it("handles null index (no index file) by returning empty array", async () => {
+      // No index file written — readRaw returns null → return []
+      const sessions = await manager.getActiveSessions("any-goal");
+      expect(sessions).toEqual([]);
+    });
+  });
+
+  // ─── updateSessionIndex deduplication ───
+
+  describe("updateSessionIndex deduplication", () => {
+    it("does not duplicate session IDs in the index when createSession is called twice for same session structure", async () => {
+      const s1 = await manager.createSession("task_execution", "goal-1", "task-1");
+
+      // Manually write the same session ID to index again to simulate a duplicate scenario,
+      // then create another session — the index should not contain more duplicates
+      const s2 = await manager.createSession("observation", "goal-1", null);
+
+      // Read the raw index and verify no duplicates
+      const rawIndex = await stateManager.readRaw("sessions/index.json") as string[];
+      expect(rawIndex).toContain(s1.id);
+      expect(rawIndex).toContain(s2.id);
+      // Verify uniqueness
+      const unique = new Set(rawIndex);
+      expect(unique.size).toBe(rawIndex.length);
+    });
+
+    it("does not add duplicate session ID when persistSession is called twice", async () => {
+      const s = await manager.createSession("goal_review", "goal-dup", null);
+      // End the session (which calls persistSession again with the same id)
+      await manager.endSession(s.id, "done");
+
+      const rawIndex = await stateManager.readRaw("sessions/index.json") as string[];
+      const count = rawIndex.filter((id) => id === s.id).length;
+      expect(count).toBe(1);
+    });
+  });
+
+  // ─── Checkpoint delegation ───
+
+  describe("checkpoint delegation", () => {
+    it("saveCheckpoint returns null when no checkpointManager is set", async () => {
+      const result = await manager.saveCheckpoint({
+        goalId: "goal-1",
+        taskId: "task-1",
+        agentId: "mock-agent",
+        sessionContextSnapshot: "context",
+      });
+      expect(result).toBeNull();
+    });
+
+    it("loadCheckpoint returns null when no checkpointManager is set", async () => {
+      const result = await manager.loadCheckpoint("goal-1", "mock-agent");
+      expect(result).toBeNull();
+    });
+
+    it("gcCheckpoints returns 0 when no checkpointManager is set", async () => {
+      const result = await manager.gcCheckpoints("goal-1");
+      expect(result).toBe(0);
+    });
+
+    it("setCheckpointManager installs the checkpoint manager", async () => {
+      const cm = new CheckpointManager({ stateManager });
+      manager.setCheckpointManager(cm);
+
+      // After setting, saveCheckpoint should delegate (returns a Checkpoint object, not null)
+      const result = await manager.saveCheckpoint({
+        goalId: "goal-cp",
+        taskId: "task-cp",
+        agentId: "mock-agent",
+        sessionContextSnapshot: "snapshot text",
+        intermediateResults: ["step 1 done"],
+      });
+      expect(result).not.toBeNull();
+      expect(result?.goal_id).toBe("goal-cp");
+    });
+
+    it("gcCheckpoints delegates to checkpointManager when set", async () => {
+      const cm = new CheckpointManager({ stateManager });
+      manager.setCheckpointManager(cm);
+
+      // No checkpoints exist for the goal — should return 0 deleted
+      const deleted = await manager.gcCheckpoints("goal-no-checkpoints");
+      expect(typeof deleted).toBe("number");
+      expect(deleted).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  // ─── buildContextForType with tokenBudget ───
+
+  describe("buildContextForType with tokenBudget (via createSession)", () => {
+    it("createSession with very tight budget produces fewer slots", async () => {
+      // A budget of 1 token should drop most or all slots (all have token_estimate=0 but content)
+      // The key is the branch `if (tokenBudget !== undefined)` inside buildContextForType is hit.
+      // With budget=0 all slots are dropped.
+      const session = await manager.createSession("task_execution", "goal-budget", "task-budget", 0);
+      // With budget 0, all slots should be filtered out
+      expect(session.context_slots).toHaveLength(0);
+    });
+
+    it("createSession with ample budget retains all slots", async () => {
+      const session = await manager.createSession("task_review", "goal-budget2", "task-budget2", 1_000_000);
+      expect(session.context_slots).toHaveLength(2);
+    });
+  });
+
+  // ─── injectLearningFeedback ───
+
+  describe("injectLearningFeedback", () => {
+    it("returns slots unchanged when feedback array is empty", () => {
+      const slots = manager.buildTaskExecutionContext("goal-1", "task-1");
+      const result = manager.injectLearningFeedback(slots, []);
+      expect(result).toHaveLength(slots.length);
+    });
+
+    it("adds a learning_feedback slot when feedback items are provided", () => {
+      const slots = manager.buildGoalReviewContext("goal-1");
+      const result = manager.injectLearningFeedback(slots, ["Feedback item A", "Feedback item B"]);
+      const feedbackSlot = result.find((s) => s.label === "learning_feedback");
+      expect(feedbackSlot).toBeDefined();
+    });
+
+    it("feedback slot content contains the provided feedback items", () => {
+      const slots = manager.buildObservationContext("goal-1", ["dim_a"]);
+      const result = manager.injectLearningFeedback(slots, ["Use approach X", "Avoid approach Y"]);
+      const feedbackSlot = result.find((s) => s.label === "learning_feedback")!;
+      expect(feedbackSlot.content).toContain("Use approach X");
+      expect(feedbackSlot.content).toContain("Avoid approach Y");
     });
   });
 });

@@ -127,6 +127,26 @@ describe("Phase 2 methods", () => {
       await expect(async () => await manager.activateMultiple("goal-1", [])).rejects.toThrow();
     });
 
+    it("leaves non-targeted strategies unchanged when activating a subset of candidates", async () => {
+      // Generate two candidates, activate only one — the other should stay as candidate
+      const mock = createMockLLMClient([CANDIDATE_RESPONSE_TWO]);
+      const manager = new StrategyManager(stateManager, mock);
+      const candidates = await manager.generateCandidates("goal-1", "research_depth", ["research_depth"], {
+        currentGap: 0.5,
+        pastStrategies: [],
+      });
+
+      // Activate only the first candidate
+      const activated = await manager.activateMultiple("goal-1", [candidates[0]!.id]);
+      expect(activated).toHaveLength(1);
+      expect(activated[0]!.state).toBe("active");
+
+      // Second candidate should remain as candidate
+      const portfolio = await manager.getPortfolio("goal-1");
+      const second = portfolio!.strategies.find((s) => s.id === candidates[1]!.id);
+      expect(second!.state).toBe("candidate");
+    });
+
     it("throws when a strategy is not in candidate state", async () => {
       const mock = createMockLLMClient([CANDIDATE_RESPONSE_ONE]);
       const manager = new StrategyManager(stateManager, mock);
@@ -475,6 +495,30 @@ describe("Phase 2 methods", () => {
       ).rejects.toThrow("not found");
     });
 
+    it("leaves other strategies untouched when updating allocation in a multi-strategy portfolio", async () => {
+      const mock = createMockLLMClient([CANDIDATE_RESPONSE_TWO]);
+      const manager = new StrategyManager(stateManager, mock);
+      const candidates = await manager.generateCandidates("goal-1", "research_depth", ["research_depth"], {
+        currentGap: 0.5,
+        pastStrategies: [],
+      });
+
+      await manager.activateMultiple("goal-1", candidates.map((c) => c.id));
+
+      const targetId = candidates[0]!.id;
+      const otherId = candidates[1]!.id;
+
+      await manager.updateAllocation("goal-1", targetId, 0.3);
+
+      const portfolio = await manager.getPortfolio("goal-1");
+      const target = portfolio!.strategies.find((s) => s.id === targetId);
+      const other = portfolio!.strategies.find((s) => s.id === otherId);
+
+      expect(target!.allocation).toBe(0.3);
+      // other strategy allocation is unchanged
+      expect(other!.allocation).toBeCloseTo(0.5, 5);
+    });
+
     it("persists updated allocation across manager instances", async () => {
       const mock = createMockLLMClient([CANDIDATE_RESPONSE_ONE]);
       const manager1 = new StrategyManager(stateManager, mock);
@@ -490,6 +534,147 @@ describe("Phase 2 methods", () => {
       const strategy = portfolio!.strategies.find((s) => s.id === candidate!.id);
       expect(strategy!.allocation).toBe(0.55);
     });
+  });
+});
+
+// ─── Additional branch coverage ───
+
+describe("activateMultiple — strategy not found in portfolio", () => {
+  it("throws when a strategy ID does not exist in the portfolio", async () => {
+    const mock = createMockLLMClient([]);
+    const manager = new StrategyManager(stateManager, mock);
+
+    // Portfolio for goal-1 exists (will be created) but "ghost-id" is not in it
+    await expect(
+      manager.activateMultiple("goal-1", ["ghost-id"])
+    ).rejects.toThrow("not found in portfolio");
+  });
+});
+
+describe("terminateStrategy — strategy not found", () => {
+  it("throws when strategy ID does not exist in the portfolio", async () => {
+    const mock = createMockLLMClient([CANDIDATE_RESPONSE_ONE]);
+    const manager = new StrategyManager(stateManager, mock);
+    // Create portfolio with one candidate
+    await manager.generateCandidates("goal-1", "word_count", ["word_count"], {
+      currentGap: 0.7,
+      pastStrategies: [],
+    });
+
+    await expect(
+      manager.terminateStrategy("goal-1", "nonexistent-id", "reason")
+    ).rejects.toThrow("not found in portfolio");
+  });
+});
+
+describe("resumeStrategy — error paths", () => {
+  it("throws when allocation is negative", async () => {
+    const mock = createMockLLMClient([]);
+    const manager = new StrategyManager(stateManager, mock);
+
+    await expect(
+      manager.resumeStrategy("goal-1", "any-id", -0.1)
+    ).rejects.toThrow("allocation must be in [0, 1]");
+  });
+
+  it("throws when allocation exceeds 1", async () => {
+    const mock = createMockLLMClient([]);
+    const manager = new StrategyManager(stateManager, mock);
+
+    await expect(
+      manager.resumeStrategy("goal-1", "any-id", 1.01)
+    ).rejects.toThrow("allocation must be in [0, 1]");
+  });
+
+  it("throws when strategy ID does not exist in portfolio", async () => {
+    const mock = createMockLLMClient([CANDIDATE_RESPONSE_ONE]);
+    const manager = new StrategyManager(stateManager, mock);
+    await manager.generateCandidates("goal-1", "word_count", ["word_count"], {
+      currentGap: 0.7,
+      pastStrategies: [],
+    });
+
+    await expect(
+      manager.resumeStrategy("goal-1", "nonexistent-id", 0.5)
+    ).rejects.toThrow("not found in portfolio");
+  });
+
+  it("leaves non-active strategies unchanged when resuming (covers !others.some branch)", async () => {
+    // Set up: two candidates, one active, one suspended, plus a third candidate (non-active)
+    // The third candidate should be returned unchanged during the strategy map in resumeStrategy
+    const mock = createMockLLMClient([CANDIDATE_RESPONSE_TWO, CANDIDATE_RESPONSE_ONE]);
+    const manager = new StrategyManager(stateManager, mock);
+    const firstBatch = await manager.generateCandidates("goal-1", "research_depth", ["research_depth"], {
+      currentGap: 0.5,
+      pastStrategies: [],
+    });
+
+    // Activate both from firstBatch
+    await manager.activateMultiple("goal-1", firstBatch.map((c) => c.id));
+
+    // Generate a third candidate (remains in candidate state — not active/evaluating)
+    const secondBatch = await manager.generateCandidates("goal-1", "word_count", ["word_count"], {
+      currentGap: 0.7,
+      pastStrategies: [],
+    });
+    const thirdCandidateId = secondBatch[0]!.id;
+
+    // Suspend first strategy
+    await manager.suspendStrategy("goal-1", firstBatch[0]!.id);
+
+    // Resume first strategy — third candidate should pass through unchanged
+    const resumed = await manager.resumeStrategy("goal-1", firstBatch[0]!.id, 0.3);
+    expect(resumed.state).toBe("active");
+
+    // Verify the third candidate (non-active) is still in candidate state
+    const portfolio = await manager.getPortfolio("goal-1");
+    const third = portfolio!.strategies.find((s) => s.id === thirdCandidateId);
+    expect(third!.state).toBe("candidate");
+  });
+
+  it("uses equal split when totalOtherAlloc is zero (no other active strategies)", async () => {
+    // Suspend the only active strategy, then resume it — no others exist so totalOtherAlloc = 0
+    const mock = createMockLLMClient([CANDIDATE_RESPONSE_ONE]);
+    const manager = new StrategyManager(stateManager, mock);
+    const [candidate] = await manager.generateCandidates("goal-1", "word_count", ["word_count"], {
+      currentGap: 0.7,
+      pastStrategies: [],
+    });
+    await manager.updateState(candidate!.id, "active");
+    await manager.suspendStrategy("goal-1", candidate!.id);
+
+    // Resume with allocation 0.6; no other active strategies (totalOtherAlloc = 0)
+    const resumed = await manager.resumeStrategy("goal-1", candidate!.id, 0.6);
+    expect(resumed.state).toBe("active");
+    expect(resumed.allocation).toBe(0.6);
+  });
+
+  it("uses equal-split fallback when other active strategies have zero allocation", async () => {
+    // Set up two active strategies, force the non-target one to have allocation 0
+    const mock = createMockLLMClient([CANDIDATE_RESPONSE_TWO]);
+    const manager = new StrategyManager(stateManager, mock);
+    const candidates = await manager.generateCandidates("goal-1", "research_depth", ["research_depth"], {
+      currentGap: 0.5,
+      pastStrategies: [],
+    });
+
+    await manager.activateMultiple("goal-1", candidates.map((c) => c.id));
+
+    // Force id2's allocation to 0 via updateAllocation
+    await manager.updateAllocation("goal-1", candidates[1]!.id, 0);
+
+    // Suspend id1
+    await manager.suspendStrategy("goal-1", candidates[0]!.id);
+
+    // Resume id1: others=[id2] with allocation=0 → totalOtherAlloc=0 → uses equal split fallback
+    const resumed = await manager.resumeStrategy("goal-1", candidates[0]!.id, 0.4);
+    expect(resumed.state).toBe("active");
+    expect(resumed.allocation).toBe(0.4);
+
+    const portfolio = await manager.getPortfolio("goal-1");
+    const other = portfolio!.strategies.find((s) => s.id === candidates[1]!.id);
+    // remaining = 1 - 0.4 = 0.6; split equally among 1 other → 0.6
+    expect(other!.allocation).toBeCloseTo(0.6, 5);
   });
 });
 

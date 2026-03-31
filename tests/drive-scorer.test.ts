@@ -462,4 +462,128 @@ describe("rankDimensions", () => {
     expect(ranked).toHaveLength(3);
     expect(ranked.map((s) => s.dimension_name)).toEqual(["alpha", "bravo", "charlie"]);
   });
+
+  it("two elements with identical name and score maintain stable relative order (comparator returns 0)", () => {
+    // Exercises the `0` branch of the ternary: a.dimension_name === b.dimension_name
+    const s1: import("../src/types/drive.js").DriveScore = {
+      dimension_name: "same",
+      dissatisfaction: 0.5,
+      deadline: 0,
+      opportunity: 0,
+      final_score: 0.5,
+      dominant_drive: "dissatisfaction",
+    };
+    const s2: import("../src/types/drive.js").DriveScore = {
+      dimension_name: "same",
+      dissatisfaction: 0.5,
+      deadline: 0,
+      opportunity: 0,
+      final_score: 0.5,
+      dominant_drive: "dissatisfaction",
+    };
+    const ranked = rankDimensions([s1, s2]);
+    expect(ranked).toHaveLength(2);
+    // Both have the same name and score — order is stable (0 returned by comparator)
+    ranked.forEach((r) => expect(r.dimension_name).toBe("same"));
+  });
+});
+
+// ─── scoreAllDimensions — edge cases ───
+
+describe("scoreAllDimensions — edge cases", () => {
+  it("dimension missing from time_since_last_attempt defaults timeSince to 0", () => {
+    const gv: GapVector = {
+      goal_id: "goal-1",
+      gaps: [
+        {
+          dimension_name: "unknown_dim",
+          raw_gap: 0.5,
+          normalized_gap: 0.5,
+          normalized_weighted_gap: 0.5,
+          confidence: 0.9,
+          uncertainty_weight: 1.0,
+        },
+      ],
+      timestamp: new Date().toISOString(),
+    };
+
+    const ctx: DriveContext = {
+      time_since_last_attempt: {}, // no entry for "unknown_dim" → defaults to 0
+      deadlines: {},
+      opportunities: {},
+    };
+
+    const scores = scoreAllDimensions(gv, ctx, DEFAULT_CONFIG);
+    expect(scores).toHaveLength(1);
+    // At t=0, decay_factor = decay_floor = 0.3
+    expect(scores[0]!.dissatisfaction).toBeCloseTo(0.5 * 0.3, 5);
+  });
+
+  it("opportunity explicitly null in context falls back to scoreOpportunity(0, 0)", () => {
+    const gv: GapVector = {
+      goal_id: "goal-1",
+      gaps: [
+        {
+          dimension_name: "dim_null_opp",
+          raw_gap: 0.4,
+          normalized_gap: 0.4,
+          normalized_weighted_gap: 0.4,
+          confidence: 0.8,
+          uncertainty_weight: 1.0,
+        },
+      ],
+      timestamp: new Date().toISOString(),
+    };
+
+    const ctx: DriveContext = {
+      time_since_last_attempt: { dim_null_opp: 0 },
+      deadlines: { dim_null_opp: null },
+      opportunities: { dim_null_opp: null as any }, // explicitly null → fallback path
+    };
+
+    const scores = scoreAllDimensions(gv, ctx, DEFAULT_CONFIG);
+    expect(scores).toHaveLength(1);
+    // opportunity score should be 0 (value=0, freshness_decay=1)
+    expect(scores[0]!.opportunity).toBe(0);
+  });
+
+  it("empty gaps array returns empty scores", () => {
+    const gv: GapVector = {
+      goal_id: "goal-1",
+      gaps: [],
+      timestamp: new Date().toISOString(),
+    };
+    const ctx: DriveContext = {
+      time_since_last_attempt: {},
+      deadlines: {},
+      opportunities: {},
+    };
+    const scores = scoreAllDimensions(gv, ctx, DEFAULT_CONFIG);
+    expect(scores).toHaveLength(0);
+  });
+
+  it("uses default config when none provided", () => {
+    const gv: GapVector = {
+      goal_id: "goal-1",
+      gaps: [
+        {
+          dimension_name: "dim",
+          raw_gap: 0.5,
+          normalized_gap: 0.5,
+          normalized_weighted_gap: 0.5,
+          confidence: 0.8,
+          uncertainty_weight: 1.0,
+        },
+      ],
+      timestamp: new Date().toISOString(),
+    };
+    const ctx: DriveContext = {
+      time_since_last_attempt: { dim: 0 },
+      deadlines: {},
+      opportunities: {},
+    };
+    const withDefault = scoreAllDimensions(gv, ctx);
+    const withExplicit = scoreAllDimensions(gv, ctx, DEFAULT_CONFIG);
+    expect(withDefault[0]!.final_score).toBeCloseTo(withExplicit[0]!.final_score, 5);
+  });
 });

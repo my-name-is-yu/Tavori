@@ -980,4 +980,68 @@ describe("StallDetector with ProgressPredictor", () => {
     expect(result).not.toBeNull();
     expect(result!.stall_type).toBe("dimension_stall"); // not predicted_plateau
   });
+
+  it("returns null when predictor says improving (trend=improving, confidence > 0.6)", () => {
+    const predictor = new ProgressPredictor();
+    const det = new StallDetector(sm, undefined, predictor);
+    // History: oldest=0.8, latest=0.3 → diff=0.5 >= 0.05 → passes improvement check, goes to predictor.
+    // Last 5: [0.7, 0.6, 0.5, 0.4, 0.3] — monotonically decreasing → slope = -0.1 (improving)
+    // trend="improving" → checkPredictedStall returns null at line 564
+    const history = makeGapHistory([0.8, 0.7, 0.6, 0.5, 0.4, 0.3]);
+    const result = det.checkDimensionStall("g1", "d1", history);
+    expect(result).toBeNull();
+  });
+});
+
+// ─── durationToHours: weeks and default fallback ───
+
+describe("checkTimeExceeded — additional duration units", () => {
+  it("handles duration in weeks correctly (estimate × 2)", () => {
+    // Estimate = 1 week (168 hours) → threshold = 336 hours; started 400 hours ago → stall
+    const startedAt = new Date(Date.now() - 400 * 60 * 60 * 1000).toISOString();
+    const task = {
+      goal_id: "goal-1",
+      started_at: startedAt,
+      estimated_duration: { value: 1, unit: "weeks" },
+    };
+    const result = detector.checkTimeExceeded(task);
+    expect(result).not.toBeNull();
+    expect(result!.stall_type).toBe("time_exceeded");
+  });
+
+  it("does not stall when within 2-week threshold (1 week estimate, 1 week elapsed)", () => {
+    // Estimate = 1 week (168h) → threshold = 336h; started 100 hours ago → within threshold
+    const startedAt = new Date(Date.now() - 100 * 60 * 60 * 1000).toISOString();
+    const task = {
+      goal_id: "goal-1",
+      started_at: startedAt,
+      estimated_duration: { value: 1, unit: "weeks" },
+    };
+    expect(detector.checkTimeExceeded(task)).toBeNull();
+  });
+
+  it("handles unknown duration unit (default fallback treats value as hours)", () => {
+    // Unknown unit → value treated as hours; value=1 hour → threshold = 2 hours
+    // started 3 hours ago → exceeds threshold
+    const startedAt = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+    const task = {
+      goal_id: "goal-1",
+      started_at: startedAt,
+      estimated_duration: { value: 1, unit: "fortnights" }, // unknown unit
+    };
+    const result = detector.checkTimeExceeded(task);
+    expect(result).not.toBeNull();
+    expect(result!.stall_type).toBe("time_exceeded");
+  });
+
+  it("does not stall for unknown unit when within fallback threshold", () => {
+    // Unknown unit → value=10 hours → threshold = 20 hours; started 5 hours ago → ok
+    const startedAt = new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString();
+    const task = {
+      goal_id: "goal-1",
+      started_at: startedAt,
+      estimated_duration: { value: 10, unit: "fortnights" },
+    };
+    expect(detector.checkTimeExceeded(task)).toBeNull();
+  });
 });

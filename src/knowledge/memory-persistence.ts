@@ -73,11 +73,24 @@ export async function readJsonFileAsync<T>(filePath: string, schema: z.ZodTypeAn
   } catch {
     return null;
   }
+  let content: string;
   try {
-    const content = await fsp.readFile(filePath, "utf-8");
-    const raw = JSON.parse(content) as unknown;
+    content = await fsp.readFile(filePath, "utf-8");
+  } catch (err) {
+    console.warn(`[memory-persistence] Failed to read file "${filePath}": ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+  let raw: unknown;
+  try {
+    raw = JSON.parse(content);
+  } catch (err) {
+    console.warn(`[memory-persistence] JSON.parse failed for "${filePath}": ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+  try {
     return schema.parse(raw) as T;
-  } catch {
+  } catch (err) {
+    console.warn(`[memory-persistence] Schema validation failed for "${filePath}": ${err instanceof Error ? err.message : String(err)}`);
     return null;
   }
 }

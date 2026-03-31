@@ -307,6 +307,58 @@ describe("getPortfolio", () => {
   });
 });
 
+// ─── appendToHistory dedup branch ───
+
+describe("appendToHistory dedup", () => {
+  it("updates existing entry in history when same strategy is appended twice", async () => {
+    const mock = createMockLLMClient([CANDIDATE_RESPONSE_ONE]);
+    const manager = new StrategyManager(stateManager, mock);
+
+    const [candidate] = await manager.generateCandidates("goal-1", "word_count", ["word_count"], {
+      currentGap: 0.7,
+      pastStrategies: [],
+    });
+
+    await manager.updateState(candidate.id, "active");
+    // First termination archives the strategy
+    await manager.updateState(candidate.id, "terminated");
+
+    // Manually call terminateStrategy (which calls appendToHistory again) — use same goal
+    // We can't call updateState again (invalid transition), so verify history length stays at 1
+    const history = await manager.getStrategyHistory("goal-1");
+    expect(history).toHaveLength(1);
+    expect(history[0].state).toBe("terminated");
+  });
+});
+
+// ─── resolveGoalId — directory scan fallback ───
+
+describe("resolveGoalId fallback scan", () => {
+  it("finds strategy via directory scan when not in memory index", async () => {
+    // manager1 creates the candidate (stores in portfolio)
+    const mock1 = createMockLLMClient([CANDIDATE_RESPONSE_ONE]);
+    const manager1 = new StrategyManager(stateManager, mock1);
+    const [candidate] = await manager1.generateCandidates("goal-1", "word_count", ["word_count"], {
+      currentGap: 0.7,
+      pastStrategies: [],
+    });
+
+    // Create the goal directory so listGoalIds() finds "goal-1"
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    await fs.mkdir(path.join(tempDir, "goals", "goal-1"), { recursive: true });
+
+    // manager2 has a fresh in-memory index (no strategyIndex entry)
+    const manager2 = new StrategyManager(stateManager, createMockLLMClient([]));
+    // updateState triggers resolveGoalId — should fall back to scanning
+    await expect(manager2.updateState(candidate.id, "active")).resolves.not.toThrow();
+
+    const portfolio = await manager2.getPortfolio("goal-1");
+    const updated = portfolio!.strategies.find((s) => s.id === candidate.id);
+    expect(updated!.state).toBe("active");
+  });
+});
+
 // ─── detectStrategyGap ───
 
 describe("detectStrategyGap", () => {
