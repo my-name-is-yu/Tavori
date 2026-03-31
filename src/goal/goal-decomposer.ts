@@ -145,7 +145,7 @@ export async function decompose(
       dimensions,
       gap_aggregation: "max",
       dimension_mapping: null,
-      constraints: [],
+      constraints: parentGoal.constraints ?? [],
       children_ids: [],
       target_date: null,
       origin: "decomposition",
