@@ -201,7 +201,7 @@ export async function autoRegisterFileExistenceDataSources(
 ): Promise<void> {
   try {
     const fileExistenceDims = dimensions.filter((d) =>
-      /_exists$|_file$|file_existence/.test(d.name)
+      /_exists$|_file$|_present$|file_existence/.test(d.name)
     );
     if (fileExistenceDims.length === 0) return;
 
