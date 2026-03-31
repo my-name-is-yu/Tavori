@@ -344,7 +344,15 @@ export async function observeWithLLM(
   // §3.3: Observation score jump suppression (±0.4/cycle)
   // When no mechanical source is available and the LLM score jumps more than 0.4
   // from the previous score, suppress the change and lower confidence.
+  // Exception: present/match threshold types have binary 0→1 transitions that are
+  // legitimate and must not be suppressed.
   const MAX_SCORE_DELTA = 0.4;
+  let isBinaryThreshold = false;
+  try {
+    const th = JSON.parse(thresholdDescription);
+    isBinaryThreshold = th.type === "present" || th.type === "match";
+  } catch { /* keep false */ }
+
   let resolvedLayer: "self_report" | "independent_review";
   let resolvedConfidence: number;
   // Fix Root Cause B: When sourceAvailable=false but context IS available,
@@ -362,6 +370,7 @@ export async function observeWithLLM(
     resolvedConfidence = hasContext ? 0.70 : (scorePreservedFromPrevious ? 0.30 : 0.10);
   }
   if (
+    !isBinaryThreshold &&
     typeof previousScore === "number" &&
     previousScore !== null &&
     Math.abs(score - previousScore) > MAX_SCORE_DELTA

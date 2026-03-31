@@ -379,6 +379,96 @@ describe("Root Cause B: confidence tier when sourceAvailable=false", () => {
   });
 });
 
+// ─── §3.3: Jump suppression bypass for binary threshold types ─────────────
+
+describe("§3.3: Jump suppression bypass for present/match threshold types", () => {
+  beforeEach(() => {
+    noopApply.mockReset();
+  });
+
+  it("does NOT suppress 0→1 jump for match threshold type", async () => {
+    const contextOutput = "File: hello.ts\nexport function greet() { return 'hello'; }";
+    // LLM sees the file and correctly scores 1.0 (previously 0.0)
+    const mockLLMClient = createMockLLMClient(1.0, "hello.ts contains export function greet, target achieved");
+    const logger = makeLogger();
+
+    const entry = await observeWithLLM(
+      "goal-match-binary",
+      "dim1",
+      "Export greet function",
+      "greet_function_exported",
+      JSON.stringify({ type: "match", value: "export function greet" }),
+      mockLLMClient,
+      {},
+      noopApply,
+      contextOutput,
+      0.0, // previousScore = 0.0
+      true,
+      logger
+    );
+
+    // Jump from 0.0 → 1.0 should NOT be suppressed for match type
+    expect(entry.extracted_value).toBe(1.0);
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining("score jump suppressed")
+    );
+  });
+
+  it("does NOT suppress 0→1 jump for present threshold type", async () => {
+    const contextOutput = "File: hello.ts\nexport function greet() { return 'hello'; }";
+    const mockLLMClient = createMockLLMClient(1.0, "hello.ts exists, target achieved");
+    const logger = makeLogger();
+
+    const entry = await observeWithLLM(
+      "goal-present-binary",
+      "dim1",
+      "Create hello.ts",
+      "hello_ts_present",
+      JSON.stringify({ type: "present", value: "hello.ts" }),
+      mockLLMClient,
+      {},
+      noopApply,
+      contextOutput,
+      0.0, // previousScore = 0.0
+      true,
+      logger
+    );
+
+    // Jump from 0.0 → 1.0 should NOT be suppressed for present type
+    expect(entry.extracted_value).toBe(1.0);
+    expect(logger.warn).not.toHaveBeenCalledWith(
+      expect.stringContaining("score jump suppressed")
+    );
+  });
+
+  it("DOES suppress 0→1 jump for min threshold type (continuous dimension)", async () => {
+    const contextOutput = "File: src/foo.ts\nconst x = 1;";
+    const mockLLMClient = createMockLLMClient(1.0, "looks complete");
+    const logger = makeLogger();
+
+    const entry = await observeWithLLM(
+      "goal-min-continuous",
+      "dim1",
+      "Improve code coverage",
+      "coverage",
+      JSON.stringify({ type: "min", value: 0.8 }),
+      mockLLMClient,
+      {},
+      noopApply,
+      contextOutput,
+      0.0, // previousScore = 0.0 → jump of 1.0 > 0.4
+      true,
+      logger
+    );
+
+    // Jump from 0.0 → 1.0 SHOULD be suppressed for min type
+    expect(entry.extracted_value).toBe(0.0);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("score jump suppressed")
+    );
+  });
+});
+
 // ─── readWorkspaceFiles helper ─────────────────────────────────────────────
 
 describe("readWorkspaceFiles", () => {
