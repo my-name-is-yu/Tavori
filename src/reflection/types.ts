@@ -54,3 +54,23 @@ export const ConsolidationReportSchema = z.object({
   revalidation_tasks_created: z.number().int().min(0),
 });
 export type ConsolidationReport = z.infer<typeof ConsolidationReportSchema>;
+
+// ─── WeeklyReviewReport ───
+
+export const WeeklyReviewReportSchema = z.object({
+  week: z.string(),
+  created_at: z.string(),
+  goals_reviewed: z.number().int().min(0),
+  rankings: z.array(
+    z.object({
+      goal_id: z.string(),
+      progress_rate: z.number().min(0).max(1),
+      strategy_effectiveness: z.enum(["high", "medium", "low"]),
+      recommendation: z.string(),
+    })
+  ),
+  suggested_additions: z.array(z.string()),
+  suggested_removals: z.array(z.string()),
+  summary: z.string(),
+});
+export type WeeklyReviewReport = z.infer<typeof WeeklyReviewReportSchema>;

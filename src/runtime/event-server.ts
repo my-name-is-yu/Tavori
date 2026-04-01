@@ -9,12 +9,14 @@ import type { TriggerMappingsConfig } from "../types/trigger.js";
 import { getEventsDir } from "../utils/paths.js";
 import type { Logger } from "./logger.js";
 import type { StateManager } from "../state-manager.js";
+import type { TriggerMapper } from "./trigger-mapper.js";
 
 export interface EventServerConfig {
   host?: string; // default: "127.0.0.1" (localhost only!)
   port?: number; // default: 41700
   eventsDir?: string; // default: ~/.pulseed/events/
   stateManager?: StateManager;
+  triggerMapper?: TriggerMapper;
 }
 
 export class EventServer {
@@ -26,6 +28,7 @@ export class EventServer {
   private fileWatcher: fs.FSWatcher | null = null;
   private readonly logger?: Logger;
   private readonly stateManager?: StateManager;
+  private readonly triggerMapper?: TriggerMapper;
   private triggerMappingsCache: TriggerMappingsConfig | null = null;
 
   constructor(driveSystem: DriveSystem, config?: EventServerConfig, logger?: Logger) {
@@ -36,6 +39,7 @@ export class EventServer {
     this.eventsDir = config?.eventsDir ?? getEventsDir();
     this.logger = logger;
     this.stateManager = config?.stateManager;
+    this.triggerMapper = config?.triggerMapper;
   }
 
   /** Start HTTP server */
@@ -247,26 +251,39 @@ export class EventServer {
           const data = JSON.parse(body) as unknown;
           const trigger = TriggerEventSchema.parse(data);
 
-          const mappingsConfig = await this.loadTriggerMappings();
-          const mapping = mappingsConfig.mappings.find(
-            (m) => m.source === trigger.source && m.event_type === trigger.event_type
-          );
-
           let action: string;
-          const goalId = mapping?.goal_id ?? trigger.goal_id;
+          let goalId: string | undefined | null;
 
-          if (!mapping) {
-            if (!trigger.goal_id) {
+          if (this.triggerMapper) {
+            const resolved = await this.triggerMapper.resolve(trigger, []);
+            if (resolved.action === "none") {
               res.writeHead(200, { "Content-Type": "application/json" });
               res.end(JSON.stringify({ status: "no_mapping" }));
               return;
             }
-            action = "observe";
+            action = resolved.action;
+            goalId = resolved.goal_id ?? undefined;
           } else {
-            action = mapping.action;
+            const mappingsConfig = await this.loadTriggerMappings();
+            const mapping = mappingsConfig.mappings.find(
+              (m) => m.source === trigger.source && m.event_type === trigger.event_type
+            );
+
+            goalId = mapping?.goal_id ?? trigger.goal_id;
+
+            if (!mapping) {
+              if (!trigger.goal_id) {
+                res.writeHead(200, { "Content-Type": "application/json" });
+                res.end(JSON.stringify({ status: "no_mapping" }));
+                return;
+              }
+              action = "observe";
+            } else {
+              action = mapping.action;
+            }
           }
 
-          await this.executeTriggerAction(action, trigger, goalId);
+          await this.executeTriggerAction(action, trigger, goalId ?? undefined);
 
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ status: "ok", action, goal_id: goalId ?? null }));

@@ -71,12 +71,21 @@ export const GoalReportingOverrideSchema = z.object({
 });
 export type GoalReportingOverride = z.infer<typeof GoalReportingOverrideSchema>;
 
+// Batching config
+export const NotificationBatchingSchema = z.object({
+  enabled: z.boolean().default(false),
+  window_minutes: z.number().default(30),
+  digest_format: z.enum(["compact", "detailed"]).default("compact"),
+});
+export type NotificationBatching = z.infer<typeof NotificationBatchingSchema>;
+
 // Full notification config
 export const NotificationConfigSchema = z.object({
   channels: z.array(NotificationChannelSchema).default([]),
   do_not_disturb: DoNotDisturbSchema.default({}),
   cooldown: NotificationCooldownSchema.default({}),
   goal_overrides: z.array(GoalReportingOverrideSchema).default([]),
+  batching: NotificationBatchingSchema.default({}),
 });
 export type NotificationConfig = z.infer<typeof NotificationConfigSchema>;
 

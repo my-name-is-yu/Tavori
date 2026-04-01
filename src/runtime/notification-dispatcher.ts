@@ -14,6 +14,7 @@ import type { NotifierRegistry } from "./notifier-registry.js";
 import { sendSlack } from "./channels/slack-channel.js";
 import { sendEmail } from "./channels/email-channel.js";
 import { sendWebhook } from "./channels/webhook-channel.js";
+import { NotificationBatcher } from "./notification-batcher.js";
 
 // ─── Interface ───
 
@@ -54,15 +55,42 @@ export class NotificationDispatcher implements INotificationDispatcher {
   private lastSent: Map<string, number> = new Map();
   private notifierRegistry?: NotifierRegistry;
   private readonly logger?: Logger;
+  private batcher?: NotificationBatcher;
 
   constructor(config?: Partial<NotificationConfig>, notifierRegistry?: NotifierRegistry, logger?: Logger) {
     this.config = NotificationConfigSchema.parse(config ?? {});
     this.notifierRegistry = notifierRegistry;
     this.logger = logger;
+
+    if (this.config.batching.enabled) {
+      this.batcher = new NotificationBatcher(
+        {
+          window_minutes: this.config.batching.window_minutes,
+          digest_format: this.config.batching.digest_format,
+        },
+        async (digest) => { await this.sendReport(digest); }
+      );
+    }
+  }
+
+  /** Flush batcher and stop the timer. Call on shutdown. */
+  async stop(): Promise<void> {
+    await this.batcher?.stop();
   }
 
   /** Dispatch report to all configured channels */
   async dispatch(report: Report): Promise<NotificationResult[]> {
+    // If batching is enabled, non-immediate reports go to the batcher
+    if (this.batcher) {
+      const batched = this.batcher.add(report);
+      if (batched) return [];
+    }
+
+    return this.sendReport(report);
+  }
+
+  /** Send a report directly to all channels (bypasses batching). */
+  private async sendReport(report: Report): Promise<NotificationResult[]> {
     const results: NotificationResult[] = [];
 
     const channels = this.getChannelsForReport(report);
