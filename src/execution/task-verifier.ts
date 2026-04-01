@@ -964,8 +964,20 @@ function isDirectionCorrect(verificationResult: VerificationResult): boolean {
 
 async function attemptRevert(deps: VerifierDeps, task: Task): Promise<boolean> {
   // Attempt to revert a task's changes
-  // In MVP, we create a revert prompt and check if it succeeds
-  // This is called only for reversible tasks
+  // First try git-based revert (faster, more reliable, no LLM cost)
+  // Falls back to LLM-based revert if git is not available or fails
+  try {
+    const filesToRestore = task.scope_boundary.in_scope;
+    if (filesToRestore.length > 0) {
+      const { execFileSync } = await import("child_process");
+      execFileSync("git", ["restore", ...filesToRestore], { cwd: process.cwd(), encoding: "utf-8" });
+      deps.logger?.info?.(`[attemptRevert] git restore succeeded for ${filesToRestore.length} files`);
+      return true;
+    }
+  } catch {
+    // git not available or failed — fall back to LLM-based revert
+  }
+
   try {
     const revertSession = await deps.sessionManager.createSession(
       "task_execution",

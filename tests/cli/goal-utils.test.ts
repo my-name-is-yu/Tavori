@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { buildThreshold, autoRegisterFileExistenceDataSources, loadExistingDatasources } from "../../src/cli/commands/goal-utils.js";
+import { buildThreshold, autoRegisterFileExistenceDataSources, loadExistingDatasources, findShellPattern } from "../../src/cli/commands/goal-utils.js";
 
 // ─── fileExistenceDatasourceExists dedup tests ───
 // Tested indirectly via autoRegisterFileExistenceDataSources
@@ -152,5 +152,14 @@ describe("buildThreshold", () => {
     it("returns null when value is not parseable", () => {
       expect(buildThreshold({ name: "x", type: "range", value: "abc" })).toBeNull();
     });
+  });
+});
+
+describe("findShellPattern", () => {
+  it("returns defined pattern for test_pass_count with output_type raw and timeout_ms", () => {
+    const pattern = findShellPattern("test_pass_count");
+    expect(pattern).toBeDefined();
+    expect(pattern!.output_type).toBe("raw");
+    expect(pattern!.timeout_ms).toBe(120000);
   });
 });

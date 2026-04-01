@@ -408,13 +408,19 @@ describe("DriveSystem", () => {
       expect(await driveSystem.getSchedule(goalId)).not.toBeNull();
     });
 
-    it("returns null for corrupted schedule file", async () => {
+    it("returns fallback schedule for corrupted schedule file", async () => {
       const goalId = "corrupted-goal";
       const scheduleDir = path.join(tmpDir, "schedule");
       fs.mkdirSync(scheduleDir, { recursive: true });
       fs.writeFileSync(path.join(scheduleDir, `${goalId}.json`), "not valid json", "utf-8");
 
-      expect(await driveSystem.getSchedule(goalId)).toBeNull();
+      const result = await driveSystem.getSchedule(goalId);
+      expect(result).not.toBeNull();
+      expect(result!.goal_id).toBe(goalId);
+      expect(result!.next_check_at).toBe(new Date(0).toISOString());
+      expect(result!.last_triggered_at).toBeNull();
+      expect(result!.consecutive_actions).toBe(0);
+      expect(result!.cooldown_until).toBeNull();
     });
   });
 

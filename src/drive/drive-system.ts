@@ -220,8 +220,17 @@ export class DriveSystem {
       if (typeof err === "object" && err !== null && "code" in err && (err as NodeJS.ErrnoException).code === "ENOENT") {
         return null;
       }
-      this.logger?.warn(`DriveSystem: failed to load schedule for goal "${goalId}": ${err}`);
-      return null;
+      // Corrupted or invalid schedule file — return a fallback schedule that is immediately due
+      this.logger?.warn(`DriveSystem: failed to load schedule for goal "${goalId}", using fallback: ${err}`);
+      return GoalScheduleSchema.parse({
+        goal_id: goalId,
+        next_check_at: new Date(0).toISOString(),
+        check_interval_hours: 1,
+        last_triggered_at: null,
+        consecutive_actions: 0,
+        cooldown_until: null,
+        current_interval_hours: 1,
+      });
     }
   }
 

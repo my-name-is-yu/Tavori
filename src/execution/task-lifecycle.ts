@@ -124,7 +124,7 @@ export class TaskLifecycle {
     this.capabilityDetector = options?.capabilityDetector;
     this.logger = options?.logger;
     this.adapterRegistry = options?.adapterRegistry;
-    this.healthCheckEnabled = options?.healthCheckEnabled ?? false;
+    this.healthCheckEnabled = options?.healthCheckEnabled ?? true;
     this.execFileSyncFn = options?.execFileSyncFn ?? _execFileSync;
     this.completionJudgerConfig = options?.completionJudgerConfig;
     this.knowledgeTransfer = options?.knowledgeTransfer;

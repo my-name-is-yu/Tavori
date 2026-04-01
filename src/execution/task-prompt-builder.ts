@@ -165,6 +165,7 @@ Requirements:
 - Single measurable output in one session
 - work_description: target file path(s), specific changes (not "improve X" → "add section Y to file Z")
 - No vague review/triage tasks
+- Prefer minimal-change approach: make the smallest targeted change that moves the metric; avoid unrelated refactoring
 
 Return JSON only (inside markdown code block):
 {

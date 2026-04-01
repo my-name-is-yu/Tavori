@@ -54,6 +54,7 @@ export const SHELL_DIMENSION_PATTERNS: Record<string, ShellCommandConfig> = {
   fixme_count:       { argv: ["grep", "-rc", "FIXME", "src/"], output_type: "number" },
   todo_like_marker_inventory: { argv: ["grep", "-rn", "--include=*.ts", "-E", "TODO|FIXME", "src/"], output_type: "raw" },
   test_count:        { argv: ["grep", "-rEc", "--include=*.ts", "--include=*.js", "it\\(|test\\(|describe\\(", "."], output_type: "number" },
+  test_pass_count:   { argv: ["npx", "vitest", "run", "--reporter=verbose"], output_type: "raw", timeout_ms: 120000 },
   lint_errors:       { argv: ["npx", "eslint", "src/", "--format", "compact", "--max-warnings", "9999"], output_type: "number" },
   tsc_error_count:   { argv: ["npx", "tsc", "--noEmit", "--pretty", "false"], output_type: "number" },
   test_coverage:     { argv: ["node", "scripts/measure-coverage.cjs"], output_type: "raw", timeout_ms: 180000 },

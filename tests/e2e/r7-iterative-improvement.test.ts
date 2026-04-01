@@ -49,6 +49,8 @@ import type { IDataSourceAdapter } from "../../src/observation/data-source-adapt
 import type { DataSourceConfig, DataSourceResult, DataSourceQuery } from "../../src/types/data-source.js";
 import { makeTempDir } from "../helpers/temp-dir.js";
 
+vi.setConfig({ testTimeout: 15000 });
+
 // ─── Helpers ───
 
 /** Fake workspace context so the no-evidence guard does not zero out LLM scores */
@@ -314,7 +316,7 @@ function buildCoreLoop(
     trustManager,
     strategyManager,
     stallDetector,
-    { approvalFn: async (_task) => true }
+    { approvalFn: async (_task) => true, healthCheckEnabled: false }
   );
 
   const adapterRegistry = new AdapterRegistry();

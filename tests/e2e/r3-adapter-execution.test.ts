@@ -237,7 +237,7 @@ describe("R3: runTaskCycle generates task, executes via adapter, and verifies", 
       trustManager,
       strategyManager,
       stallDetector,
-      { approvalFn: async (_task) => true }
+      { approvalFn: async (_task) => true, healthCheckEnabled: false }
     );
 
     const gapVector = makeGapVector(goal.id);
@@ -301,7 +301,7 @@ describe("R3: runTaskCycle handles adapter execution failure", () => {
       trustManager,
       strategyManager,
       stallDetector,
-      { approvalFn: async (_task) => true }
+      { approvalFn: async (_task) => true, healthCheckEnabled: false }
     );
 
     const gapVector = makeGapVector(goal.id);
@@ -387,7 +387,7 @@ describe("R3: runTaskCycle passes existingTasks for dedup", () => {
       trustManager,
       strategyManager,
       stallDetector,
-      { approvalFn: async (_task) => true }
+      { approvalFn: async (_task) => true, healthCheckEnabled: false }
     );
 
     const existingTasks = [
@@ -446,7 +446,7 @@ describe("R3: full pipeline with CoreLoop — task results update goal state", (
       trustManager,
       strategyManager,
       stallDetector,
-      { approvalFn: async (_task) => true }
+      { approvalFn: async (_task) => true, healthCheckEnabled: false }
     );
 
     const gapVector = makeGapVector(goal.id);
@@ -496,7 +496,7 @@ describe("R3: full pipeline with CoreLoop — task results update goal state", (
       trustManager,
       strategyManager,
       stallDetector,
-      { approvalFn: async (_task) => true }
+      { approvalFn: async (_task) => true, healthCheckEnabled: false }
     );
 
     const adapterRegistry = new AdapterRegistry();

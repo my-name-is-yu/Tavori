@@ -192,7 +192,7 @@ describe("CoreLoop integration — single iteration with real deps", () => {
       stallDetector,
       {
         // approvalFn: always approve so irreversible check doesn't block
-        approvalFn: async (_task) => true,
+        approvalFn: async (_task) => true, healthCheckEnabled: false,
       }
     );
 
@@ -325,7 +325,7 @@ describe("CoreLoop integration — single iteration with real deps", () => {
       trustManager,
       strategyManager,
       stallDetector,
-      { approvalFn: async (_task) => true }
+      { approvalFn: async (_task) => true, healthCheckEnabled: false }
     );
 
     const adapterRegistry = new AdapterRegistry();
