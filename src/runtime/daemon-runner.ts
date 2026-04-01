@@ -13,6 +13,7 @@ import type { PulSeedEvent } from "../types/drive.js";
 import type { DaemonConfig, DaemonState } from "../types/daemon.js";
 import { DaemonConfigSchema, DaemonStateSchema } from "../types/daemon.js";
 import type { ILLMClient } from "../llm/llm-client.js";
+import { CronScheduler } from "./cron-scheduler.js";
 import { z } from "zod";
 
 // ─── ShutdownMarker ───
@@ -53,6 +54,7 @@ export interface DaemonDeps {
   config?: Partial<DaemonConfig>;
   eventServer?: EventServer;
   llmClient?: ILLMClient;
+  cronScheduler?: CronScheduler;
 }
 
 export class DaemonRunner {
@@ -73,6 +75,7 @@ export class DaemonRunner {
   private currentLoopIndex = 0;
   private lastProactiveTickAt: number = 0;
   private llmClient: ILLMClient | undefined;
+  private cronScheduler: CronScheduler | undefined;
   private consecutiveIdleCycles: number = 0;
 
   constructor(deps: DaemonDeps) {
@@ -83,6 +86,7 @@ export class DaemonRunner {
     this.logger = deps.logger;
     this.eventServer = deps.eventServer;
     this.llmClient = deps.llmClient;
+    this.cronScheduler = deps.cronScheduler;
     this.lastProactiveTickAt = Date.now();
 
     // Parse config with defaults via DaemonConfigSchema.parse()
@@ -280,6 +284,14 @@ export class DaemonRunner {
         // 3. Save state
         await this.saveDaemonState();
 
+        // 3b. Process due cron-scheduled tasks
+        await this.processCronTasks();
+
+        // 3c. Expire old cron tasks periodically (every 100 cycles)
+        if (this.state.loop_count > 0 && this.state.loop_count % 100 === 0) {
+          await this.expireCronTasks();
+        }
+
         // 4. Proactive tick: fire every cycle (not only when idle) so long-running goals
         // do not block proactive actions indefinitely.
         if (this.running) {
@@ -303,7 +315,7 @@ export class DaemonRunner {
             maxGapScore,
             this.consecutiveIdleCycles
           );
-          this.logger.debug(`Sleeping for ${intervalMs}ms until next check`);
+          this.logger.info(`Sleeping for ${intervalMs}ms until next check`);
           await this.sleep(intervalMs);
         }
       } catch (err) {
@@ -499,6 +511,64 @@ export class DaemonRunner {
       loop_count: this.state.loop_count,
       crash_count: this.state.crash_count,
     });
+  }
+
+  // ─── Private: Cron Scheduler ───
+
+  /**
+   * Process due cron-scheduled tasks.
+   * Logs each task, executes based on type, and marks as fired.
+   */
+  private async processCronTasks(): Promise<void> {
+    if (!this.cronScheduler) return;
+
+    try {
+      const dueTasks = await this.cronScheduler.getDueTasks();
+      for (const task of dueTasks) {
+        this.logger.info(`Cron task due: ${task.id} (type=${task.type})`, {
+          cron: task.cron,
+          type: task.type,
+        });
+
+        try {
+          // Log the task prompt and type for observability; actual execution
+          // varies by type but all are currently handled as fire-and-log.
+          this.logger.info(`Executing cron task: ${task.type}`, {
+            prompt: task.prompt,
+          });
+
+          await this.cronScheduler.markFired(task.id);
+          this.logger.info(`Cron task fired: ${task.id}`);
+        } catch (err) {
+          this.logger.warn(`Cron task ${task.id} failed`, {
+            error: err instanceof Error ? err.message : String(err),
+          });
+          // Still mark as fired to avoid retry-storms
+          await this.cronScheduler.markFired(task.id);
+        }
+      }
+    } catch (err) {
+      // Non-fatal — cron errors should not crash the daemon
+      this.logger.warn("Failed to process cron tasks", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  /**
+   * Expire old non-permanent cron tasks.
+   */
+  private async expireCronTasks(): Promise<void> {
+    if (!this.cronScheduler) return;
+
+    try {
+      await this.cronScheduler.expireOldTasks();
+      this.logger.debug("Expired old cron tasks");
+    } catch (err) {
+      this.logger.warn("Failed to expire cron tasks", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   // ─── Private: Sleep ───

@@ -4,14 +4,16 @@ import { parseArgs } from "node:util";
 import { spawn } from "node:child_process";
 import * as path from "node:path";
 import { readJsonFileOrNull } from "../../utils/json-io.js";
-import { DaemonStateSchema } from "../../types/daemon.js";
-import type { DaemonState } from "../../types/daemon.js";
+import { DaemonStateSchema, DaemonConfigSchema } from "../../types/daemon.js";
+import type { DaemonState, DaemonConfig } from "../../types/daemon.js";
 
 import { StateManager } from "../../state-manager.js";
 import { CharacterConfigManager } from "../../traits/character-config.js";
 import { Logger } from "../../runtime/logger.js";
 import { DaemonRunner } from "../../runtime/daemon-runner.js";
 import { PIDManager } from "../../runtime/pid-manager.js";
+import { EventServer } from "../../runtime/event-server.js";
+import { CronScheduler } from "../../runtime/cron-scheduler.js";
 import { buildDeps } from "../setup.js";
 import { formatOperationError } from "../utils.js";
 import { getCliLogger } from "../cli-logger.js";
@@ -70,11 +72,29 @@ export async function cmdStart(
     process.exit(0);
   }
 
+  // Gap 1: Load DaemonConfig from --config path (if provided)
+  let daemonConfig: Partial<DaemonConfig> | undefined;
+  if (values.config) {
+    try {
+      const raw = await readJsonFileOrNull(values.config);
+      if (raw !== null) {
+        daemonConfig = DaemonConfigSchema.parse(raw);
+      } else {
+        getCliLogger().error(`Config file not found: ${values.config}`);
+        process.exit(1);
+      }
+    } catch (err) {
+      getCliLogger().error(formatOperationError(`parse daemon config from "${values.config}"`, err));
+      process.exit(1);
+    }
+  }
+
   const deps = await buildDeps(stateManager, characterConfigManager);
 
-  const pidManager = new PIDManager(deps.stateManager.getBaseDir());
+  const baseDir = deps.stateManager.getBaseDir();
+  const pidManager = new PIDManager(baseDir);
   const logger = new Logger({
-    dir: getLogsDir(deps.stateManager.getBaseDir()),
+    dir: getLogsDir(baseDir),
   });
 
   if (await pidManager.isRunning()) {
@@ -83,12 +103,29 @@ export async function cmdStart(
     process.exit(1);
   }
 
+  // Gap 2: Create EventServer for event-driven wake-ups (only if config specifies a port)
+  let eventServer: EventServer | undefined;
+  if (daemonConfig && typeof (daemonConfig as Record<string, unknown>).event_server_port === "number") {
+    eventServer = new EventServer(
+      deps.driveSystem,
+      { port: (daemonConfig as Record<string, unknown>).event_server_port as number },
+      logger
+    );
+  }
+
+  // Gap 4: Create CronScheduler for scheduled tasks
+  const cronScheduler = new CronScheduler(baseDir);
+
   const daemon = new DaemonRunner({
     coreLoop: deps.coreLoop,
     driveSystem: deps.driveSystem,
     stateManager: deps.stateManager,
     pidManager,
     logger,
+    config: daemonConfig,
+    ...(eventServer ? { eventServer } : {}),
+    llmClient: deps.llmClient,
+    cronScheduler,
   });
 
   logger.info(`Starting PulSeed daemon for goals: ${goalIds.join(", ")}`);

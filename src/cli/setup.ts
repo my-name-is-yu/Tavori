@@ -46,6 +46,7 @@ import type { GapCalculatorModule, DriveScorerModule, LoopConfig } from "../core
 import type { Task } from "../types/task.js";
 import type { ProgressEvent } from "../core-loop.js";
 import { Logger } from "../runtime/logger.js";
+import { HookManager } from "../runtime/hook-manager.js";
 import { getCliLogger } from "./cli-logger.js";
 import { formatOperationError } from "./utils.js";
 
@@ -121,7 +122,11 @@ export async function buildDeps(
     }
   );
 
-  const observationEngine = new ObservationEngine(stateManager, dataSources, llmClient, contextProvider);
+  // HookManager — load lifecycle hooks from ~/.pulseed/hooks.json
+  const hookManager = new HookManager(stateManager.getBaseDir(), logger);
+  await hookManager.loadHooks();
+
+  const observationEngine = new ObservationEngine(stateManager, dataSources, llmClient, contextProvider, {}, logger, undefined, hookManager);
   const progressPredictor = new ProgressPredictor();
   const stallDetector = new StallDetector(stateManager, characterConfig, progressPredictor);
   const satisficingJudge = new SatisficingJudge(stateManager);
@@ -140,7 +145,7 @@ export async function buildDeps(
     trustManager,
     strategyManager,
     stallDetector,
-    { approvalFn, logger }
+    { approvalFn, logger, hookManager }
   );
 
   const reportingEngine = new ReportingEngine(stateManager, undefined, characterConfig);
@@ -228,6 +233,7 @@ export async function buildDeps(
     memoryLifecycleManager,
     driveScoreAdapter,
     knowledgeManager,
+    hookManager,
     logger,
     contextProvider,
     onProgress,
@@ -253,5 +259,5 @@ export async function buildDeps(
     ethicsGate,
   );
 
-  return { coreLoop, goalNegotiator, goalRefiner, reportingEngine, stateManager, driveSystem };
+  return { coreLoop, goalNegotiator, goalRefiner, reportingEngine, stateManager, driveSystem, llmClient };
 }
