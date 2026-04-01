@@ -24,7 +24,7 @@ export async function cmdStart(
   characterConfigManager: CharacterConfigManager,
   args: string[]
 ): Promise<void> {
-  let values: { "api-key"?: string; config?: string; goal?: string[]; detach?: boolean };
+  let values: { "api-key"?: string; config?: string; goal?: string[]; detach?: boolean; "check-interval-ms"?: string; "iterations-per-cycle"?: string };
   try {
     ({ values } = parseArgs({
       args,
@@ -33,9 +33,11 @@ export async function cmdStart(
         config: { type: "string" },
         goal: { type: "string", multiple: true },
         detach: { type: "boolean", short: "d" },
+        "check-interval-ms": { type: "string" },
+        "iterations-per-cycle": { type: "string" },
       },
       strict: false,
-    }) as { values: { "api-key"?: string; config?: string; goal?: string[]; detach?: boolean } });
+    }) as { values: { "api-key"?: string; config?: string; goal?: string[]; detach?: boolean; "check-interval-ms"?: string; "iterations-per-cycle"?: string } });
   } catch (err) {
     getCliLogger().error(formatOperationError("parse start command arguments", err));
     values = {};
@@ -54,6 +56,8 @@ export async function cmdStart(
     // Reconstruct args from parsed values (never include --detach)
     const childArgs = ["start"];
     for (const g of goalIds) childArgs.push("--goal", g);
+    if (values["check-interval-ms"]) childArgs.push("--check-interval-ms", values["check-interval-ms"]);
+    if (values["iterations-per-cycle"]) childArgs.push("--iterations-per-cycle", values["iterations-per-cycle"]);
 
     const child = spawn(process.execPath, [scriptPath, ...childArgs], {
       detached: true,
@@ -87,6 +91,26 @@ export async function cmdStart(
       getCliLogger().error(formatOperationError(`parse daemon config from "${values.config}"`, err));
       process.exit(1);
     }
+  }
+
+  // Merge CLI flag overrides into daemonConfig
+  if (values["check-interval-ms"]) {
+    const parsed = parseInt(values["check-interval-ms"], 10);
+    if (isNaN(parsed) || parsed <= 0) {
+      getCliLogger().error("--check-interval-ms must be a positive integer");
+      process.exit(1);
+    }
+    daemonConfig = daemonConfig ?? {};
+    daemonConfig.check_interval_ms = parsed;
+  }
+  if (values["iterations-per-cycle"]) {
+    const parsed = parseInt(values["iterations-per-cycle"], 10);
+    if (isNaN(parsed) || parsed <= 0) {
+      getCliLogger().error("--iterations-per-cycle must be a positive integer");
+      process.exit(1);
+    }
+    daemonConfig = daemonConfig ?? {};
+    daemonConfig.iterations_per_cycle = parsed;
   }
 
   const deps = await buildDeps(stateManager, characterConfigManager);

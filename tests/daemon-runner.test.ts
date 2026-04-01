@@ -193,7 +193,7 @@ describe("DaemonRunner", () => {
       daemon.stop();
       await startPromise;
 
-      expect((deps.coreLoop as { run: ReturnType<typeof vi.fn> }).run).toHaveBeenCalledWith("goal-1", { maxIterations: 1 });
+      expect((deps.coreLoop as { run: ReturnType<typeof vi.fn> }).run).toHaveBeenCalledWith("goal-1", { maxIterations: 10 });
     });
 
     it("should skip goals that shouldActivate returns false for", async () => {
@@ -544,7 +544,7 @@ describe("DaemonRunner", () => {
 
       expect((deps.coreLoop as { run: ReturnType<typeof vi.fn> }).run).toHaveBeenCalledWith(
         "goal-fast",
-        { maxIterations: 1 }
+        { maxIterations: 10 }
       );
     });
   });
@@ -1372,7 +1372,7 @@ describe("DaemonRunner", () => {
   // ─── iterations_per_cycle / per-cycle budget ───
 
   describe("iterations_per_cycle", () => {
-    it("should call CoreLoop.run with { maxIterations: 1 } by default", async () => {
+    it("should call CoreLoop.run with { maxIterations: 10 } by default", async () => {
       const deps = makeDeps(tmpDir, { config: { check_interval_ms: 50 } });
       const daemon = new DaemonRunner(deps);
       currentDaemon = daemon;
@@ -1384,7 +1384,7 @@ describe("DaemonRunner", () => {
       await startPromise;
 
       const runMock = (deps.coreLoop as { run: ReturnType<typeof vi.fn> }).run;
-      expect(runMock).toHaveBeenCalledWith("goal-1", { maxIterations: 1 });
+      expect(runMock).toHaveBeenCalledWith("goal-1", { maxIterations: 10 });
     });
 
     it("should call CoreLoop.run with { maxIterations: N } when iterations_per_cycle is configured", async () => {

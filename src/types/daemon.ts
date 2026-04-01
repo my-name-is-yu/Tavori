@@ -16,7 +16,7 @@ export const DaemonConfigSchema = z.object({
     graceful_shutdown_timeout_ms: z.number().int().positive().optional(),
   }).default({}),
   goal_intervals: z.record(z.string(), z.number().int().positive()).optional(), // goal_id -> interval_ms override
-  iterations_per_cycle: z.number().int().positive().default(1), // max CoreLoop iterations per daemon cycle
+  iterations_per_cycle: z.number().int().positive().default(10), // max CoreLoop iterations per daemon cycle
   proactive_mode: z.boolean().default(false),
   proactive_interval_ms: z.number().default(3_600_000), // 1 hour minimum between proactive ticks
   adaptive_sleep: z.object({
