@@ -176,7 +176,7 @@ describe("TaskLifecycle", async () => {
       trustManager,
       strategyManager,
       stallDetector,
-      options
+      { healthCheckEnabled: false, ...options }
     );
   }
 
