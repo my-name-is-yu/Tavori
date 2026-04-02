@@ -8,7 +8,7 @@ import type { EscalationHandler, EscalationResult } from "../../src/chat/escalat
 // Mock context-provider so tests don't walk the real filesystem
 vi.mock("../../src/observation/context-provider.js", () => ({
   resolveGitRoot: (cwd: string) => cwd,
-  buildChatContext: (_task: string, cwd: string) => `Working directory: ${cwd}`,
+  buildChatContext: (_task: string, cwd: string) => Promise.resolve(`Working directory: ${cwd}`),
 }));
 
 const CANNED_RESULT: AgentResult = {
