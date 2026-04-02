@@ -5,6 +5,7 @@
  */
 
 import { z } from "zod";
+import { StrategyArraySchema } from "../../strategy/strategy-helpers.js";
 
 export const STRATEGY_SYSTEM_PROMPT = `Generate candidate strategies for achieving the goal.
 Consider past lessons, strategy templates from similar goals, and the current gap.
@@ -28,26 +29,7 @@ Example format:
   }
 ]`;
 
-export const StrategyResponseSchema = z.array(
-  z.object({
-    hypothesis: z.string(),
-    expected_effect: z.array(
-      z.object({
-        dimension: z.string(),
-        direction: z.enum(["increase", "decrease"]),
-        magnitude: z.enum(["small", "medium", "large"]),
-      })
-    ),
-    resource_estimate: z.object({
-      sessions: z.number(),
-      duration: z.object({
-        value: z.number(),
-        unit: z.enum(["minutes", "hours", "days", "weeks"]),
-      }),
-      llm_calls: z.number().nullable().default(null),
-    }),
-    allocation: z.number().min(0).max(1).default(0),
-  })
-);
+// Re-export the canonical schema from strategy-helpers to avoid duplication
+export { StrategyArraySchema as StrategyResponseSchema } from "../../strategy/strategy-helpers.js";
 
-export type StrategyResponse = z.infer<typeof StrategyResponseSchema>;
+export type StrategyResponse = z.infer<typeof StrategyArraySchema>;
