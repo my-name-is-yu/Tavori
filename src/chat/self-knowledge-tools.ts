@@ -146,6 +146,7 @@ async function handleGetSessions(
     const files = fs
       .readdirSync(sessionsDir)
       .filter((f) => f.endsWith(".json"))
+      .sort()
       .slice(-limit);
     const sessions = files.map((f) => {
       try {

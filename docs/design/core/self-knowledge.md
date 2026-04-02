@@ -190,8 +190,8 @@ export async function handleSelfKnowledgeToolCall(
 // Dependencies injected from the caller
 interface SelfKnowledgeDeps {
   stateManager: StateManager;
-  trustManager: TrustManager;
-  pluginLoader: PluginLoader;
+  trustManager?: TrustManager;  // optional — graceful fallback when unavailable
+  pluginLoader?: PluginLoader;  // optional — graceful fallback when unavailable
   homeDir: string;
 }
 ```

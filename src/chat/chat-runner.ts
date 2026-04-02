@@ -269,7 +269,7 @@ export class ChatRunner {
     const skDeps = this.buildSelfKnowledgeDeps();
     const messages: LLMMessage[] = [{ role: "user", content: prompt }];
 
-    for (let loop = 0; loop <= MAX_TOOL_LOOPS; loop++) {
+    for (let loop = 0; loop < MAX_TOOL_LOOPS; loop++) {
       let response: LLMResponse;
       try {
         response = await llmClient.sendMessage(messages, {
