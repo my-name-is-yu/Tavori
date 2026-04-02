@@ -382,6 +382,37 @@ describe("createWorkspaceContextProvider — dynamic workDir from goal constrain
   });
 });
 
+describe("createWorkspaceContextProvider — Phase 3 grep content match", () => {
+  let tmpWorkDir: string;
+
+  beforeEach(() => {
+    tmpWorkDir = fs.mkdtempSync(path.join(os.tmpdir(), "pulseed-ws-grep-"));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpWorkDir, { recursive: true, force: true });
+  });
+
+  it("finds a file by content when its name does not match any keyword", async () => {
+    // Create enough files to exceed the small workspace fast path (>10)
+    for (let i = 1; i <= 10; i++) {
+      fs.writeFileSync(path.join(tmpWorkDir, `unrelated${i}.ts`), `// file ${i}`, "utf-8");
+    }
+    // This file's name ("impl.ts") has no keyword match, but its content contains "TODO"
+    fs.writeFileSync(path.join(tmpWorkDir, "impl.ts"), "// TODO: finish this implementation", "utf-8");
+
+    const provider = createWorkspaceContextProvider(
+      { workDir: tmpWorkDir },
+      () => "Track todo count in the project"
+    );
+
+    // dimension "todo_count" → dimensionNameToSearchTerms → ["TODO"]
+    const result = await provider("goal-grep-1", "todo_count");
+    expect(result).toContain("impl.ts");
+    expect(result).toContain("TODO: finish this implementation");
+  });
+});
+
 describe("createWorkspaceContextProvider — existing workspace behavior unchanged", () => {
   let tmpWorkDir: string;
 

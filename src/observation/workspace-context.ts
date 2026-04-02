@@ -1,6 +1,11 @@
+import { execFile } from "node:child_process";
 import * as fsp from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import { promisify } from "node:util";
+import { dimensionNameToSearchTerms } from "./context-provider.js";
+
+const execFileAsync = promisify(execFile);
 
 export interface WorkspaceContextOptions {
   workDir: string;
@@ -273,6 +278,34 @@ export function createWorkspaceContextProvider(
         ...selected,
         ...contentMatched.slice(0, neededFromCandidates - selected.length),
       ];
+    }
+
+    // Phase 3: grep content match — find files whose content contains dimension-derived terms
+    // but weren't caught by filename or keyword matching above
+    if (selected.length < neededFromCandidates) {
+      const searchTerms = dimensionNameToSearchTerms(dimensionName);
+      const alreadySelected = new Set([
+        ...alwaysIncludePaths, ...pathMatchedPaths, ...dimHintPaths, ...selected,
+      ]);
+      const grepMatched: string[] = [];
+      for (const term of searchTerms) {
+        try {
+          const { stdout } = await execFileAsync(
+            "grep",
+            ["-rl", "--include=*.ts", "--include=*.js", "--include=*.json", term, effectiveWorkDir],
+            { timeout: 5000 }
+          );
+          for (const fp of stdout.trim().split("\n").filter(Boolean)) {
+            if (!alreadySelected.has(fp) && !grepMatched.includes(fp)) {
+              grepMatched.push(fp);
+            }
+          }
+        } catch {
+          // grep returns exit 1 for zero matches — silently ignore
+        }
+      }
+      const slotsLeft = neededFromCandidates - selected.length;
+      selected = [...selected, ...grepMatched.slice(0, slotsLeft)];
     }
 
     // Read always-include files first
