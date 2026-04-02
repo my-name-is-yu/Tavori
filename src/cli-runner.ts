@@ -55,6 +55,10 @@ import { cmdSetup } from "./cli/commands/setup.js";
 import { cmdKnowledgeList, cmdKnowledgeSearch, cmdKnowledgeStats } from "./cli/commands/knowledge.js";
 import { cmdTaskList, cmdTaskShow } from "./cli/commands/task-read.js";
 import { cmdChat } from "./cli/commands/chat.js";
+import { cmdDoctor } from "./cli/commands/doctor.js";
+import { cmdLogs } from "./cli/commands/logs.js";
+import { cmdInstall, cmdUninstall } from "./cli/commands/install.js";
+import { cmdNotify } from "./cli/commands/notify.js";
 import { printUsage, formatOperationError } from "./cli/utils.js";
 import { ensureProviderConfig } from "./cli/ensure-api-key.js";
 
@@ -524,6 +528,26 @@ export class CLIRunner {
       const { startMCPServer } = await import("./mcp-server/index.js");
       await startMCPServer({ stateManager: this.stateManager, baseDir: this.stateManager.getBaseDir() });
       return 0;
+    }
+
+    if (subcommand === "doctor") {
+      return await cmdDoctor(argv.slice(1));
+    }
+
+    if (subcommand === "logs") {
+      return await cmdLogs(argv.slice(1));
+    }
+
+    if (subcommand === "install") {
+      return await cmdInstall(argv.slice(1));
+    }
+
+    if (subcommand === "uninstall") {
+      return await cmdUninstall(argv.slice(1));
+    }
+
+    if (subcommand === "notify") {
+      return await cmdNotify(argv.slice(1));
     }
 
     if (subcommand === "chat") {

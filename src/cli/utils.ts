@@ -57,6 +57,16 @@ Usage:
   pulseed plugin list                  List installed plugins
   pulseed plugin install <path>        Install a plugin from a local directory
   pulseed plugin remove <name>         Remove an installed plugin
+  pulseed logs                          View daemon logs (last 50 lines)
+  pulseed logs --follow                Tail daemon logs in real-time
+  pulseed logs --level ERROR           Filter logs by level (ERROR > WARN > INFO > DEBUG)
+  pulseed doctor                       Run health checks on PulSeed installation
+  pulseed install --goal <id>          Install as macOS launchd service (auto-start on boot)
+  pulseed uninstall                    Remove launchd service
+  pulseed notify add slack --webhook-url <url>   Add Slack notification channel
+  pulseed notify add webhook --url <url>         Add webhook notification channel
+  pulseed notify list                  List configured notification channels
+  pulseed notify remove <index>        Remove a notification channel
   pulseed setup                        Interactive setup wizard (first-time configuration)
   pulseed provider show                Show current provider config
   pulseed provider set                 Set LLM provider and/or default adapter

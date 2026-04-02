@@ -57,12 +57,11 @@ describe("cmdDaemonStatus", () => {
     await cmdDaemonStatus([]);
 
     const output = consoleSpy.mock.calls[0]?.[0] as string;
-    expect(output).toContain("Status:      stopped");
-    expect(output).toContain("PID:         999999999");
+    expect(output).toContain("stopped (PID: 999999999)");
     expect(output).toContain("goal-a");
     expect(output).toContain("goal-b");
-    expect(output).toContain("Loop count:  5");
-    expect(output).toContain("Crash count: 1");
+    expect(output).toContain("5 cycles completed");
+    expect(output).toContain("1/3 retries used");
   });
 
   it("shows running status when PID is the current process", async () => {
@@ -82,11 +81,10 @@ describe("cmdDaemonStatus", () => {
     await cmdDaemonStatus([]);
 
     const output = consoleSpy.mock.calls[0]?.[0] as string;
-    expect(output).toContain("Status:      running");
-    expect(output).toContain(`PID:         ${process.pid}`);
+    expect(output).toContain(`running (PID: ${process.pid})`);
     expect(output).toContain("Uptime:");
-    expect(output).toContain("Loop count:  10");
-    expect(output).toContain("Crash count: 0");
+    expect(output).toContain("10 cycles completed");
+    expect(output).toContain("0/3 retries used");
   });
 
   it("shows last_error when present", async () => {
@@ -105,7 +103,7 @@ describe("cmdDaemonStatus", () => {
     await cmdDaemonStatus([]);
 
     const output = consoleSpy.mock.calls[0]?.[0] as string;
-    expect(output).toContain("Last error:  something went wrong");
+    expect(output).toContain("Last error:      something went wrong");
   });
 
   it("handles empty active_goals gracefully", async () => {
@@ -124,6 +122,119 @@ describe("cmdDaemonStatus", () => {
     await cmdDaemonStatus([]);
 
     const output = consoleSpy.mock.calls[0]?.[0] as string;
-    expect(output).toContain("Active goals: (none)");
+    expect(output).toContain("Active goals:    (none)");
+  });
+
+  it("shows header and separator", async () => {
+    const state = {
+      pid: 999999999,
+      started_at: "2026-01-01T00:00:00.000Z",
+      last_loop_at: null,
+      loop_count: 0,
+      active_goals: [],
+      status: "stopped",
+      crash_count: 0,
+      last_error: null,
+    };
+    fs.writeFileSync(path.join(tmpDir, "daemon-state.json"), JSON.stringify(state));
+
+    await cmdDaemonStatus([]);
+
+    const output = consoleSpy.mock.calls[0]?.[0] as string;
+    expect(output).toContain("PulSeed Daemon Status");
+    expect(output).toContain("\u2500".repeat(21));
+  });
+
+  it("shows config section with defaults when no config file", async () => {
+    const state = {
+      pid: 999999999,
+      started_at: "2026-01-01T00:00:00.000Z",
+      last_loop_at: null,
+      loop_count: 0,
+      active_goals: [],
+      status: "stopped",
+      crash_count: 0,
+      last_error: null,
+    };
+    fs.writeFileSync(path.join(tmpDir, "daemon-state.json"), JSON.stringify(state));
+
+    await cmdDaemonStatus([]);
+
+    const output = consoleSpy.mock.calls[0]?.[0] as string;
+    expect(output).toContain("Config:");
+    expect(output).toContain("5m (adaptive sleep: off)");
+    expect(output).toContain("10 per cycle");
+    expect(output).toContain("Proactive:     off");
+    expect(output).toContain("enabled");
+  });
+
+  it("reads config file when present and shows its values", async () => {
+    const state = {
+      pid: 999999999,
+      started_at: "2026-01-01T00:00:00.000Z",
+      last_loop_at: null,
+      loop_count: 0,
+      active_goals: [],
+      status: "stopped",
+      crash_count: 0,
+      last_error: null,
+    };
+    const config = {
+      check_interval_ms: 120_000, // 2 min
+      iterations_per_cycle: 5,
+      proactive_mode: true,
+      adaptive_sleep: { enabled: true },
+      crash_recovery: { enabled: true, max_retries: 5 },
+    };
+    fs.writeFileSync(path.join(tmpDir, "daemon-state.json"), JSON.stringify(state));
+    fs.writeFileSync(path.join(tmpDir, "daemon-config.json"), JSON.stringify(config));
+
+    await cmdDaemonStatus([]);
+
+    const output = consoleSpy.mock.calls[0]?.[0] as string;
+    expect(output).toContain("2m (adaptive sleep: on)");
+    expect(output).toContain("5 per cycle");
+    expect(output).toContain("Proactive:     on");
+    expect(output).toContain("0/5 retries used");
+  });
+
+  it("shows last cycle relative time when last_loop_at is present", async () => {
+    const lastLoop = new Date(Date.now() - 3 * 60 * 1000).toISOString(); // 3 minutes ago
+    const state = {
+      pid: 999999999,
+      started_at: "2026-01-01T00:00:00.000Z",
+      last_loop_at: lastLoop,
+      loop_count: 7,
+      active_goals: ["goal-z"],
+      status: "stopped",
+      crash_count: 0,
+      last_error: null,
+    };
+    fs.writeFileSync(path.join(tmpDir, "daemon-state.json"), JSON.stringify(state));
+
+    await cmdDaemonStatus([]);
+
+    const output = consoleSpy.mock.calls[0]?.[0] as string;
+    expect(output).toContain("Last cycle:");
+    expect(output).toMatch(/\d+m ago/);
+  });
+
+  it("shows 'Last error: none' when no error", async () => {
+    const state = {
+      pid: 999999999,
+      started_at: "2026-01-01T00:00:00.000Z",
+      last_loop_at: null,
+      loop_count: 0,
+      active_goals: [],
+      status: "stopped",
+      crash_count: 0,
+      last_error: null,
+    };
+    fs.writeFileSync(path.join(tmpDir, "daemon-state.json"), JSON.stringify(state));
+
+    await cmdDaemonStatus([]);
+
+    const output = consoleSpy.mock.calls[0]?.[0] as string;
+    expect(output).toContain("Last error:      none");
   });
 });

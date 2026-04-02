@@ -156,6 +156,26 @@ export async function cmdStart(
   await daemon.start(goalIds);
 }
 
+function formatUptime(startedAt: string): string {
+  const ms = Date.now() - new Date(startedAt).getTime();
+  const days = Math.floor(ms / 86400000);
+  const hours = Math.floor((ms % 86400000) / 3600000);
+  const minutes = Math.floor((ms % 3600000) / 60000);
+  const parts: string[] = [];
+  if (days > 0) parts.push(`${days}d`);
+  if (hours > 0) parts.push(`${hours}h`);
+  parts.push(`${minutes}m`);
+  return parts.join(" ");
+}
+
+function formatRelativeTime(isoDate: string): string {
+  const ms = Date.now() - new Date(isoDate).getTime();
+  if (ms < 60000) return `${Math.floor(ms / 1000)}s ago`;
+  if (ms < 3600000) return `${Math.floor(ms / 60000)}m ago`;
+  if (ms < 86400000) return `${Math.floor(ms / 3600000)}h ago`;
+  return `${Math.floor(ms / 86400000)}d ago`;
+}
+
 export async function cmdDaemonStatus(_args: string[]): Promise<void> {
   const baseDir = getPulseedDirPath();
   const statePath = path.join(baseDir, "daemon-state.json");
@@ -181,31 +201,51 @@ export async function cmdDaemonStatus(_args: string[]): Promise<void> {
     alive = false;
   }
 
+  // Load daemon config for config section display
+  const configPath = path.join(baseDir, "daemon-config.json");
+  const configRaw = await readJsonFileOrNull(configPath);
+  const configParsed = configRaw !== null ? DaemonConfigSchema.safeParse(configRaw) : null;
+  const cfg = configParsed?.success ? configParsed.data : DaemonConfigSchema.parse({});
+
   const status = alive ? "running" : "stopped";
   const lines: string[] = [
-    `Status:      ${status}`,
-    `PID:         ${data.pid}`,
-    `Active goals: ${data.active_goals.join(", ") || "(none)"}`,
-    `Loop count:  ${data.loop_count}`,
-    `Crash count: ${data.crash_count}`,
+    "PulSeed Daemon Status",
+    "\u2500".repeat(21),
+    `Status:          ${status} (PID: ${data.pid})`,
   ];
 
   if (data.started_at) {
-    const uptimeMs = alive ? Date.now() - new Date(data.started_at).getTime() : null;
-    lines.push(`Started at:  ${data.started_at}`);
-    if (uptimeMs !== null) {
-      const uptimeSec = Math.floor(uptimeMs / 1000);
-      lines.push(`Uptime:      ${uptimeSec}s`);
+    if (alive) {
+      lines.push(`Uptime:          ${formatUptime(data.started_at)}`);
     }
+    lines.push(`Started:         ${data.started_at}`);
   }
+
+  lines.push("");
+  lines.push(`Loops:           ${data.loop_count} cycles completed`);
 
   if (data.last_loop_at) {
-    lines.push(`Last loop:   ${data.last_loop_at}`);
+    lines.push(`Last cycle:      ${formatRelativeTime(data.last_loop_at)}`);
   }
 
-  if (data.last_error) {
-    lines.push(`Last error:  ${data.last_error}`);
-  }
+  lines.push(`Active goals:    ${data.active_goals.join(", ") || "(none)"}`);
+
+  // Config section
+  const intervalMin = Math.round(cfg.check_interval_ms / 60000);
+  const adaptiveSleep = cfg.adaptive_sleep.enabled ? "on" : "off";
+  const proactive = cfg.proactive_mode ? "on" : "off";
+  const crashEnabled = cfg.crash_recovery.enabled ? "enabled" : "disabled";
+  const maxRetries = cfg.crash_recovery.max_retries;
+
+  lines.push("");
+  lines.push("Config:");
+  lines.push(`  Interval:      ${intervalMin}m (adaptive sleep: ${adaptiveSleep})`);
+  lines.push(`  Iterations:    ${cfg.iterations_per_cycle} per cycle`);
+  lines.push(`  Proactive:     ${proactive}`);
+  lines.push(`  Crash recovery: ${crashEnabled} (${data.crash_count}/${maxRetries} retries used)`);
+
+  lines.push("");
+  lines.push(`Last error:      ${data.last_error ?? "none"}`);
 
   console.log(lines.join("\n"));
 }
