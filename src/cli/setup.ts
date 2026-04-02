@@ -105,7 +105,15 @@ export async function buildDeps(
     async (goalId: string) => {
       try {
         const goal = await stateManager.loadGoal(goalId);
-        return goal?.description;
+        if (!goal) return undefined;
+        let desc = goal.description;
+        if (goal.parent_id) {
+          const parent = await stateManager.loadGoal(goal.parent_id);
+          if (parent?.description) {
+            desc = `${desc}\n${parent.description}`;
+          }
+        }
+        return desc;
       } catch (err) {
         getCliLogger().error(formatOperationError(`resolve workspace context goal description for "${goalId}"`, err));
         return undefined;

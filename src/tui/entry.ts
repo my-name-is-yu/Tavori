@@ -59,9 +59,26 @@ async function buildDeps() {
     async (goalId: string) => {
       try {
         const goal = await stateManager.loadGoal(goalId);
-        return goal?.description;
+        if (!goal) return undefined;
+        let desc = goal.description;
+        if (goal.parent_id) {
+          const parent = await stateManager.loadGoal(goal.parent_id);
+          if (parent?.description) {
+            desc = `${desc}\n${parent.description}`;
+          }
+        }
+        return desc;
       } catch (err) {
         getCliLogger().error(`[pulseed] Failed to resolve goal description for "${goalId}": ${err instanceof Error ? err.message : String(err)}`);
+        return undefined;
+      }
+    },
+    async (goalId: string) => {
+      try {
+        const goal = await stateManager.loadGoal(goalId);
+        return goal?.constraints;
+      } catch (err) {
+        getCliLogger().error(`[pulseed] Failed to resolve goal constraints for "${goalId}": ${err instanceof Error ? err.message : String(err)}`);
         return undefined;
       }
     }

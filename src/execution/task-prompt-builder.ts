@@ -21,6 +21,17 @@ export async function buildTaskGenerationPrompt(
 ): Promise<string> {
   // Load goal context to enrich the prompt
   const goal = await stateManager.loadGoal(goalId);
+
+  // Load parent goal chain (max 3 levels)
+  const parentChain: Array<{ title: string; description: string }> = [];
+  let current = goal;
+  for (let i = 0; i < 3 && current?.parent_id; i++) {
+    const parent = await stateManager.loadGoal(current.parent_id);
+    if (!parent) break;
+    parentChain.push({ title: parent.title, description: parent.description });
+    current = parent;
+  }
+
   const dim = goal?.dimensions.find((d) => d.name === targetDimension);
 
   // Build goal context section
@@ -152,12 +163,32 @@ Constraints:
     // no failure context — skip injection
   }
 
+  // Parent Goal Context section
+  const parentSection = parentChain.length > 0
+    ? `## Parent Goal Context\n${parentChain.map((p, i) => `${"  ".repeat(i)}Goal: ${p.title}\n${"  ".repeat(i)}Description: ${p.description}`).join("\n")}`
+    : "";
+
+  // Referenced Issue section (dynamic import — graceful when absent)
+  let issueSection = "";
+  try {
+    const { fetchIssueContext } = await import("./issue-context-fetcher.js");
+    const allText = [goal?.title, goal?.description, ...parentChain.map(p => `${p.title} ${p.description}`)].filter(Boolean).join(" ");
+    issueSection = await fetchIssueContext(allText);
+  } catch {
+    // issue-context-fetcher not available
+  }
+
+  // Task Purpose section
+  const purposeSection = goal
+    ? `## Task Purpose\nThis task addresses dimension "${targetDimension}" of subgoal "${goal.title}"${parentChain.length > 0 ? `, which is part of the parent goal "${parentChain[0].title}"` : ""}.`
+    : "";
+
   const reflectionsSection = reflections ? `\n${reflections}\n` : "";
   const lessonsSection = lessons ? `\n${lessons}\n` : "";
 
   return `${goalSection}
 ${dimensionSection}
-${repoSection}${adapterSection}${knowledgeSection}${workspaceSection}${existingTasksSection}${failureContextSection}${reflectionsSection}${lessonsSection}
+${parentSection ? `${parentSection}\n` : ""}${issueSection ? `${issueSection}\n` : ""}${purposeSection ? `${purposeSection}\n` : ""}${repoSection}${adapterSection}${knowledgeSection}${workspaceSection}${existingTasksSection}${failureContextSection}${reflectionsSection}${lessonsSection}
 Requirements:
 - Specific to actual project (goal, description, repo context)
 - No generic improvements unless in goal description
