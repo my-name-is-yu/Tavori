@@ -587,5 +587,36 @@ describe("CoreLoop", async () => {
       // Iteration should still complete successfully
       expect(result.taskResult).not.toBeNull();
     });
+
+    it("handles unexpected throw from runOneIteration gracefully in standalone mode", async () => {
+      const { deps, mocks } = createMockDeps(tmpDir);
+      await mocks.stateManager.saveGoal(makeGoal());
+
+      // Make observationEngine.observe throw an unexpected error that bypasses
+      // the internal phase try/catches (simulates a truly unexpected failure).
+      // We use stateManager.loadGoal throwing so the error surfaces before any
+      // phase-level handler can catch it, forcing the top-level for-loop catch.
+      const originalLoad = mocks.stateManager.loadGoal.bind(mocks.stateManager);
+      let callCount = 0;
+      vi.spyOn(mocks.stateManager, "loadGoal").mockImplementation(async (id: string) => {
+        callCount++;
+        // First call in run() succeeds (goal validation); subsequent calls throw.
+        if (callCount === 1) return originalLoad(id);
+        throw new Error("Unexpected internal error");
+      });
+
+      // maxConsecutiveErrors=2 so the loop exits after 2 consecutive throws.
+      const loop = new CoreLoop(deps, {
+        maxIterations: 5,
+        maxConsecutiveErrors: 2,
+        delayBetweenLoopsMs: 0,
+      });
+      const result = await loop.run("goal-1");
+
+      // Loop must not propagate the throw — it should exit with finalStatus "error".
+      expect(result.finalStatus).toBe("error");
+      // The loop should have stopped, not run all 5 iterations.
+      expect(result.totalIterations).toBeLessThan(5);
+    });
   });
 });
