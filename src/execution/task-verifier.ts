@@ -972,7 +972,7 @@ async function attemptRevert(deps: VerifierDeps, task: Task): Promise<boolean> {
     const filesToRestore = task.scope_boundary.in_scope;
     if (filesToRestore.length > 0) {
       const { execFileSync } = await import("child_process");
-      execFileSync("git", ["restore", ...filesToRestore], { cwd: process.cwd(), encoding: "utf-8" });
+      execFileSync("git", ["restore", ...filesToRestore], { cwd: process.cwd(), encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
       deps.logger?.info?.(`[attemptRevert] git restore succeeded for ${filesToRestore.length} files`);
       return true;
     }
