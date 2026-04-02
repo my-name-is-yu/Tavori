@@ -47,7 +47,7 @@ describe("Observation LLM malformed JSON regression", () => {
       expect.stringContaining("Failed to parse thresholdDescription for binary check")
     );
     expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("Failed to parse thresholdDescription JSON, using raw score")
+      expect.stringContaining("Failed to parse thresholdDescription JSON goal=")
     );
   });
 });

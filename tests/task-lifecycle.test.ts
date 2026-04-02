@@ -173,7 +173,7 @@ describe("TaskLifecycle — uncovered branches", () => {
       trustManager,
       strategyManager,
       stallDetector,
-      { healthCheckEnabled: false, ...options }
+      { healthCheckEnabled: false, execFileSyncFn: () => "some-file.ts", ...options }
     );
   }
 
