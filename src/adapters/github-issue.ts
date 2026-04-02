@@ -445,7 +445,7 @@ export class GitHubIssueAdapter implements IAdapter {
     let resolved = false;
 
     const child = spawn("git", ["remote", "get-url", "origin"], {
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: ["ignore", "pipe", "ignore"],
     });
 
     const timeoutHandle = setTimeout(() => {

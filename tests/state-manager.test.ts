@@ -123,6 +123,173 @@ describe("StateManager", async () => {
     });
   });
 
+  describe("Issue #429: non-ENOENT errors are re-thrown", async () => {
+    it("listGoalIds re-throws non-ENOENT errors", async () => {
+      // Remove the goals dir and replace it with a file to cause ENOTDIR
+      const goalsDir = path.join(tmpDir, "goals");
+      fs.rmSync(goalsDir, { recursive: true, force: true });
+      fs.writeFileSync(goalsDir, "not a directory");
+
+      await expect(manager.listGoalIds()).rejects.toThrow();
+
+      // Restore for afterEach cleanup
+      fs.rmSync(goalsDir);
+      fs.mkdirSync(goalsDir);
+    });
+
+    it("listArchivedGoals re-throws non-ENOENT errors", async () => {
+      // Create archive as a file instead of directory to cause ENOTDIR on readdir
+      const archiveDir = path.join(tmpDir, "archive");
+      fs.writeFileSync(archiveDir, "not a directory");
+
+      await expect(manager.listArchivedGoals()).rejects.toThrow();
+
+      // Restore for afterEach cleanup
+      fs.rmSync(archiveDir);
+    });
+
+    it("deleteGoalTree re-throws non-ENOENT errors", async () => {
+      // Create a directory where the file should be so unlink gets EISDIR
+      const treeDir = path.join(tmpDir, "goal-trees", "bad-id.json");
+      fs.mkdirSync(treeDir, { recursive: true });
+
+      await expect(manager.deleteGoalTree("bad-id")).rejects.toThrow();
+
+      // Restore for afterEach cleanup
+      fs.rmSync(treeDir, { recursive: true, force: true });
+    });
+
+    it("goalExists re-throws non-ENOENT errors (ENOTDIR via file as dir)", async () => {
+      // Make goals/<goalId> a regular file — then fsp.access(goals/<goalId>/goal.json)
+      // fails with ENOTDIR because it tries to traverse into a non-directory
+      const goalEntry = path.join(tmpDir, "goals", "badgoal-exists");
+      fs.rmSync(goalEntry, { recursive: true, force: true });
+      fs.writeFileSync(goalEntry, "not a dir");
+
+      await expect(manager.goalExists("badgoal-exists")).rejects.toThrow();
+
+      // Restore for afterEach cleanup
+      fs.rmSync(goalEntry);
+    });
+
+    it("deleteGoal re-throws non-ENOENT errors on goal dir access", async () => {
+      // Remove execute permission from goals dir so fsp.access fails with EACCES
+      const goalsDir = path.join(tmpDir, "goals");
+      fs.chmodSync(goalsDir, 0o000);
+
+      try {
+        await expect(manager.deleteGoal("any-goal")).rejects.toThrow();
+      } finally {
+        fs.chmodSync(goalsDir, 0o755);
+      }
+    });
+
+    it("archiveGoal re-throws non-ENOENT errors on goal dir access", async () => {
+      // Remove execute permission from goals dir so fsp.access fails with EACCES
+      const goalsDir = path.join(tmpDir, "goals");
+      fs.chmodSync(goalsDir, 0o000);
+
+      try {
+        await expect(manager.archiveGoal("any-goal")).rejects.toThrow();
+      } finally {
+        fs.chmodSync(goalsDir, 0o755);
+      }
+    });
+  });
+
+  describe("Issue #430: corrupt JSON returns null instead of throwing", async () => {
+    it("loadGoal returns null for corrupt goal.json", async () => {
+      const goal = makeGoal({ id: "corrupt-goal" });
+      await manager.saveGoal(goal);
+
+      const goalPath = path.join(tmpDir, "goals", "corrupt-goal", "goal.json");
+      fs.writeFileSync(goalPath, "{ not valid json ~~~");
+
+      const result = await manager.loadGoal("corrupt-goal");
+      expect(result).toBeNull();
+    });
+
+    it("loadObservationLog returns null for corrupt observations.json", async () => {
+      await manager.saveGoal(makeGoal({ id: "corrupt-obs" }));
+      const obsPath = path.join(tmpDir, "goals", "corrupt-obs", "observations.json");
+      fs.mkdirSync(path.dirname(obsPath), { recursive: true });
+      fs.writeFileSync(obsPath, "{ bad json");
+
+      const result = await manager.loadObservationLog("corrupt-obs");
+      expect(result).toBeNull();
+    });
+
+    it("loadGapHistory returns empty array for corrupt gap-history.json", async () => {
+      await manager.saveGoal(makeGoal({ id: "corrupt-gap" }));
+      const gapPath = path.join(tmpDir, "goals", "corrupt-gap", "gap-history.json");
+      fs.mkdirSync(path.dirname(gapPath), { recursive: true });
+      fs.writeFileSync(gapPath, "not json at all");
+
+      const result = await manager.loadGapHistory("corrupt-gap");
+      // atomicRead returns null -> loadGapHistory returns []
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe("Issue #431: history capping at 500 entries", async () => {
+    it("appendObservation caps entries at 500", async () => {
+      await manager.saveGoal(makeGoal({ id: "cap-obs" }));
+
+      const baseEntry: ObservationLogEntry = {
+        observation_id: "obs-0",
+        timestamp: new Date().toISOString(),
+        trigger: "periodic",
+        goal_id: "cap-obs",
+        dimension_name: "dim1",
+        layer: "mechanical",
+        method: {
+          type: "api_query",
+          source: "api",
+          schedule: null,
+          endpoint: null,
+          confidence_tier: "mechanical",
+        },
+        raw_result: 1,
+        extracted_value: 1,
+        confidence: 0.9,
+        notes: null,
+      };
+
+      // Append 510 entries
+      for (let i = 0; i < 510; i++) {
+        await manager.appendObservation("cap-obs", { ...baseEntry, observation_id: `obs-${i}` });
+      }
+
+      const loaded = await manager.loadObservationLog("cap-obs");
+      expect(loaded!.entries).toHaveLength(500);
+      // Should keep the last 500 (obs-10 through obs-509)
+      expect(loaded!.entries[0].observation_id).toBe("obs-10");
+      expect(loaded!.entries[499].observation_id).toBe("obs-509");
+    });
+
+    it("appendGapHistoryEntry caps entries at 500", async () => {
+      await manager.saveGoal(makeGoal({ id: "cap-gap" }));
+
+      const baseEntry: GapHistoryEntry = {
+        iteration: 0,
+        timestamp: new Date().toISOString(),
+        gap_vector: [{ dimension_name: "d", normalized_weighted_gap: 0.5 }],
+        confidence_vector: [{ dimension_name: "d", confidence: 0.9 }],
+      };
+
+      // Append 510 entries
+      for (let i = 0; i < 510; i++) {
+        await manager.appendGapHistoryEntry("cap-gap", { ...baseEntry, iteration: i });
+      }
+
+      const loaded = await manager.loadGapHistory("cap-gap");
+      expect(loaded).toHaveLength(500);
+      // Should keep the last 500 (iteration 10 through 509)
+      expect(loaded[0].iteration).toBe(10);
+      expect(loaded[499].iteration).toBe(509);
+    });
+  });
+
   describe("Goal Tree", async () => {
     it("saves and loads a goal tree", async () => {
       const goal1 = makeGoal({ id: "root", children_ids: ["child1"] });
@@ -734,6 +901,70 @@ describe("StateManager", async () => {
       await expect(manager.deleteGoal("del-corrupt-parent")).resolves.toBe(true);
 
       expect(await manager.goalExists("del-corrupt-parent")).toBe(false);
+    });
+  });
+
+  describe("atomicRead / history cap / error propagation", async () => {
+    it("atomicRead returns null on corrupt JSON instead of throwing", async () => {
+      // Write a valid goal first to create the directory, then corrupt its JSON
+      const goal = makeGoal({ id: "corrupt-read" });
+      await manager.saveGoal(goal);
+
+      const goalPath = path.join(tmpDir, "goals", "corrupt-read", "goal.json");
+      fs.writeFileSync(goalPath, "{ this is not valid json ~~~");
+
+      // loadGoal calls atomicRead which should return null on corrupt JSON
+      const loaded = await manager.loadGoal("corrupt-read");
+      expect(loaded).toBeNull();
+    });
+
+    it("appendObservation caps entries at 500", async () => {
+      await manager.saveGoal(makeGoal({ id: "cap-test" }));
+
+      const baseEntry: ObservationLogEntry = {
+        observation_id: "obs-cap",
+        timestamp: new Date().toISOString(),
+        trigger: "periodic",
+        goal_id: "cap-test",
+        dimension_name: "dim1",
+        layer: "mechanical",
+        method: {
+          type: "api_query",
+          source: "api",
+          schedule: null,
+          endpoint: null,
+          confidence_tier: "mechanical",
+        },
+        raw_result: 1,
+        extracted_value: 1,
+        confidence: 0.9,
+        notes: null,
+      };
+
+      // Append 510 entries
+      for (let i = 0; i < 510; i++) {
+        await manager.appendObservation("cap-test", {
+          ...baseEntry,
+          observation_id: `obs-${i}`,
+          extracted_value: i,
+        });
+      }
+
+      const loaded = await manager.loadObservationLog("cap-test");
+      expect(loaded).not.toBeNull();
+      expect(loaded!.entries.length).toBe(500);
+      // Should have the last 500 entries (obs-10 through obs-509)
+      expect(loaded!.entries[0].observation_id).toBe("obs-10");
+      expect(loaded!.entries[499].observation_id).toBe("obs-509");
+    });
+
+    it("listGoalIds propagates non-ENOENT errors", async () => {
+      // Remove the goals directory then replace it with a file — readdir will fail with ENOTDIR
+      const goalsDir = path.join(tmpDir, "goals");
+      fs.rmSync(goalsDir, { recursive: true, force: true });
+      fs.writeFileSync(goalsDir, "not-a-directory");
+
+      await expect(manager.listGoalIds()).rejects.toThrow();
     });
   });
 });
