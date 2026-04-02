@@ -99,7 +99,8 @@ export class StateManager {
       return JSON.parse(content) as T;
     } catch (err) {
       this.logger?.warn(`[StateManager] Corrupt JSON at ${filePath}: ${err}`);
-      throw err;
+      console.warn(`[StateManager] Corrupt JSON at ${filePath}, returning null:`, err);
+      return null;
     }
   }
 
@@ -131,7 +132,8 @@ export class StateManager {
     const dir = path.join(this.baseDir, "goals", goalId);
     try {
       await fsp.access(dir);
-    } catch {
+    } catch (e: unknown) {
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
       // After the active goals check fails, try archive directory
       const archiveDir = path.join(this.baseDir, "archive", goalId);
       try {
@@ -142,7 +144,8 @@ export class StateManager {
         try {
           const raw = await this.atomicRead<unknown>(archiveGoalPath);
           if (raw !== null) archivedGoal = GoalSchema.parse(raw);
-        } catch {
+        } catch (e: unknown) {
+          if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
           this.logger?.warn(`[StateManager] Skipping children of archived "${goalId}": goal.json unreadable`);
         }
         if (archivedGoal !== null) {
@@ -152,7 +155,8 @@ export class StateManager {
         }
         await fsp.rm(archiveDir, { recursive: true, force: true });
         return true;
-      } catch {
+      } catch (e: unknown) {
+        if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
         return false;
       }
     }
@@ -161,7 +165,8 @@ export class StateManager {
     let goal: Goal | null = null;
     try {
       goal = await this.loadGoal(goalId);
-    } catch {
+    } catch (e: unknown) {
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
       this.logger?.warn(`[StateManager] Skipping children of "${goalId}": goal.json unreadable`);
     }
     if (goal !== null) {
@@ -194,7 +199,8 @@ export class StateManager {
     const goalDir = path.join(this.baseDir, "goals", goalId);
     try {
       await fsp.access(goalDir);
-    } catch {
+    } catch (e: unknown) {
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
       return false;
     }
 
@@ -202,7 +208,8 @@ export class StateManager {
     let goal: Goal | null = null;
     try {
       goal = await this.loadGoal(goalId);
-    } catch {
+    } catch (e: unknown) {
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
       this.logger?.warn(`[StateManager] Skipping children of "${goalId}": goal.json unreadable`);
     }
     if (goal !== null) {
@@ -241,7 +248,7 @@ export class StateManager {
       const archiveTasksDir = path.join(archiveBase, "tasks");
       await fsp.cp(tasksDir, archiveTasksDir, { recursive: true });
       await fsp.rm(tasksDir, { recursive: true, force: true });
-    } catch { /* not found, skip */ }
+    } catch (e: unknown) { if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; }
 
     // Move strategies/<goalId>/ → archive/<goalId>/strategies/ (if exists)
     const strategiesDir = path.join(this.baseDir, "strategies", goalId);
@@ -250,7 +257,7 @@ export class StateManager {
       const archiveStrategiesDir = path.join(archiveBase, "strategies");
       await fsp.cp(strategiesDir, archiveStrategiesDir, { recursive: true });
       await fsp.rm(strategiesDir, { recursive: true, force: true });
-    } catch { /* not found, skip */ }
+    } catch (e: unknown) { if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; }
 
     // Move stalls/<goalId>.json → archive/<goalId>/stalls.json (if exists)
     const stallsFile = path.join(this.baseDir, "stalls", `${goalId}.json`);
@@ -259,7 +266,7 @@ export class StateManager {
       const archiveStallsFile = path.join(archiveBase, "stalls.json");
       await fsp.cp(stallsFile, archiveStallsFile);
       await fsp.rm(stallsFile, { force: true });
-    } catch { /* not found, skip */ }
+    } catch (e: unknown) { if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; }
 
     // Move reports/<goalId>/ → archive/<goalId>/reports/ (if exists)
     const reportsDir = path.join(this.baseDir, "reports", goalId);
@@ -268,7 +275,7 @@ export class StateManager {
       const archiveReportsDir = path.join(archiveBase, "reports");
       await fsp.cp(reportsDir, archiveReportsDir, { recursive: true });
       await fsp.rm(reportsDir, { recursive: true, force: true });
-    } catch { /* not found, skip */ }
+    } catch (e: unknown) { if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; }
 
     return true;
   }
@@ -281,7 +288,8 @@ export class StateManager {
     try {
       const entries = await fsp.readdir(archiveDir, { withFileTypes: true });
       return entries.filter((d) => d.isDirectory()).map((d) => d.name);
-    } catch {
+    } catch (e: unknown) {
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
       return [];
     }
   }
@@ -291,7 +299,8 @@ export class StateManager {
     try {
       const entries = await fsp.readdir(goalsDir, { withFileTypes: true });
       return entries.filter((d) => d.isDirectory()).map((d) => d.name);
-    } catch {
+    } catch (e: unknown) {
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
       return [];
     }
   }
@@ -320,7 +329,8 @@ export class StateManager {
     try {
       await fsp.unlink(filePath);
       return true;
-    } catch {
+    } catch (e: unknown) {
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
       return false;
     }
   }
@@ -357,6 +367,7 @@ export class StateManager {
       log = { goal_id: goalId, entries: [] };
     }
     log.entries.push(parsed);
+    log.entries = log.entries.slice(-500);
     await this.saveObservationLog(log);
   }
 
@@ -384,7 +395,7 @@ export class StateManager {
     const parsed = GapHistoryEntrySchema.parse(entry);
     const history = await this.loadGapHistory(goalId);
     history.push(parsed);
-    await this.saveGapHistory(goalId, history);
+    await this.saveGapHistory(goalId, history.slice(-500));
   }
 
   /**
@@ -489,7 +500,8 @@ export class StateManager {
     try {
       await fsp.access(path.join(this.baseDir, "goals", goalId, "goal.json"));
       return true;
-    } catch {
+    } catch (e: unknown) {
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
       return false;
     }
   }
@@ -536,13 +548,13 @@ export class StateManager {
       if (typeof cp.trust_snapshot === "number" && trustManager) {
         try {
           await trustManager.setOverride(adapterType, cp.trust_snapshot, "checkpoint_restore");
-        } catch {
+        } catch (e: unknown) {
           // Non-fatal — trust restore failure should not abort the run
         }
       }
 
       return cp.cycle_number;
-    } catch {
+    } catch (e: unknown) {
       // Checkpoint restore failure is non-fatal — caller starts from beginning
       return 0;
     }
