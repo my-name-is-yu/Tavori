@@ -106,7 +106,7 @@ export async function buildDeps(
       try {
         const goal = await stateManager.loadGoal(goalId);
         if (!goal) return undefined;
-        let desc = goal.description;
+        let desc = goal.title + "\n" + goal.description;
         if (goal.parent_id) {
           const parent = await stateManager.loadGoal(goal.parent_id);
           if (parent?.description) {

@@ -31,16 +31,18 @@ export async function runTreeIteration(
     await deps.treeLoopOrchestrator?.startTreeExecution(rootId, defaultConfig);
   }
   let decomposed = false;
+  console.log(`  [TREE] rootGoal loaded: ${!!rootGoalForDecomp}, children: ${rootGoalForDecomp?.children_ids.length ?? "N/A"}, hasTLO: ${!!deps.treeLoopOrchestrator}, hasRefiner: ${!!deps.goalRefiner}`);
   if (rootGoalForDecomp && rootGoalForDecomp.children_ids.length === 0) {
     const defaultConfig = { min_specificity: 0.7, max_depth: 3, parallel_loop_limit: 3, auto_prune_threshold: 0.3 };
     if (deps.treeLoopOrchestrator) {
       try {
-        logger?.info("CoreLoop: refining goal tree via ensureGoalRefined (force=true)", { rootId });
+        console.log("  [TREE] Calling ensureGoalRefined(force=true)...");
         await deps.treeLoopOrchestrator.ensureGoalRefined(rootId, { force: true });
+        console.log("  [TREE] ensureGoalRefined complete. Starting tree execution...");
         await deps.treeLoopOrchestrator.startTreeExecution(rootId, defaultConfig);
         const rootAfterRefine = await deps.stateManager.loadGoal(rootId);
         decomposed = (rootAfterRefine?.children_ids.length ?? 0) > 0;
-        logger?.info("CoreLoop: refinement complete", { rootId, decomposed });
+        console.log(`  [TREE] Refinement result: decomposed=${decomposed}, children=${rootAfterRefine?.children_ids.length ?? 0}`);
       } catch (err) {
         logger?.warn("CoreLoop: refinement failed, falling back to flat iteration", { rootId, err });
       }
