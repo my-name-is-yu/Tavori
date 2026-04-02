@@ -39,9 +39,25 @@ const COMMAND_HELP = `Available commands:
 export class ChatRunner {
   private readonly deps: ChatRunnerDeps;
   private history: ChatHistory | null = null;
+  private sessionCwd: string | null = null;
+  /** True when startSession() has been called — enables session persistence across execute() calls. */
+  private sessionActive = false;
 
   constructor(deps: ChatRunnerDeps) {
     this.deps = deps;
+  }
+
+  /**
+   * Initialize a persistent session for interactive (multi-turn) mode.
+   * Must be called before the first execute() to share history across turns.
+   * If not called, execute() auto-creates a new session per call (Phase 1a behavior).
+   */
+  startSession(cwd: string): void {
+    const gitRoot = resolveGitRoot(cwd);
+    const sessionId = crypto.randomUUID();
+    this.history = new ChatHistory(this.deps.stateManager, sessionId, gitRoot);
+    this.sessionCwd = gitRoot;
+    this.sessionActive = true;
   }
 
   private handleCommand(input: string): ChatRunResult | null {
@@ -89,12 +105,19 @@ export class ChatRunner {
       return commandResult;
     }
 
-    const gitRoot = resolveGitRoot(cwd);
-    const sessionId = crypto.randomUUID();
-    this.history = new ChatHistory(this.deps.stateManager, sessionId, gitRoot);
+    // Reuse session (interactive mode) or create a fresh one per call (1-shot mode)
+    if (!this.sessionActive) {
+      const gitRoot = resolveGitRoot(cwd);
+      const sessionId = crypto.randomUUID();
+      this.history = new ChatHistory(this.deps.stateManager, sessionId, gitRoot);
+    }
+    const gitRoot = this.sessionCwd ?? resolveGitRoot(cwd);
+
+    // history is always assigned by this point (either by startSession or the block above)
+    const history = this.history!;
 
     // Persist-before-execute: user message written to disk first
-    await this.history.appendUserMessage(input);
+    await history.appendUserMessage(input);
 
     const context = buildChatContext(input, gitRoot);
     const prompt = context ? `${context}\n\n${input}` : input;
@@ -111,7 +134,7 @@ export class ChatRunner {
     const elapsed_ms = Date.now() - start;
 
     // Fire-and-forget: persist assistant response after completion
-    this.history.appendAssistantMessage(result.output);
+    history.appendAssistantMessage(result.output);
 
     return {
       success: result.success,

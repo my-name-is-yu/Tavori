@@ -189,6 +189,81 @@ describe("ChatRunner", () => {
     });
   });
 
+  describe("startSession / multi-turn behavior", () => {
+    it("startSession initializes a session that is reused across multiple execute() calls", async () => {
+      const stateManager = makeMockStateManager();
+      const runner = new ChatRunner(makeDeps({ stateManager }));
+
+      runner.startSession("/repo");
+      await runner.execute("Turn 1", "/repo");
+      await runner.execute("Turn 2", "/repo");
+
+      const writeRawMock = stateManager.writeRaw as ReturnType<typeof vi.fn>;
+      const paths = writeRawMock.mock.calls.map((c: unknown[]) => c[0] as string);
+      const sessionPaths = paths.filter((p: string) => p.startsWith("chat/sessions/"));
+      // All writes should use the same session path
+      const uniquePaths = new Set(sessionPaths);
+      expect(uniquePaths.size).toBe(1);
+    });
+
+    it("multiple execute() calls without startSession create separate sessions", async () => {
+      const stateManager = makeMockStateManager();
+      const runner = new ChatRunner(makeDeps({ stateManager }));
+
+      await runner.execute("Turn 1", "/repo");
+      await runner.execute("Turn 2", "/repo");
+
+      const writeRawMock = stateManager.writeRaw as ReturnType<typeof vi.fn>;
+      const paths = writeRawMock.mock.calls.map((c: unknown[]) => c[0] as string);
+      const sessionPaths = paths.filter((p: string) => p.startsWith("chat/sessions/"));
+      // Each call creates a fresh session → two distinct session paths
+      const uniquePaths = new Set(sessionPaths);
+      expect(uniquePaths.size).toBe(2);
+    });
+
+    it("history accumulates across turns when session is started", async () => {
+      const stateManager = makeMockStateManager();
+      const runner = new ChatRunner(makeDeps({ stateManager }));
+
+      runner.startSession("/repo");
+      await runner.execute("First question", "/repo");
+      await runner.execute("Second question", "/repo");
+
+      const writeRawMock = stateManager.writeRaw as ReturnType<typeof vi.fn>;
+      // Last write contains all accumulated messages (2 user + 2 assistant = 4)
+      const lastCall = writeRawMock.mock.calls[writeRawMock.mock.calls.length - 1];
+      const sessionData = lastCall[1] as { messages: Array<{ role: string }> };
+      expect(sessionData.messages.length).toBeGreaterThanOrEqual(4);
+    });
+
+    it("startSession calls from execute() for 1-shot mode are adapter-call-safe", async () => {
+      const adapter = makeMockAdapter();
+      const runner = new ChatRunner(makeDeps({ adapter }));
+
+      // Without startSession, two calls should both reach the adapter
+      await runner.execute("Task A", "/repo");
+      await runner.execute("Task B", "/repo");
+
+      expect(adapter.execute).toHaveBeenCalledTimes(2);
+    });
+
+    it("startSession followed by /clear still keeps the same session path", async () => {
+      const stateManager = makeMockStateManager();
+      const runner = new ChatRunner(makeDeps({ stateManager }));
+
+      runner.startSession("/repo");
+      await runner.execute("Before clear", "/repo");
+      await runner.execute("/clear", "/repo");
+      await runner.execute("After clear", "/repo");
+
+      const writeRawMock = stateManager.writeRaw as ReturnType<typeof vi.fn>;
+      const paths = writeRawMock.mock.calls.map((c: unknown[]) => c[0] as string);
+      const sessionPaths = paths.filter((p: string) => p.startsWith("chat/sessions/"));
+      const uniquePaths = new Set(sessionPaths);
+      expect(uniquePaths.size).toBe(1);
+    });
+  });
+
   describe("persist-before-execute ordering", () => {
     it("stateManager.writeRaw is called before adapter.execute", async () => {
       const callOrder: string[] = [];
