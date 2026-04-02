@@ -200,7 +200,7 @@ export class GoalRefiner {
     }
 
     // ── Stopping condition c: already has validated dimensions ──
-    if (hasValidatedDimensions(goal)) {
+    if (!config.force && hasValidatedDimensions(goal)) {
       return {
         goal,
         leaf: true,

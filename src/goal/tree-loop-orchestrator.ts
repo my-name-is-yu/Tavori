@@ -102,7 +102,7 @@ export class TreeLoopOrchestrator {
 
     if (this.goalRefiner) {
       try {
-        await this.goalRefiner.refine(goalId);
+        await this.goalRefiner.refine(goalId, options?.force ? { force: true } : undefined);
       } catch {
         // Non-fatal: fall back to raw decompose if refiner errors
         try {

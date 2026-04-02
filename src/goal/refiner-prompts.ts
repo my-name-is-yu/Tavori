@@ -61,5 +61,7 @@ Return JSON:
 When is_measurable is false, set "dimensions" to null.
 For "present" threshold_type, always set "threshold_value" to null.
 
+If the goal spans multiple files or multiple independent targets, prefer decomposition into per-file subgoals. A goal with more than 3 dimensions affecting different files should almost always be decomposed rather than treated as a single leaf.
+
 IMPORTANT: Respond with ONLY the JSON object above. Do not return an array, do not wrap in markdown, do not include any other text.`;
 }

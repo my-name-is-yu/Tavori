@@ -11,6 +11,7 @@ export const RefineConfigSchema = z.object({
   feasibilityCheck: z.boolean().default(true),
   minSpecificity: z.number().min(0).max(1).default(0.7),
   maxChildrenPerNode: z.number().int().min(1).default(5),
+  force: z.boolean().optional(),
 });
 export type RefineConfig = z.infer<typeof RefineConfigSchema>;
 

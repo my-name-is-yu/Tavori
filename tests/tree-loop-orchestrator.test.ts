@@ -1039,7 +1039,7 @@ describe("ensureGoalRefined — GoalRefiner integration", () => {
     await orchestratorWithRefiner.ensureGoalRefined(goal.id);
 
     expect(mockRefiner.refine).toHaveBeenCalledOnce();
-    expect(mockRefiner.refine).toHaveBeenCalledWith(goal.id);
+    expect(mockRefiner.refine).toHaveBeenCalledWith(goal.id, undefined);
   });
 
   it("does NOT call refiner.refine() when goal already has children", async () => {
