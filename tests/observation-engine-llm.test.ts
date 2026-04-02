@@ -560,9 +560,9 @@ describe("ObservationEngine LLM observation", () => {
       expect(promptArg).toContain("src/foo.ts");
     });
 
-    it("truncates context to 4000 chars max", async () => {
-      // Create context that exceeds 4000 chars
-      const longContext = "x".repeat(5000);
+    it("truncates context to 16000 chars max", async () => {
+      // Create context that exceeds 16000 chars
+      const longContext = "x".repeat(20000);
       const mockLLMClient = createMockLLMClient(0.6, "truncated");
       const engine = new ObservationEngine(stateManager, [], mockLLMClient);
 
@@ -585,7 +585,7 @@ describe("ObservationEngine LLM observation", () => {
       // Prompt should contain truncation marker
       expect(promptArg).toContain("(truncated)");
       // The full 5000-char context should NOT appear verbatim
-      expect(promptArg).not.toContain("x".repeat(4001));
+      expect(promptArg).not.toContain("x".repeat(16001));
     });
 
     it("observation still works when both contextProvider and git diff fail", async () => {
