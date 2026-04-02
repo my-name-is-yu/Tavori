@@ -191,7 +191,7 @@ export async function observeWithLLM(
   }
 
   // Truncate to 4000 chars max to avoid token waste
-  const MAX_CONTEXT_CHARS = 4000;
+  const MAX_CONTEXT_CHARS = 16000;
   if (resolvedContext && resolvedContext.length > MAX_CONTEXT_CHARS) {
     resolvedContext = resolvedContext.slice(0, MAX_CONTEXT_CHARS) + "\n...(truncated)";
   }

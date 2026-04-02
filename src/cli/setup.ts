@@ -162,10 +162,6 @@ export async function buildDeps(
     stateManager, llmClient, ethicsGate, goalDependencyGraph
   );
   const stateAggregator = new StateAggregator(stateManager, satisficingJudge);
-  const treeLoopOrchestrator = new TreeLoopOrchestrator(
-    stateManager, goalTreeManager, stateAggregator, satisficingJudge
-  );
-
   // MemoryLifecycleManager — wires 3-tier memory model into CoreLoop.
   const pulseedBaseDir = getPulseedDirPath();
 
@@ -240,6 +236,10 @@ export async function buildDeps(
     goalNegotiator,
     goalTreeManager,
     ethicsGate,
+  );
+
+  const treeLoopOrchestrator = new TreeLoopOrchestrator(
+    stateManager, goalTreeManager, stateAggregator, satisficingJudge, goalRefiner
   );
 
   const coreLoop = new CoreLoop({

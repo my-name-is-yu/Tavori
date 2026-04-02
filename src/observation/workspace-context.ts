@@ -149,7 +149,7 @@ export function createWorkspaceContextProvider(
   getGoalDescription: (goalId: string) => string | undefined | Promise<string | undefined>,
   getGoalConstraints?: (goalId: string) => string[] | undefined | Promise<string[] | undefined>
 ): (goalId: string, dimensionName: string) => Promise<string> {
-  const { workDir, maxFiles = 5, maxCharsPerFile = 4000, externalFileMaxBytes = 10240 } = options;
+  const { workDir, maxFiles = 15, maxCharsPerFile = 6000, externalFileMaxBytes = 10240 } = options;
 
   return async (goalId: string, dimensionName: string): Promise<string> => {
     const goalDescription = (await getGoalDescription(goalId)) ?? "";
