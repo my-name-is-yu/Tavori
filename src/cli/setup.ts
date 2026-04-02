@@ -222,6 +222,26 @@ export async function buildDeps(
     rankDimensions: DriveScorer.rankDimensions,
   };
 
+  const goalNegotiator = new GoalNegotiator(
+    stateManager,
+    llmClient,
+    ethicsGate,
+    observationEngine,
+    characterConfig,
+    satisficingJudge,
+    goalTreeManager,
+    adapterRegistry.getAdapterCapabilities()
+  );
+
+  const goalRefiner = new GoalRefiner(
+    stateManager,
+    llmClient,
+    observationEngine,
+    goalNegotiator,
+    goalTreeManager,
+    ethicsGate,
+  );
+
   const coreLoop = new CoreLoop({
     stateManager,
     observationEngine,
@@ -245,27 +265,8 @@ export async function buildDeps(
     logger,
     contextProvider,
     onProgress,
+    goalRefiner,
   }, config);
-
-  const goalNegotiator = new GoalNegotiator(
-    stateManager,
-    llmClient,
-    ethicsGate,
-    observationEngine,
-    characterConfig,
-    satisficingJudge,
-    goalTreeManager,
-    adapterRegistry.getAdapterCapabilities()
-  );
-
-  const goalRefiner = new GoalRefiner(
-    stateManager,
-    llmClient,
-    observationEngine,
-    goalNegotiator,
-    goalTreeManager,
-    ethicsGate,
-  );
 
   return { coreLoop, goalNegotiator, goalRefiner, reportingEngine, stateManager, driveSystem, llmClient };
 }

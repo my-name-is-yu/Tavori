@@ -300,17 +300,21 @@ export async function observeWithLLM(
     } catch (err) {
       // Fallback to direct LLM call if gateway fails
       logger?.warn(`[ObservationEngine] PromptGateway failed for "${dimensionLabel}", falling back to direct LLM: ${String(err)}`);
+      console.log(`  [LLM] Calling LLM for observation (fallback) "${dimensionLabel}"...`);
       const response = await llmClient.sendMessage(
         [{ role: "user", content: prompt }],
         { system: OBSERVATION_SYSTEM_PROMPT, max_tokens: 512, temperature: 0, model_tier: 'light' }
       );
+      console.log(`  [LLM] Observation (fallback) complete for "${dimensionLabel}".`);
       parsed = llmClient.parseJSON(response.content, LLMObservationResponseSchema);
     }
   } else {
+    console.log(`  [LLM] Calling LLM for observation "${dimensionLabel}"...`);
     const response = await llmClient.sendMessage(
       [{ role: "user", content: prompt }],
       { system: OBSERVATION_SYSTEM_PROMPT, max_tokens: 512, temperature: 0, model_tier: 'light' }
     );
+    console.log(`  [LLM] Observation complete for "${dimensionLabel}".`);
     parsed = llmClient.parseJSON(response.content, LLMObservationResponseSchema);
   }
 

@@ -284,6 +284,7 @@ export async function generateTask(
   if (deps.gateway) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      console.log(`  [LLM] Calling LLM for task generation (${targetDimension})...`);
       generated = await deps.gateway.execute({
         purpose: "task_generation",
         goalId,
@@ -292,6 +293,7 @@ export async function generateTask(
         responseSchema: LLMGeneratedTaskSchema as z.ZodSchema<ReturnType<typeof LLMGeneratedTaskSchema.parse>>,
         maxTokens: 2048,
       });
+      console.log(`  [LLM] Task generation complete (${targetDimension}).`);
     } catch (err) {
       deps.logger?.error(
         "Task generation failed: PromptGateway.execute() error.",
@@ -300,6 +302,7 @@ export async function generateTask(
       throw err;
     }
   } else {
+    console.log(`  [LLM] Calling LLM for task generation (${targetDimension})...`);
     const response = await deps.llmClient.sendMessage(
       [{ role: "user", content: prompt }],
       {
@@ -309,6 +312,7 @@ export async function generateTask(
         model_tier: 'main',
       }
     );
+    console.log(`  [LLM] Task generation complete (${targetDimension}).`);
     try {
       generated = deps.llmClient.parseJSON(response.content, LLMGeneratedTaskSchema) as ReturnType<typeof LLMGeneratedTaskSchema.parse>;
     } catch (err) {
@@ -453,6 +457,7 @@ export async function generateTaskGroup(
   let raw: z.infer<typeof LLMTaskGroupSchema>;
   if (gateway) {
     try {
+      console.log(`  [LLM] Calling LLM for task group decomposition (${context.targetDimension})...`);
       raw = await gateway.execute({
         purpose: "task_generation",
         goalId: context.goalId,
@@ -461,6 +466,7 @@ export async function generateTaskGroup(
         responseSchema: LLMTaskGroupSchema as z.ZodSchema<z.infer<typeof LLMTaskGroupSchema>>,
         maxTokens: 4096,
       });
+      console.log(`  [LLM] Task group decomposition complete (${context.targetDimension}).`);
     } catch (err) {
       logger?.error("generateTaskGroup: PromptGateway.execute() failed", { error: String(err) });
       return null;
@@ -468,6 +474,7 @@ export async function generateTaskGroup(
   } else {
     let response: { content: string };
     try {
+      console.log(`  [LLM] Calling LLM for task group decomposition (${context.targetDimension})...`);
       response = await llmClient.sendMessage(
         [{ role: "user", content: prompt }],
         {
@@ -476,6 +483,7 @@ export async function generateTaskGroup(
           model_tier: 'main',
         }
       );
+      console.log(`  [LLM] Task group decomposition complete (${context.targetDimension}).`);
     } catch (err) {
       logger?.error("generateTaskGroup: LLM call failed", { error: String(err) });
       return null;

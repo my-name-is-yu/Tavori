@@ -174,13 +174,18 @@ export class CLIRunner {
           await this.stateManager.saveGoal(goal);
         }
       } else {
-        // No --workspace flag: check if goal already has workspace_path constraint
+        // No --workspace flag: auto-detect from cwd or use existing constraint
         const goal = await this.stateManager.loadGoal(goalId);
         if (goal) {
           const wpPrefix = "workspace_path:";
           const existing = goal.constraints.find((c) => c.startsWith(wpPrefix));
           if (existing) {
             resolvedWorkspace = existing.slice(wpPrefix.length);
+          } else {
+            // Auto-add workspace_path from cwd so observation can read real files
+            goal.constraints.push(`${wpPrefix}${process.cwd()}`);
+            await this.stateManager.saveGoal(goal);
+            resolvedWorkspace = process.cwd();
           }
         }
       }
