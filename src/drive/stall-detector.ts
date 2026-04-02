@@ -620,6 +620,113 @@ export class StallDetector {
     await this.saveStallState(goalId, state);
   }
 
+  /**
+   * Detect repetitive patterns in recent task history.
+   * Checks for: identical_actions, oscillating, no_change patterns.
+   */
+  detectRepetitivePatterns(taskHistory: TaskHistoryEntry[]): RepetitivePatternResult {
+    if (taskHistory.length < REPETITIVE_WINDOW) {
+      return { isRepetitive: false, pattern: null, confidence: 0 };
+    }
+
+    const recent = taskHistory.slice(-Math.max(REPETITIVE_WINDOW, taskHistory.length));
+
+    // 1. Check no_change pattern first (highest priority)
+    const noChangeCount = recent.filter((entry) => {
+      const lower = entry.output.toLowerCase();
+      return NO_CHANGE_PATTERNS.some((p) => lower.includes(p));
+    }).length;
+    if (noChangeCount >= REPETITIVE_WINDOW) {
+      return {
+        isRepetitive: true,
+        pattern: "no_change",
+        confidence: Math.min(0.9 + (noChangeCount - REPETITIVE_WINDOW) * 0.03, 1.0),
+      };
+    }
+
+    // 2. Check identical_actions: same strategy_id (non-null) + similar outputs
+    const lastN = recent.slice(-REPETITIVE_WINDOW);
+    const strategyIds = lastN.map((e) => e.strategy_id);
+    const allSameStrategy =
+      strategyIds[0] !== null && strategyIds.every((id) => id === strategyIds[0]);
+
+    if (allSameStrategy) {
+      const outputs = lastN.map((e) => e.output);
+      const allSimilar = outputs.every((o, i) => {
+        if (i === 0) return true;
+        return this.stringSimilarity(o, outputs[0]!) >= SIMILARITY_THRESHOLD;
+      });
+      if (allSimilar) {
+        const avgSim =
+          outputs.reduce((sum, o) => sum + this.stringSimilarity(o, outputs[0]!), 0) /
+          outputs.length;
+        return {
+          isRepetitive: true,
+          pattern: "identical_actions",
+          confidence: avgSim,
+        };
+      }
+    }
+
+    // 3. Check oscillating: A->B->A->B pattern (need >= 4 entries)
+    if (recent.length >= 4) {
+      const last4 = recent.slice(-4);
+      const aMatch =
+        this.stringSimilarity(last4[0]!.output, last4[2]!.output) >= SIMILARITY_THRESHOLD;
+      const bMatch =
+        this.stringSimilarity(last4[1]!.output, last4[3]!.output) >= SIMILARITY_THRESHOLD;
+      const abDifferent =
+        this.stringSimilarity(last4[0]!.output, last4[1]!.output) < SIMILARITY_THRESHOLD;
+
+      if (aMatch && bMatch && abDifferent) {
+        const avgSim =
+          (this.stringSimilarity(last4[0]!.output, last4[2]!.output) +
+            this.stringSimilarity(last4[1]!.output, last4[3]!.output)) /
+          2;
+        return {
+          isRepetitive: true,
+          pattern: "oscillating",
+          confidence: avgSim,
+        };
+      }
+    }
+
+    return { isRepetitive: false, pattern: null, confidence: 0 };
+  }
+
+  /**
+   * Compute string similarity using bigram Dice coefficient.
+   * Returns a value between 0 (completely different) and 1 (identical).
+   */
+  private stringSimilarity(a: string, b: string): number {
+    if (a === b) return 1.0;
+    if (a.length < 2 || b.length < 2) return 0.0;
+
+    const getBigrams = (s: string): Map<string, number> => {
+      const map = new Map<string, number>();
+      for (let i = 0; i < s.length - 1; i++) {
+        const bigram = s.slice(i, i + 2);
+        map.set(bigram, (map.get(bigram) ?? 0) + 1);
+      }
+      return map;
+    };
+
+    const bigramsA = getBigrams(a.toLowerCase());
+    const bigramsB = getBigrams(b.toLowerCase());
+
+    let intersection = 0;
+    for (const [bigram, countA] of bigramsA) {
+      const countB = bigramsB.get(bigram) ?? 0;
+      intersection += Math.min(countA, countB);
+    }
+
+    const totalA = a.length - 1;
+    const totalB = b.length - 1;
+
+    return (2 * intersection) / (totalA + totalB);
+  }
+
+
   // ─── Private Helpers ───
 
   /**
