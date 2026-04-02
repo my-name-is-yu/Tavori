@@ -2,6 +2,7 @@
 
 import { parseArgs } from "node:util";
 import { spawn } from "node:child_process";
+import * as os from "node:os";
 import * as path from "node:path";
 import { readJsonFileOrNull } from "../../utils/json-io.js";
 import { DaemonStateSchema, DaemonConfigSchema } from "../../types/daemon.js";
@@ -14,6 +15,11 @@ import { DaemonRunner } from "../../runtime/daemon-runner.js";
 import { PIDManager } from "../../runtime/pid-manager.js";
 import { EventServer } from "../../runtime/event-server.js";
 import { CronScheduler } from "../../runtime/cron-scheduler.js";
+import { PluginLoader } from "../../runtime/plugin-loader.js";
+import { NotifierRegistry } from "../../runtime/notifier-registry.js";
+import { NotificationDispatcher } from "../../runtime/notification-dispatcher.js";
+import { AdapterRegistry } from "../../execution/adapter-layer.js";
+import { DataSourceRegistry } from "../../observation/data-source-adapter.js";
 import { buildDeps } from "../setup.js";
 import { formatOperationError } from "../utils.js";
 import { getCliLogger } from "../cli-logger.js";
@@ -114,6 +120,20 @@ export async function cmdStart(
   }
 
   const deps = await buildDeps(stateManager, characterConfigManager);
+
+  // Load notifier plugins and wire NotificationDispatcher
+  const notifierRegistry = new NotifierRegistry();
+  const pluginsDir = path.join(os.homedir(), ".pulseed", "plugins");
+  const adapterRegistry = new AdapterRegistry();
+  const dataSourceRegistry = new DataSourceRegistry();
+  const pluginLoader = new PluginLoader(adapterRegistry, dataSourceRegistry, notifierRegistry, pluginsDir);
+  try {
+    await pluginLoader.loadAll();
+  } catch (err) {
+    getCliLogger().warn(`[daemon] Plugin loading failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+  }
+  const notificationDispatcher = new NotificationDispatcher(undefined, notifierRegistry);
+  deps.reportingEngine.setNotificationDispatcher(notificationDispatcher);
 
   const baseDir = deps.stateManager.getBaseDir();
   const pidManager = new PIDManager(baseDir);

@@ -356,7 +356,7 @@ export async function observeWithLLM(
     const th = JSON.parse(thresholdDescription);
     isBinaryThreshold = th.type === "present" || th.type === "match";
   } catch (err) {
-    logger?.warn(`[ObservationEngine] Failed to parse thresholdDescription for binary check: ${String(err)}`);
+    logger?.warn(`[ObservationEngine] Failed to parse thresholdDescription for binary check goal=${goalId} dimension=${dimensionName}: ${String(err)}`);
   }
 
   let resolvedLayer: "self_report" | "independent_review";
@@ -431,7 +431,7 @@ export async function observeWithLLM(
       }
     }
   } catch (err) {
-    logger?.warn(`[ObservationEngine] Failed to parse thresholdDescription JSON, using raw score: ${String(err)}`);
+    logger?.warn(`[ObservationEngine] Failed to parse thresholdDescription JSON goal=${goalId} dimension=${dimensionName}, using raw score: ${String(err)}`);
   }
 
   const entry = ObservationLogEntrySchema.parse({

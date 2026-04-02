@@ -1,0 +1,35 @@
+name: telegram-bot
+version: "1.0.0"
+type: notifier
+capabilities:
+  - telegram_notification
+  - bidirectional_chat
+supported_events:
+  - goal_complete
+  - approval_needed
+  - stall_detected
+  - task_blocked
+  - goal_progress
+  - trust_change
+description: "Telegram bot plugin for PulSeed — bidirectional chat + notifications"
+config_schema:
+  bot_token:
+    type: string
+    required: true
+    description: "Telegram Bot API token from @BotFather"
+  chat_id:
+    type: number
+    required: true
+    description: "Telegram chat ID to send notifications to"
+  allowed_user_ids:
+    type: array
+    required: false
+    description: "Telegram user IDs allowed to send commands (empty = all)"
+  polling_timeout:
+    type: number
+    default: 30
+    description: "Long-polling timeout in seconds"
+entry_point: "dist/index.js"
+min_pulseed_version: "0.1.0"
+permissions:
+  network: true

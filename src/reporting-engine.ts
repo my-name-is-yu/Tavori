@@ -69,6 +69,10 @@ export class ReportingEngine {
     this.transferTrust = tt;
   }
 
+  setNotificationDispatcher(dispatcher: INotificationDispatcher): void {
+    this.notificationDispatcher = dispatcher;
+  }
+
   // ─── getVerbosityLevel ───
 
   private getVerbosityLevel(): "brief" | "normal" | "detailed" {

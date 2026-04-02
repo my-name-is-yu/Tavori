@@ -1,0 +1,24 @@
+{
+  "name": "@pulseed/telegram-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot plugin for PulSeed — bidirectional chat + notifications",
+  "type": "module",
+  "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json"
+  },
+  "keywords": ["pulseed", "plugin", "telegram", "notifier", "chat"],
+  "license": "MIT",
+  "peerDependencies": {
+    "pulseed": ">=0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

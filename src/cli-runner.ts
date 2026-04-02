@@ -59,6 +59,7 @@ import { cmdDoctor } from "./cli/commands/doctor.js";
 import { cmdLogs } from "./cli/commands/logs.js";
 import { cmdInstall, cmdUninstall } from "./cli/commands/install.js";
 import { cmdNotify } from "./cli/commands/notify.js";
+import { cmdTelegramSetup } from "./cli/commands/telegram.js";
 import { printUsage, formatOperationError } from "./cli/utils.js";
 import { ensureProviderConfig } from "./cli/ensure-api-key.js";
 
@@ -552,6 +553,18 @@ export class CLIRunner {
 
     if (subcommand === "chat") {
       return await cmdChat(this.stateManager, argv.slice(1));
+    }
+
+    if (subcommand === "telegram") {
+      const telegramSubcommand = argv[1];
+
+      if (telegramSubcommand === "setup") {
+        return await cmdTelegramSetup(argv.slice(2));
+      }
+
+      logger.error(`Unknown telegram subcommand: "${telegramSubcommand ?? ""}"`);
+      logger.error("Available: telegram setup");
+      return 1;
     }
 
     if (subcommand === "tui") {

@@ -68,6 +68,7 @@ Usage:
   pulseed notify list                  List configured notification channels
   pulseed notify remove <index>        Remove a notification channel
   pulseed setup                        Interactive setup wizard (first-time configuration)
+  pulseed telegram setup               Configure Telegram Bot notification plugin
   pulseed provider show                Show current provider config
   pulseed provider set                 Set LLM provider and/or default adapter
 
