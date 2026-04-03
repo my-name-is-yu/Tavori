@@ -2,7 +2,6 @@ import * as fsp from "node:fs/promises";
 import * as path from "node:path";
 import { getPulseedDirPath } from "../utils/paths.js";
 import { StateError } from "../utils/errors.js";
-import { writeJsonFileAtomic } from "../utils/json-io.js";
 import type { Logger } from "../runtime/logger.js";
 import { GoalSchema, GoalTreeSchema } from "../types/goal.js";
 import { ObservationLogSchema, ObservationLogEntrySchema } from "../types/state.js";
@@ -13,6 +12,9 @@ import type { GapHistoryEntry } from "../types/gap.js";
 import type { PaceSnapshot } from "../types/goal.js";
 import { LoopCheckpointSchema } from "../types/checkpoint.js";
 import type { TrustManager } from "../traits/trust-manager.js";
+import { initDirs, atomicWrite, atomicRead } from "./state-persistence.js";
+
+export { initDirs, atomicWrite, atomicRead };
 
 /**
  * StateManager handles persistence of goals, state vectors, observation logs,
@@ -40,21 +42,7 @@ export class StateManager {
 
   /** Create required subdirectories. Must be called after construction before first use. */
   async init(): Promise<void> {
-    const dirs = [
-      this.baseDir,
-      path.join(this.baseDir, "goals"),
-      path.join(this.baseDir, "goal-trees"),
-      path.join(this.baseDir, "events"),
-      path.join(this.baseDir, "events", "archive"),
-      path.join(this.baseDir, "reports"),
-      path.join(this.baseDir, "reports", "daily"),
-      path.join(this.baseDir, "reports", "weekly"),
-      path.join(this.baseDir, "reports", "notifications"),
-      path.join(this.baseDir, "checkpoints"),
-    ];
-    for (const dir of dirs) {
-      await fsp.mkdir(dir, { recursive: true });
-    }
+    await initDirs(this.baseDir);
   }
 
   /** Returns the base directory path */
@@ -73,35 +61,14 @@ export class StateManager {
     return dir;
   }
 
-  // ─── Atomic Write ───
+  // ─── Atomic Write / Read (delegated to state-persistence) ───
 
   private async atomicWrite(filePath: string, data: unknown): Promise<void> {
-    try {
-      await writeJsonFileAtomic(filePath, data);
-    } catch (err: unknown) {
-      // Base dir removed (e.g. test cleanup) — silently skip write
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
-      throw err;
-    }
+    return atomicWrite(filePath, data);
   }
 
   private async atomicRead<T>(filePath: string): Promise<T | null> {
-    let content: string;
-    try {
-      content = await fsp.readFile(filePath, "utf-8");
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-        return null;
-      }
-      throw err;
-    }
-    try {
-      return JSON.parse(content) as T;
-    } catch (err) {
-      this.logger?.warn(`[StateManager] Corrupt JSON at ${filePath}: ${err}`);
-      console.warn(`[StateManager] Corrupt JSON at ${filePath}, returning null:`, err);
-      return null;
-    }
+    return atomicRead<T>(filePath, this.logger);
   }
 
   // ─── Goal CRUD ───
@@ -580,7 +547,6 @@ export class StateManager {
     try {
       await fsp.mkdir(dir, { recursive: true });
     } catch (err: unknown) {
-      // Base dir removed (e.g. test cleanup) — silently skip write
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
       throw err;
     }
