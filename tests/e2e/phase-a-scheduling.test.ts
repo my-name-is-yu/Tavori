@@ -36,7 +36,7 @@ function buildDaemonRunner(
     configOverride?: Partial<DaemonDeps["config"]>;
     llmClient?: DaemonDeps["llmClient"];
   } = {}
-): DaemonRunner {
+): { runner: DaemonRunner; logger: Logger } {
   const driveSystem = new DriveSystem(stateManager, { baseDir: tempDir });
   const pidManager = new PIDManager(tempDir);
   const logger = new Logger({ dir: path.join(tempDir, "logs"), consoleOutput: false });
@@ -66,7 +66,7 @@ function buildDaemonRunner(
     llmClient: options.llmClient,
   };
 
-  return new DaemonRunner(deps);
+  return { runner: new DaemonRunner(deps), logger };
 }
 
 async function saveActiveGoal(stateManager: StateManager, id: string): Promise<void> {
@@ -312,12 +312,16 @@ describe("Phase A — CronScheduler", () => {
 
 describe("Phase A — DaemonRunner proactive tick", () => {
   let tempDir: string;
+  let builtLogger: Logger | null = null;
 
   beforeEach(() => {
     tempDir = makeTempDir("pulseed-proactive-test-");
+    builtLogger = null;
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await builtLogger?.close();
+    builtLogger = null;
     cleanupTempDir(tempDir);
     vi.useRealTimers();
   });
@@ -336,14 +340,14 @@ describe("Phase A — DaemonRunner proactive tick", () => {
       daemonRef?.stop();
     });
 
-    daemonRef = buildDaemonRunner(tempDir, stateManager, {
+    ({ runner: daemonRef, logger: builtLogger } = buildDaemonRunner(tempDir, stateManager, {
       configOverride: {
         proactive_mode: true,
         proactive_interval_ms: 0, // no cooldown for test
         check_interval_ms: 50,
       },
       llmClient: mockLLM,
-    });
+    }));
 
     // No goals registered — daemon will idle → proactive tick fires → LLM called → daemon stops
     await daemonRef.start([]);
@@ -367,13 +371,12 @@ describe("Phase A — DaemonRunner proactive tick", () => {
       daemonRef?.stop();
     });
 
-    const logMessages: string[] = [];
     const logDir = path.join(tempDir, "logs");
     const logger = new Logger({
       dir: logDir,
       consoleOutput: false,
-      onLog: (msg: string) => logMessages.push(msg),
     });
+    builtLogger = logger;
 
     const driveSystem = new DriveSystem(stateManager, { baseDir: tempDir });
     const pidManager = new PIDManager(tempDir);
@@ -423,7 +426,7 @@ describe("Phase A — DaemonRunner proactive tick", () => {
     // The key invariant: LLM is never called because goals are always active AND cooldown is long.
     let cycleCount = 0;
     let daemonRef: DaemonRunner | null = null;
-    daemonRef = buildDaemonRunner(tempDir, stateManager, {
+    ({ runner: daemonRef, logger: builtLogger } = buildDaemonRunner(tempDir, stateManager, {
       configOverride: {
         proactive_mode: true,
         proactive_interval_ms: 60_000, // 1 minute cooldown — won't expire during test
@@ -444,7 +447,7 @@ describe("Phase A — DaemonRunner proactive tick", () => {
           };
         },
       },
-    });
+    }));
 
     await daemonRef.start(["cooldown-goal"]);
 
@@ -466,7 +469,7 @@ describe("Phase A — DaemonRunner proactive tick", () => {
     // Since goals are always active, proactive tick is never reached.
     // But even if it were, proactive_mode=false would suppress it.
     let daemonRef: DaemonRunner | null = null;
-    daemonRef = buildDaemonRunner(tempDir, stateManager, {
+    ({ runner: daemonRef, logger: builtLogger } = buildDaemonRunner(tempDir, stateManager, {
       configOverride: {
         proactive_mode: false,
         check_interval_ms: 1,
@@ -485,7 +488,7 @@ describe("Phase A — DaemonRunner proactive tick", () => {
           };
         },
       },
-    });
+    }));
 
     await daemonRef.start(["probe-goal"]);
 
@@ -499,11 +502,12 @@ describe("Phase A — DaemonRunner proactive tick", () => {
 describe("Phase A — DaemonRunner adaptive sleep (calculateAdaptiveInterval)", () => {
   let tempDir: string;
   let daemon: DaemonRunner;
+  let daemonLogger: Logger;
 
   beforeEach(() => {
     tempDir = makeTempDir("pulseed-adaptive-test-");
     const stateManager = new StateManager(tempDir);
-    daemon = buildDaemonRunner(tempDir, stateManager, {
+    ({ runner: daemon, logger: daemonLogger } = buildDaemonRunner(tempDir, stateManager, {
       configOverride: {
         adaptive_sleep: {
           enabled: true,
@@ -515,10 +519,11 @@ describe("Phase A — DaemonRunner adaptive sleep (calculateAdaptiveInterval)", 
         },
         check_interval_ms: 300_000,
       },
-    });
+    }));
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    await daemonLogger.close();
     cleanupTempDir(tempDir);
     vi.useRealTimers();
   });
@@ -527,7 +532,7 @@ describe("Phase A — DaemonRunner adaptive sleep (calculateAdaptiveInterval)", 
 
   it("returns baseInterval unchanged when adaptive_sleep is disabled", () => {
     const stateManager = new StateManager(tempDir);
-    const d = buildDaemonRunner(tempDir, stateManager, {
+    const { runner: d } = buildDaemonRunner(tempDir, stateManager, {
       configOverride: {
         adaptive_sleep: { enabled: false },
         check_interval_ms: 300_000,
@@ -707,12 +712,14 @@ describe("Phase A — Integration: CronScheduler triggers reflection", () => {
     await saveActiveGoal(stateManager, "goal-integration");
 
     let loopRan = false;
-    const daemon = buildDaemonRunner(tempDir, stateManager, {
+    let daemonInst: DaemonRunner;
+    let daemonInst_logger: Logger;
+    ({ runner: daemonInst, logger: daemonInst_logger } = buildDaemonRunner(tempDir, stateManager, {
       configOverride: { check_interval_ms: 50 },
       coreLoopOverride: {
         run: async (goalId: string): Promise<LoopResult> => {
           loopRan = true;
-          daemon.stop();
+          daemonInst.stop();
           return {
             goalId,
             totalIterations: 1,
@@ -723,9 +730,10 @@ describe("Phase A — Integration: CronScheduler triggers reflection", () => {
           };
         },
       },
-    });
+    }));
 
-    await daemon.start(["goal-integration"]);
+    await daemonInst.start(["goal-integration"]);
+    await daemonInst_logger.close();
     expect(loopRan).toBe(true);
 
     // CronScheduler's task file should still exist and be valid after daemon ran
