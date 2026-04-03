@@ -254,3 +254,95 @@ export function rebalanceOnStall(
 
   return actions;
 }
+
+// ─── Strategy Helpers ───
+
+/**
+ * Check if a strategy is a WaitStrategy (has wait-specific fields).
+ * Pure function — no class dependency.
+ */
+export function isWaitStrategy(strategy: Record<string, unknown>): boolean {
+  return (
+    typeof strategy["wait_reason"] === "string" &&
+    typeof strategy["wait_until"] === "string" &&
+    typeof strategy["measurement_plan"] === "string"
+  );
+}
+
+/**
+ * Check whether a strategy should be terminated.
+ *
+ * Three conditions (design doc sec 6.4):
+ * 1. Lowest effectiveness score for 3 consecutive rebalances at min allocation
+ * 2. consecutive_stall_count >= 3
+ * 3. Resource consumption > 2x estimate
+ */
+export function checkStrategyTermination(
+  strategy: {
+    id: string;
+    goal_id: string;
+    consecutive_stall_count: number;
+    tasks_generated: unknown[];
+    allocation: number;
+    resource_estimate: { sessions: number };
+    effectiveness_score: number | null;
+  },
+  records: Array<{ strategy_id: string; effectiveness_score: number | null }>,
+  config: {
+    termination_stall_count: number;
+    termination_resource_multiplier: number;
+    min_allocation: number;
+    termination_min_rebalances: number;
+  },
+  rebalanceHistory: Map<string, Array<{ terminated_strategies: string[]; adjustments: Array<{ strategy_id: string; new_allocation: number }> }>>,
+  countConsecutiveLowest: (
+    strategyId: string,
+    history: Array<{ terminated_strategies: string[]; adjustments: Array<{ strategy_id: string; new_allocation: number }> }>,
+    minAllocation: number
+  ) => number
+): boolean {
+  if (strategy.consecutive_stall_count >= config.termination_stall_count) {
+    return true;
+  }
+
+  const sessionsConsumed = strategy.tasks_generated.length;
+  const estimatedSessions = strategy.resource_estimate.sessions;
+  if (
+    estimatedSessions > 0 &&
+    sessionsConsumed > estimatedSessions * config.termination_resource_multiplier
+  ) {
+    return true;
+  }
+
+  if (strategy.allocation <= config.min_allocation) {
+    const record = records.find((r) => r.strategy_id === strategy.id);
+    if (record?.effectiveness_score !== null && record !== undefined) {
+      const otherScores = records
+        .filter(
+          (r) =>
+            r.strategy_id !== strategy.id &&
+            r.effectiveness_score !== null
+        )
+        .map((r) => r.effectiveness_score!);
+
+      if (otherScores.length > 0) {
+        const isLowest = otherScores.every(
+          (s) => s >= record.effectiveness_score!
+        );
+        if (isLowest) {
+          const history = rebalanceHistory.get(strategy.goal_id) ?? [];
+          const recentCount = countConsecutiveLowest(
+            strategy.id,
+            history,
+            config.min_allocation
+          );
+          if (recentCount >= config.termination_min_rebalances) {
+            return true;
+          }
+        }
+      }
+    }
+  }
+
+  return false;
+}
