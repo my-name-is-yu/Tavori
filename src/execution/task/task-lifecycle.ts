@@ -1,22 +1,22 @@
 import { execFileSync as _execFileSync } from "node:child_process";
-import type { Logger } from "../runtime/logger.js";
+import type { Logger } from "../../runtime/logger.js";
 import {
   runShellCommand as _runShellCommand,
   runPostExecutionHealthCheck as _runPostExecutionHealthCheck,
 } from "./task-health-check.js";
-import { StateManager } from "../state-manager.js";
-import type { ILLMClient } from "../llm/llm-client.js";
+import { StateManager } from "../../state-manager.js";
+import type { ILLMClient } from "../../llm/llm-client.js";
 import { SessionManager } from "../session-manager.js";
-import { TrustManager } from "../traits/trust-manager.js";
-import { StrategyManager } from "../strategy/strategy-manager.js";
-import { StallDetector } from "../drive/stall-detector.js";
+import { TrustManager } from "../../traits/trust-manager.js";
+import { StrategyManager } from "../../strategy/strategy-manager.js";
+import { StallDetector } from "../../drive/stall-detector.js";
 import { selectTargetDimension as _selectTargetDimension } from "../context/dimension-selector.js";
-import type { Task, VerificationResult } from "../types/task.js";
-import type { GapVector } from "../types/gap.js";
-import type { DriveContext } from "../types/drive.js";
-import type { Dimension } from "../types/goal.js";
-import type { EthicsGate } from "../traits/ethics-gate.js";
-import type { CapabilityDetector } from "../observation/capability-detector.js";
+import type { Task, VerificationResult } from "../../types/task.js";
+import type { GapVector } from "../../types/gap.js";
+import type { DriveContext } from "../../types/drive.js";
+import type { Dimension } from "../../types/goal.js";
+import type { EthicsGate } from "../../traits/ethics-gate.js";
+import type { CapabilityDetector } from "../../observation/capability-detector.js";
 import {
   verifyTask as _verifyTask,
   handleVerdict as _handleVerdict,
@@ -37,8 +37,8 @@ import { AdapterRegistry } from "../adapter-layer.js";
 export type { AgentTask, AgentResult, IAdapter };
 export { AdapterRegistry };
 
-import type { TaskPipeline, TaskDomain } from "../types/pipeline.js";
-import type { ObservationEngine } from "../observation/observation-engine.js";
+import type { TaskPipeline, TaskDomain } from "../../types/pipeline.js";
+import type { ObservationEngine } from "../../observation/observation-engine.js";
 
 export { LLMGeneratedTaskSchema } from "./task-generation.js";
 import { generateTask as _generateTask } from "./task-generation.js";
@@ -46,11 +46,11 @@ import { executeTask as _executeTask, reloadTaskFromDisk, durationToMs } from ".
 import { runPreExecutionChecks } from "./task-approval.js";
 import { checkIrreversibleApproval as _checkIrreversibleApproval } from "./task-approval-check.js";
 import { runPipelineTaskCycle as runPipelineTaskCycleFn } from "./task-pipeline-cycle.js";
-import type { KnowledgeTransfer } from "../knowledge/transfer/knowledge-transfer.js";
-import type { KnowledgeManager } from "../knowledge/knowledge-manager.js";
-import { generateReflection, saveReflectionAsKnowledge, getReflectionsForGoal, formatReflectionsForPrompt } from "../reflection-generator.js";
+import type { KnowledgeTransfer } from "../../knowledge/transfer/knowledge-transfer.js";
+import type { KnowledgeManager } from "../../knowledge/knowledge-manager.js";
+import { generateReflection, saveReflectionAsKnowledge, getReflectionsForGoal, formatReflectionsForPrompt } from "../../reflection-generator.js";
 import { GuardrailRunner } from "../guardrail-runner.js";
-import type { HookManager } from "../runtime/hook-manager.js";
+import type { HookManager } from "../../runtime/hook-manager.js";
 
 export type { TaskCycleResult } from "./task-execution-types.js";
 import type { TaskCycleResult } from "./task-execution-types.js";

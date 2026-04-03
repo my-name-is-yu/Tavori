@@ -1,7 +1,7 @@
-import { scoreAllDimensions, rankDimensions } from "../drive/drive-scorer.js";
-import type { GapVector } from "../types/gap.js";
-import type { DriveContext } from "../types/drive.js";
-import type { Dimension } from "../types/goal.js";
+import { scoreAllDimensions, rankDimensions } from "../../drive/drive-scorer.js";
+import type { GapVector } from "../../types/gap.js";
+import type { DriveContext } from "../../types/drive.js";
+import type { Dimension } from "../../types/goal.js";
 
 /**
  * Confidence-tier weights for dimension selection.

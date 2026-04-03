@@ -1,4 +1,4 @@
-import type { TierBudget } from "../types/memory-lifecycle.js";
+import type { TierBudget } from "../../types/memory-lifecycle.js";
 
 // ─── Tier Budget Allocation ───
 

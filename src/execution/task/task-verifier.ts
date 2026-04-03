@@ -12,20 +12,20 @@
  */
 
 import { z } from "zod";
-import { StateManager } from "../state-manager.js";
-import type { ILLMClient } from "../llm/llm-client.js";
+import { StateManager } from "../../state-manager.js";
+import type { ILLMClient } from "../../llm/llm-client.js";
 import { SessionManager } from "./session-manager.js";
-import { TrustManager } from "../traits/trust-manager.js";
-import { StallDetector } from "../drive/stall-detector.js";
-import { TaskSchema, VerificationResultSchema } from "../types/task.js";
-import type { Task, VerificationResult } from "../types/task.js";
-import type { Logger } from "../runtime/logger.js";
+import { TrustManager } from "../../traits/trust-manager.js";
+import { StallDetector } from "../../drive/stall-detector.js";
+import { TaskSchema, VerificationResultSchema } from "../../types/task.js";
+import type { Task, VerificationResult } from "../../types/task.js";
+import type { Logger } from "../../runtime/logger.js";
 import type { AgentTask, AgentResult, IAdapter } from "./adapter-layer.js";
 import { AdapterRegistry } from "./adapter-layer.js";
-import { wrapXmlTag, formatKnowledge } from "../prompt/formatters.js";
-import type { IPromptGateway } from "../prompt/gateway.js";
+import { wrapXmlTag, formatKnowledge } from "../../prompt/formatters.js";
+import type { IPromptGateway } from "../../prompt/gateway.js";
 import { analyzeImpact } from "./impact-analyzer.js";
-import type { ImpactAnalysis } from "../types/pipeline.js";
+import type { ImpactAnalysis } from "../../types/pipeline.js";
 
 // ─── Re-exported types used by consumers ───
 

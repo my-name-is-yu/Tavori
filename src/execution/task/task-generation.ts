@@ -1,19 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import type { Logger } from "../runtime/logger.js";
+import type { Logger } from "../../runtime/logger.js";
 import { buildTaskGenerationPrompt } from "./task-prompt-builder.js";
-import type { ILLMClient } from "../llm/llm-client.js";
-import { StateManager } from "../state-manager.js";
-import { StrategyManager } from "../strategy/strategy-manager.js";
-import { TaskSchema } from "../types/task.js";
-import type { Task } from "../types/task.js";
-import { TaskGroupSchema } from "../types/index.js";
-import type { TaskGroup } from "../types/index.js";
-import type { TaskPipeline } from "../types/pipeline.js";
-import { wrapXmlTag, formatReflections, formatLessons } from "../prompt/formatters.js";
+import type { ILLMClient } from "../../llm/llm-client.js";
+import { StateManager } from "../../state-manager.js";
+import { StrategyManager } from "../../strategy/strategy-manager.js";
+import { TaskSchema } from "../../types/task.js";
+import type { Task } from "../../types/task.js";
+import { TaskGroupSchema } from "../../types/index.js";
+import type { TaskGroup } from "../../types/index.js";
+import type { TaskPipeline } from "../../types/pipeline.js";
+import { wrapXmlTag, formatReflections, formatLessons } from "../../prompt/formatters.js";
 import { getReflectionsForGoal } from "./reflection-generator.js";
-import type { KnowledgeManager } from "../knowledge/knowledge-manager.js";
-import type { IPromptGateway } from "../prompt/gateway.js";
+import type { KnowledgeManager } from "../../knowledge/knowledge-manager.js";
+import type { IPromptGateway } from "../../prompt/gateway.js";
 
 // ─── Schema for LLM-generated task fields ───
 
