@@ -2,13 +2,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { StateManager } from "../src/state-manager.js";
+import { StateManager } from "../src/state/state-manager.js";
 import { KnowledgeTransfer } from "../src/knowledge/transfer/knowledge-transfer.js";
 import { TransferTrustManager } from "../src/knowledge/transfer/transfer-trust.js";
 import { VectorIndex } from "../src/knowledge/vector-index.js";
 import { MockEmbeddingClient } from "../src/knowledge/embedding-client.js";
 import { CheckpointManager } from "../src/execution/checkpoint-manager.js";
-import { ReportingEngine } from "../src/reporting-engine.js";
+import { ReportingEngine } from "../src/reporting/reporting-engine.js";
 import {
   allocateBudget,
   selectWithinBudget,

@@ -1,11 +1,11 @@
 import * as fsp from "node:fs/promises";
 import type { Stats } from "node:fs";
 import * as path from "node:path";
-import { CoreLoop } from "../core-loop.js";
+import { CoreLoop } from "../loop/core-loop.js";
 import { writeJsonFileAtomic, readJsonFileOrNull } from "../utils/json-io.js";
-import type { LoopResult } from "../core-loop.js";
+import type { LoopResult } from "../loop/core-loop.js";
 import { DriveSystem } from "../drive/drive-system.js";
-import { StateManager } from "../state-manager.js";
+import { StateManager } from "../state/state-manager.js";
 import { PIDManager } from "./pid-manager.js";
 import { Logger } from "./logger.js";
 import type { EventServer } from "./event-server.js";

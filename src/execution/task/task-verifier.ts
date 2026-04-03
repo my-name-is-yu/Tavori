@@ -12,7 +12,7 @@
  */
 
 import { z } from "zod";
-import { StateManager } from "../../state-manager.js";
+import { StateManager } from "../../state/state-manager.js";
 import type { ILLMClient } from "../../llm/llm-client.js";
 import { SessionManager } from "../session-manager.js";
 import { TrustManager } from "../../traits/trust-manager.js";

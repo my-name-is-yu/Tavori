@@ -13,17 +13,17 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 // ─── Real implementations ───
-import { StateManager } from "../../src/state-manager.js";
+import { StateManager } from "../../src/state/state-manager.js";
 import { ObservationEngine } from "../../src/observation/observation-engine.js";
 import { TaskLifecycle } from "../../src/execution/task/task-lifecycle.js";
 import { SatisficingJudge } from "../../src/drive/satisficing-judge.js";
 import { StallDetector } from "../../src/drive/stall-detector.js";
 import { StrategyManager } from "../../src/strategy/strategy-manager.js";
-import { ReportingEngine } from "../../src/reporting-engine.js";
+import { ReportingEngine } from "../../src/reporting/reporting-engine.js";
 import { DriveSystem } from "../../src/drive/drive-system.js";
 import { SessionManager } from "../../src/execution/session-manager.js";
 import { TrustManager } from "../../src/traits/trust-manager.js";
-import { CoreLoop } from "../../src/core-loop.js";
+import { CoreLoop } from "../../src/loop/core-loop.js";
 import { AdapterRegistry } from "../../src/execution/adapter-layer.js";
 import type { IAdapter, AgentTask, AgentResult } from "../../src/execution/adapter-layer.js";
 import { FileExistenceDataSourceAdapter } from "../../src/adapters/datasources/file-existence-datasource.js";

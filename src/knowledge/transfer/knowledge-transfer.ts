@@ -4,7 +4,7 @@ import type { KnowledgeManager } from "../knowledge-manager.js";
 import type { VectorIndex } from "../vector-index.js";
 import type { LearningPipeline } from "../learning/learning-pipeline.js";
 import type { EthicsGate } from "../../traits/ethics-gate.js";
-import type { StateManager } from "../../state-manager.js";
+import type { StateManager } from "../../state/state-manager.js";
 import type {
   TransferCandidate,
   TransferResult,

@@ -7,7 +7,7 @@ import { DaemonRunner } from "../src/runtime/daemon-runner.js";
 import type { ShutdownMarker } from "../src/runtime/daemon-runner.js";
 import { PIDManager } from "../src/runtime/pid-manager.js";
 import { Logger } from "../src/runtime/logger.js";
-import type { LoopResult } from "../src/core-loop.js";
+import type { LoopResult } from "../src/loop/core-loop.js";
 import type { DaemonDeps } from "../src/runtime/daemon-runner.js";
 
 // ─── Helpers ───

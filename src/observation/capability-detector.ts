@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { StateManager } from "../state-manager.js";
-import { ReportingEngine } from "../reporting-engine.js";
+import { StateManager } from "../state/state-manager.js";
+import { ReportingEngine } from "../reporting/reporting-engine.js";
 import type { ILLMClient } from "../llm/llm-client.js";
 import type { IPromptGateway } from "../prompt/gateway.js";
 import type { Task } from "../types/task.js";

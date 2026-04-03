@@ -1,4 +1,4 @@
-import { StateManager } from "../state-manager.js";
+import { StateManager } from "../state/state-manager.js";
 import { GoalDependencyGraph } from "../goal/goal-dependency-graph.js";
 import { VectorIndex } from "../knowledge/vector-index.js";
 import type { IEmbeddingClient } from "../knowledge/embedding-client.js";

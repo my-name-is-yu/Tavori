@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { StateManager } from "../src/state-manager.js";
+import { StateManager } from "../src/state/state-manager.js";
 import { SessionManager, DEFAULT_CONTEXT_BUDGET } from "../src/execution/session-manager.js";
 import { CheckpointManager } from "../src/execution/checkpoint-manager.js";
 import type { Session } from "../src/types/session.js";

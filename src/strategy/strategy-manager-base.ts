@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { StateManager } from "../state-manager.js";
+import { StateManager } from "../state/state-manager.js";
 import { StrategySchema, PortfolioSchema } from "../types/strategy.js";
 import type { Strategy, Portfolio } from "../types/strategy.js";
 import type { StrategyState } from "../types/core.js";

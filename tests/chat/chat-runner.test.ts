@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ChatRunner } from "../../src/chat/chat-runner.js";
 import type { ChatRunnerDeps } from "../../src/chat/chat-runner.js";
-import type { StateManager } from "../../src/state-manager.js";
+import type { StateManager } from "../../src/state/state-manager.js";
 import type { IAdapter, AgentResult } from "../../src/execution/adapter-layer.js";
 import type { EscalationHandler, EscalationResult } from "../../src/chat/escalation.js";
 

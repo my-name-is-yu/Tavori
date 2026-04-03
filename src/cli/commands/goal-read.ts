@@ -5,8 +5,8 @@ import * as path from "node:path";
 import { getArchiveDir, getGoalsDir } from "../../utils/paths.js";
 import { readJsonFile } from "../../utils/json-io.js";
 
-import { StateManager } from "../../state-manager.js";
-import { ReportingEngine } from "../../reporting-engine.js";
+import { StateManager } from "../../state/state-manager.js";
+import { ReportingEngine } from "../../reporting/reporting-engine.js";
 import { formatOperationError } from "../utils.js";
 import { getCliLogger } from "../cli-logger.js";
 import { dimensionProgress } from "../../drive/gap-calculator.js";

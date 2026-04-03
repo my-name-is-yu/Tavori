@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { StateManager } from "../src/state-manager.js";
-import { ReportingEngine } from "../src/reporting-engine.js";
+import { StateManager } from "../src/state/state-manager.js";
+import { ReportingEngine } from "../src/reporting/reporting-engine.js";
 import type { Report } from "../src/types/report.js";
 import type { CharacterConfig } from "../src/types/character.js";
 import { makeTempDir } from "./helpers/temp-dir.js";

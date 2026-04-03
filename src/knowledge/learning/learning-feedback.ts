@@ -9,7 +9,7 @@ import type {
   FeedbackAggregation,
   ParameterTuning,
 } from "../../types/learning.js";
-import type { StateManager } from "../../state-manager.js";
+import type { StateManager } from "../../state/state-manager.js";
 import type { LearningPipelineConfig } from "../../types/learning.js";
 
 // ─── Deps ───

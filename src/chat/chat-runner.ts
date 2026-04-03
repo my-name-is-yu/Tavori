@@ -4,7 +4,7 @@
 // Bypasses TaskLifecycle — calls adapter.execute() directly.
 
 import { execFile } from "node:child_process";
-import type { StateManager } from "../state-manager.js";
+import type { StateManager } from "../state/state-manager.js";
 import type { IAdapter, AgentTask } from "../execution/adapter-layer.js";
 import type { ILLMClient } from "../llm/llm-client.js";
 import { ChatHistory } from "./chat-history.js";

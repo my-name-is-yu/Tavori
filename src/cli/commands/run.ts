@@ -2,10 +2,10 @@
 
 import * as readline from "node:readline";
 
-import { StateManager } from "../../state-manager.js";
+import { StateManager } from "../../state/state-manager.js";
 import { CharacterConfigManager } from "../../traits/character-config.js";
 import { ensureProviderConfig } from "../ensure-api-key.js";
-import type { LoopConfig } from "../../core-loop.js";
+import type { LoopConfig } from "../../loop/core-loop.js";
 import type { Task } from "../../types/task.js";
 import { buildDeps } from "../setup.js";
 import { formatOperationError } from "../utils.js";
@@ -41,7 +41,7 @@ export async function cmdRun(
   loopConfig?: LoopConfig,
   autoApprove?: boolean,
   verbose?: boolean,
-  activeCoreLoopRef?: { value: import("../../core-loop.js").CoreLoop | null },
+  activeCoreLoopRef?: { value: import("../../loop/core-loop.js").CoreLoop | null },
   workspacePath?: string,
 ): Promise<number> {
   try {

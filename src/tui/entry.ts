@@ -9,7 +9,7 @@ import React from "react";
 import os from "os";
 import { execFileSync } from "child_process";
 
-import { StateManager } from "../state-manager.js";
+import { StateManager } from "../state/state-manager.js";
 import { buildLLMClient, buildAdapterRegistry } from "../llm/provider-factory.js";
 import { loadProviderConfig } from "../llm/provider-config.js";
 import { createWorkspaceContextProvider } from "../observation/workspace-context.js";
@@ -24,8 +24,8 @@ import { SessionManager } from "../execution/session-manager.js";
 import { StrategyManager } from "../strategy/strategy-manager.js";
 import { GoalNegotiator } from "../goal/goal-negotiator.js";
 import { TaskLifecycle } from "../execution/task/task-lifecycle.js";
-import { ReportingEngine } from "../reporting-engine.js";
-import { CoreLoop } from "../core-loop.js";
+import { ReportingEngine } from "../reporting/reporting-engine.js";
+import { CoreLoop } from "../loop/core-loop.js";
 import { GoalTreeManager } from "../goal/goal-tree-manager.js";
 import { StateAggregator } from "../goal/state-aggregator.js";
 import { GoalDependencyGraph } from "../goal/goal-dependency-graph.js";
@@ -35,7 +35,7 @@ import { CharacterConfigManager } from "../traits/character-config.js";
 import { getPulseedDirPath } from "../utils/paths.js";
 import * as GapCalculator from "../drive/gap-calculator.js";
 import * as DriveScorer from "../drive/drive-scorer.js";
-import type { GapCalculatorModule, DriveScorerModule } from "../core-loop.js";
+import type { GapCalculatorModule, DriveScorerModule } from "../loop/core-loop.js";
 
 import { App, type ApprovalRequest } from "./app.js";
 import { getCliLogger } from "../cli/cli-logger.js";

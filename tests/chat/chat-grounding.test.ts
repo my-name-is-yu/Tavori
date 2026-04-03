@@ -40,7 +40,7 @@ import { BrowserUseCLIAdapter } from "../../src/adapters/agents/browser-use-cli.
 import { ChatRunner } from "../../src/chat/chat-runner.js";
 import type { ChatRunnerDeps } from "../../src/chat/chat-runner.js";
 import type { IAdapter, AgentResult } from "../../src/execution/adapter-layer.js";
-import type { StateManager } from "../../src/state-manager.js";
+import type { StateManager } from "../../src/state/state-manager.js";
 import type { ILLMClient } from "../../src/llm/llm-client.js";
 import { spawnWithTimeout } from "../../src/adapters/spawn-helper.js";
 

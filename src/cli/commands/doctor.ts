@@ -134,12 +134,12 @@ export function checkBuild(): CheckResult {
   // This file lives at src/cli/commands/doctor.ts (or dist/cli/commands/doctor.js).
   // Walk up four levels to reach the package root.
   const packageRoot = path.resolve(new URL(import.meta.url).pathname, "..", "..", "..", "..");
-  const buildPath = path.join(packageRoot, "dist", "cli-runner.js");
+  const buildPath = path.join(packageRoot, "dist", "cli", "cli-runner.js");
 
   if (fs.existsSync(buildPath)) {
-    return { name: "Build", status: "pass", detail: "dist/cli-runner.js exists" };
+    return { name: "Build", status: "pass", detail: "dist/cli/cli-runner.js exists" };
   }
-  return { name: "Build", status: "fail", detail: "dist/cli-runner.js not found (run: npm run build)" };
+  return { name: "Build", status: "fail", detail: "dist/cli/cli-runner.js not found (run: npm run build)" };
 }
 
 export function checkDaemon(baseDir?: string): CheckResult {

@@ -1,6 +1,6 @@
 import type { TransferCandidate } from "../../types/cross-portfolio.js";
 import type { LearnedPattern } from "../../types/learning.js";
-import type { StateManager } from "../../state-manager.js";
+import type { StateManager } from "../../state/state-manager.js";
 
 // ─── Internal Storage Types ───
 

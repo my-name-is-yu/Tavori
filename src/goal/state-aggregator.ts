@@ -1,4 +1,4 @@
-import { StateManager } from "../state-manager.js";
+import { StateManager } from "../state/state-manager.js";
 import { StateError } from "../utils/errors.js";
 import { SatisficingJudge, aggregateValues } from "../drive/satisficing-judge.js";
 import { dimensionProgress } from "../drive/gap-calculator.js";

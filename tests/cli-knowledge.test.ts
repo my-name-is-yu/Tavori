@@ -11,8 +11,8 @@ import * as fs from "node:fs";
 
 // ─── Module mocks (must precede imports of mocked modules) ───────────────────
 
-vi.mock("../src/core-loop.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/core-loop.js")>();
+vi.mock("../src/loop/core-loop.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/loop/core-loop.js")>();
   return { ...actual, CoreLoop: vi.fn() };
 });
 
@@ -77,8 +77,8 @@ vi.mock("../src/execution/task/task-lifecycle.js", () => ({
   TaskLifecycle: vi.fn().mockImplementation(() => ({})),
 }));
 
-vi.mock("../src/reporting-engine.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/reporting-engine.js")>();
+vi.mock("../src/reporting/reporting-engine.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/reporting/reporting-engine.js")>();
   return {
     ...actual,
     ReportingEngine: vi.fn().mockImplementation((...args) => new actual.ReportingEngine(...args)),
@@ -99,8 +99,8 @@ vi.mock("../src/llm/provider-factory.js", async (importOriginal) => {
 
 // ─── Imports after mocks ─────────────────────────────────────────────────────
 
-import { CLIRunner } from "../src/cli-runner.js";
-import { StateManager } from "../src/state-manager.js";
+import { CLIRunner } from "../src/cli/cli-runner.js";
+import { StateManager } from "../src/state/state-manager.js";
 import type { SharedKnowledgeEntry } from "../src/types/knowledge.js";
 import { makeTempDir } from "./helpers/temp-dir.js";
 

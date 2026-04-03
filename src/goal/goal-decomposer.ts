@@ -13,7 +13,7 @@ import type {
   DecompositionResult,
 } from "../types/goal-tree.js";
 import { decompositionToDimension } from "./goal-validation.js";
-import type { StateManager } from "../state-manager.js";
+import type { StateManager } from "../state/state-manager.js";
 
 // ─── Prompt builders ───
 

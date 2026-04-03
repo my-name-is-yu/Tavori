@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { StateManager } from "../src/state-manager.js";
-import { ReportingEngine } from "../src/reporting-engine.js";
+import { StateManager } from "../src/state/state-manager.js";
+import { ReportingEngine } from "../src/reporting/reporting-engine.js";
 import { CapabilityDetector } from "../src/observation/capability-detector.js";
 import { CapabilityRegistrySchema } from "../src/types/capability.js";
 import type {

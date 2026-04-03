@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import { z } from "zod";
-import { StateManager } from "../src/state-manager.js";
+import { StateManager } from "../src/state/state-manager.js";
 import { EthicsGate } from "../src/traits/ethics-gate.js";
 import type { ILLMClient, LLMResponse } from "../src/llm/llm-client.js";
 import { createMockLLMClient } from "./helpers/mock-llm.js";

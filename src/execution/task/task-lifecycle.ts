@@ -4,7 +4,7 @@ import {
   runShellCommand as _runShellCommand,
   runPostExecutionHealthCheck as _runPostExecutionHealthCheck,
 } from "./task-health-check.js";
-import { StateManager } from "../../state-manager.js";
+import { StateManager } from "../../state/state-manager.js";
 import type { ILLMClient } from "../../llm/llm-client.js";
 import { SessionManager } from "../session-manager.js";
 import { TrustManager } from "../../traits/trust-manager.js";
@@ -49,7 +49,7 @@ import { runPipelineTaskCycle as runPipelineTaskCycleFn } from "./task-pipeline-
 import type { KnowledgeTransfer } from "../../knowledge/transfer/knowledge-transfer.js";
 import type { KnowledgeManager } from "../../knowledge/knowledge-manager.js";
 import { generateReflection, saveReflectionAsKnowledge, getReflectionsForGoal, formatReflectionsForPrompt } from "../reflection-generator.js";
-import { GuardrailRunner } from "../../guardrail-runner.js";
+import { GuardrailRunner } from "../../traits/guardrail-runner.js";
 import type { HookManager } from "../../runtime/hook-manager.js";
 
 export type { TaskCycleResult } from "./task-execution-types.js";

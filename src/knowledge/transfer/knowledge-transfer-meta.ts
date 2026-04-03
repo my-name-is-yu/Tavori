@@ -4,7 +4,7 @@ import { extractJSON } from "../../llm/llm-client.js";
 import type { IPromptGateway } from "../../prompt/gateway.js";
 import type { LearningPipeline } from "../learning/learning-pipeline.js";
 import type { VectorIndex } from "../vector-index.js";
-import type { StateManager } from "../../state-manager.js";
+import type { StateManager } from "../../state/state-manager.js";
 import type { CrossGoalPattern, StructuralFeedbackType } from "../../types/learning.js";
 import { CrossGoalPatternSchema } from "../../types/learning.js";
 import {

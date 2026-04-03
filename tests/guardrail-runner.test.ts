@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { GuardrailRunner } from "../src/guardrail-runner.js";
+import { GuardrailRunner } from "../src/traits/guardrail-runner.js";
 import type {
   IGuardrailHook,
   GuardrailContext,

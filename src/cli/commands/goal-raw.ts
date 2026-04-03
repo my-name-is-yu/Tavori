@@ -1,6 +1,6 @@
 // ─── goal-raw.ts: cmdGoalAddRaw — add a goal without LLM negotiation ───
 
-import { StateManager } from "../../state-manager.js";
+import { StateManager } from "../../state/state-manager.js";
 import { getCliLogger } from "../cli-logger.js";
 import {
   RawDimensionSpec,

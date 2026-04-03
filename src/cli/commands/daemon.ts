@@ -8,7 +8,7 @@ import { readJsonFileOrNull } from "../../utils/json-io.js";
 import { DaemonStateSchema, DaemonConfigSchema } from "../../types/daemon.js";
 import type { DaemonState, DaemonConfig } from "../../types/daemon.js";
 
-import { StateManager } from "../../state-manager.js";
+import { StateManager } from "../../state/state-manager.js";
 import { CharacterConfigManager } from "../../traits/character-config.js";
 import { Logger } from "../../runtime/logger.js";
 import { DaemonRunner } from "../../runtime/daemon-runner.js";

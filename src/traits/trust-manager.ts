@@ -1,4 +1,4 @@
-import type { StateManager } from "../state-manager.js";
+import type { StateManager } from "../state/state-manager.js";
 import {
   TrustBalanceSchema,
   TrustStoreSchema,

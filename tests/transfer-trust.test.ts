@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { TransferTrustManager } from "../src/knowledge/transfer/transfer-trust.js";
-import { StateManager } from "../src/state-manager.js";
+import { StateManager } from "../src/state/state-manager.js";
 
 // ─── Helpers ───
 

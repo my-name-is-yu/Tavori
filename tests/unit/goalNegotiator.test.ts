@@ -7,7 +7,7 @@ import {
   GoalNegotiator,
   gatherNegotiationContext,
 } from "../../src/goal/goal-negotiator.js";
-import { StateManager } from "../../src/state-manager.js";
+import { StateManager } from "../../src/state/state-manager.js";
 import { GoalSchema } from "../../src/types/goal.js";
 import type { Dimension } from "../../src/types/goal.js";
 import { makeTempDir } from "../helpers/temp-dir.js";

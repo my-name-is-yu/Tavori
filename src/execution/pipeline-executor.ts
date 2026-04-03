@@ -5,7 +5,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { Logger } from "../runtime/logger.js";
-import type { StateManager } from "../state-manager.js";
+import type { StateManager } from "../state/state-manager.js";
 import type { AgentTask, AgentResult, IAdapter } from "./adapter-layer.js";
 import { AdapterRegistry } from "./adapter-layer.js";
 import type { TaskPipeline, PipelineStage, PipelineState, StageResult } from "../types/pipeline.js";

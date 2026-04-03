@@ -1,4 +1,4 @@
-import { StateManager } from "../state-manager.js";
+import { StateManager } from "../state/state-manager.js";
 import { ProgressPredictor } from "./progress-predictor.js";
 import { StallReportSchema, StallStateSchema, StallAnalysisSchema } from "../types/stall.js";
 import type { StallReport, StallState, StallAnalysis } from "../types/stall.js";

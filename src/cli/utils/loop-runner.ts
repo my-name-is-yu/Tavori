@@ -2,7 +2,7 @@
 
 import { getLogsDir } from "../../utils/paths.js";
 import { Logger } from "../../runtime/logger.js";
-import type { CoreLoop, LoopResult, ProgressEvent } from "../../core-loop.js";
+import type { CoreLoop, LoopResult, ProgressEvent } from "../../loop/core-loop.js";
 import type { Task } from "../../types/task.js";
 
 export function buildAutoApprovalFn(): (task: Task) => Promise<boolean> {

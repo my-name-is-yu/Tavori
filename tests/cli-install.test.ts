@@ -34,7 +34,7 @@ describe("buildPlist", () => {
   it("includes goal IDs in ProgramArguments", () => {
     const xml = buildPlist({
       nodePath: "/usr/local/bin/node",
-      cliRunnerPath: "/app/dist/cli-runner.js",
+      cliRunnerPath: "/app/dist/cli/cli-runner.js",
       goalIds: ["goal-abc", "goal-xyz"],
       stdoutLog: "/home/.pulseed/logs/launchd-stdout.log",
       stderrLog: "/home/.pulseed/logs/launchd-stderr.log",
@@ -49,7 +49,7 @@ describe("buildPlist", () => {
   it("includes the correct node path and cli-runner path", () => {
     const xml = buildPlist({
       nodePath: "/usr/local/bin/node",
-      cliRunnerPath: "/app/dist/cli-runner.js",
+      cliRunnerPath: "/app/dist/cli/cli-runner.js",
       goalIds: ["g1"],
       stdoutLog: "/logs/out.log",
       stderrLog: "/logs/err.log",
@@ -57,13 +57,13 @@ describe("buildPlist", () => {
     });
 
     expect(xml).toContain("<string>/usr/local/bin/node</string>");
-    expect(xml).toContain("<string>/app/dist/cli-runner.js</string>");
+    expect(xml).toContain("<string>/app/dist/cli/cli-runner.js</string>");
   });
 
   it("includes RunAtLoad and KeepAlive true", () => {
     const xml = buildPlist({
       nodePath: "/usr/local/bin/node",
-      cliRunnerPath: "/app/dist/cli-runner.js",
+      cliRunnerPath: "/app/dist/cli/cli-runner.js",
       goalIds: ["g1"],
       stdoutLog: "/logs/out.log",
       stderrLog: "/logs/err.log",
@@ -80,7 +80,7 @@ describe("buildPlist", () => {
   it("includes StandardOutPath and StandardErrorPath", () => {
     const xml = buildPlist({
       nodePath: "/usr/local/bin/node",
-      cliRunnerPath: "/app/dist/cli-runner.js",
+      cliRunnerPath: "/app/dist/cli/cli-runner.js",
       goalIds: ["g1"],
       stdoutLog: "/home/.pulseed/logs/launchd-stdout.log",
       stderrLog: "/home/.pulseed/logs/launchd-stderr.log",
@@ -96,7 +96,7 @@ describe("buildPlist", () => {
   it("includes WorkingDirectory", () => {
     const xml = buildPlist({
       nodePath: "/usr/local/bin/node",
-      cliRunnerPath: "/app/dist/cli-runner.js",
+      cliRunnerPath: "/app/dist/cli/cli-runner.js",
       goalIds: ["g1"],
       stdoutLog: "/logs/out.log",
       stderrLog: "/logs/err.log",
@@ -110,7 +110,7 @@ describe("buildPlist", () => {
   it("includes EnvironmentVariables when PATH is provided", () => {
     const xml = buildPlist({
       nodePath: "/usr/local/bin/node",
-      cliRunnerPath: "/app/dist/cli-runner.js",
+      cliRunnerPath: "/app/dist/cli/cli-runner.js",
       goalIds: ["g1"],
       stdoutLog: "/logs/out.log",
       stderrLog: "/logs/err.log",
@@ -126,7 +126,7 @@ describe("buildPlist", () => {
   it("includes PULSEED_HOME when provided", () => {
     const xml = buildPlist({
       nodePath: "/usr/local/bin/node",
-      cliRunnerPath: "/app/dist/cli-runner.js",
+      cliRunnerPath: "/app/dist/cli/cli-runner.js",
       goalIds: ["g1"],
       stdoutLog: "/logs/out.log",
       stderrLog: "/logs/err.log",
@@ -141,7 +141,7 @@ describe("buildPlist", () => {
   it("omits EnvironmentVariables block when neither PATH nor PULSEED_HOME is given", () => {
     const xml = buildPlist({
       nodePath: "/usr/local/bin/node",
-      cliRunnerPath: "/app/dist/cli-runner.js",
+      cliRunnerPath: "/app/dist/cli/cli-runner.js",
       goalIds: ["g1"],
       stdoutLog: "/logs/out.log",
       stderrLog: "/logs/err.log",
@@ -154,7 +154,7 @@ describe("buildPlist", () => {
   it("includes --config when configPath is provided", () => {
     const xml = buildPlist({
       nodePath: "/usr/local/bin/node",
-      cliRunnerPath: "/app/dist/cli-runner.js",
+      cliRunnerPath: "/app/dist/cli/cli-runner.js",
       goalIds: ["g1"],
       configPath: "/home/user/.pulseed/config.json",
       stdoutLog: "/logs/out.log",
@@ -169,7 +169,7 @@ describe("buildPlist", () => {
   it("includes --check-interval-ms when intervalMs is provided", () => {
     const xml = buildPlist({
       nodePath: "/usr/local/bin/node",
-      cliRunnerPath: "/app/dist/cli-runner.js",
+      cliRunnerPath: "/app/dist/cli/cli-runner.js",
       goalIds: ["g1"],
       intervalMs: 5000,
       stdoutLog: "/logs/out.log",
@@ -184,7 +184,7 @@ describe("buildPlist", () => {
   it("escapes special XML characters in paths", () => {
     const xml = buildPlist({
       nodePath: "/usr/local/bin/node",
-      cliRunnerPath: "/app/dist/cli-runner.js",
+      cliRunnerPath: "/app/dist/cli/cli-runner.js",
       goalIds: ["g1"],
       stdoutLog: "/logs/out.log",
       stderrLog: "/logs/err.log",
@@ -198,7 +198,7 @@ describe("buildPlist", () => {
   it("contains valid XML plist header and root element", () => {
     const xml = buildPlist({
       nodePath: "/usr/local/bin/node",
-      cliRunnerPath: "/app/dist/cli-runner.js",
+      cliRunnerPath: "/app/dist/cli/cli-runner.js",
       goalIds: ["g1"],
       stdoutLog: "/logs/out.log",
       stderrLog: "/logs/err.log",

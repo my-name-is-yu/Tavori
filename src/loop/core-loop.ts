@@ -1,13 +1,13 @@
-import { sleep } from "./utils/sleep.js";
-import type { Logger } from "./runtime/logger.js";
-import type { StateDiffCalculator, IterationSnapshot } from "./loop/state-diff.js";
-import { IterationBudget } from "./loop/iteration-budget.js";
-import { saveLoopCheckpoint, restoreLoopCheckpoint } from "./loop/checkpoint-manager-loop.js";
-import { runPostLoopHooks } from "./loop/post-loop-hooks.js";
-import { tryRunParallel } from "./loop/parallel-dispatch.js";
-import { generateLoopReport } from "./loop/loop-report-helper.js";
+import { sleep } from "../utils/sleep.js";
+import type { Logger } from "../runtime/logger.js";
+import type { StateDiffCalculator, IterationSnapshot } from "./state-diff.js";
+import { IterationBudget } from "./iteration-budget.js";
+import { saveLoopCheckpoint, restoreLoopCheckpoint } from "./checkpoint-manager-loop.js";
+import { runPostLoopHooks } from "./post-loop-hooks.js";
+import { tryRunParallel } from "./parallel-dispatch.js";
+import { generateLoopReport } from "./loop-report-helper.js";
 
-import { makeEmptyIterationResult } from "./loop/core-loop-types.js";
+import { makeEmptyIterationResult } from "./core-loop-types.js";
 import type {
   LoopConfig,
   ResolvedLoopConfig,
@@ -15,11 +15,11 @@ import type {
   LoopResult,
   CoreLoopDeps,
   ProgressEvent,
-} from "./loop/core-loop-types.js";
+} from "./core-loop-types.js";
 import {
   runTreeIteration as runTreeIterationImpl,
   runMultiGoalIteration as runMultiGoalIterationImpl,
-} from "./loop/tree-loop-runner.js";
+} from "./tree-loop-runner.js";
 import {
   loadGoalWithAggregation,
   observeAndReload,
@@ -27,16 +27,16 @@ import {
   scoreDrivesAndCheckKnowledge,
   phaseAutoDecompose,
   type PhaseCtx,
-} from "./loop/core-loop-phases.js";
+} from "./core-loop-phases.js";
 import {
   checkCompletionAndMilestones,
   detectStallsAndRebalance,
   checkDependencyBlock,
   runTaskCycleWithContext,
   type LoopCallbacks,
-} from "./loop/core-loop-phases-b.js";
-import { handleCapabilityAcquisition } from "./loop/core-loop-capability.js";
-import { CoreLoopLearning } from "./loop/core-loop-learning.js";
+} from "./core-loop-phases-b.js";
+import { handleCapabilityAcquisition } from "./core-loop-capability.js";
+import { CoreLoopLearning } from "./core-loop-learning.js";
 
 // Re-export types for backward compatibility
 export type {
@@ -51,8 +51,8 @@ export type {
   CoreLoopDeps,
   ProgressEvent,
   ProgressPhase,
-} from "./loop/core-loop-types.js";
-export { buildDriveContext, makeEmptyIterationResult } from "./loop/core-loop-types.js";
+} from "./core-loop-types.js";
+export { buildDriveContext, makeEmptyIterationResult } from "./core-loop-types.js";
 
 const DEFAULT_CONFIG: Required<Omit<LoopConfig, "iterationBudget">> = {
   maxIterations: 100,
@@ -444,7 +444,7 @@ export class CoreLoop {
     this.logger?.info(`[iter ${loopIndex}] gap: ${gapAggregate.toFixed(2)} | ${(gapVector.gaps ?? []).map((g: any) => `${g.dimension_name}=${g.normalized_weighted_gap.toFixed(2)}`).join(', ')}`);
 
     // 4. Drive scoring + knowledge gap check (skip when gap=0 — no task needed)
-    let driveScores: import("./types/drive.js").DriveScore[] = [];
+    let driveScores: import("../types/drive.js").DriveScore[] = [];
     let highDissatisfactionDimensions: string[] = [];
     if (!skipTaskGeneration) {
       const driveResult = await scoreDrivesAndCheckKnowledge(

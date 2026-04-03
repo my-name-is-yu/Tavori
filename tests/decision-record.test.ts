@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as os from "node:os";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { StateManager } from "../src/state-manager.js";
+import { StateManager } from "../src/state/state-manager.js";
 import { KnowledgeManager } from "../src/knowledge/knowledge-manager.js";
 import type { DecisionRecord } from "../src/types/knowledge.js";
 import { createMockLLMClient } from "./helpers/mock-llm.js";

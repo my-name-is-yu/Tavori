@@ -3,7 +3,7 @@
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
 import { randomUUID } from "node:crypto";
-import type { StateManager } from "../state-manager.js";
+import type { StateManager } from "../state/state-manager.js";
 import { loadSharedEntries } from "../knowledge/knowledge-search.js";
 
 export interface MCPServerDeps {

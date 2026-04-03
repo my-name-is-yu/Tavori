@@ -1,4 +1,4 @@
-import type { StateManager } from "../state-manager.js";
+import type { StateManager } from "../state/state-manager.js";
 import type { GoalTreeManager } from "./goal-tree-manager.js";
 import type { GoalRefiner } from "./goal-refiner.js";
 import { hasValidatedDimensions } from "./goal-refiner.js";

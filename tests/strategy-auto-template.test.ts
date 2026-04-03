@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
-import { StateManager } from "../src/state-manager.js";
+import { StateManager } from "../src/state/state-manager.js";
 import { StrategyManager } from "../src/strategy/strategy-manager.js";
 import type { StrategyTemplateRegistry } from "../src/strategy/strategy-template-registry.js";
 import type { Logger } from "../src/runtime/logger.js";

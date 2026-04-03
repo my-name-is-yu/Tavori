@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { ObservationEngine } from "../src/observation/observation-engine.js";
-import { StateManager } from "../src/state-manager.js";
+import { StateManager } from "../src/state/state-manager.js";
 import type { ILLMClient } from "../src/llm/llm-client.js";
 import type { Logger } from "../src/runtime/logger.js";
 import { makeTempDir, cleanupTempDir } from "./helpers/temp-dir.js";

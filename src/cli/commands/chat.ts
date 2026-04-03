@@ -4,7 +4,7 @@ import React, { useState, useCallback, useEffect } from "react";
 import { render, useApp } from "ink";
 import { parseArgs } from "node:util";
 
-import { StateManager } from "../../state-manager.js";
+import { StateManager } from "../../state/state-manager.js";
 import { ensureProviderConfig } from "../ensure-api-key.js";
 import { buildLLMClient, buildAdapterRegistry } from "../../llm/provider-factory.js";
 import { loadProviderConfig } from "../../llm/provider-config.js";

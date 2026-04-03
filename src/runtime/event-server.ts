@@ -8,7 +8,7 @@ import { TriggerEventSchema, TriggerMappingsConfigSchema } from "../types/trigge
 import type { TriggerMappingsConfig } from "../types/trigger.js";
 import { getEventsDir } from "../utils/paths.js";
 import type { Logger } from "./logger.js";
-import type { StateManager } from "../state-manager.js";
+import type { StateManager } from "../state/state-manager.js";
 import type { TriggerMapper } from "./trigger-mapper.js";
 
 export interface EventServerConfig {

@@ -1,5 +1,5 @@
 import type { Logger } from "../../runtime/logger.js";
-import type { StateManager } from "../../state-manager.js";
+import type { StateManager } from "../../state/state-manager.js";
 import type { SessionManager } from "../session-manager.js";
 import type { ILLMClient } from "../../llm/llm-client.js";
 import type { KnowledgeManager } from "../../knowledge/knowledge-manager.js";

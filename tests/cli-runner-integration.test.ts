@@ -57,8 +57,8 @@ vi.mock("../src/adapters/agents/claude-api.js", () => ({
 
 // ─── Imports after mocks ──────────────────────────────────────────────────────
 
-import { CLIRunner } from "../src/cli-runner.js";
-import { StateManager } from "../src/state-manager.js";
+import { CLIRunner } from "../src/cli/cli-runner.js";
+import { StateManager } from "../src/state/state-manager.js";
 import { makeGoal } from "./helpers/fixtures.js";
 
 async function runCLI(tmpDir: string, ...args: string[]): Promise<number> {

@@ -1,6 +1,6 @@
 export * from "./types/index.js";
 export { LLMError, AdapterError, ValidationError, StateError } from "./utils/errors.js";
-export { StateManager } from "./state-manager.js";
+export { StateManager } from "./state/state-manager.js";
 export {
   computeRawGap,
   normalizeGap,
@@ -34,7 +34,7 @@ export { OpenAILLMClient } from "./llm/openai-client.js";
 export type { OpenAIClientConfig } from "./llm/openai-client.js";
 export { EthicsGate } from "./traits/ethics-gate.js";
 export * from "./types/guardrail.js";
-export { GuardrailRunner } from "./guardrail-runner.js";
+export { GuardrailRunner } from "./traits/guardrail-runner.js";
 export { generateReflection, saveReflectionAsKnowledge, getReflectionsForGoal, formatReflectionsForPrompt } from "./execution/reflection-generator.js";
 export * from "./types/reflection.js";
 export { SessionManager } from "./execution/session-manager.js";
@@ -55,13 +55,13 @@ export type { CodexLLMClientConfig } from "./llm/codex-llm-client.js";
 export { loadProviderConfig, saveProviderConfig, DEFAULT_PROVIDER_CONFIG, migrateProviderConfig, validateProviderConfig, MODEL_REGISTRY } from "./llm/provider-config.js";
 export type { ProviderConfig, ValidationResult } from "./llm/provider-config.js";
 export { TaskLifecycle } from "./execution/task/task-lifecycle.js";
-export { ReportingEngine } from "./reporting-engine.js";
+export { ReportingEngine } from "./reporting/reporting-engine.js";
 export { KnowledgeManager } from "./knowledge/knowledge-manager.js";
 export { CapabilityDetector } from "./observation/capability-detector.js";
-export { PortfolioManager } from "./portfolio-manager.js";
-export { CoreLoop } from "./core-loop.js";
-export type { CoreLoopDeps, LoopConfig, LoopResult } from "./core-loop.js";
-export { CLIRunner } from "./cli-runner.js";
+export { PortfolioManager } from "./strategy/portfolio-manager.js";
+export { CoreLoop } from "./loop/core-loop.js";
+export type { CoreLoopDeps, LoopConfig, LoopResult } from "./loop/core-loop.js";
+export { CLIRunner } from "./cli/cli-runner.js";
 export { IntentRecognizer } from "./tui/intent-recognizer.js";
 export type { IntentType, RecognizedIntent } from "./tui/intent-recognizer.js";
 export { ActionHandler } from "./tui/actions.js";

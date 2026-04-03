@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { PortfolioManager } from "../src/portfolio-manager.js";
+import { PortfolioManager } from "../src/strategy/portfolio-manager.js";
 import type { Strategy, WaitStrategy, Portfolio } from "../src/types/strategy.js";
 import type { StrategyManager } from "../src/strategy-manager.js";
-import type { StateManager } from "../src/state-manager.js";
+import type { StateManager } from "../src/state/state-manager.js";
 import type { RebalanceTrigger } from "../src/types/portfolio.js";
 
 // ─── Helpers ───

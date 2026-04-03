@@ -1,5 +1,5 @@
 import type { Logger } from "../../runtime/logger.js";
-import { StateManager } from "../../state-manager.js";
+import { StateManager } from "../../state/state-manager.js";
 import { SessionManager } from "../session-manager.js";
 import type { AgentTask, AgentResult, IAdapter } from "../adapter-layer.js";
 import type { Task } from "../../types/task.js";

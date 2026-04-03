@@ -5,7 +5,7 @@ import { DecisionRecordSchema } from "../types/knowledge.js";
 import type { DecisionRecord } from "../types/knowledge.js";
 import type { ILLMClient } from "../llm/llm-client.js";
 import type { IPromptGateway } from "../prompt/gateway.js";
-import type { StateManager } from "../state-manager.js";
+import type { StateManager } from "../state/state-manager.js";
 import { writeJsonFileAtomic } from "../utils/json-io.js";
 
 // ─── LLM response schema ───

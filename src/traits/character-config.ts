@@ -1,6 +1,6 @@
 import { CharacterConfigSchema, DEFAULT_CHARACTER_CONFIG } from "../types/character.js";
 import type { CharacterConfig } from "../types/character.js";
-import type { StateManager } from "../state-manager.js";
+import type { StateManager } from "../state/state-manager.js";
 
 const CHARACTER_CONFIG_PATH = "character-config.json";
 

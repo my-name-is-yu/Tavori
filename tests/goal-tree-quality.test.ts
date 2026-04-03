@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
-import { StateManager } from "../src/state-manager.js";
+import { StateManager } from "../src/state/state-manager.js";
 import { EthicsGate } from "../src/traits/ethics-gate.js";
 import { GoalDependencyGraph } from "../src/goal/goal-dependency-graph.js";
 import { GoalTreeManager } from "../src/goal/goal-tree-manager.js";

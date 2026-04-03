@@ -4,7 +4,7 @@
 // Persists via StateManager.writeRaw (persist-before-execute principle).
 
 import { z } from "zod";
-import type { StateManager } from "../state-manager.js";
+import type { StateManager } from "../state/state-manager.js";
 
 // ─── Schemas ───
 

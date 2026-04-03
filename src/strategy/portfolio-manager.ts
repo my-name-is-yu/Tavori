@@ -1,15 +1,15 @@
-import { StrategyManager } from "./strategy/strategy-manager.js";
-import { StateManager } from "./state-manager.js";
-import { StrategySchema } from "./types/strategy.js";
-import type { Strategy, Portfolio } from "./types/strategy.js";
-import { PortfolioConfigSchema } from "./types/portfolio.js";
+import { StrategyManager } from "./strategy-manager.js";
+import { StateManager } from "../state/state-manager.js";
+import { StrategySchema } from "../types/strategy.js";
+import type { Strategy, Portfolio } from "../types/strategy.js";
+import { PortfolioConfigSchema } from "../types/portfolio.js";
 import type {
   PortfolioConfig,
   EffectivenessRecord,
   TaskSelectionResult,
   RebalanceTrigger,
   RebalanceResult,
-} from "./types/portfolio.js";
+} from "../types/portfolio.js";
 import {
   calculateInitialAllocations,
   countConsecutiveLowestRebalances,

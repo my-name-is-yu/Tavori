@@ -5,7 +5,7 @@ describe("src/index.ts exports", () => {
     const barrel = await import("../src/index.js");
     const llmModule = await import("../src/llm/llm-client.js");
     const ethicsModule = await import("../src/traits/ethics-gate.js");
-    const stateModule = await import("../src/state-manager.js");
+    const stateModule = await import("../src/state/state-manager.js");
 
     expect(barrel.LLMClient).toBe(llmModule.LLMClient);
     expect(barrel.MockLLMClient).toBe(llmModule.MockLLMClient);

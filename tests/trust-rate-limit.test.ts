@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { StateManager } from "../src/state-manager.js";
+import { StateManager } from "../src/state/state-manager.js";
 import { TrustManager } from "../src/traits/trust-manager.js";
 import { TRUST_SUCCESS_DELTA } from "../src/types/trust.js";
 import { makeTempDir, cleanupTempDir } from "./helpers/temp-dir.js";

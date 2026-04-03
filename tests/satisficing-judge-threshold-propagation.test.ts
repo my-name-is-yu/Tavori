@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
-import { StateManager } from "../src/state-manager.js";
+import { StateManager } from "../src/state/state-manager.js";
 import { SatisficingJudge, aggregateValues } from "../src/drive/satisficing-judge.js";
 import { MockEmbeddingClient } from "../src/knowledge/embedding-client.js";
 import type { Dimension } from "../src/types/goal.js";

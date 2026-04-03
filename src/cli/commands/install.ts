@@ -138,7 +138,7 @@ export async function cmdInstall(args: string[]): Promise<number> {
 
   const nodePath = process.execPath;
   // This file is compiled to dist/cli/commands/install.js — go up two levels to dist/
-  const cliRunnerPath = path.resolve(__dirname, "../../cli-runner.js");
+  const cliRunnerPath = path.resolve(__dirname, "../../cli/cli-runner.js");
   const home = os.homedir();
   const logsDir = path.join(home, ".pulseed", "logs");
   const stdoutLog = path.join(logsDir, "launchd-stdout.log");

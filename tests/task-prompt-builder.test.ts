@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { buildTaskGenerationPrompt } from "../src/execution/task/task-prompt-builder.js";
-import type { StateManager } from "../src/state-manager.js";
+import type { StateManager } from "../src/state/state-manager.js";
 
 // Mock issue-context-fetcher so dynamic import in buildTaskGenerationPrompt is controlled
 vi.mock("../src/execution/context/issue-context-fetcher.js", () => ({

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import { ObservationEngine } from "../src/observation/observation-engine.js";
-import { StateManager } from "../src/state-manager.js";
+import { StateManager } from "../src/state/state-manager.js";
 import type { ObservationMethod } from "../src/types/core.js";
 import type { ILLMClient } from "../src/llm/llm-client.js";
 import type { IDataSourceAdapter } from "../src/observation/data-source-adapter.js";

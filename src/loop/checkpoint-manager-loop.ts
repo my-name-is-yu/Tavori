@@ -8,7 +8,7 @@
  * trust balance snapshots for crash recovery within a single run.
  */
 
-import type { StateManager } from "../state-manager.js";
+import type { StateManager } from "../state/state-manager.js";
 import type { TrustManager } from "../traits/trust-manager.js";
 import type { LoopIterationResult } from "./core-loop-types.js";
 import type { Logger } from "../runtime/logger.js";

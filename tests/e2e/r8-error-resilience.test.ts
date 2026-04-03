@@ -19,8 +19,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 
-import { CoreLoop, type CoreLoopDeps } from "../../src/core-loop.js";
-import { StateManager } from "../../src/state-manager.js";
+import { CoreLoop, type CoreLoopDeps } from "../../src/loop/core-loop.js";
+import { StateManager } from "../../src/state/state-manager.js";
 import type { IAdapter, AgentTask, AgentResult } from "../../src/execution/adapter-layer.js";
 import type { Goal } from "../../src/types/goal.js";
 import type { CompletionJudgment } from "../../src/types/satisficing.js";

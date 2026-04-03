@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { StateManager } from "../../src/state-manager.js";
+import type { StateManager } from "../../src/state/state-manager.js";
 import type { CharacterConfigManager } from "../../src/traits/character-config.js";
 
 // ─── Module-level mocks ───

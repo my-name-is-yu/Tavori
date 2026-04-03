@@ -17,7 +17,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { StateManager } from "../../src/state-manager.js";
+import { StateManager } from "../../src/state/state-manager.js";
 import { runMorningPlanning } from "../../src/reflection/morning-planning.js";
 import { runEveningCatchup } from "../../src/reflection/evening-catchup.js";
 import { runDreamConsolidation } from "../../src/reflection/dream-consolidation.js";

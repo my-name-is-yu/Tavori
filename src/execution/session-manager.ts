@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { SessionSchema } from "../types/session.js";
 import type { Session, SessionType, ContextSlot } from "../types/session.js";
-import type { StateManager } from "../state-manager.js";
+import type { StateManager } from "../state/state-manager.js";
 import type { KnowledgeEntry } from "../types/knowledge.js";
 import type { VectorIndex } from "../knowledge/vector-index.js";
 import type { GoalDependencyGraph } from "../goal/goal-dependency-graph.js";

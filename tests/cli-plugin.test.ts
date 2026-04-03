@@ -13,8 +13,8 @@ import * as yaml from "js-yaml";
 
 // ─── Module mocks (must precede imports of mocked modules) ───────────────────
 
-vi.mock("../src/core-loop.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/core-loop.js")>();
+vi.mock("../src/loop/core-loop.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/loop/core-loop.js")>();
   return { ...actual, CoreLoop: vi.fn() };
 });
 
@@ -79,8 +79,8 @@ vi.mock("../src/execution/task/task-lifecycle.js", () => ({
   TaskLifecycle: vi.fn().mockImplementation(() => ({})),
 }));
 
-vi.mock("../src/reporting-engine.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/reporting-engine.js")>();
+vi.mock("../src/reporting/reporting-engine.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/reporting/reporting-engine.js")>();
   return {
     ...actual,
     ReportingEngine: vi.fn().mockImplementation(function(...args: ConstructorParameters<typeof actual.ReportingEngine>) { return new actual.ReportingEngine(...args); }),

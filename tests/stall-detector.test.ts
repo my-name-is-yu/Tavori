@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { StateManager } from "../src/state-manager.js";
+import { StateManager } from "../src/state/state-manager.js";
 import { StallDetector } from "../src/drive/stall-detector.js";
 import { ProgressPredictor } from "../src/drive/progress-predictor.js";
 import type { StallState } from "../src/types/stall.js";

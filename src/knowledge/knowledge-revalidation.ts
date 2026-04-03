@@ -14,7 +14,7 @@ import type {
 import type { ILLMClient } from "../llm/llm-client.js";
 import type { IPromptGateway } from "../prompt/gateway.js";
 import { loadSharedEntries } from "./knowledge-search.js";
-import type { StateManager } from "../state-manager.js";
+import type { StateManager } from "../state/state-manager.js";
 
 // ─── LLM response schema ───
 

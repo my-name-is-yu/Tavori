@@ -6,8 +6,8 @@ import {
   type GapCalculatorModule,
   type DriveScorerModule,
   type ReportingEngine,
-} from "../src/core-loop.js";
-import { StateManager } from "../src/state-manager.js";
+} from "../src/loop/core-loop.js";
+import { StateManager } from "../src/state/state-manager.js";
 import type { ObservationEngine } from "../src/observation/observation-engine.js";
 import type { TaskLifecycle, TaskCycleResult } from "../src/execution/task/task-lifecycle.js";
 import type { SatisficingJudge } from "../src/drive/satisficing-judge.js";

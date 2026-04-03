@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { randomUUID } from "node:crypto";
-import { StateManager } from "../../src/state-manager.js";
+import { StateManager } from "../../src/state/state-manager.js";
 import { DriveSystem } from "../../src/drive/drive-system.js";
 import { observeWithLLM } from "../../src/observation/observation-llm.js";
 import { verifyTask, type VerifierDeps } from "../../src/execution/task/task-verifier.js";

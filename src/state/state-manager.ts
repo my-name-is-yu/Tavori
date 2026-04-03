@@ -1,18 +1,18 @@
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
-import { getPulseedDirPath } from "./utils/paths.js";
-import { StateError } from "./utils/errors.js";
-import { writeJsonFileAtomic } from "./utils/json-io.js";
-import type { Logger } from "./runtime/logger.js";
-import { GoalSchema, GoalTreeSchema } from "./types/goal.js";
-import { ObservationLogSchema, ObservationLogEntrySchema } from "./types/state.js";
-import { GapHistoryEntrySchema } from "./types/gap.js";
-import type { Goal, GoalTree } from "./types/goal.js";
-import type { ObservationLog, ObservationLogEntry } from "./types/state.js";
-import type { GapHistoryEntry } from "./types/gap.js";
-import type { PaceSnapshot } from "./types/goal.js";
-import { LoopCheckpointSchema } from "./types/checkpoint.js";
-import type { TrustManager } from "./traits/trust-manager.js";
+import { getPulseedDirPath } from "../utils/paths.js";
+import { StateError } from "../utils/errors.js";
+import { writeJsonFileAtomic } from "../utils/json-io.js";
+import type { Logger } from "../runtime/logger.js";
+import { GoalSchema, GoalTreeSchema } from "../types/goal.js";
+import { ObservationLogSchema, ObservationLogEntrySchema } from "../types/state.js";
+import { GapHistoryEntrySchema } from "../types/gap.js";
+import type { Goal, GoalTree } from "../types/goal.js";
+import type { ObservationLog, ObservationLogEntry } from "../types/state.js";
+import type { GapHistoryEntry } from "../types/gap.js";
+import type { PaceSnapshot } from "../types/goal.js";
+import { LoopCheckpointSchema } from "../types/checkpoint.js";
+import type { TrustManager } from "../traits/trust-manager.js";
 
 /**
  * StateManager handles persistence of goals, state vectors, observation logs,

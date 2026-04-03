@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { StateManager } from "../src/state-manager.js";
+import { StateManager } from "../src/state/state-manager.js";
 import { GoalDependencyGraph } from "../src/goal/goal-dependency-graph.js";
 import { VectorIndex } from "../src/knowledge/vector-index.js";
 import { MockEmbeddingClient } from "../src/knowledge/embedding-client.js";

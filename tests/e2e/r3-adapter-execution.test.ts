@@ -15,12 +15,12 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { TaskLifecycle } from "../../src/execution/task/task-lifecycle.js";
-import { StateManager } from "../../src/state-manager.js";
+import { StateManager } from "../../src/state/state-manager.js";
 import { SessionManager } from "../../src/execution/session-manager.js";
 import { TrustManager } from "../../src/traits/trust-manager.js";
 import { StrategyManager } from "../../src/strategy/strategy-manager.js";
 import { StallDetector } from "../../src/drive/stall-detector.js";
-import { CoreLoop, type CoreLoopDeps } from "../../src/core-loop.js";
+import { CoreLoop, type CoreLoopDeps } from "../../src/loop/core-loop.js";
 import { AdapterRegistry } from "../../src/execution/adapter-layer.js";
 import type { IAdapter, AgentTask, AgentResult } from "../../src/execution/adapter-layer.js";
 import type { Goal } from "../../src/types/goal.js";

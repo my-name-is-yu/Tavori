@@ -1,4 +1,4 @@
-import { StateManager } from "../state-manager.js";
+import { StateManager } from "../state/state-manager.js";
 import type { Goal } from "../types/goal.js";
 import type {
   CompletionJudgment,

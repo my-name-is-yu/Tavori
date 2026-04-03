@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { StateManager } from "../../src/state-manager.js";
+import { StateManager } from "../../src/state/state-manager.js";
 import { SatisficingJudge } from "../../src/drive/satisficing-judge.js";
 import type { Goal, Dimension } from "../../src/types/goal.js";
 import { makeTempDir } from "../helpers/temp-dir.js";

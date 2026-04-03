@@ -1,7 +1,7 @@
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
 import { writeJsonFileAtomic } from "../utils/json-io.js";
-import type { StateManager } from "../state-manager.js";
+import type { StateManager } from "../state/state-manager.js";
 import type { ILLMClient } from "../llm/llm-client.js";
 import type { INotificationDispatcher } from "../runtime/notification-dispatcher.js";
 import { z } from "zod";

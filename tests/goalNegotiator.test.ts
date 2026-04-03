@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ObservationEngine } from "../src/observation/observation-engine.js";
 import { GoalNegotiator, EthicsRejectedError } from "../src/goal/goal-negotiator.js";
-import { StateManager } from "../src/state-manager.js";
+import { StateManager } from "../src/state/state-manager.js";
 import type { DimensionDecomposition } from "../src/types/negotiation.js";
 import type { Goal } from "../src/types/goal.js";
 import { createMockLLMClient } from "./helpers/mock-llm.js";

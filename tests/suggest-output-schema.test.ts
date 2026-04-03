@@ -22,8 +22,8 @@ vi.mock("../src/core/suggest/repo-context.js", async (importOriginal) => {
   };
 });
 
-vi.mock("../src/core-loop.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/core-loop.js")>();
+vi.mock("../src/loop/core-loop.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/loop/core-loop.js")>();
   return {
     ...actual,
     CoreLoop: vi.fn(),
@@ -94,15 +94,15 @@ vi.mock("../src/execution/task/task-lifecycle.js", () => ({
   TaskLifecycle: vi.fn().mockImplementation(function() { return {}; }),
 }));
 
-vi.mock("../src/reporting-engine.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/reporting-engine.js")>();
+vi.mock("../src/reporting/reporting-engine.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/reporting/reporting-engine.js")>();
   return {
     ...actual,
     ReportingEngine: vi.fn().mockImplementation(function(...args: ConstructorParameters<typeof actual.ReportingEngine>) { return new actual.ReportingEngine(...args); }),
   };
 });
 
-import { CLIRunner } from "../src/cli-runner.js";
+import { CLIRunner } from "../src/cli/cli-runner.js";
 import { GoalNegotiator } from "../src/goal/goal-negotiator.js";
 import { SuggestOutputSchema } from "../src/types/suggest.js";
 import { makeTempDir } from "./helpers/temp-dir.js";

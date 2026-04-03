@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { ObservationLogEntrySchema } from "../types/state.js";
 import type { ObservationLogEntry } from "../types/state.js";
 import type { ObservationLayer } from "../types/core.js";
-import type { StateManager } from "../state-manager.js";
+import type { StateManager } from "../state/state-manager.js";
 import type { IDataSourceAdapter } from "./data-source-adapter.js";
 import type { DataSourceQuery } from "../types/data-source.js";
 import type { ObservationEngineOptions } from "./observation-helpers.js";

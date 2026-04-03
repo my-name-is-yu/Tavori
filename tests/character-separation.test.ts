@@ -9,10 +9,10 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
-import { StateManager } from "../src/state-manager.js";
+import { StateManager } from "../src/state/state-manager.js";
 import { EthicsGate } from "../src/traits/ethics-gate.js";
 import { StallDetector } from "../src/drive/stall-detector.js";
-import { ReportingEngine } from "../src/reporting-engine.js";
+import { ReportingEngine } from "../src/reporting/reporting-engine.js";
 import type { CharacterConfig } from "../src/types/character.js";
 import { DEFAULT_CHARACTER_CONFIG } from "../src/types/character.js";
 import { createMockLLMClient } from "./helpers/mock-llm.js";

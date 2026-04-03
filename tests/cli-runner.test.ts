@@ -58,8 +58,8 @@ vi.mock("../src/cli/ensure-api-key.js", () => ({
   }),
 }));
 
-vi.mock("../src/core-loop.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/core-loop.js")>();
+vi.mock("../src/loop/core-loop.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/loop/core-loop.js")>();
   return {
     ...actual,
     CoreLoop: vi.fn(),
@@ -148,8 +148,8 @@ vi.mock("../src/execution/task/task-lifecycle.js", () => ({
   TaskLifecycle: vi.fn().mockImplementation(function() { return {}; }),
 }));
 
-vi.mock("../src/reporting-engine.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/reporting-engine.js")>();
+vi.mock("../src/reporting/reporting-engine.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/reporting/reporting-engine.js")>();
   return {
     ...actual,
     ReportingEngine: vi.fn().mockImplementation(function(...args: ConstructorParameters<typeof actual.ReportingEngine>) { return new actual.ReportingEngine(...args); }),
@@ -158,13 +158,13 @@ vi.mock("../src/reporting-engine.js", async (importOriginal) => {
 
 // ─── Imports after mocks ─────────────────────────────────────────────────────
 
-import { CLIRunner } from "../src/cli-runner.js";
-import { StateManager } from "../src/state-manager.js";
-import { CoreLoop } from "../src/core-loop.js";
+import { CLIRunner } from "../src/cli/cli-runner.js";
+import { StateManager } from "../src/state/state-manager.js";
+import { CoreLoop } from "../src/loop/core-loop.js";
 import { GoalNegotiator, EthicsRejectedError } from "../src/goal/goal-negotiator.js";
 import { GoalRefiner } from "../src/goal/goal-refiner.js";
 import { ensureProviderConfig } from "../src/cli/ensure-api-key.js";
-import type { LoopResult } from "../src/core-loop.js";
+import type { LoopResult } from "../src/loop/core-loop.js";
 import { makeTempDir } from "./helpers/temp-dir.js";
 import { makeGoal } from "./helpers/fixtures.js";
 

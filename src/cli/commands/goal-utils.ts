@@ -4,7 +4,7 @@ import * as fsp from "node:fs/promises";
 import * as path from "node:path";
 import { getDatasourcesDir } from "../../utils/paths.js";
 import { writeJsonFile } from "../../utils/json-io.js";
-import { StateManager } from "../../state-manager.js";
+import { StateManager } from "../../state/state-manager.js";
 import { getCliLogger } from "../cli-logger.js";
 import { formatOperationError } from "../utils.js";
 

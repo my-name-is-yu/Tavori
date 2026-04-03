@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { IterationBudget } from "../src/loop/iteration-budget.js";
 import { runTreeIteration } from "../src/loop/tree-loop-runner.js";
-import { CoreLoop } from "../src/core-loop.js";
-import type { CoreLoopDeps, LoopConfig } from "../src/core-loop.js";
+import { CoreLoop } from "../src/loop/core-loop.js";
+import type { CoreLoopDeps, LoopConfig } from "../src/loop/core-loop.js";
 
 // ─── Unit tests: IterationBudget ───
 

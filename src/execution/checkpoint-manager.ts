@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
-import { StateManager } from '../state-manager.js';
+import { StateManager } from '../state/state-manager.js';
 import {
   Checkpoint,
   CheckpointSchema,

@@ -1,6 +1,6 @@
 import * as _path from "node:path";
 import { access, readFile } from "node:fs/promises";
-import type { StateManager } from "../../state-manager.js";
+import type { StateManager } from "../../state/state-manager.js";
 
 /**
  * Build the LLM prompt used to generate a task for the given goal and target dimension.

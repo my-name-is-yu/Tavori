@@ -5,7 +5,7 @@
 
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
-import type { StateManager } from "../state-manager.js";
+import type { StateManager } from "../state/state-manager.js";
 
 export interface GroundingOptions {
   stateManager: StateManager;

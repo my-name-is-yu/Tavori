@@ -5,7 +5,7 @@
 
 import { parseArgs } from "node:util";
 
-import { StateManager } from "../../state-manager.js";
+import { StateManager } from "../../state/state-manager.js";
 import { CharacterConfigManager } from "../../traits/character-config.js";
 import { getCliLogger } from "../cli-logger.js";
 import { formatOperationError } from "../utils.js";

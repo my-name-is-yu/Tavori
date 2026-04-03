@@ -7,7 +7,7 @@
  * See docs/design/goal-refinement-pipeline.md §3 for the full algorithm.
  */
 
-import type { StateManager } from "../state-manager.js";
+import type { StateManager } from "../state/state-manager.js";
 import type { ILLMClient } from "../llm/llm-client.js";
 import type { ObservationEngine } from "../observation/observation-engine.js";
 import type { GoalNegotiator } from "./goal-negotiator.js";

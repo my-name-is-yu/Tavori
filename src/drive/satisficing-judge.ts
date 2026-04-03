@@ -1,4 +1,4 @@
-import { StateManager } from "../state-manager.js";
+import { StateManager } from "../state/state-manager.js";
 import { dimensionProgress } from "./gap-calculator.js";
 import type { Goal, Dimension } from "../types/goal.js";
 import type {

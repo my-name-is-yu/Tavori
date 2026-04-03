@@ -12,7 +12,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 
 import { StrategyManager } from "../../src/strategy/strategy-manager.js";
-import { StateManager } from "../../src/state-manager.js";
+import { StateManager } from "../../src/state/state-manager.js";
 import type { ILLMClient } from "../../src/llm/llm-client.js";
 import { makeTempDir } from "../helpers/temp-dir.js";
 

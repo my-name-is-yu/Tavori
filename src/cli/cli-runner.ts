@@ -27,18 +27,18 @@
 
 import { parseArgs } from "node:util";
 
-import { getCliLogger } from "./cli/cli-logger.js";
-import { StateManager } from "./state-manager.js";
-import { CharacterConfigManager } from "./traits/character-config.js";
-import type { CoreLoop } from "./core-loop.js";
-import type { LoopConfig } from "./core-loop.js";
+import { getCliLogger } from "./cli-logger.js";
+import { StateManager } from "../state/state-manager.js";
+import { CharacterConfigManager } from "../traits/character-config.js";
+import type { CoreLoop } from "../loop/core-loop.js";
+import type { LoopConfig } from "../loop/core-loop.js";
 
 // Commands
-import { cmdRun } from "./cli/commands/run.js";
-import { cmdStatus, cmdLog, cmdCleanup } from "./cli/commands/goal.js";
-import { dispatchGoalCommand } from "./cli/commands/goal-dispatch.js";
-import { cmdPluginList, cmdPluginInstall, cmdPluginRemove, cmdPluginUpdate, cmdPluginSearch } from "./cli/commands/plugin.js";
-import { cmdReport } from "./cli/commands/report.js";
+import { cmdRun } from "./commands/run.js";
+import { cmdStatus, cmdLog, cmdCleanup } from "./commands/goal.js";
+import { dispatchGoalCommand } from "./commands/goal-dispatch.js";
+import { cmdPluginList, cmdPluginInstall, cmdPluginRemove, cmdPluginUpdate, cmdPluginSearch } from "./commands/plugin.js";
+import { cmdReport } from "./commands/report.js";
 import {
   cmdProvider,
   cmdConfigCharacter,
@@ -48,20 +48,20 @@ import {
   cmdDatasourceDedup,
   cmdCapabilityList,
   cmdCapabilityRemove,
-} from "./cli/commands/config.js";
-import { cmdStart, cmdStop, cmdCron, cmdDaemonStatus } from "./cli/commands/daemon.js";
-import { cmdSuggest, cmdImprove } from "./cli/commands/suggest.js";
-import { cmdSetup } from "./cli/commands/setup.js";
-import { cmdKnowledgeList, cmdKnowledgeSearch, cmdKnowledgeStats } from "./cli/commands/knowledge.js";
-import { cmdTaskList, cmdTaskShow } from "./cli/commands/task-read.js";
-import { cmdChat } from "./cli/commands/chat.js";
-import { cmdDoctor } from "./cli/commands/doctor.js";
-import { cmdLogs } from "./cli/commands/logs.js";
-import { cmdInstall, cmdUninstall } from "./cli/commands/install.js";
-import { cmdNotify } from "./cli/commands/notify.js";
-import { cmdTelegramSetup } from "./cli/commands/telegram.js";
-import { printUsage, formatOperationError } from "./cli/utils.js";
-import { ensureProviderConfig } from "./cli/ensure-api-key.js";
+} from "./commands/config.js";
+import { cmdStart, cmdStop, cmdCron, cmdDaemonStatus } from "./commands/daemon.js";
+import { cmdSuggest, cmdImprove } from "./commands/suggest.js";
+import { cmdSetup } from "./commands/setup.js";
+import { cmdKnowledgeList, cmdKnowledgeSearch, cmdKnowledgeStats } from "./commands/knowledge.js";
+import { cmdTaskList, cmdTaskShow } from "./commands/task-read.js";
+import { cmdChat } from "./commands/chat.js";
+import { cmdDoctor } from "./commands/doctor.js";
+import { cmdLogs } from "./commands/logs.js";
+import { cmdInstall, cmdUninstall } from "./commands/install.js";
+import { cmdNotify } from "./commands/notify.js";
+import { cmdTelegramSetup } from "./commands/telegram.js";
+import { printUsage, formatOperationError } from "./utils.js";
+import { ensureProviderConfig } from "./ensure-api-key.js";
 
 const logger = getCliLogger();
 
@@ -526,7 +526,7 @@ export class CLIRunner {
     }
 
     if (subcommand === "mcp-server") {
-      const { startMCPServer } = await import("./mcp-server/index.js");
+      const { startMCPServer } = await import("../mcp-server/index.js");
       await startMCPServer({ stateManager: this.stateManager, baseDir: this.stateManager.getBaseDir() });
       return 0;
     }
@@ -569,7 +569,7 @@ export class CLIRunner {
 
     if (subcommand === "tui") {
       // Dynamically import to avoid bundling Ink into the CLI when not needed
-      const { startTUI } = await import("./tui/entry.js");
+      const { startTUI } = await import("../tui/entry.js");
       await startTUI();
       return 0;
     }

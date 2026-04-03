@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ValidationError } from "../utils/errors.js";
-import type { StateManager } from "../state-manager.js";
+import type { StateManager } from "../state/state-manager.js";
 import type { ILLMClient, LLMMessage } from "../llm/llm-client.js";
 import type {
   DependencyEdge,

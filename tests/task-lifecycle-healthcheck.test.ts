@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { z } from "zod";
-import { StateManager } from "../src/state-manager.js";
+import { StateManager } from "../src/state/state-manager.js";
 import { SessionManager } from "../src/execution/session-manager.js";
 import { TrustManager } from "../src/traits/trust-manager.js";
 import { StrategyManager } from "../src/strategy/strategy-manager.js";

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { StateManager } from "../state-manager.js";
+import { StateManager } from "../state/state-manager.js";
 import type { ILLMClient } from "../llm/llm-client.js";
 import type { IPromptGateway } from "../prompt/gateway.js";
 import { TaskSchema } from "../types/task.js";

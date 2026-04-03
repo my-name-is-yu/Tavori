@@ -13,13 +13,13 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
-import { StateManager } from "../src/state-manager.js";
+import { StateManager } from "../src/state/state-manager.js";
 import { SessionManager } from "../src/execution/session-manager.js";
 import { TrustManager } from "../src/traits/trust-manager.js";
 import { StrategyManager } from "../src/strategy/strategy-manager.js";
 import { StallDetector } from "../src/drive/stall-detector.js";
 import { TaskLifecycle } from "../src/execution/task/task-lifecycle.js";
-import { GuardrailRunner } from "../src/guardrail-runner.js";
+import { GuardrailRunner } from "../src/traits/guardrail-runner.js";
 import type { Task } from "../src/types/task.js";
 import type { GapVector } from "../src/types/gap.js";
 import type { DriveContext } from "../src/types/drive.js";
@@ -160,7 +160,7 @@ describe("TaskLifecycle — uncovered branches", () => {
       adapterRegistry?: import("../src/execution/task/task-lifecycle.js").AdapterRegistry;
       execFileSyncFn?: (cmd: string, args: string[], opts: { cwd: string; encoding: "utf-8" }) => string;
       healthCheckEnabled?: boolean;
-      guardrailRunner?: import("../src/guardrail-runner.js").GuardrailRunner;
+      guardrailRunner?: import("../src/traits/guardrail-runner.js").GuardrailRunner;
       knowledgeTransfer?: import("../src/knowledge/transfer/knowledge-transfer.js").KnowledgeTransfer;
       knowledgeManager?: import("../src/knowledge/knowledge-manager.js").KnowledgeManager;
     }

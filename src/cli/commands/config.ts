@@ -6,13 +6,13 @@ import { parseArgs } from "node:util";
 import { getDatasourcesDir } from "../../utils/paths.js";
 import { writeJsonFile, readJsonFile } from "../../utils/json-io.js";
 
-import { StateManager } from "../../state-manager.js";
+import { StateManager } from "../../state/state-manager.js";
 import { CharacterConfigManager } from "../../traits/character-config.js";
 
 import { loadProviderConfig, saveProviderConfig } from "../../llm/provider-config.js";
 import type { ProviderConfig } from "../../llm/provider-config.js";
 import { buildLLMClient } from "../../llm/provider-factory.js";
-import { ReportingEngine } from "../../reporting-engine.js";
+import { ReportingEngine } from "../../reporting/reporting-engine.js";
 import { CapabilityDetector } from "../../observation/capability-detector.js";
 import { formatOperationError, printCharacterConfig } from "../utils.js";
 import { getCliLogger } from "../cli-logger.js";

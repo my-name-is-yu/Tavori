@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { randomUUID } from "node:crypto";
 import { GoalRefiner } from "../src/goal/goal-refiner.js";
-import type { StateManager } from "../src/state-manager.js";
+import type { StateManager } from "../src/state/state-manager.js";
 import type { ObservationEngine } from "../src/observation/observation-engine.js";
 import type { GoalNegotiator } from "../src/goal/goal-negotiator.js";
 import type { GoalTreeManager } from "../src/goal/goal-tree-manager.js";

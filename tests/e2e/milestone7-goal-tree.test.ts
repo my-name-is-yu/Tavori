@@ -13,7 +13,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { StateManager } from "../../src/state-manager.js";
+import { StateManager } from "../../src/state/state-manager.js";
 import { GoalTreeManager } from "../../src/goal/goal-tree-manager.js";
 import { scoreConcreteness, evaluateDecompositionQuality } from "../../src/goal/goal-tree-quality.js";
 import { GoalDependencyGraph } from "../../src/goal/goal-dependency-graph.js";

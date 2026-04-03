@@ -3,7 +3,7 @@ import type {
   KnowledgeEntry,
   SharedKnowledgeEntry,
 } from "../types/knowledge.js";
-import type { StateManager } from "../state-manager.js";
+import type { StateManager } from "../state/state-manager.js";
 import type { VectorIndex } from "./vector-index.js";
 import type { DomainKnowledge } from "../types/knowledge.js";
 import { DomainKnowledgeSchema } from "../types/knowledge.js";

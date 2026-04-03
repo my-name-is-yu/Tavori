@@ -1,4 +1,4 @@
-import type { StateManager } from "../../state-manager.js";
+import type { StateManager } from "../../state/state-manager.js";
 import { TransferCandidateSchema, TransferEffectivenessSchema } from "../../types/cross-portfolio.js";
 import type {
   TransferCandidate,

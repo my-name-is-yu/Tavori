@@ -1,5 +1,5 @@
-import { StateManager } from "../state-manager.js";
-import { ReportingEngine } from "../reporting-engine.js";
+import { StateManager } from "../state/state-manager.js";
+import { ReportingEngine } from "../reporting/reporting-engine.js";
 import {
   CapabilitySchema,
   CapabilityRegistrySchema,

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ChatHistory } from "../../src/chat/chat-history.js";
-import type { StateManager } from "../../src/state-manager.js";
+import type { StateManager } from "../../src/state/state-manager.js";
 
 function makeMockStateManager(): StateManager {
   return {

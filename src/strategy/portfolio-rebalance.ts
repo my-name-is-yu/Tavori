@@ -14,8 +14,8 @@ import type {
   AllocationAdjustment,
   RebalanceTrigger,
   TaskSelectionResult,
-} from "./types/portfolio.js";
-import type { Strategy, WaitStrategy } from "./types/strategy.js";
+} from "../types/portfolio.js";
+import type { Strategy, WaitStrategy } from "../types/strategy.js";
 
 /**
  * Get the current gap value for a specific dimension of a goal.
