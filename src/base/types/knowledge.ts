@@ -1,2 +1,2 @@
 // Re-export from new location for backward compatibility
-export * from "../../knowledge/types/knowledge.js";
+export * from "../../platform/knowledge/types/knowledge.js";

@@ -7,8 +7,8 @@ import {
   trimToBudget,
   type BudgetAllocation,
 } from "../context/context-budget.js";
-import { VectorIndex } from "../../knowledge/vector-index.js";
-import type { IEmbeddingClient } from "../../knowledge/embedding-client.js";
+import { VectorIndex } from "../../platform/knowledge/vector-index.js";
+import type { IEmbeddingClient } from "../../platform/knowledge/embedding-client.js";
 
 // ─── Helpers ───
 

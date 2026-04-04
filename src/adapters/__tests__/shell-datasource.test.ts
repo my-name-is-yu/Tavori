@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { ShellDataSourceAdapter } from "../datasources/shell-datasource.js";
-import { ObservationEngine } from "../../observation/observation-engine.js";
+import { ObservationEngine } from "../../platform/observation/observation-engine.js";
 import { StateManager } from "../../base/state/state-manager.js";
 import type { Goal } from "../../base/types/goal.js";
 import type { ObservationMethod } from "../../base/types/core.js";

@@ -5,9 +5,9 @@ import { z } from "zod";
 import { ValidationError } from "../base/utils/errors.js";
 import type { ILLMClient } from "../base/llm/llm-client.js";
 import type { Logger } from "../runtime/logger.js";
-import type { IEmbeddingClient } from "../knowledge/embedding-client.js";
+import type { IEmbeddingClient } from "../platform/knowledge/embedding-client.js";
 import type { IPromptGateway } from "../prompt/gateway.js";
-import { VectorIndex } from "../knowledge/vector-index.js";
+import { VectorIndex } from "../platform/knowledge/vector-index.js";
 import { StrategyTemplateSchema } from "../base/types/cross-portfolio.js";
 import type {
   StrategyTemplate,

@@ -1,7 +1,7 @@
 // ─── pulseed knowledge commands ───
 
 import { StateManager } from "../../base/state/state-manager.js";
-import { loadSharedEntries, loadDomainKnowledge } from "../../knowledge/knowledge-search.js";
+import { loadSharedEntries, loadDomainKnowledge } from "../../platform/knowledge/knowledge-search.js";
 import { formatOperationError } from "../utils.js";
 import { getCliLogger } from "../cli-logger.js";
 

@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
 import * as http from "node:http";
-import type { DriveSystem } from "../drive/drive-system.js";
+import type { DriveSystem } from "../platform/drive/drive-system.js";
 import { PulSeedEventSchema } from "../base/types/drive.js";
 import { TriggerEventSchema, TriggerMappingsConfigSchema } from "../base/types/trigger.js";
 import type { TriggerMappingsConfig } from "../base/types/trigger.js";

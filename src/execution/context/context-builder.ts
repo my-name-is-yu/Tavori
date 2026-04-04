@@ -1,7 +1,7 @@
 import { ContextSlotSchema } from "../../base/types/session.js";
 import type { ContextSlot } from "../../base/types/session.js";
 import type { KnowledgeEntry } from "../../base/types/knowledge.js";
-import type { VectorIndex } from "../../knowledge/vector-index.js";
+import type { VectorIndex } from "../../platform/knowledge/vector-index.js";
 import { allocateBudget, selectWithinBudget, estimateTokens } from "./context-budget.js";
 
 export { estimateTokens };

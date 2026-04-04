@@ -7,7 +7,7 @@ import type { Goal } from "../base/types/goal.js";
 import {
   calculateDimensionGap,
   aggregateGaps,
-} from "../drive/gap-calculator.js";
+} from "../platform/drive/gap-calculator.js";
 
 /** Preferred difficulty band for curriculum-based selection. */
 export const MEDIUM_BAND = { min: 0.3, max: 0.7 };

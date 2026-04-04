@@ -3,7 +3,7 @@ import { SessionSchema } from "../base/types/session.js";
 import type { Session, SessionType, ContextSlot } from "../base/types/session.js";
 import type { StateManager } from "../base/state/state-manager.js";
 import type { KnowledgeEntry } from "../base/types/knowledge.js";
-import type { VectorIndex } from "../knowledge/vector-index.js";
+import type { VectorIndex } from "../platform/knowledge/vector-index.js";
 import type { GoalDependencyGraph } from "../goal/goal-dependency-graph.js";
 import { CheckpointManager } from './checkpoint-manager.js';
 import type { Checkpoint } from '../base/types/checkpoint.js';

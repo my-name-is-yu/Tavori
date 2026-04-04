@@ -6,7 +6,7 @@ import type { IAdapter, AgentResult } from "../../execution/adapter-layer.js";
 import type { EscalationHandler, EscalationResult } from "../escalation.js";
 
 // Mock context-provider so tests don't walk the real filesystem
-vi.mock("../../observation/context-provider.js", () => ({
+vi.mock("../../platform/observation/context-provider.js", () => ({
   resolveGitRoot: (cwd: string) => cwd,
   buildChatContext: (_task: string, cwd: string) => Promise.resolve(`Working directory: ${cwd}`),
 }));

@@ -10,7 +10,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { StateManager } from "../../base/state/state-manager.js";
-import type { CharacterConfigManager } from "../../traits/character-config.js";
+import type { CharacterConfigManager } from "../../platform/traits/character-config.js";
 
 // ─── Module-level mocks ───
 // Note: vi.mock factories are hoisted — DO NOT reference outer variables inside them.

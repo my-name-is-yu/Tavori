@@ -16,7 +16,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import * as path from "node:path";
-import type { IDataSourceAdapter } from "../../observation/data-source-adapter.js";
+import type { IDataSourceAdapter } from "../../platform/observation/data-source-adapter.js";
 import type {
   DataSourceType,
   DataSourceConfig,

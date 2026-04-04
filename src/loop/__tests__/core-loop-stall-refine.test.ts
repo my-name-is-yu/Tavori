@@ -22,12 +22,12 @@ import {
 } from "../core-loop.js";
 import { detectStallsAndRebalance } from "../core-loop-phases-b.js";
 import { StateManager } from "../../base/state/state-manager.js";
-import type { ObservationEngine } from "../../observation/observation-engine.js";
+import type { ObservationEngine } from "../../platform/observation/observation-engine.js";
 import type { TaskLifecycle } from "../../execution/task/task-lifecycle.js";
-import type { SatisficingJudge } from "../../drive/satisficing-judge.js";
-import type { StallDetector } from "../../drive/stall-detector.js";
+import type { SatisficingJudge } from "../../platform/drive/satisficing-judge.js";
+import type { StallDetector } from "../../platform/drive/stall-detector.js";
 import type { StrategyManager } from "../../strategy/strategy-manager.js";
-import type { DriveSystem } from "../../drive/drive-system.js";
+import type { DriveSystem } from "../../platform/drive/drive-system.js";
 import type { AdapterRegistry } from "../../execution/adapter-layer.js";
 import type { GoalRefiner } from "../../goal/goal-refiner.js";
 import type { Goal } from "../../base/types/goal.js";

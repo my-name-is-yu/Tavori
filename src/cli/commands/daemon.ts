@@ -9,7 +9,7 @@ import { DaemonStateSchema, DaemonConfigSchema } from "../../base/types/daemon.j
 import type { DaemonState, DaemonConfig } from "../../base/types/daemon.js";
 
 import { StateManager } from "../../base/state/state-manager.js";
-import { CharacterConfigManager } from "../../traits/character-config.js";
+import { CharacterConfigManager } from "../../platform/traits/character-config.js";
 import { Logger } from "../../runtime/logger.js";
 import { DaemonRunner } from "../../runtime/daemon-runner.js";
 import { PIDManager } from "../../runtime/pid-manager.js";
@@ -19,7 +19,7 @@ import { PluginLoader } from "../../runtime/plugin-loader.js";
 import { NotifierRegistry } from "../../runtime/notifier-registry.js";
 import { NotificationDispatcher } from "../../runtime/notification-dispatcher.js";
 import { AdapterRegistry } from "../../execution/adapter-layer.js";
-import { DataSourceRegistry } from "../../observation/data-source-adapter.js";
+import { DataSourceRegistry } from "../../platform/observation/data-source-adapter.js";
 import { buildDeps } from "../setup.js";
 import { formatOperationError } from "../utils.js";
 import { getCliLogger } from "../cli-logger.js";

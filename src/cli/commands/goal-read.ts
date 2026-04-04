@@ -9,7 +9,7 @@ import { StateManager } from "../../base/state/state-manager.js";
 import { ReportingEngine } from "../../reporting/reporting-engine.js";
 import { formatOperationError } from "../utils.js";
 import { getCliLogger } from "../cli-logger.js";
-import { dimensionProgress } from "../../drive/gap-calculator.js";
+import { dimensionProgress } from "../../platform/drive/gap-calculator.js";
 
 async function printActiveGoals(
   stateManager: StateManager,

@@ -1,5 +1,5 @@
 import type { Task } from "../../base/types/task.js";
-import type { TrustManager } from "../../traits/trust-manager.js";
+import type { TrustManager } from "../../platform/traits/trust-manager.js";
 
 /**
  * Check whether the task requires human approval and, if so, request it.

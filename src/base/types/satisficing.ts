@@ -1,2 +1,2 @@
 // Re-export from new location for backward compatibility
-export * from "../../drive/types/satisficing.js";
+export * from "../../platform/drive/types/satisficing.js";

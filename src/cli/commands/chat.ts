@@ -12,8 +12,8 @@ import { formatOperationError } from "../utils.js";
 import { getCliLogger } from "../cli-logger.js";
 import type { ChatRunner } from "../../chat/chat-runner.js";
 import { Chat, type ChatMessage } from "../../tui/chat.js";
-import { EthicsGate } from "../../traits/ethics-gate.js";
-import { ObservationEngine } from "../../observation/observation-engine.js";
+import { EthicsGate } from "../../platform/traits/ethics-gate.js";
+import { ObservationEngine } from "../../platform/observation/observation-engine.js";
 import { GoalNegotiator } from "../../goal/goal-negotiator.js";
 import { EscalationHandler } from "../../chat/escalation.js";
 

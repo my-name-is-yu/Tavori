@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import { StateManager } from "../../base/state/state-manager.js";
-import { EthicsGate } from "../../traits/ethics-gate.js";
-import { ObservationEngine } from "../../observation/observation-engine.js";
+import { EthicsGate } from "../../platform/traits/ethics-gate.js";
+import { ObservationEngine } from "../../platform/observation/observation-engine.js";
 import { GoalNegotiator, EthicsRejectedError } from "../goal-negotiator.js";
 import { GoalSchema } from "../../base/types/goal.js";
 import type { Goal } from "../../base/types/goal.js";

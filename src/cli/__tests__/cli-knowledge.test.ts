@@ -34,7 +34,7 @@ vi.mock("../src/drive-system.js", () => ({
   DriveSystem: vi.fn().mockImplementation(() => ({})),
 }));
 
-vi.mock("../../observation/observation-engine.js", () => ({
+vi.mock("../../platform/observation/observation-engine.js", () => ({
   ObservationEngine: vi.fn().mockImplementation(() => ({})),
 }));
 

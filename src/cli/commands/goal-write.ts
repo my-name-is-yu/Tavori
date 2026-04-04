@@ -6,7 +6,7 @@ import { getReportsDir, getDatasourcesDir } from "../../base/utils/paths.js";
 import { readJsonFile } from "../../base/utils/json-io.js";
 
 import { StateManager } from "../../base/state/state-manager.js";
-import { CharacterConfigManager } from "../../traits/character-config.js";
+import { CharacterConfigManager } from "../../platform/traits/character-config.js";
 import { ensureProviderConfig } from "../ensure-api-key.js";
 import { EthicsRejectedError } from "../../goal/goal-negotiator.js";
 import { collectLeafGoalIds } from "../../goal/goal-refiner.js";

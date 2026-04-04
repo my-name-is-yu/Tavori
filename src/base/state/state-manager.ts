@@ -11,7 +11,7 @@ import type { ObservationLog, ObservationLogEntry } from "../types/state.js";
 import type { GapHistoryEntry } from "../types/gap.js";
 import type { PaceSnapshot } from "../types/goal.js";
 import { LoopCheckpointSchema } from "../types/checkpoint.js";
-import type { TrustManager } from "../../traits/trust-manager.js";
+import type { TrustManager } from "../../platform/traits/trust-manager.js";
 import { initDirs, atomicWrite, atomicRead } from "./state-persistence.js";
 
 export { initDirs, atomicWrite, atomicRead };

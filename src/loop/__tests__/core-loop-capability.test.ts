@@ -9,14 +9,14 @@ import {
   type ReportingEngine,
 } from "../core-loop.js";
 import { StateManager } from "../../base/state/state-manager.js";
-import type { ObservationEngine } from "../../observation/observation-engine.js";
+import type { ObservationEngine } from "../../platform/observation/observation-engine.js";
 import type { TaskLifecycle, TaskCycleResult } from "../../execution/task/task-lifecycle.js";
-import type { SatisficingJudge } from "../../drive/satisficing-judge.js";
-import type { StallDetector } from "../../drive/stall-detector.js";
+import type { SatisficingJudge } from "../../platform/drive/satisficing-judge.js";
+import type { StallDetector } from "../../platform/drive/stall-detector.js";
 import type { StrategyManager } from "../../strategy/strategy-manager.js";
-import type { DriveSystem } from "../../drive/drive-system.js";
+import type { DriveSystem } from "../../platform/drive/drive-system.js";
 import type { AdapterRegistry, IAdapter } from "../../execution/adapter-layer.js";
-import type { CapabilityDetector } from "../../observation/capability-detector.js";
+import type { CapabilityDetector } from "../../platform/observation/capability-detector.js";
 import type { GapVector } from "../../base/types/gap.js";
 import type { CompletionJudgment } from "../../base/types/satisficing.js";
 import type { DriveScore } from "../../base/types/drive.js";

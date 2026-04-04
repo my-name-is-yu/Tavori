@@ -8,7 +8,7 @@
 import { z } from "zod";
 import type { ILLMClient } from "../base/llm/llm-client.js";
 import type { IPromptGateway } from "../prompt/gateway.js";
-import type { ObservationEngine } from "../observation/observation-engine.js";
+import type { ObservationEngine } from "../platform/observation/observation-engine.js";
 import type { Logger } from "../runtime/logger.js";
 import {
   DimensionDecompositionSchema,

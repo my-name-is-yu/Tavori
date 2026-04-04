@@ -10,7 +10,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { suggestGoals, SuggestTimeoutError } from "../goal-suggest.js";
 import type { ILLMClient } from "../../base/llm/llm-client.js";
-import type { EthicsGate } from "../../traits/ethics-gate.js";
+import type { EthicsGate } from "../../platform/traits/ethics-gate.js";
 
 // ─── Minimal mock factories ───────────────────────────────────────────────────
 

@@ -8,7 +8,7 @@ import type { StateManager } from "../base/state/state-manager.js";
 import type { IAdapter, AgentTask } from "../execution/adapter-layer.js";
 import type { ILLMClient } from "../base/llm/llm-client.js";
 import { ChatHistory } from "./chat-history.js";
-import { buildChatContext, resolveGitRoot } from "../observation/context-provider.js";
+import { buildChatContext, resolveGitRoot } from "../platform/observation/context-provider.js";
 import type { EscalationHandler } from "./escalation.js";
 import { buildSystemPrompt } from "./grounding.js";
 import { verifyChatAction } from "./chat-verifier.js";
@@ -16,7 +16,7 @@ import { getSelfKnowledgeToolDefinitions, handleSelfKnowledgeToolCall } from "./
 import type { SelfKnowledgeDeps } from "./self-knowledge-tools.js";
 import { getMutationToolDefinitions, handleMutationToolCall } from "./self-knowledge-mutation-tools.js";
 import type { MutationToolDeps, ApprovalLevel } from "./self-knowledge-mutation-tools.js";
-import type { TrustManager } from "../traits/trust-manager.js";
+import type { TrustManager } from "../platform/traits/trust-manager.js";
 import type { PluginLoader } from "../runtime/plugin-loader.js";
 import type { LLMMessage, LLMResponse } from "../base/llm/llm-client.js";
 

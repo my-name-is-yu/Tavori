@@ -7,7 +7,7 @@ import type { GoalNegotiator } from "../../goal/goal-negotiator.js";
 import { ChatHistory } from "../chat-history.js";
 
 // Mock context-provider so tests don't walk the real filesystem
-vi.mock("../../observation/context-provider.js", () => ({
+vi.mock("../../platform/observation/context-provider.js", () => ({
   resolveGitRoot: (cwd: string) => cwd,
   buildChatContext: (_task: string, cwd: string) => `Working directory: ${cwd}`,
 }));

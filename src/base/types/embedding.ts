@@ -1,2 +1,2 @@
 // Re-export from new location for backward compatibility
-export * from "../../knowledge/types/embedding.js";
+export * from "../../platform/knowledge/types/embedding.js";

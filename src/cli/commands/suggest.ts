@@ -3,11 +3,11 @@
 import { parseArgs } from "node:util";
 
 import { StateManager } from "../../base/state/state-manager.js";
-import { CharacterConfigManager } from "../../traits/character-config.js";
+import { CharacterConfigManager } from "../../platform/traits/character-config.js";
 import { ensureProviderConfig } from "../ensure-api-key.js";
 import { buildLLMClient } from "../../base/llm/provider-factory.js";
 import { ReportingEngine } from "../../reporting/reporting-engine.js";
-import { CapabilityDetector } from "../../observation/capability-detector.js";
+import { CapabilityDetector } from "../../platform/observation/capability-detector.js";
 import { buildDeps } from "../setup.js";
 import { formatOperationError } from "../utils.js";
 import { getCliLogger } from "../cli-logger.js";

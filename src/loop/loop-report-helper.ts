@@ -7,7 +7,7 @@
 import type { Goal } from "../base/types/goal.js";
 import type { ReportingEngine, LoopIterationResult } from "./core-loop-types.js";
 import type { Logger } from "../runtime/logger.js";
-import { dimensionProgress } from "../drive/gap-calculator.js";
+import { dimensionProgress } from "../platform/drive/gap-calculator.js";
 
 /**
  * Generate and save an execution summary report for one iteration.

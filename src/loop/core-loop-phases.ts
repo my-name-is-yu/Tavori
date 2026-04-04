@@ -18,7 +18,7 @@ import {
   type ResolvedLoopConfig,
   type LoopIterationResult,
 } from "./core-loop-types.js";
-import { logRewardComputation } from "../drive/reward-log.js";
+import { logRewardComputation } from "../platform/drive/reward-log.js";
 
 /** Minimal context passed to every phase function. */
 export interface PhaseCtx {

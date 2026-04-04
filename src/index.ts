@@ -9,10 +9,10 @@ export {
   calculateGapVector,
   aggregateGaps,
   dimensionProgress,
-} from "./drive/gap-calculator.js";
-export type { DimensionGapInput } from "./drive/gap-calculator.js";
-export { TrustManager } from "./traits/trust-manager.js";
-export { DriveSystem } from "./drive/drive-system.js";
+} from "./platform/drive/gap-calculator.js";
+export type { DimensionGapInput } from "./platform/drive/gap-calculator.js";
+export { TrustManager } from "./platform/traits/trust-manager.js";
+export { DriveSystem } from "./platform/drive/drive-system.js";
 export {
   scoreDissatisfaction,
   scoreDeadline,
@@ -21,10 +21,10 @@ export {
   combineDriveScores,
   scoreAllDimensions,
   rankDimensions,
-} from "./drive/drive-scorer.js";
-export { ObservationEngine } from "./observation/observation-engine.js";
-export { StallDetector } from "./drive/stall-detector.js";
-export { SatisficingJudge, aggregateValues } from "./drive/satisficing-judge.js";
+} from "./platform/drive/drive-scorer.js";
+export { ObservationEngine } from "./platform/observation/observation-engine.js";
+export { StallDetector } from "./platform/drive/stall-detector.js";
+export { SatisficingJudge, aggregateValues } from "./platform/drive/satisficing-judge.js";
 export type { ILLMClient, LLMMessage, LLMRequestOptions, LLMResponse, ModelTier } from "./base/llm/llm-client.js";
 export { LLMClient, MockLLMClient, extractJSON } from "./base/llm/llm-client.js";
 export { BaseLLMClient, DEFAULT_MAX_TOKENS } from "./base/llm/base-llm-client.js";
@@ -32,9 +32,9 @@ export { OllamaLLMClient } from "./base/llm/ollama-client.js";
 export type { OllamaClientConfig } from "./base/llm/ollama-client.js";
 export { OpenAILLMClient } from "./base/llm/openai-client.js";
 export type { OpenAIClientConfig } from "./base/llm/openai-client.js";
-export { EthicsGate } from "./traits/ethics-gate.js";
+export { EthicsGate } from "./platform/traits/ethics-gate.js";
 export * from "./base/types/guardrail.js";
-export { GuardrailRunner } from "./traits/guardrail-runner.js";
+export { GuardrailRunner } from "./platform/traits/guardrail-runner.js";
 export { generateReflection, saveReflectionAsKnowledge, getReflectionsForGoal, formatReflectionsForPrompt } from "./execution/reflection-generator.js";
 export * from "./base/types/reflection.js";
 export { SessionManager } from "./execution/session-manager.js";
@@ -56,8 +56,8 @@ export { loadProviderConfig, saveProviderConfig, DEFAULT_PROVIDER_CONFIG, migrat
 export type { ProviderConfig, ValidationResult } from "./base/llm/provider-config.js";
 export { TaskLifecycle } from "./execution/task/task-lifecycle.js";
 export { ReportingEngine } from "./reporting/reporting-engine.js";
-export { KnowledgeManager } from "./knowledge/knowledge-manager.js";
-export { CapabilityDetector } from "./observation/capability-detector.js";
+export { KnowledgeManager } from "./platform/knowledge/knowledge-manager.js";
+export { CapabilityDetector } from "./platform/observation/capability-detector.js";
 export { PortfolioManager } from "./strategy/portfolio-manager.js";
 export { CoreLoop } from "./loop/core-loop.js";
 export type { CoreLoopDeps, LoopConfig, LoopResult } from "./loop/core-loop.js";
@@ -78,14 +78,14 @@ export { EventServer } from "./runtime/event-server.js";
 export type { EventServerConfig } from "./runtime/event-server.js";
 export { NotificationDispatcher } from "./runtime/notification-dispatcher.js";
 export type { INotificationDispatcher } from "./runtime/notification-dispatcher.js";
-export { MemoryLifecycleManager } from "./knowledge/memory/memory-lifecycle.js";
-export { CharacterConfigManager } from "./traits/character-config.js";
+export { MemoryLifecycleManager } from "./platform/knowledge/memory/memory-lifecycle.js";
+export { CharacterConfigManager } from "./platform/traits/character-config.js";
 export { CharacterConfigSchema, DEFAULT_CHARACTER_CONFIG } from "./base/types/character.js";
 export type { CharacterConfig } from "./base/types/character.js";
-export { CuriosityEngine } from "./traits/curiosity-engine.js";
+export { CuriosityEngine } from "./platform/traits/curiosity-engine.js";
 export { GoalDependencyGraph } from "./goal/goal-dependency-graph.js";
-export { KnowledgeGraph } from "./knowledge/knowledge-graph.js";
-export type { CuriosityEngineDeps } from "./traits/curiosity-engine.js";
+export { KnowledgeGraph } from "./platform/knowledge/knowledge-graph.js";
+export type { CuriosityEngineDeps } from "./platform/traits/curiosity-engine.js";
 export {
   CuriosityTriggerTypeEnum,
   CuriosityTriggerSchema,
@@ -106,13 +106,13 @@ export type {
 } from "./base/types/curiosity.js";
 
 // --- Embedding ---
-export { type IEmbeddingClient, MockEmbeddingClient, OllamaEmbeddingClient, OpenAIEmbeddingClient, cosineSimilarity } from "./knowledge/embedding-client.js";
-export { VectorIndex } from "./knowledge/vector-index.js";
+export { type IEmbeddingClient, MockEmbeddingClient, OllamaEmbeddingClient, OpenAIEmbeddingClient, cosineSimilarity } from "./platform/knowledge/embedding-client.js";
+export { VectorIndex } from "./platform/knowledge/vector-index.js";
 export type { EmbeddingConfig, EmbeddingEntry, VectorSearchResult } from "./base/types/embedding.js";
 
 // --- Data source ---
-export { DataSourceRegistry, FileDataSourceAdapter, HttpApiDataSourceAdapter, getNestedValue } from "./observation/data-source-adapter.js";
-export type { IDataSourceAdapter } from "./observation/data-source-adapter.js";
+export { DataSourceRegistry, FileDataSourceAdapter, HttpApiDataSourceAdapter, getNestedValue } from "./platform/observation/data-source-adapter.js";
+export type { IDataSourceAdapter } from "./platform/observation/data-source-adapter.js";
 
 // --- Stage 14 modules ---
 export { GoalTreeManager } from "./goal/goal-tree-manager.js";
@@ -120,8 +120,8 @@ export { StateAggregator, type AggregatedState } from "./goal/state-aggregator.j
 export { TreeLoopOrchestrator } from "./goal/tree-loop-orchestrator.js";
 export { CrossGoalPortfolio } from "./strategy/cross-goal-portfolio.js";
 export { StrategyTemplateRegistry } from "./strategy/strategy-template-registry.js";
-export { LearningPipeline } from "./knowledge/learning/learning-pipeline.js";
-export { KnowledgeTransfer } from "./knowledge/transfer/knowledge-transfer.js";
+export { LearningPipeline } from "./platform/knowledge/learning/learning-pipeline.js";
+export { KnowledgeTransfer } from "./platform/knowledge/transfer/knowledge-transfer.js";
 
 // --- A2A Protocol adapter ---
 export { A2AAdapter } from "./adapters/agents/a2a-adapter.js";

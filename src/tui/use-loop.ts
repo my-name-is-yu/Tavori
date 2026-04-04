@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { CoreLoop, LoopResult } from "../loop/core-loop.js";
 import type { StateManager } from "../base/state/state-manager.js";
-import type { TrustManager } from "../traits/trust-manager.js";
+import type { TrustManager } from "../platform/traits/trust-manager.js";
 import type { Threshold } from "../base/types/core.js";
 
 export interface LoopState {

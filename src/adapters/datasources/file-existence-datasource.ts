@@ -13,7 +13,7 @@
 
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
-import type { IDataSourceAdapter } from "../../observation/data-source-adapter.js";
+import type { IDataSourceAdapter } from "../../platform/observation/data-source-adapter.js";
 import type {
   DataSourceType,
   DataSourceConfig,

@@ -7,7 +7,7 @@ import { parseArgs } from "node:util";
 
 import { getCliLogger } from "./cli-logger.js";
 import { StateManager } from "../base/state/state-manager.js";
-import { CharacterConfigManager } from "../traits/character-config.js";
+import { CharacterConfigManager } from "../platform/traits/character-config.js";
 import type { CoreLoop } from "../loop/core-loop.js";
 import type { LoopConfig } from "../loop/core-loop.js";
 

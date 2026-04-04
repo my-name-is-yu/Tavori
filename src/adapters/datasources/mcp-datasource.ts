@@ -7,7 +7,7 @@
 // The MCP connection is injected (IMCPConnection) so that unit tests can mock
 // the protocol layer without spawning real processes.
 
-import type { IDataSourceAdapter } from "../../observation/data-source-adapter.js";
+import type { IDataSourceAdapter } from "../../platform/observation/data-source-adapter.js";
 import type {
   DataSourceType,
   DataSourceConfig,

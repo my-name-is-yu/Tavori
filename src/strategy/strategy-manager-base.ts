@@ -7,7 +7,7 @@ import type { StrategyState } from "../base/types/core.js";
 import type { ILLMClient } from "../base/llm/llm-client.js";
 import type { IPromptGateway } from "../prompt/gateway.js";
 import type { KnowledgeGapSignal } from "../base/types/knowledge.js";
-import type { KnowledgeManager } from "../knowledge/knowledge-manager.js";
+import type { KnowledgeManager } from "../platform/knowledge/knowledge-manager.js";
 import type { StrategyTemplateRegistry } from "./strategy-template-registry.js";
 import type { Logger } from "../runtime/logger.js";
 import {

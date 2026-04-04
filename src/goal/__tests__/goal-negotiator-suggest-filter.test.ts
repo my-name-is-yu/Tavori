@@ -3,10 +3,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { StateManager } from "../../base/state/state-manager.js";
-import { EthicsGate } from "../../traits/ethics-gate.js";
-import { ObservationEngine } from "../../observation/observation-engine.js";
+import { EthicsGate } from "../../platform/traits/ethics-gate.js";
+import { ObservationEngine } from "../../platform/observation/observation-engine.js";
 import { GoalNegotiator } from "../goal-negotiator.js";
-import type { CapabilityDetector } from "../../observation/capability-detector.js";
+import type { CapabilityDetector } from "../../platform/observation/capability-detector.js";
 import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
 import { PASS_VERDICT_SAFE_JSON as PASS_VERDICT } from "../../../tests/helpers/ethics-fixtures.js";
 

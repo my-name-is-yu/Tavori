@@ -12,7 +12,7 @@ import type { TaskGroup } from "../../base/types/index.js";
 import type { TaskPipeline } from "../../base/types/pipeline.js";
 import { wrapXmlTag, formatReflections, formatLessons } from "../../prompt/formatters.js";
 import { getReflectionsForGoal } from "../reflection-generator.js";
-import type { KnowledgeManager } from "../../knowledge/knowledge-manager.js";
+import type { KnowledgeManager } from "../../platform/knowledge/knowledge-manager.js";
 import type { IPromptGateway } from "../../prompt/gateway.js";
 
 // ─── Schema for LLM-generated task fields ───

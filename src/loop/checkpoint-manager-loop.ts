@@ -9,7 +9,7 @@
  */
 
 import type { StateManager } from "../base/state/state-manager.js";
-import type { TrustManager } from "../traits/trust-manager.js";
+import type { TrustManager } from "../platform/traits/trust-manager.js";
 import type { LoopIterationResult } from "./core-loop-types.js";
 import type { Logger } from "../runtime/logger.js";
 

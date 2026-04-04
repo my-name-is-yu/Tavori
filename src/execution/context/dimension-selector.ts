@@ -1,4 +1,4 @@
-import { scoreAllDimensions, rankDimensions } from "../../drive/drive-scorer.js";
+import { scoreAllDimensions, rankDimensions } from "../../platform/drive/drive-scorer.js";
 import type { GapVector } from "../../base/types/gap.js";
 import type { DriveContext } from "../../base/types/drive.js";
 import type { Dimension } from "../../base/types/goal.js";
