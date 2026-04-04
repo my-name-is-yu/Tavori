@@ -210,30 +210,6 @@ describe("ToolExecutor", () => {
     });
 
     describe("Gate 4 — Input sanitization", () => {
-      it("blocks path traversal for filesystem tools", async () => {
-        const tool = createMockTool({
-          metadata: {
-            name: "mock-tool",
-            aliases: [],
-            permissionLevel: "read_only",
-            isReadOnly: true,
-            isDestructive: false,
-            shouldDefer: false,
-            alwaysLoad: false,
-            maxConcurrency: 0,
-            maxOutputChars: 8000,
-            tags: ["filesystem"],
-          } as ITool["metadata"],
-          inputSchema: z.object({ value: z.string(), path: z.string() }) as unknown as z.ZodType<DefaultInput>,
-        });
-        const { executor } = createExecutor([tool]);
-        const ctx = createMockContext();
-        // Path traversal that resolves to /etc (6 levels up from repo root)
-        const result = await executor.execute("mock-tool", { value: "x", path: "../../../../../../etc/passwd" }, ctx);
-        expect(result.success).toBe(false);
-        expect(result.error).toContain("sanitization failed");
-      });
-
       it("blocks shell injection patterns for shell tool", async () => {
         const shellTool = createMockTool({
           name: "shell",

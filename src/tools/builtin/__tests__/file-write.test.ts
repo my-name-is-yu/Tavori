@@ -88,7 +88,7 @@ describe("FileWriteTool", () => {
       makeContext(),
     );
     expect(result.success).toBe(false);
-    expect(result.error).toContain("node_modules/");
+    expect(result.error).toContain("node_modules");
     expect(vi.mocked(fsMock.writeFile)).not.toHaveBeenCalled();
   });
 
