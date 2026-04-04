@@ -144,14 +144,25 @@ describe("ToolPermissionManager", () => {
       expect(result.status).toBe("allowed");
     });
 
-    it("non-shell tool does not consult ethicsGate", async () => {
+    it("read-only non-shell tool does not consult ethicsGate", async () => {
       const ethicsGate: EthicsGateInterface = {
         check: vi.fn(),
       };
       const manager = new ToolPermissionManager({ ethicsGate });
-      const tool = makeTool({ name: "file-reader", permissionLevel: "write_local", isReadOnly: false });
+      // read_only bypasses EthicsGate because it short-circuits after deny-list check
+      const tool = makeTool({ name: "file-reader", permissionLevel: "read_only", isReadOnly: true });
       await manager.check(tool, {}, makeContext({ trustBalance: 50 }));
       expect(ethicsGate.check).not.toHaveBeenCalled();
+    });
+
+    it("non-read-only non-shell tool consults ethicsGate", async () => {
+      const ethicsGate: EthicsGateInterface = {
+        check: vi.fn().mockResolvedValue({ verdict: "approve", reason: "ok" }),
+      };
+      const manager = new ToolPermissionManager({ ethicsGate });
+      const tool = makeTool({ name: "write-tool", permissionLevel: "write_local", isReadOnly: false });
+      await manager.check(tool, {}, makeContext({ trustBalance: 50 }));
+      expect(ethicsGate.check).toHaveBeenCalled();
     });
   });
 
