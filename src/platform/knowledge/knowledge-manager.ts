@@ -49,6 +49,9 @@ import {
   generateAcquisitionTask as _generateAcquisitionTask,
   checkContradiction as _checkContradiction,
 } from "./knowledge-manager-query.js";
+import type { ToolExecutor } from "../../tools/executor.js";
+import type { ToolCallContext } from "../../tools/types.js";
+
 
 // Re-export for backward compatibility
 export {
@@ -448,4 +451,70 @@ export class KnowledgeManager {
   private async _loadDomainKnowledge(goalId: string): Promise<DomainKnowledge> {
     return loadDomainKnowledge(this.stateManager, goalId);
   }
+
+  // ─── acquireWithTools (Phase 3-B) ───
+
+  /**
+   * Acquire knowledge by planning and executing tool calls, then synthesizing results via LLM.
+   * Uses read-only tools (glob, grep, read, http_fetch, json_query, shell) to gather data.
+   */
+  async acquireWithTools(
+    question: string,
+    goalId: string,
+    toolExecutor: ToolExecutor,
+    context: ToolCallContext,
+  ): Promise<KnowledgeEntry[]> {
+    // Step 1: Plan tool calls via LLM
+    const planResponse = await this.llmClient.sendMessage(
+      [{ role: "user", content: `Question: ${question}
+Workspace: ${context.cwd}` }],
+      { system: "You are a research planner. Given a question, plan tool calls to gather information.
+Available read-only tools: glob (find files), grep (search content), read (read file), http_fetch (GET URL), json_query (query JSON file), shell (read-only commands like wc, git log, npm ls).
+Return a JSON array of { toolName, input } objects. Return [] if the question cannot be answered with these tools." }
+    );
+
+    // Step 2: Parse plan, return [] on error or empty
+    let toolCalls: Array<{ toolName: string; input: unknown }>;
+    try { toolCalls = JSON.parse(planResponse.content); } catch { return []; }
+    if (!Array.isArray(toolCalls) || toolCalls.length === 0) return [];
+
+    // Step 3: Execute batch
+    const results = await toolExecutor.executeBatch(toolCalls, context);
+    const successfulResults = results
+      .filter((r) => r.success)
+      .map((r) => r.summary + "
+" + String(r.data).slice(0, 2000));
+    if (successfulResults.length === 0) return [];
+
+    // Step 4: Synthesize via LLM
+    const synthesisResponse = await this.llmClient.sendMessage(
+      [{ role: "user", content: `Question: ${question}
+
+Tool outputs:
+${successfulResults.join("
+---
+")}` }],
+      { system: "Synthesize the following tool outputs to answer the question. Return a JSON object with: { answer: string, confidence: number (0-1), tags: string[] }" }
+    );
+    try {
+      const synthesis = JSON.parse(synthesisResponse.content);
+      return [{
+        entry_id: crypto.randomUUID(),
+        question,
+        answer: synthesis.answer,
+        sources: toolCalls.map((tc) => ({
+          type: "data_analysis" as const,
+          reference: `tool:${tc.toolName}`,
+          reliability: "high" as const,
+        })),
+        confidence: Math.min(synthesis.confidence, 0.92),
+        acquired_at: new Date().toISOString(),
+        acquisition_task_id: "tool_direct",
+        superseded_by: null,
+        tags: synthesis.tags ?? [],
+        embedding_id: null,
+      }];
+    } catch { return []; }
+  }
+
 }
