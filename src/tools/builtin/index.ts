@@ -48,6 +48,8 @@ export interface BuiltinToolDeps {
 /** All built-in tools, sorted alphabetically by name. */
 export function createBuiltinTools(deps?: BuiltinToolDeps): ITool[] {
   const tools: ITool[] = [
+    new EnvTool(),
+    new GitDiffTool(),
     new GitLogTool(),
     new GlobTool(),
     new GrepTool(),
