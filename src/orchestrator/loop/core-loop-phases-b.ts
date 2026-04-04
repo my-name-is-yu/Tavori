@@ -6,10 +6,10 @@
  */
 
 import { randomUUID } from "node:crypto";
-import type { Goal } from "../base/types/goal.js";
-import type { GapVector, GapHistoryEntry } from "../base/types/gap.js";
-import type { StallReport } from "../base/types/stall.js";
-import type { DriveScore } from "../base/types/drive.js";
+import type { Goal } from "../../base/types/goal.js";
+import type { GapVector, GapHistoryEntry } from "../../base/types/gap.js";
+import type { StallReport } from "../../base/types/stall.js";
+import type { DriveScore } from "../../base/types/drive.js";
 import {
   buildDriveContext,
   type LoopIterationResult,

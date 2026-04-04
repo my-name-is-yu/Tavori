@@ -1,6 +1,6 @@
-import { TaskSchema, VerificationResultSchema } from "../../base/types/task.js";
-import type { Task, VerificationResult } from "../../base/types/task.js";
-import type { CapabilityAcquisitionTask } from "../../base/types/capability.js";
+import { TaskSchema, VerificationResultSchema } from "../../../base/types/task.js";
+import type { Task, VerificationResult } from "../../../base/types/task.js";
+import type { CapabilityAcquisitionTask } from "../../../base/types/capability.js";
 
 /**
  * Result produced by one full task cycle (generate → approve → execute → verify).

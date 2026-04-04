@@ -8,17 +8,17 @@
  * Phases 5–7 are in core-loop-phases-b.ts.
  */
 
-import type { Logger } from "../runtime/logger.js";
-import type { Goal } from "../base/types/goal.js";
-import type { GapVector } from "../base/types/gap.js";
-import type { DriveScore } from "../base/types/drive.js";
+import type { Logger } from "../../runtime/logger.js";
+import type { Goal } from "../../base/types/goal.js";
+import type { GapVector } from "../../base/types/gap.js";
+import type { DriveScore } from "../../base/types/drive.js";
 import {
   buildDriveContext,
   type CoreLoopDeps,
   type ResolvedLoopConfig,
   type LoopIterationResult,
 } from "./core-loop-types.js";
-import { logRewardComputation } from "../platform/drive/reward-log.js";
+import { logRewardComputation } from "../../platform/drive/reward-log.js";
 
 /** Minimal context passed to every phase function. */
 export interface PhaseCtx {

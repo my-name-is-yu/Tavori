@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ThresholdTypeEnum } from "../../base/types/core.js";
+import { ThresholdTypeEnum } from "../../../base/types/core.js";
 import { GoalSchema } from "./goal.js";
 import { FeasibilityResultSchema } from "./negotiation.js";
 

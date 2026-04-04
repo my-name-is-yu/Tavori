@@ -3,7 +3,7 @@ import { PipelineExecutor } from "../pipeline-executor.js";
 import type { PipelineExecutorDeps } from "../pipeline-executor.js";
 import { AdapterRegistry } from "../adapter-layer.js";
 import type { IAdapter, AgentTask, AgentResult } from "../adapter-layer.js";
-import type { TaskPipeline } from "../../base/types/pipeline.js";
+import type { TaskPipeline } from "../../../base/types/pipeline.js";
 
 // ─── Helpers ───
 

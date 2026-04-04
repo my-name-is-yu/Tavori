@@ -1,9 +1,9 @@
 import { z } from "zod";
-import type { ILLMClient } from "../base/llm/llm-client.js";
-import type { Logger } from "../runtime/logger.js";
-import type { ConcretenessScore, DecompositionQualityMetrics } from "../base/types/goal-tree.js";
-import { ConcretenessScoreSchema, DecompositionQualityMetricsSchema } from "../base/types/goal-tree.js";
-import type { IPromptGateway } from "../prompt/gateway.js";
+import type { ILLMClient } from "../../base/llm/llm-client.js";
+import type { Logger } from "../../runtime/logger.js";
+import type { ConcretenessScore, DecompositionQualityMetrics } from "../../base/types/goal-tree.js";
+import { ConcretenessScoreSchema, DecompositionQualityMetricsSchema } from "../../base/types/goal-tree.js";
+import type { IPromptGateway } from "../../prompt/gateway.js";
 
 // ─── LLM Response Schemas ───
 

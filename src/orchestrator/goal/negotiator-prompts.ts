@@ -1,5 +1,5 @@
 import { z } from "zod";
-import type { FeasibilityResult } from "../base/types/negotiation.js";
+import type { FeasibilityResult } from "../../base/types/negotiation.js";
 
 // ─── Prompts ───
 

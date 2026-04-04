@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { StateManager } from "../../base/state/state-manager.js";
-import { EthicsGate } from "../../platform/traits/ethics-gate.js";
+import { StateManager } from "../../../base/state/state-manager.js";
+import { EthicsGate } from "../../../platform/traits/ethics-gate.js";
 import { GoalDependencyGraph } from "../goal-dependency-graph.js";
 import { GoalTreeManager } from "../goal-tree-manager.js";
-import type { GoalDecompositionConfig } from "../../base/types/goal-tree.js";
+import type { GoalDecompositionConfig } from "../../../base/types/goal-tree.js";
 import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
 import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
 import { makeGoal as _makeGoal, makeDimension } from "../../../tests/helpers/fixtures.js";

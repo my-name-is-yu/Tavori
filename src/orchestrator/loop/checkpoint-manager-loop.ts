@@ -8,10 +8,10 @@
  * trust balance snapshots for crash recovery within a single run.
  */
 
-import type { StateManager } from "../base/state/state-manager.js";
-import type { TrustManager } from "../platform/traits/trust-manager.js";
+import type { StateManager } from "../../base/state/state-manager.js";
+import type { TrustManager } from "../../platform/traits/trust-manager.js";
 import type { LoopIterationResult } from "./core-loop-types.js";
-import type { Logger } from "../runtime/logger.js";
+import type { Logger } from "../../runtime/logger.js";
 
 /**
  * Save a checkpoint after a successful verify step.

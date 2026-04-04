@@ -1,19 +1,19 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import { z } from "zod";
-import { StateManager } from "../../base/state/state-manager.js";
+import { StateManager } from "../../../base/state/state-manager.js";
 import { SessionManager } from "../session-manager.js";
-import { TrustManager } from "../../platform/traits/trust-manager.js";
+import { TrustManager } from "../../../platform/traits/trust-manager.js";
 import { StrategyManager } from "../../strategy/strategy-manager.js";
-import { StallDetector } from "../../platform/drive/stall-detector.js";
+import { StallDetector } from "../../../platform/drive/stall-detector.js";
 import { TaskLifecycle } from "../task/task-lifecycle.js";
-import type { Task } from "../../base/types/task.js";
+import type { Task } from "../../../base/types/task.js";
 import type {
   ILLMClient,
   LLMMessage,
   LLMRequestOptions,
   LLMResponse,
-} from "../../base/llm/llm-client.js";
+} from "../../../base/llm/llm-client.js";
 import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
 import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
 
@@ -115,7 +115,7 @@ describe("TaskLifecycle", async () => {
     llmClient: ILLMClient,
     options?: {
       approvalFn?: (task: Task) => Promise<boolean>;
-      logger?: import("../../runtime/logger.js").Logger;
+      logger?: import("../../../runtime/logger.js").Logger;
       adapterRegistry?: import("../task/task-lifecycle.js").AdapterRegistry;
       execFileSyncFn?: (cmd: string, args: string[], opts: { cwd: string; encoding: "utf-8" }) => string;
     }
@@ -138,8 +138,8 @@ describe("TaskLifecycle", async () => {
 
   describe("handleVerdict", async () => {
     function makeVerificationResult(
-      overrides: Partial<import("../../base/types/task.js").VerificationResult> = {}
-    ): import("../../base/types/task.js").VerificationResult {
+      overrides: Partial<import("../../../base/types/task.js").VerificationResult> = {}
+    ): import("../../../base/types/task.js").VerificationResult {
       return {
         task_id: "task-1",
         verdict: "pass",
@@ -565,8 +565,8 @@ describe("TaskLifecycle", async () => {
 
   describe("handleFailure", async () => {
     function makeVerificationResult(
-      overrides: Partial<import("../../base/types/task.js").VerificationResult> = {}
-    ): import("../../base/types/task.js").VerificationResult {
+      overrides: Partial<import("../../../base/types/task.js").VerificationResult> = {}
+    ): import("../../../base/types/task.js").VerificationResult {
       return {
         task_id: "task-1",
         verdict: "fail",

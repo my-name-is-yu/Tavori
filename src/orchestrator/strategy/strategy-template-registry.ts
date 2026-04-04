@@ -2,20 +2,20 @@ import { randomUUID } from "node:crypto";
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
 import { z } from "zod";
-import { ValidationError } from "../base/utils/errors.js";
-import type { ILLMClient } from "../base/llm/llm-client.js";
-import type { Logger } from "../runtime/logger.js";
-import type { IEmbeddingClient } from "../platform/knowledge/embedding-client.js";
-import type { IPromptGateway } from "../prompt/gateway.js";
-import { VectorIndex } from "../platform/knowledge/vector-index.js";
-import { StrategyTemplateSchema } from "../base/types/cross-portfolio.js";
+import { ValidationError } from "../../base/utils/errors.js";
+import type { ILLMClient } from "../../base/llm/llm-client.js";
+import type { Logger } from "../../runtime/logger.js";
+import type { IEmbeddingClient } from "../../platform/knowledge/embedding-client.js";
+import type { IPromptGateway } from "../../prompt/gateway.js";
+import { VectorIndex } from "../../platform/knowledge/vector-index.js";
+import { StrategyTemplateSchema } from "../../base/types/cross-portfolio.js";
 import type {
   StrategyTemplate,
   EmbeddingRecommendation,
   HybridRecommendation,
-} from "../base/types/cross-portfolio.js";
-import { StrategySchema } from "../base/types/strategy.js";
-import type { Strategy } from "../base/types/strategy.js";
+} from "../../base/types/cross-portfolio.js";
+import { StrategySchema } from "../../base/types/strategy.js";
+import type { Strategy } from "../../base/types/strategy.js";
 
 // ─── LLM Response Schemas ───
 

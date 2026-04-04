@@ -3,7 +3,7 @@ import { ToolsetLock } from "../toolset-lock.js";
 import { executeTask } from "../task/task-executor.js";
 import type { AgentTask, AgentResult } from "../adapter-layer.js";
 import type { TaskExecutorDeps } from "../task/task-executor.js";
-import type { Strategy } from "../../base/types/strategy.js";
+import type { Strategy } from "../../../base/types/strategy.js";
 
 // ─── ToolsetLock ───
 

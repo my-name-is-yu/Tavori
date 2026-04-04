@@ -16,13 +16,13 @@
  *   - task-verifier-llm.ts    — LLM review, timeout, retry
  */
 
-import { StateManager } from "../../base/state/state-manager.js";
-import { VerificationResultSchema } from "../../base/types/task.js";
-import type { Task, VerificationResult } from "../../base/types/task.js";
+import { StateManager } from "../../../base/state/state-manager.js";
+import { VerificationResultSchema } from "../../../base/types/task.js";
+import type { Task, VerificationResult } from "../../../base/types/task.js";
 import type { AgentResult } from "../adapter-layer.js";
-import { wrapXmlTag, formatKnowledge } from "../../prompt/formatters.js";
+import { wrapXmlTag, formatKnowledge } from "../../../prompt/formatters.js";
 import { analyzeImpact } from "../impact-analyzer.js";
-import type { ImpactAnalysis } from "../../base/types/pipeline.js";
+import type { ImpactAnalysis } from "../../../base/types/pipeline.js";
 
 // Re-export types so external consumers keep working
 export type {

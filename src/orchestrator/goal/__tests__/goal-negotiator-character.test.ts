@@ -2,9 +2,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { StateManager } from "../../base/state/state-manager.js";
-import { EthicsGate } from "../../platform/traits/ethics-gate.js";
-import { ObservationEngine } from "../../platform/observation/observation-engine.js";
+import { StateManager } from "../../../base/state/state-manager.js";
+import { EthicsGate } from "../../../platform/traits/ethics-gate.js";
+import { ObservationEngine } from "../../../platform/observation/observation-engine.js";
 import { GoalNegotiator, EthicsRejectedError } from "../goal-negotiator.js";
 import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
 import {
@@ -749,7 +749,7 @@ describe("GoalNegotiator CharacterConfig integration", () => {
 
       const goalIds = await stateManager.listGoalIds();
       const loadedGoals2 = await Promise.all(goalIds.map((goalId) => stateManager.loadGoal(goalId)));
-      const goals = loadedGoals2.filter((goal): goal is import("../../base/types/goal.js").Goal => goal !== null);
+      const goals = loadedGoals2.filter((goal): goal is import("../../../base/types/goal.js").Goal => goal !== null);
 
       expect(goalIds).toEqual(expect.arrayContaining([first.goal.id, second.goal.id]));
       expect(goals).toHaveLength(2);

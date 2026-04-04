@@ -89,7 +89,7 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-vi.mock("../../base/utils/sleep.js", () => ({
+vi.mock("../../../base/utils/sleep.js", () => ({
   sleep: vi.fn().mockResolvedValue(undefined),
 }));
 

@@ -3,11 +3,11 @@
  * Prioritizes medium-complexity (0.3-0.7) subgoals using gap × (1 - confidence).
  */
 
-import type { Goal } from "../base/types/goal.js";
+import type { Goal } from "../../base/types/goal.js";
 import {
   calculateDimensionGap,
   aggregateGaps,
-} from "../platform/drive/gap-calculator.js";
+} from "../../platform/drive/gap-calculator.js";
 
 /** Preferred difficulty band for curriculum-based selection. */
 export const MEDIUM_BAND = { min: 0.3, max: 0.7 };

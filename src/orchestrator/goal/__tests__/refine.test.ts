@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { randomUUID } from "node:crypto";
 import { GoalRefiner } from "../goal-refiner.js";
-import type { StateManager } from "../../base/state/state-manager.js";
-import type { ObservationEngine } from "../../platform/observation/observation-engine.js";
+import type { StateManager } from "../../../base/state/state-manager.js";
+import type { ObservationEngine } from "../../../platform/observation/observation-engine.js";
 import type { GoalNegotiator } from "../goal-negotiator.js";
 import type { GoalTreeManager } from "../goal-tree-manager.js";
-import type { EthicsGate } from "../../platform/traits/ethics-gate.js";
+import type { EthicsGate } from "../../../platform/traits/ethics-gate.js";
 import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
 import { makeGoal, makeDimension } from "../../../tests/helpers/fixtures.js";
 import { ZodError } from "zod";

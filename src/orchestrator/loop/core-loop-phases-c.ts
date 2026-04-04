@@ -1,4 +1,4 @@
-import type { Logger } from "../runtime/logger.js";
+import type { Logger } from "../../runtime/logger.js";
 import type { StateDiffCalculator, IterationSnapshot } from "./state-diff.js";
 import { tryRunParallel } from "./parallel-dispatch.js";
 import { generateLoopReport } from "./loop-report-helper.js";
@@ -7,7 +7,7 @@ import type {
   LoopIterationResult,
   CoreLoopDeps,
 } from "./core-loop-types.js";
-import type { Goal } from "../base/types/goal.js";
+import type { Goal } from "../../base/types/goal.js";
 
 // ─── State diff check ───
 

@@ -7,25 +7,25 @@
  * See docs/design/goal-refinement-pipeline.md §3 for the full algorithm.
  */
 
-import type { StateManager } from "../base/state/state-manager.js";
-import type { ILLMClient } from "../base/llm/llm-client.js";
-import type { ObservationEngine } from "../platform/observation/observation-engine.js";
+import type { StateManager } from "../../base/state/state-manager.js";
+import type { ILLMClient } from "../../base/llm/llm-client.js";
+import type { ObservationEngine } from "../../platform/observation/observation-engine.js";
 import type { GoalNegotiator } from "./goal-negotiator.js";
 import type { GoalTreeManager } from "./goal-tree-manager.js";
-import type { EthicsGate } from "../platform/traits/ethics-gate.js";
-import { GoalSchema } from "../base/types/goal.js";
-import type { Goal, Dimension } from "../base/types/goal.js";
-import type { FeasibilityResult } from "../base/types/negotiation.js";
+import type { EthicsGate } from "../../platform/traits/ethics-gate.js";
+import { GoalSchema } from "../../base/types/goal.js";
+import type { Goal, Dimension } from "../../base/types/goal.js";
+import type { FeasibilityResult } from "../../base/types/negotiation.js";
 import {
   RefineConfigSchema,
   LeafTestResultSchema,
-} from "../base/types/goal-refiner.js";
+} from "../../base/types/goal-refiner.js";
 import type {
   RefineConfig,
   LeafTestResult,
   LeafDimension,
   RefineResult,
-} from "../base/types/goal-refiner.js";
+} from "../../base/types/goal-refiner.js";
 import { buildLeafTestPrompt } from "./refiner-prompts.js";
 import { evaluateQualitatively, DEFAULT_TIME_HORIZON_DAYS } from "./negotiator-steps.js";
 

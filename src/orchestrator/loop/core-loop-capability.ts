@@ -5,10 +5,10 @@
  * These functions accept deps explicitly instead of using `this`.
  */
 
-import type { Logger } from "../runtime/logger.js";
+import type { Logger } from "../../runtime/logger.js";
 import type { IAdapter } from "../execution/adapter-layer.js";
-import type { CapabilityDetector } from "../platform/observation/capability-detector.js";
-import type { CapabilityAcquisitionTask } from "../base/types/capability.js";
+import type { CapabilityDetector } from "../../platform/observation/capability-detector.js";
+import type { CapabilityAcquisitionTask } from "../../base/types/capability.js";
 
 /** Handle the "capability_acquiring" action from TaskLifecycle.
  * Delegates acquisition to an adapter, verifies the result, and registers

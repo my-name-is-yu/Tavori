@@ -10,8 +10,8 @@
  */
 
 import type { CoreLoopDeps, ResolvedLoopConfig, LoopResult, LoopIterationResult } from "./core-loop-types.js";
-import type { Goal } from "../base/types/goal.js";
-import type { Logger } from "../runtime/logger.js";
+import type { Goal } from "../../base/types/goal.js";
+import type { Logger } from "../../runtime/logger.js";
 
 export interface PostLoopHooksParams {
   goalId: string;

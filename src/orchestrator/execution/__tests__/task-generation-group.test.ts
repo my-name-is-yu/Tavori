@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { z } from "zod";
 import { generateTaskGroup } from "../task/task-generation.js";
-import type { ILLMClient, LLMMessage, LLMRequestOptions, LLMResponse } from "../../base/llm/llm-client.js";
+import type { ILLMClient, LLMMessage, LLMRequestOptions, LLMResponse } from "../../../base/llm/llm-client.js";
 
 // ─── Spy LLM Client ───
 

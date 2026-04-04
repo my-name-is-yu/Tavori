@@ -3,8 +3,8 @@
  * used by GoalNegotiator and related modules.
  */
 
-import type { Dimension } from "../base/types/goal.js";
-import type { DimensionDecomposition } from "../base/types/negotiation.js";
+import type { Dimension } from "../../base/types/goal.js";
+import type { DimensionDecomposition } from "../../base/types/negotiation.js";
 
 // ─── Helper: convert DimensionDecomposition to Dimension ───
 

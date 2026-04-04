@@ -2,14 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
 import { z } from 'zod';
-import { StateManager } from '../base/state/state-manager.js';
+import { StateManager } from '../../base/state/state-manager.js';
 import {
   Checkpoint,
   CheckpointSchema,
   CheckpointIndex,
   CheckpointIndexSchema,
-} from '../base/types/checkpoint.js';
-import type { IPromptGateway } from '../prompt/gateway.js';
+} from '../../base/types/checkpoint.js';
+import type { IPromptGateway } from '../../prompt/gateway.js';
 
 interface LLMClient {
   chat(messages: Array<{ role: string; content: string }>): Promise<{ content: string }>;

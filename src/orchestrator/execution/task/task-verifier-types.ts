@@ -1,12 +1,12 @@
 import { z } from "zod";
-import { StateManager } from "../../base/state/state-manager.js";
-import type { ILLMClient } from "../../base/llm/llm-client.js";
+import { StateManager } from "../../../base/state/state-manager.js";
+import type { ILLMClient } from "../../../base/llm/llm-client.js";
 import { SessionManager } from "../session-manager.js";
-import { TrustManager } from "../../platform/traits/trust-manager.js";
-import { StallDetector } from "../../platform/drive/stall-detector.js";
+import { TrustManager } from "../../../platform/traits/trust-manager.js";
+import { StallDetector } from "../../../platform/drive/stall-detector.js";
 import { AdapterRegistry } from "../adapter-layer.js";
-import type { Logger } from "../../runtime/logger.js";
-import type { IPromptGateway } from "../../prompt/gateway.js";
+import type { Logger } from "../../../runtime/logger.js";
+import type { IPromptGateway } from "../../../prompt/gateway.js";
 
 // ─── Re-exported types used by consumers ───
 
@@ -19,12 +19,12 @@ export interface ExecutorReport {
 
 export interface VerdictResult {
   action: "completed" | "keep" | "discard" | "escalate";
-  task: import("../../base/types/task.js").Task;
+  task: import("../../../base/types/task.js").Task;
 }
 
 export interface FailureResult {
   action: "keep" | "discard" | "escalate";
-  task: import("../../base/types/task.js").Task;
+  task: import("../../../base/types/task.js").Task;
 }
 
 // ─── CompletionJudgerResponseSchema: Zod schema for LLM completion judgment response ───

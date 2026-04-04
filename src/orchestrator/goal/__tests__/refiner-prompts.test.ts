@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildLeafTestPrompt } from "../refiner-prompts.js";
-import type { Goal } from "../../base/types/goal.js";
+import type { Goal } from "../../../base/types/goal.js";
 
 // ─── Helpers ───
 

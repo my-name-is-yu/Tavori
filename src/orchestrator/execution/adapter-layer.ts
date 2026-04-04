@@ -5,7 +5,7 @@
 // This is the abstraction layer that isolates TaskLifecycle from
 // concrete agent implementations (Claude Code CLI, Claude API, etc.).
 
-import { AdapterError } from "../base/utils/errors.js";
+import { AdapterError } from "../../base/utils/errors.js";
 
 // ─── Types ───
 
@@ -60,7 +60,7 @@ export interface IAdapter {
    * When implemented, task-executor uses this instead of the default prompt builder.
    * Receives the raw Task (not AgentTask) so the adapter can access work_description etc.
    */
-  formatPrompt?(task: import("../base/types/task.js").Task, workspaceContext?: string): string;
+  formatPrompt?(task: import("../../base/types/task.js").Task, workspaceContext?: string): string;
 }
 
 // ─── Circuit Breaker ───

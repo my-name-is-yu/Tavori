@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { ReflectionNoteSchema, type ReflectionNote } from "../base/types/reflection.js";
-import type { ILLMClient } from "../base/llm/llm-client.js";
-import type { Task } from "../base/types/task.js";
-import type { VerificationResult } from "../base/types/task.js";
-import type { KnowledgeManager } from "../platform/knowledge/knowledge-manager.js";
-import type { KnowledgeEntry } from "../base/types/knowledge.js";
-import { extractJSON } from "../base/llm/llm-client.js";
-import type { IPromptGateway } from "../prompt/gateway.js";
+import { ReflectionNoteSchema, type ReflectionNote } from "../../base/types/reflection.js";
+import type { ILLMClient } from "../../base/llm/llm-client.js";
+import type { Task } from "../../base/types/task.js";
+import type { VerificationResult } from "../../base/types/task.js";
+import type { KnowledgeManager } from "../../platform/knowledge/knowledge-manager.js";
+import type { KnowledgeEntry } from "../../base/types/knowledge.js";
+import { extractJSON } from "../../base/llm/llm-client.js";
+import type { IPromptGateway } from "../../prompt/gateway.js";
 
 interface ReflectionLogger {
   debug?: (message: string, context?: Record<string, unknown>) => void;

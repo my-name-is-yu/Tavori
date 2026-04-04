@@ -13,17 +13,17 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
-import { StateManager } from "../../base/state/state-manager.js";
+import { StateManager } from "../../../base/state/state-manager.js";
 import { SessionManager } from "../session-manager.js";
-import { TrustManager } from "../../platform/traits/trust-manager.js";
+import { TrustManager } from "../../../platform/traits/trust-manager.js";
 import { StrategyManager } from "../../strategy/strategy-manager.js";
-import { StallDetector } from "../../platform/drive/stall-detector.js";
+import { StallDetector } from "../../../platform/drive/stall-detector.js";
 import { TaskLifecycle } from "../task/task-lifecycle.js";
-import { GuardrailRunner } from "../../platform/traits/guardrail-runner.js";
-import type { Task } from "../../base/types/task.js";
-import type { GapVector } from "../../base/types/gap.js";
-import type { DriveContext } from "../../base/types/drive.js";
-import type { IGuardrailHook } from "../../base/types/guardrail.js";
+import { GuardrailRunner } from "../../../platform/traits/guardrail-runner.js";
+import type { Task } from "../../../base/types/task.js";
+import type { GapVector } from "../../../base/types/gap.js";
+import type { DriveContext } from "../../../base/types/drive.js";
+import type { IGuardrailHook } from "../../../base/types/guardrail.js";
 import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
 import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
 
@@ -156,7 +156,7 @@ describe("TaskLifecycle — uncovered branches", () => {
     llmClient: ReturnType<typeof createMockLLMClient>,
     options?: {
       approvalFn?: (task: Task) => Promise<boolean>;
-      logger?: import("../../runtime/logger.js").Logger;
+      logger?: import("../../../runtime/logger.js").Logger;
       adapterRegistry?: import("../task/task-lifecycle.js").AdapterRegistry;
       execFileSyncFn?: (cmd: string, args: string[], opts: { cwd: string; encoding: "utf-8" }) => string;
       healthCheckEnabled?: boolean;
@@ -514,7 +514,7 @@ describe("TaskLifecycle — uncovered branches", () => {
       const task = makeTask({ strategy_id: "strategy-abc" });
       await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
 
-      const vr: import("../../base/types/task.js").VerificationResult = {
+      const vr: import("../../../base/types/task.js").VerificationResult = {
         task_id: task.id,
         verdict: "pass",
         confidence: 0.9,

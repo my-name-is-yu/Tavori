@@ -1,37 +1,37 @@
-import { CuriosityEngine } from "../platform/traits/curiosity-engine.js";
+import { CuriosityEngine } from "../../platform/traits/curiosity-engine.js";
 import type { IterationBudget } from "./iteration-budget.js";
-import type { Logger } from "../runtime/logger.js";
+import type { Logger } from "../../runtime/logger.js";
 import type { StrategyTemplateRegistry } from "../strategy/strategy-template-registry.js";
-import type { TrustManager } from "../platform/traits/trust-manager.js";
-import type { KnowledgeTransfer } from "../platform/knowledge/transfer/knowledge-transfer.js";
-import type { TransferCandidate } from "../base/types/cross-portfolio.js";
+import type { TrustManager } from "../../platform/traits/trust-manager.js";
+import type { KnowledgeTransfer } from "../../platform/knowledge/transfer/knowledge-transfer.js";
+import type { TransferCandidate } from "../../base/types/cross-portfolio.js";
 import type { CrossGoalPortfolio } from "../strategy/cross-goal-portfolio.js";
 import type { GoalTreeManager } from "../goal/goal-tree-manager.js";
 import type { StateAggregator } from "../goal/state-aggregator.js";
 import type { TreeLoopOrchestrator } from "../goal/tree-loop-orchestrator.js";
-import type { StateManager } from "../base/state/state-manager.js";
-import type { ObservationEngine } from "../platform/observation/observation-engine.js";
+import type { StateManager } from "../../base/state/state-manager.js";
+import type { ObservationEngine } from "../../platform/observation/observation-engine.js";
 import type { TaskLifecycle, TaskCycleResult } from "../execution/task/task-lifecycle.js";
-import type { SatisficingJudge } from "../platform/drive/satisficing-judge.js";
-import type { StallDetector } from "../platform/drive/stall-detector.js";
+import type { SatisficingJudge } from "../../platform/drive/satisficing-judge.js";
+import type { StallDetector } from "../../platform/drive/stall-detector.js";
 import type { StrategyManager } from "../strategy/strategy-manager.js";
-import type { DriveSystem } from "../platform/drive/drive-system.js";
+import type { DriveSystem } from "../../platform/drive/drive-system.js";
 import type { AdapterRegistry, IAdapter } from "../execution/adapter-layer.js";
-import type { KnowledgeManager } from "../platform/knowledge/knowledge-manager.js";
-import type { CapabilityDetector } from "../platform/observation/capability-detector.js";
-import type { CapabilityAcquisitionTask } from "../base/types/capability.js";
+import type { KnowledgeManager } from "../../platform/knowledge/knowledge-manager.js";
+import type { CapabilityDetector } from "../../platform/observation/capability-detector.js";
+import type { CapabilityAcquisitionTask } from "../../base/types/capability.js";
 import type { PortfolioManager } from "../strategy/portfolio-manager.js";
 import type { GoalDependencyGraph } from "../goal/goal-dependency-graph.js";
-import type { LearningPipeline } from "../platform/knowledge/learning/learning-pipeline.js";
-import { DriveScoreAdapter } from "../platform/knowledge/memory/memory-lifecycle.js";
-import type { MemoryLifecycleManager } from "../platform/knowledge/memory/memory-lifecycle.js";
+import type { LearningPipeline } from "../../platform/knowledge/learning/learning-pipeline.js";
+import { DriveScoreAdapter } from "../../platform/knowledge/memory/memory-lifecycle.js";
+import type { MemoryLifecycleManager } from "../../platform/knowledge/memory/memory-lifecycle.js";
 import type { ParallelExecutor } from "../execution/parallel-executor.js";
 import type { GoalRefiner } from "../goal/goal-refiner.js";
-import type { Goal } from "../base/types/goal.js";
-import type { GapVector } from "../base/types/gap.js";
-import type { DriveContext, DriveScore } from "../base/types/drive.js";
-import type { CompletionJudgment } from "../base/types/satisficing.js";
-import type { StallReport, StallAnalysis } from "../base/types/stall.js";
+import type { Goal } from "../../base/types/goal.js";
+import type { GapVector } from "../../base/types/gap.js";
+import type { DriveContext, DriveScore } from "../../base/types/drive.js";
+import type { CompletionJudgment } from "../../base/types/satisficing.js";
+import type { StallReport, StallAnalysis } from "../../base/types/stall.js";
 
 // ─── GapCalculator module interface (pure functions) ───
 
@@ -287,7 +287,7 @@ export interface CoreLoopDeps extends ObservationDeps, TreeDeps, StallDeps, Task
     gap: number;
     availableAdapters: string[];
     contextBlock?: string;
-  }) => Promise<import("../base/types/index.js").TaskGroup | null>;
+  }) => Promise<import("../../base/types/index.js").TaskGroup | null>;
   logger?: Logger;
   /**
    * Optional progress callback. Called at key phases during each iteration so
@@ -301,7 +301,7 @@ export interface CoreLoopDeps extends ObservationDeps, TreeDeps, StallDeps, Task
    */
   strategyTemplateRegistry?: StrategyTemplateRegistry;
   /** Optional HookManager for lifecycle hook events. */
-  hookManager?: import("../runtime/hook-manager.js").HookManager;
+  hookManager?: import("../../runtime/hook-manager.js").HookManager;
 }
 
 export type ProgressPhase =

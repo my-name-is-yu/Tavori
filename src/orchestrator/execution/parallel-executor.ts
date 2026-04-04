@@ -4,9 +4,9 @@
 // ordering and file ownership constraints. Each wave is a set of tasks
 // whose dependencies have already completed; waves run via Promise.all.
 
-import type { Logger } from "../runtime/logger.js";
-import type { ILLMClient } from "../base/llm/llm-client.js";
-import type { TaskGroup } from "../base/types/index.js";
+import type { Logger } from "../../runtime/logger.js";
+import type { ILLMClient } from "../../base/llm/llm-client.js";
+import type { TaskGroup } from "../../base/types/index.js";
 import type { AgentTask } from "./adapter-layer.js";
 import type { PipelineExecutor } from "./pipeline-executor.js";
 import { reconcileResults } from "./result-reconciler.js";

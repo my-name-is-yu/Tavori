@@ -5,8 +5,8 @@ import type {
   DependencySchedule,
   AllocationStrategy,
   RebalanceAction,
-} from "../base/types/cross-portfolio.js";
-import type { RebalanceResult } from "../base/types/portfolio.js";
+} from "../../base/types/cross-portfolio.js";
+import type { RebalanceResult } from "../../base/types/portfolio.js";
 
 // ─── Helpers ───
 

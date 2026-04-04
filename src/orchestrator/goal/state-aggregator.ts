@@ -1,10 +1,10 @@
-import { StateManager } from "../base/state/state-manager.js";
-import { StateError } from "../base/utils/errors.js";
-import { SatisficingJudge, aggregateValues } from "../platform/drive/satisficing-judge.js";
-import { dimensionProgress } from "../platform/drive/gap-calculator.js";
-import type { Goal, Dimension } from "../base/types/goal.js";
-import type { SatisficingAggregation } from "../base/types/goal.js";
-import type { StateAggregationRule } from "../base/types/goal-tree.js";
+import { StateManager } from "../../base/state/state-manager.js";
+import { StateError } from "../../base/utils/errors.js";
+import { SatisficingJudge, aggregateValues } from "../../platform/drive/satisficing-judge.js";
+import { dimensionProgress } from "../../platform/drive/gap-calculator.js";
+import type { Goal, Dimension } from "../../base/types/goal.js";
+import type { SatisficingAggregation } from "../../base/types/goal.js";
+import type { StateAggregationRule } from "../../base/types/goal-tree.js";
 
 /**
  * AggregatedState captures the result of rolling up child states into a parent.

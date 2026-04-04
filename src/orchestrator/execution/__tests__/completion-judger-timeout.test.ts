@@ -10,14 +10,14 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
-import { StateManager } from "../../base/state/state-manager.js";
+import { StateManager } from "../../../base/state/state-manager.js";
 import { SessionManager } from "../session-manager.js";
-import { TrustManager } from "../../platform/traits/trust-manager.js";
-import { StallDetector } from "../../platform/drive/stall-detector.js";
+import { TrustManager } from "../../../platform/traits/trust-manager.js";
+import { StallDetector } from "../../../platform/drive/stall-detector.js";
 import { verifyTask, type VerifierDeps } from "../task/task-verifier.js";
-import type { Task } from "../../base/types/task.js";
+import type { Task } from "../../../base/types/task.js";
 import type { AgentResult } from "../adapter-layer.js";
-import type { ILLMClient, LLMMessage, LLMRequestOptions, LLMResponse } from "../../base/llm/llm-client.js";
+import type { ILLMClient, LLMMessage, LLMRequestOptions, LLMResponse } from "../../../base/llm/llm-client.js";
 import type { z } from "zod";
 import { makeTempDir, cleanupTempDir } from "../../../tests/helpers/temp-dir.js";
 

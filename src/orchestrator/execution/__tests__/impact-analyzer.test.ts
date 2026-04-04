@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { analyzeImpact } from "../impact-analyzer.js";
 import type { ImpactAnalyzerDeps } from "../impact-analyzer.js";
-import { ImpactAnalysisSchema } from "../../base/types/pipeline.js";
+import { ImpactAnalysisSchema } from "../../../base/types/pipeline.js";
 
 // ─── Helpers ───
 

@@ -5,12 +5,12 @@
 
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import type { Logger } from "../runtime/logger.js";
-import type { ILLMClient } from "../base/llm/llm-client.js";
-import type { EthicsGate } from "../platform/traits/ethics-gate.js";
-import type { CapabilityDetector } from "../platform/observation/capability-detector.js";
-import type { IPromptGateway } from "../prompt/gateway.js";
-import type { DimensionDecomposition } from "../base/types/negotiation.js";
+import type { Logger } from "../../runtime/logger.js";
+import type { ILLMClient } from "../../base/llm/llm-client.js";
+import type { EthicsGate } from "../../platform/traits/ethics-gate.js";
+import type { CapabilityDetector } from "../../platform/observation/capability-detector.js";
+import type { IPromptGateway } from "../../prompt/gateway.js";
+import type { DimensionDecomposition } from "../../base/types/negotiation.js";
 
 // ─── Goal Suggestion schemas ───
 

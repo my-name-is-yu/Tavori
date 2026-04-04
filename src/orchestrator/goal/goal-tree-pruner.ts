@@ -1,6 +1,6 @@
-import type { StateManager } from "../base/state/state-manager.js";
-import type { Goal } from "../base/types/goal.js";
-import type { PruneDecision, PruneReason, PruneRecord } from "../base/types/goal-tree.js";
+import type { StateManager } from "../../base/state/state-manager.js";
+import type { Goal } from "../../base/types/goal.js";
+import type { PruneDecision, PruneReason, PruneRecord } from "../../base/types/goal-tree.js";
 
 // ─── Deps Interface ───
 

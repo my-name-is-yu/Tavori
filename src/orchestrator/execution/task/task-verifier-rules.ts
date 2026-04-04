@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { Task } from "../../base/types/task.js";
-import type { VerificationResult } from "../../base/types/task.js";
+import type { Task } from "../../../base/types/task.js";
+import type { VerificationResult } from "../../../base/types/task.js";
 import type { AgentTask, AgentResult, IAdapter } from "../adapter-layer.js";
 import type { VerifierDeps } from "./task-verifier-types.js";
 
@@ -108,7 +108,7 @@ export async function runMechanicalVerification(
 export function clampDimensionUpdate(
   current: number,
   proposed: number,
-  logger?: import("../../runtime/logger.js").Logger,
+  logger?: import("../../../runtime/logger.js").Logger,
   dimName?: string
 ): number {
   const absLimit = 0.3;

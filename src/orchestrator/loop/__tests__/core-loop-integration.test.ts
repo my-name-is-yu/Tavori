@@ -12,30 +12,30 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 
 // ─── Real implementations ───
-import { StateManager } from "../../base/state/state-manager.js";
-import { ObservationEngine } from "../../platform/observation/observation-engine.js";
+import { StateManager } from "../../../base/state/state-manager.js";
+import { ObservationEngine } from "../../../platform/observation/observation-engine.js";
 import { TaskLifecycle } from "../../execution/task/task-lifecycle.js";
-import { SatisficingJudge } from "../../platform/drive/satisficing-judge.js";
-import { StallDetector } from "../../platform/drive/stall-detector.js";
+import { SatisficingJudge } from "../../../platform/drive/satisficing-judge.js";
+import { StallDetector } from "../../../platform/drive/stall-detector.js";
 import { StrategyManager } from "../../strategy/strategy-manager.js";
-import { ReportingEngine } from "../../reporting/reporting-engine.js";
-import { DriveSystem } from "../../platform/drive/drive-system.js";
+import { ReportingEngine } from "../../../reporting/reporting-engine.js";
+import { DriveSystem } from "../../../platform/drive/drive-system.js";
 import { SessionManager } from "../../execution/session-manager.js";
-import { TrustManager } from "../../platform/traits/trust-manager.js";
+import { TrustManager } from "../../../platform/traits/trust-manager.js";
 import { CoreLoop } from "../core-loop.js";
 import { AdapterRegistry } from "../../execution/adapter-layer.js";
 import type { IAdapter, AgentTask, AgentResult } from "../../execution/adapter-layer.js";
 
 // ─── Pure function modules ───
-import * as GapCalculator from "../../platform/drive/gap-calculator.js";
-import * as DriveScorer from "../../platform/drive/drive-scorer.js";
+import * as GapCalculator from "../../../platform/drive/gap-calculator.js";
+import * as DriveScorer from "../../../platform/drive/drive-scorer.js";
 
 // ─── Mock utilities ───
 import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
 import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
 
 // ─── Types ───
-import type { Goal } from "../../base/types/goal.js";
+import type { Goal } from "../../../base/types/goal.js";
 
 // ─── MockAdapter ───
 

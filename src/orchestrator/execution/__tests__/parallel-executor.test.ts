@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ParallelExecutor } from "../parallel-executor.js";
 import type { ParallelExecutorDeps } from "../parallel-executor.js";
 import type { PipelineRunResult } from "../pipeline-executor.js";
-import type { TaskGroup } from "../../base/types/index.js";
+import type { TaskGroup } from "../../../base/types/index.js";
 
 // ─── Helpers ───
 

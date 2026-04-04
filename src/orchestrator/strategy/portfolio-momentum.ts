@@ -1,4 +1,4 @@
-import type { MomentumInfo, MomentumTrend } from "../base/types/cross-portfolio.js";
+import type { MomentumInfo, MomentumTrend } from "../../base/types/cross-portfolio.js";
 
 // ─── Momentum ───
 

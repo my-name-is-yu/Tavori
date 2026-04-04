@@ -4,9 +4,9 @@
 // Fails open: on any LLM error, returns no contradictions with confidence 0.
 
 import { z } from "zod";
-import type { ILLMClient } from "../base/llm/llm-client.js";
-import type { IPromptGateway } from "../prompt/gateway.js";
-import type { Logger } from "../runtime/logger.js";
+import type { ILLMClient } from "../../base/llm/llm-client.js";
+import type { IPromptGateway } from "../../prompt/gateway.js";
+import type { Logger } from "../../runtime/logger.js";
 import type { SubtaskResult } from "./parallel-executor.js";
 
 // ─── Types ───

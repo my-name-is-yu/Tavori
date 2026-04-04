@@ -4,7 +4,7 @@
 // `gh issue view`. Returns formatted context for inclusion in task prompts.
 // On any failure, returns empty string (graceful degradation).
 
-import { execFileNoThrow } from "../../base/utils/execFileNoThrow.js";
+import { execFileNoThrow } from "../../../base/utils/execFileNoThrow.js";
 
 const MAX_ISSUES = 3;
 const MAX_BODY_CHARS = 3000;

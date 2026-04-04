@@ -1,8 +1,8 @@
-import { VerificationResultSchema } from "../../base/types/task.js";
-import type { Task, VerificationResult } from "../../base/types/task.js";
-import type { EthicsGate } from "../../platform/traits/ethics-gate.js";
-import type { CapabilityDetector } from "../../platform/observation/capability-detector.js";
-import type { CapabilityAcquisitionTask } from "../../base/types/capability.js";
+import { VerificationResultSchema } from "../../../base/types/task.js";
+import type { Task, VerificationResult } from "../../../base/types/task.js";
+import type { EthicsGate } from "../../../platform/traits/ethics-gate.js";
+import type { CapabilityDetector } from "../../../platform/observation/capability-detector.js";
+import type { CapabilityAcquisitionTask } from "../../../base/types/capability.js";
 import type { TaskCycleResult } from "./task-execution-types.js";
 
 // ─── PreExecutionCheckDeps ───

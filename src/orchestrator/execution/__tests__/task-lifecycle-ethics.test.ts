@@ -1,21 +1,21 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import { z } from "zod";
-import { StateManager } from "../../base/state/state-manager.js";
+import { StateManager } from "../../../base/state/state-manager.js";
 import { SessionManager } from "../session-manager.js";
-import { TrustManager } from "../../platform/traits/trust-manager.js";
+import { TrustManager } from "../../../platform/traits/trust-manager.js";
 import { StrategyManager } from "../../strategy/strategy-manager.js";
-import { StallDetector } from "../../platform/drive/stall-detector.js";
+import { StallDetector } from "../../../platform/drive/stall-detector.js";
 import { TaskLifecycle } from "../task/task-lifecycle.js";
-import type { Task } from "../../base/types/task.js";
-import type { GapVector } from "../../base/types/gap.js";
-import type { DriveContext } from "../../base/types/drive.js";
+import type { Task } from "../../../base/types/task.js";
+import type { GapVector } from "../../../base/types/gap.js";
+import type { DriveContext } from "../../../base/types/drive.js";
 import type {
   ILLMClient,
   LLMMessage,
   LLMRequestOptions,
   LLMResponse,
-} from "../../base/llm/llm-client.js";
+} from "../../../base/llm/llm-client.js";
 import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
 import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
 import {
@@ -161,7 +161,7 @@ describe("TaskLifecycle", async () => {
     llmClient: ILLMClient,
     options?: {
       approvalFn?: (task: Task) => Promise<boolean>;
-      logger?: import("../../runtime/logger.js").Logger;
+      logger?: import("../../../runtime/logger.js").Logger;
       adapterRegistry?: import("../task/task-lifecycle.js").AdapterRegistry;
       execFileSyncFn?: (cmd: string, args: string[], opts: { cwd: string; encoding: "utf-8" }) => string;
       ethicsGate?: import("../../ethics-gate.js").EthicsGate;
@@ -186,7 +186,7 @@ describe("TaskLifecycle", async () => {
 
   describe("runTaskCycle — ethics means check", async () => {
     // Shared helper: a mock EthicsGate with controllable checkMeans
-    function makeMockEthicsGate(checkMeansImpl: () => Promise<import("../../base/types/ethics.js").EthicsVerdict>) {
+    function makeMockEthicsGate(checkMeansImpl: () => Promise<import("../../../base/types/ethics.js").EthicsVerdict>) {
       return {
         check: vi.fn().mockResolvedValue({
           verdict: "pass",
@@ -439,7 +439,7 @@ describe("TaskLifecycle", async () => {
     });
 
     it("ethics pass with high confidence: task completes and cycle returns completed", async () => {
-      const highConfidencePass: import("../../base/types/ethics.js").EthicsVerdict = {
+      const highConfidencePass: import("../../../base/types/ethics.js").EthicsVerdict = {
         verdict: "pass",
         category: "safe",
         reasoning: "Fully safe operation",

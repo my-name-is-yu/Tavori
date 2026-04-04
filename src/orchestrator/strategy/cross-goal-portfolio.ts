@@ -1,12 +1,12 @@
-import { StateManager } from "../base/state/state-manager.js";
+import { StateManager } from "../../base/state/state-manager.js";
 import { GoalDependencyGraph } from "../goal/goal-dependency-graph.js";
-import { VectorIndex } from "../platform/knowledge/vector-index.js";
-import type { IEmbeddingClient } from "../platform/knowledge/embedding-client.js";
-import { scoreDeadline } from "../platform/drive/drive-scorer.js";
-import { computeRawGap, normalizeGap } from "../platform/drive/gap-calculator.js";
+import { VectorIndex } from "../../platform/knowledge/vector-index.js";
+import type { IEmbeddingClient } from "../../platform/knowledge/embedding-client.js";
+import { scoreDeadline } from "../../platform/drive/drive-scorer.js";
+import { computeRawGap, normalizeGap } from "../../platform/drive/gap-calculator.js";
 import {
   CrossGoalPortfolioConfigSchema,
-} from "../base/types/cross-portfolio.js";
+} from "../../base/types/cross-portfolio.js";
 import type {
   CrossGoalAllocation,
   CrossGoalPortfolioConfig,
@@ -18,8 +18,8 @@ import type {
   DependencySchedule,
   AllocationStrategy,
   RebalanceAction,
-} from "../base/types/cross-portfolio.js";
-import type { Goal } from "../base/types/goal.js";
+} from "../../base/types/cross-portfolio.js";
+import type { Goal } from "../../base/types/goal.js";
 import { buildDependencySchedule } from "./portfolio-scheduling.js";
 import { allocateResources } from "./portfolio-allocation.js";
 import { calculateMomentum } from "./portfolio-momentum.js";

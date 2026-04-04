@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
-import { StateManager } from "../../base/state/state-manager.js";
-import { EthicsGate } from "../../platform/traits/ethics-gate.js";
-import { ObservationEngine } from "../../platform/observation/observation-engine.js";
+import { StateManager } from "../../../base/state/state-manager.js";
+import { EthicsGate } from "../../../platform/traits/ethics-gate.js";
+import { ObservationEngine } from "../../../platform/observation/observation-engine.js";
 import { GoalNegotiator, EthicsRejectedError } from "../goal-negotiator.js";
 import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
 import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
@@ -355,7 +355,7 @@ describe("GoalNegotiator", () => {
 
       const goalIds = await stateManager.listGoalIds();
       const loadedGoals = await Promise.all(goalIds.map((goalId) => stateManager.loadGoal(goalId)));
-      const goals = loadedGoals.filter((goal): goal is import("../../base/types/goal.js").Goal => goal !== null);
+      const goals = loadedGoals.filter((goal): goal is import("../../../base/types/goal.js").Goal => goal !== null);
 
       expect(goals).toHaveLength(2);
       expect(goals.map((goal) => goal.id)).toEqual(

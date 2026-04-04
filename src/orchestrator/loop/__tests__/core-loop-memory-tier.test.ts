@@ -13,9 +13,9 @@ import { scoreDrivesAndCheckKnowledge } from "../core-loop-phases.js";
 import { checkCompletionAndMilestones, runTaskCycleWithContext } from "../core-loop-phases-b.js";
 import type { PhaseCtx } from "../core-loop-phases.js";
 import type { LoopIterationResult } from "../core-loop-types.js";
-import type { Goal } from "../../base/types/goal.js";
-import type { GapVector } from "../../base/types/gap.js";
-import type { DriveScore } from "../../base/types/drive.js";
+import type { Goal } from "../../../base/types/goal.js";
+import type { GapVector } from "../../../base/types/gap.js";
+import type { DriveScore } from "../../../base/types/drive.js";
 
 // ─── Helpers ───
 

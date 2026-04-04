@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { StateManager } from "../../base/state/state-manager.js";
+import { StateManager } from "../../../base/state/state-manager.js";
 import { SessionManager, DEFAULT_CONTEXT_BUDGET } from "../session-manager.js";
 import { CheckpointManager } from "../checkpoint-manager.js";
-import type { Session } from "../../base/types/session.js";
-import type { KnowledgeEntry } from "../../base/types/knowledge.js";
+import type { Session } from "../../../base/types/session.js";
+import type { KnowledgeEntry } from "../../../base/types/knowledge.js";
 import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
 import { randomUUID } from "node:crypto";
 
@@ -522,7 +522,7 @@ describe("SessionManager", () => {
     });
 
     it("drops lower-priority slots when budget is tight", () => {
-      const slots: import("../../base/types/session.js").ContextSlot[] = [
+      const slots: import("../../../base/types/session.js").ContextSlot[] = [
         { priority: 1, label: "slot-A", content: "a".repeat(400), token_estimate: 100 },
         { priority: 2, label: "slot-B", content: "b".repeat(400), token_estimate: 100 },
         { priority: 3, label: "slot-C", content: "c".repeat(400), token_estimate: 100 },
@@ -539,7 +539,7 @@ describe("SessionManager", () => {
     });
 
     it("keeps higher-priority slots over lower-priority slots", () => {
-      const slots: import("../../base/types/session.js").ContextSlot[] = [
+      const slots: import("../../../base/types/session.js").ContextSlot[] = [
         { priority: 5, label: "low-priority", content: "x".repeat(400), token_estimate: 100 },
         { priority: 1, label: "high-priority", content: "y".repeat(400), token_estimate: 100 },
       ];
@@ -549,7 +549,7 @@ describe("SessionManager", () => {
     });
 
     it("returns empty array when budget is zero", () => {
-      const slots: import("../../base/types/session.js").ContextSlot[] = [
+      const slots: import("../../../base/types/session.js").ContextSlot[] = [
         { priority: 1, label: "slot-A", content: "content", token_estimate: 10 },
       ];
       const result = manager.filterSlotsByBudget(slots, 0);
@@ -563,7 +563,7 @@ describe("SessionManager", () => {
 
     it("uses content.length / 4 to estimate tokens when token_estimate is 0", () => {
       // 400 chars / 4 = 100 token estimate
-      const slots: import("../../base/types/session.js").ContextSlot[] = [
+      const slots: import("../../../base/types/session.js").ContextSlot[] = [
         { priority: 1, label: "slot-A", content: "a".repeat(400), token_estimate: 0 },
         { priority: 2, label: "slot-B", content: "b".repeat(400), token_estimate: 0 },
         { priority: 3, label: "slot-C", content: "c".repeat(400), token_estimate: 0 },
@@ -578,7 +578,7 @@ describe("SessionManager", () => {
     });
 
     it("fits exactly at budget boundary", () => {
-      const slots: import("../../base/types/session.js").ContextSlot[] = [
+      const slots: import("../../../base/types/session.js").ContextSlot[] = [
         { priority: 1, label: "slot-A", content: "a", token_estimate: 50 },
         { priority: 2, label: "slot-B", content: "b", token_estimate: 50 },
       ];

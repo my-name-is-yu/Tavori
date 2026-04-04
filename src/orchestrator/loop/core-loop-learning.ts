@@ -6,7 +6,7 @@
  * CoreLoop and exposes methods used in run() and runOneIteration().
  */
 
-import type { Logger } from "../runtime/logger.js";
+import type { Logger } from "../../runtime/logger.js";
 import type { CoreLoopDeps } from "./core-loop-types.js";
 
 export class CoreLoopLearning {

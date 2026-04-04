@@ -1,8 +1,8 @@
 import { z } from "zod";
-import type { Task } from "../../base/types/task.js";
+import type { Task } from "../../../base/types/task.js";
 import type { AgentResult } from "../adapter-layer.js";
-import type { Logger } from "../../runtime/logger.js";
-import type { LLMResponse } from "../../base/llm/llm-client.js";
+import type { Logger } from "../../../runtime/logger.js";
+import type { LLMResponse } from "../../../base/llm/llm-client.js";
 import type { VerifierDeps } from "./task-verifier-types.js";
 import { CompletionJudgerResponseSchema } from "./task-verifier-types.js";
 

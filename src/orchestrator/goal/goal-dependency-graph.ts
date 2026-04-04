@@ -1,15 +1,15 @@
 import { z } from "zod";
-import { ValidationError } from "../base/utils/errors.js";
-import type { StateManager } from "../base/state/state-manager.js";
-import type { ILLMClient, LLMMessage } from "../base/llm/llm-client.js";
+import { ValidationError } from "../../base/utils/errors.js";
+import type { StateManager } from "../../base/state/state-manager.js";
+import type { ILLMClient, LLMMessage } from "../../base/llm/llm-client.js";
 import type {
   DependencyEdge,
   DependencyEdgeStatus,
   DependencyGraph,
-} from "../base/types/dependency.js";
-import { DependencyGraphSchema } from "../base/types/dependency.js";
-import type { DependencyType } from "../base/types/core.js";
-import type { IPromptGateway } from "../prompt/gateway.js";
+} from "../../base/types/dependency.js";
+import { DependencyGraphSchema } from "../../base/types/dependency.js";
+import type { DependencyType } from "../../base/types/core.js";
+import type { IPromptGateway } from "../../prompt/gateway.js";
 
 interface DependencyLogger {
   warn?: (message: string, context?: Record<string, unknown>) => void;

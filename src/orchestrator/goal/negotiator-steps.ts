@@ -6,23 +6,23 @@
  */
 
 import { z } from "zod";
-import type { ILLMClient } from "../base/llm/llm-client.js";
-import type { IPromptGateway } from "../prompt/gateway.js";
-import type { ObservationEngine } from "../platform/observation/observation-engine.js";
-import type { Logger } from "../runtime/logger.js";
+import type { ILLMClient } from "../../base/llm/llm-client.js";
+import type { IPromptGateway } from "../../prompt/gateway.js";
+import type { ObservationEngine } from "../../platform/observation/observation-engine.js";
+import type { Logger } from "../../runtime/logger.js";
 import {
   DimensionDecompositionSchema,
   FeasibilityResultSchema,
   CapabilityCheckLogSchema,
-} from "../base/types/negotiation.js";
+} from "../../base/types/negotiation.js";
 import type {
   DimensionDecomposition,
   FeasibilityResult,
   NegotiationLog,
   NegotiationResponse,
-} from "../base/types/negotiation.js";
-import type { Dimension } from "../base/types/goal.js";
-import type { CharacterConfig } from "../base/types/character.js";
+} from "../../base/types/negotiation.js";
+import type { Dimension } from "../../base/types/goal.js";
+import type { CharacterConfig } from "../../base/types/character.js";
 import {
   buildDecompositionPrompt,
   buildFeasibilityPrompt,

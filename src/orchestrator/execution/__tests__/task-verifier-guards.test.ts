@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
-import { StateManager } from "../../base/state/state-manager.js";
+import { StateManager } from "../../../base/state/state-manager.js";
 import { SessionManager } from "../session-manager.js";
-import { TrustManager } from "../../platform/traits/trust-manager.js";
-import { StallDetector } from "../../platform/drive/stall-detector.js";
+import { TrustManager } from "../../../platform/traits/trust-manager.js";
+import { StallDetector } from "../../../platform/drive/stall-detector.js";
 import { clampDimensionUpdate, handleVerdict, checkDimensionDirection } from "../task/task-verifier.js";
 import type { VerifierDeps } from "../task/task-verifier.js";
-import type { Task, VerificationResult } from "../../base/types/task.js";
-import type { Logger } from "../../runtime/logger.js";
+import type { Task, VerificationResult } from "../../../base/types/task.js";
+import type { Logger } from "../../../runtime/logger.js";
 import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
 import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
 

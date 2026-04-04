@@ -2,11 +2,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { extractIssueNumbers, fetchIssueContext } from "../context/issue-context-fetcher.js";
 
 // ─── Mock execFileNoThrow ───
-vi.mock("../../base/utils/execFileNoThrow.js", () => ({
+vi.mock("../../../base/utils/execFileNoThrow.js", () => ({
   execFileNoThrow: vi.fn(),
 }));
 
-import { execFileNoThrow } from "../../base/utils/execFileNoThrow.js";
+import { execFileNoThrow } from "../../../base/utils/execFileNoThrow.js";
 const mockExec = vi.mocked(execFileNoThrow);
 
 // ─── extractIssueNumbers ───

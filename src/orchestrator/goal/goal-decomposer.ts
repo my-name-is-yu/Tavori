@@ -1,19 +1,19 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import type { ILLMClient } from "../base/llm/llm-client.js";
-import type { IPromptGateway } from "../prompt/gateway.js";
-import { EthicsGate } from "../platform/traits/ethics-gate.js";
-import { GoalSchema } from "../base/types/goal.js";
-import type { Goal } from "../base/types/goal.js";
-import { DimensionDecompositionSchema } from "../base/types/negotiation.js";
-import type { SatisficingJudge } from "../platform/drive/satisficing-judge.js";
+import type { ILLMClient } from "../../base/llm/llm-client.js";
+import type { IPromptGateway } from "../../prompt/gateway.js";
+import { EthicsGate } from "../../platform/traits/ethics-gate.js";
+import { GoalSchema } from "../../base/types/goal.js";
+import type { Goal } from "../../base/types/goal.js";
+import { DimensionDecompositionSchema } from "../../base/types/negotiation.js";
+import type { SatisficingJudge } from "../../platform/drive/satisficing-judge.js";
 import type { GoalTreeManager } from "./goal-tree-manager.js";
 import type {
   GoalDecompositionConfig,
   DecompositionResult,
-} from "../base/types/goal-tree.js";
+} from "../../base/types/goal-tree.js";
 import { decompositionToDimension } from "./goal-validation.js";
-import type { StateManager } from "../base/state/state-manager.js";
+import type { StateManager } from "../../base/state/state-manager.js";
 
 // ─── Prompt builders ───
 

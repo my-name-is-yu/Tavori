@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { CheckpointManager } from "../checkpoint-manager.js";
-import type { StateManager } from "../../base/state/state-manager.js";
-import type { CheckpointIndex } from "../../base/types/checkpoint.js";
+import type { StateManager } from "../../../base/state/state-manager.js";
+import type { CheckpointIndex } from "../../../base/types/checkpoint.js";
 
 // ─── Helpers ───
 

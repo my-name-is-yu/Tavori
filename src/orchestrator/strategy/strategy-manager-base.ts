@@ -1,15 +1,15 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import { StateManager } from "../base/state/state-manager.js";
-import { StrategySchema, PortfolioSchema } from "../base/types/strategy.js";
-import type { Strategy, Portfolio } from "../base/types/strategy.js";
-import type { StrategyState } from "../base/types/core.js";
-import type { ILLMClient } from "../base/llm/llm-client.js";
-import type { IPromptGateway } from "../prompt/gateway.js";
-import type { KnowledgeGapSignal } from "../base/types/knowledge.js";
-import type { KnowledgeManager } from "../platform/knowledge/knowledge-manager.js";
+import { StateManager } from "../../base/state/state-manager.js";
+import { StrategySchema, PortfolioSchema } from "../../base/types/strategy.js";
+import type { Strategy, Portfolio } from "../../base/types/strategy.js";
+import type { StrategyState } from "../../base/types/core.js";
+import type { ILLMClient } from "../../base/llm/llm-client.js";
+import type { IPromptGateway } from "../../prompt/gateway.js";
+import type { KnowledgeGapSignal } from "../../base/types/knowledge.js";
+import type { KnowledgeManager } from "../../platform/knowledge/knowledge-manager.js";
 import type { StrategyTemplateRegistry } from "./strategy-template-registry.js";
-import type { Logger } from "../runtime/logger.js";
+import type { Logger } from "../../runtime/logger.js";
 import {
   VALID_TRANSITIONS,
   StrategyArraySchema,

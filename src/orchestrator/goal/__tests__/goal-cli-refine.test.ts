@@ -6,10 +6,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { StateManager } from "../../base/state/state-manager.js";
-import type { CharacterConfigManager } from "../../platform/traits/character-config.js";
-import type { Goal } from "../../base/types/goal.js";
-import type { RefineResult } from "../../base/types/goal-refiner.js";
+import type { StateManager } from "../../../base/state/state-manager.js";
+import type { CharacterConfigManager } from "../../../platform/traits/character-config.js";
+import type { Goal } from "../../../base/types/goal.js";
+import type { RefineResult } from "../../../base/types/goal-refiner.js";
 
 // ─── Helpers ───
 
@@ -141,7 +141,7 @@ describe("cmdGoalAdd — GoalRefiner integration", () => {
     }));
 
     // Import after mocking
-    const { cmdGoalAdd } = await import("../../cli/commands/goal.js");
+    const { cmdGoalAdd } = await import("../../../cli/commands/goal.js");
 
     // Act
     const code = await cmdGoalAdd(
@@ -194,7 +194,7 @@ describe("cmdGoalAdd — GoalRefiner integration", () => {
       gatherNegotiationContext: vi.fn(async () => null),
     }));
 
-    const { cmdGoalAdd } = await import("../../cli/commands/goal.js");
+    const { cmdGoalAdd } = await import("../../../cli/commands/goal.js");
 
     // Act
     const code = await cmdGoalAdd(
@@ -264,7 +264,7 @@ describe("cmdGoalAdd — GoalRefiner integration", () => {
       createWorkspaceContextProvider: vi.fn(() => ({})),
     }));
 
-    const { cmdGoalAdd } = await import("../../cli/commands/goal.js");
+    const { cmdGoalAdd } = await import("../../../cli/commands/goal.js");
 
     // Act
     const code = await cmdGoalAdd(
@@ -287,7 +287,7 @@ describe("cmdGoalAddRaw — raw mode unchanged", () => {
   it("saves goal without calling LLM when --title and --dim provided", async () => {
     const stateManager = makeMockStateManager();
 
-    const { cmdGoalAddRaw } = await import("../../cli/commands/goal-raw.js");
+    const { cmdGoalAddRaw } = await import("../../../cli/commands/goal-raw.js");
 
     const code = await cmdGoalAddRaw(stateManager, {
       title: "tsc zero",

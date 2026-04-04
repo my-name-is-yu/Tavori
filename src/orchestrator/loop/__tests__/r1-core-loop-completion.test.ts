@@ -15,12 +15,12 @@ import {
   CoreLoop,
   type CoreLoopDeps,
 } from "../core-loop.js";
-import { StateManager } from "../../base/state/state-manager.js";
+import { StateManager } from "../../../base/state/state-manager.js";
 import type { IAdapter } from "../../execution/adapter-layer.js";
-import type { Goal } from "../../base/types/goal.js";
-import type { CompletionJudgment } from "../../base/types/satisficing.js";
-import type { GapVector } from "../../base/types/gap.js";
-import type { DriveScore } from "../../base/types/drive.js";
+import type { Goal } from "../../../base/types/goal.js";
+import type { CompletionJudgment } from "../../../base/types/satisficing.js";
+import type { GapVector } from "../../../base/types/gap.js";
+import type { DriveScore } from "../../../base/types/drive.js";
 import type { TaskCycleResult } from "../../execution/task/task-lifecycle.js";
 import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
 import { makeGoal } from "../../../tests/helpers/fixtures.js";

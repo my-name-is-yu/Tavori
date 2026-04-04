@@ -3,11 +3,11 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { StrategyTemplateRegistry } from "../strategy-template-registry.js";
-import { VectorIndex } from "../../platform/knowledge/vector-index.js";
-import { MockEmbeddingClient } from "../../platform/knowledge/embedding-client.js";
-import type { IEmbeddingClient } from "../../platform/knowledge/embedding-client.js";
-import { StrategySchema } from "../../base/types/strategy.js";
-import type { Strategy } from "../../base/types/strategy.js";
+import { VectorIndex } from "../../../platform/knowledge/vector-index.js";
+import { MockEmbeddingClient } from "../../../platform/knowledge/embedding-client.js";
+import type { IEmbeddingClient } from "../../../platform/knowledge/embedding-client.js";
+import { StrategySchema } from "../../../base/types/strategy.js";
+import type { Strategy } from "../../../base/types/strategy.js";
 import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
 
 // ─── Fixtures ───

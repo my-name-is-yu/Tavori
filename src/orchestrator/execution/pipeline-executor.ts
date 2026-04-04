@@ -4,13 +4,13 @@
 // Phase 2: Plan Approval Gate, 3-stage escalation, strategy feedback.
 
 import { randomUUID } from "node:crypto";
-import type { Logger } from "../runtime/logger.js";
-import type { StateManager } from "../base/state/state-manager.js";
+import type { Logger } from "../../runtime/logger.js";
+import type { StateManager } from "../../base/state/state-manager.js";
 import type { AgentTask, AgentResult, IAdapter } from "./adapter-layer.js";
 import { AdapterRegistry } from "./adapter-layer.js";
-import type { TaskPipeline, PipelineStage, PipelineState, StageResult } from "../base/types/pipeline.js";
-import { PipelineStateSchema } from "../base/types/pipeline.js";
-import type { Verdict } from "../base/types/core.js";
+import type { TaskPipeline, PipelineStage, PipelineState, StageResult } from "../../base/types/pipeline.js";
+import { PipelineStateSchema } from "../../base/types/pipeline.js";
+import type { Verdict } from "../../base/types/core.js";
 
 // ─── Types ───
 

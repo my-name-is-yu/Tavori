@@ -1,11 +1,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ObservationEngine } from "../../platform/observation/observation-engine.js";
+import { ObservationEngine } from "../../../platform/observation/observation-engine.js";
 import { GoalNegotiator, EthicsRejectedError } from "../goal-negotiator.js";
-import { StateManager } from "../../base/state/state-manager.js";
-import type { DimensionDecomposition } from "../../base/types/negotiation.js";
-import type { Goal } from "../../base/types/goal.js";
+import { StateManager } from "../../../base/state/state-manager.js";
+import type { DimensionDecomposition } from "../../../base/types/negotiation.js";
+import type { Goal } from "../../../base/types/goal.js";
 import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
 import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
 import { makeGoal } from "../../../tests/helpers/fixtures.js";

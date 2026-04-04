@@ -1,21 +1,21 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import { z } from "zod";
-import { StateManager } from "../../base/state/state-manager.js";
+import { StateManager } from "../../../base/state/state-manager.js";
 import { SessionManager } from "../session-manager.js";
-import { TrustManager } from "../../platform/traits/trust-manager.js";
+import { TrustManager } from "../../../platform/traits/trust-manager.js";
 import { StrategyManager } from "../../strategy/strategy-manager.js";
-import { StallDetector } from "../../platform/drive/stall-detector.js";
+import { StallDetector } from "../../../platform/drive/stall-detector.js";
 import { TaskLifecycle } from "../task/task-lifecycle.js";
-import type { Task } from "../../base/types/task.js";
-import type { GapVector } from "../../base/types/gap.js";
-import type { DriveContext } from "../../base/types/drive.js";
+import type { Task } from "../../../base/types/task.js";
+import type { GapVector } from "../../../base/types/gap.js";
+import type { DriveContext } from "../../../base/types/drive.js";
 import type {
   ILLMClient,
   LLMMessage,
   LLMRequestOptions,
   LLMResponse,
-} from "../../base/llm/llm-client.js";
+} from "../../../base/llm/llm-client.js";
 import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
 import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
 
@@ -243,7 +243,7 @@ describe("TaskLifecycle", async () => {
     llmClient: ILLMClient,
     options?: {
       approvalFn?: (task: Task) => Promise<boolean>;
-      logger?: import("../../runtime/logger.js").Logger;
+      logger?: import("../../../runtime/logger.js").Logger;
       adapterRegistry?: import("../task/task-lifecycle.js").AdapterRegistry;
       execFileSyncFn?: (cmd: string, args: string[], opts: { cwd: string; encoding: "utf-8" }) => string;
     }
@@ -423,7 +423,7 @@ describe("TaskLifecycle", async () => {
       // Simulate two pass verdicts
       for (let i = 1; i <= 2; i++) {
         const task = makeTask({ id: `task-${i}` });
-        const vr: import("../../base/types/task.js").VerificationResult = {
+        const vr: import("../../../base/types/task.js").VerificationResult = {
           task_id: `task-${i}`,
           verdict: "pass",
           confidence: 0.9,
@@ -448,7 +448,7 @@ describe("TaskLifecycle", async () => {
       const llm = createMockLLMClient([]);
       const lifecycle = createLifecycle(llm);
       const task = makeTask({ primary_dimension: "coverage" });
-      const vr: import("../../base/types/task.js").VerificationResult = {
+      const vr: import("../../../base/types/task.js").VerificationResult = {
         task_id: "task-1",
         verdict: "pass",
         confidence: 0.9,
@@ -470,7 +470,7 @@ describe("TaskLifecycle", async () => {
       const llm = createMockLLMClient([]);
       const lifecycle = createLifecycle(llm);
       const task = makeTask({ consecutive_failure_count: 1 });
-      const vr: import("../../base/types/task.js").VerificationResult = {
+      const vr: import("../../../base/types/task.js").VerificationResult = {
         task_id: "task-1",
         verdict: "fail",
         confidence: 0.9,
@@ -628,7 +628,7 @@ describe("TaskLifecycle", async () => {
       const lifecycle = createLifecycle(llm);
       const task = makeTask({ id: "task-keep" });
 
-      const vr: import("../../base/types/task.js").VerificationResult = {
+      const vr: import("../../../base/types/task.js").VerificationResult = {
         task_id: "task-keep",
         verdict: "partial",
         confidence: 0.5,
@@ -665,7 +665,7 @@ describe("TaskLifecycle", async () => {
         consecutive_failure_count: 0,
       });
 
-      const vr: import("../../base/types/task.js").VerificationResult = {
+      const vr: import("../../../base/types/task.js").VerificationResult = {
         task_id: "task-discard",
         verdict: "fail",
         confidence: 0.9,
@@ -691,7 +691,7 @@ describe("TaskLifecycle", async () => {
         reversibility: "reversible",
       });
 
-      const vr: import("../../base/types/task.js").VerificationResult = {
+      const vr: import("../../../base/types/task.js").VerificationResult = {
         task_id: "task-escalate",
         verdict: "fail",
         confidence: 0.9,
@@ -718,7 +718,7 @@ describe("TaskLifecycle", async () => {
         consecutive_failure_count: 0,
       });
 
-      const vr: import("../../base/types/task.js").VerificationResult = {
+      const vr: import("../../../base/types/task.js").VerificationResult = {
         task_id: "task-irreversible-fail",
         verdict: "fail",
         confidence: 0.9,

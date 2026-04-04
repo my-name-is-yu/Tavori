@@ -2,7 +2,7 @@ import type { GoalDependencyGraph } from "../goal/goal-dependency-graph.js";
 import type {
   DependencySchedule,
   DependencyPhase,
-} from "../base/types/cross-portfolio.js";
+} from "../../base/types/cross-portfolio.js";
 
 // ─── Scheduling ───
 

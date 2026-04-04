@@ -1,20 +1,20 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { StateManager } from "../../base/state/state-manager.js";
+import { StateManager } from "../../../base/state/state-manager.js";
 import { GoalDependencyGraph } from "../../goal/goal-dependency-graph.js";
-import { VectorIndex } from "../../platform/knowledge/vector-index.js";
-import { MockEmbeddingClient } from "../../platform/knowledge/embedding-client.js";
+import { VectorIndex } from "../../../platform/knowledge/vector-index.js";
+import { MockEmbeddingClient } from "../../../platform/knowledge/embedding-client.js";
 import { CrossGoalPortfolio } from "../cross-goal-portfolio.js";
-import { GoalSchema } from "../../base/types/goal.js";
-import type { Goal } from "../../base/types/goal.js";
+import { GoalSchema } from "../../../base/types/goal.js";
+import type { Goal } from "../../../base/types/goal.js";
 import type {
   GoalPriorityFactors,
   CrossGoalAllocation,
   MomentumInfo,
   AllocationStrategy,
   DependencySchedule,
-} from "../../base/types/cross-portfolio.js";
+} from "../../../base/types/cross-portfolio.js";
 
 import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
 

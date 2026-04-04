@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { VerdictEnum } from "../../base/types/core.js";
+import { VerdictEnum } from "../../../base/types/core.js";
 
 // --- Task Domain ---
 

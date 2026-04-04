@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { StrategySchema, WaitStrategySchema } from "../base/types/strategy.js";
-import type { Strategy } from "../base/types/strategy.js";
+import { StrategySchema, WaitStrategySchema } from "../../base/types/strategy.js";
+import type { Strategy } from "../../base/types/strategy.js";
 import { redistributeAllocation } from "./strategy-helpers.js";
 import { StrategyManagerBase } from "./strategy-manager-base.js";
 
