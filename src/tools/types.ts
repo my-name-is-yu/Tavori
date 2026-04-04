@@ -85,7 +85,7 @@ export interface ITool<TInput = unknown, TOutput = unknown> {
   readonly metadata: ToolMetadata;
 
   /** Zod schema for input validation (gate 1 of the executor pipeline) */
-  readonly inputSchema: z.ZodType<TInput>;
+  readonly inputSchema: z.ZodType<TInput, z.ZodTypeDef, any>;
 
   /**
    * Dynamic description that may change per invocation context.
