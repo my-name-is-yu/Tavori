@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import { ObservationEngine, registerObservationAllowRules } from "../observation-engine.js";
+import { observeWithTools } from "../observation-tools.js";
 import { StateManager } from "../../../base/state/state-manager.js";
 import type { ToolExecutor } from "../../../tools/executor.js";
 import type { ToolCallContext } from "../../../tools/types.js";
@@ -338,6 +339,15 @@ describe("observeWithTools", () => {
     const result = await engineWithExecutor.observeWithTools(dim, ctx);
     expect(result).toBeNull();
     expect(mockExecutor.execute).not.toHaveBeenCalled();
+  });
+
+  it("observeWithTools returns null when toolExecutor.execute throws", async () => {
+    const mockExecutor = {
+      execute: vi.fn().mockRejectedValue(new Error("executor crashed")),
+    } as unknown as ToolExecutor;
+    const dim = makeDimension();
+    const result = await observeWithTools(mockExecutor, dim, ctx);
+    expect(result).toBeNull();
   });
 });
 
