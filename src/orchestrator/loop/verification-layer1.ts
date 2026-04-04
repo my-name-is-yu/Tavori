@@ -24,6 +24,9 @@ export interface VerificationLayer1Result {
   details: VerificationDetail[];
 }
 
+/** Allowed URL schemes for http_fetch verification. Only http/https are permitted. */
+const ALLOWED_URL_SCHEMES = ["http://", "https://"];
+
 /**
  * Map a criterion's verification_method string to a tool call.
  * Returns null when the method cannot be verified mechanically.
@@ -41,6 +44,8 @@ function mapCriterionToToolCall(
 
   if (method.startsWith("run ") || method.startsWith("execute ")) {
     const command = method.replace(/^(run|execute)\s+/, "");
+    // Shell verification commands from LLM-generated criteria must go through approvalFn.
+    // preApproved is explicitly set to false at the call site to prevent bypassing the permission gate.
     return { toolName: "shell", input: { command }, canVerify: true };
   }
 
@@ -56,6 +61,11 @@ function mapCriterionToToolCall(
 
   if (method.startsWith("fetch ") || method.startsWith("check endpoint ")) {
     const url = method.replace(/^(fetch|check endpoint)\s+/, "");
+    // SSRF protection: only allow http:// and https:// schemes.
+    // Reject file://, ftp://, data://, internal IPs, etc.
+    if (!ALLOWED_URL_SCHEMES.some((scheme) => url.startsWith(scheme))) {
+      return { toolName: "__skip__", input: null, canVerify: false };
+    }
     return { toolName: "http_fetch", input: { url, method: "GET" }, canVerify: true };
   }
 
@@ -92,10 +102,16 @@ export async function verifyWithTools(
     return { mechanicalPassed: true, details: [] };
   }
 
+  // Shell verification commands come from LLM-generated criteria and must never bypass
+  // the normal permission gate. Override preApproved=false so approvalFn is always called.
+  const shellContext: ToolCallContext = { ...context, preApproved: false };
+
   // Execute all verification tool calls (read-only, parallelize safely)
-  const toolResults = await toolExecutor.executeBatch(
-    verifiable.map((m) => ({ toolName: m.toolName, input: m.input })),
-    context,
+  const toolResults = await Promise.all(
+    verifiable.map((m) => {
+      const ctx = m.toolName === "shell" ? shellContext : context;
+      return toolExecutor.execute(m.toolName, m.input, ctx);
+    }),
   );
 
   const details: VerificationDetail[] = verifiable.map((m, i) => ({
