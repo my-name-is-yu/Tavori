@@ -40,7 +40,7 @@ export class GoalStateTool implements ITool<GoalStateInput, unknown> {
       return {
         success: false,
         data: null,
-        summary: ,
+        summary: "GoalStateTool failed: " + (err as Error).message,
         error: (err as Error).message,
         durationMs: Date.now() - startTime,
       };
@@ -53,8 +53,8 @@ export class GoalStateTool implements ITool<GoalStateInput, unknown> {
       return {
         success: false,
         data: null,
-        summary: ,
-        error: ,
+        summary: "Goal not found: " + goalId,
+        error: "Goal not found: " + goalId,
         durationMs: Date.now() - startTime,
       };
     }
@@ -85,7 +85,7 @@ export class GoalStateTool implements ITool<GoalStateInput, unknown> {
     return {
       success: true,
       data,
-      summary: ,
+      summary: "Goal " + goalId + ": status=" + goal.status + ", " + goal.dimensions.length + " dimensions",
       durationMs: Date.now() - startTime,
     };
   }
@@ -124,7 +124,7 @@ export class GoalStateTool implements ITool<GoalStateInput, unknown> {
     return {
       success: true,
       data: { goals: filtered },
-      summary: ,
+      summary: "Found " + filtered.length + " active goal(s)",
       durationMs: Date.now() - startTime,
     };
   }
