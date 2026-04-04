@@ -20,6 +20,8 @@ export const ToolResultSchema = z.object({
    * Used by verification to trace what the tool accessed.
    */
   artifacts: z.array(z.string()).optional(),
+  /** Set when output was truncated; contains the original character count */
+  truncated: z.object({ originalChars: z.number() }).optional(),
 });
 
 export type ToolResult = z.infer<typeof ToolResultSchema>;
@@ -145,6 +147,18 @@ export interface ToolCallContext {
   abortSignal?: AbortSignal;
   /** Timeout in milliseconds (per-tool-call) */
   timeoutMs?: number;
+  /** Session identifier for correlation in audit logs */
+  sessionId?: string;
+  /** Unique call identifier for correlation in audit logs */
+  callId?: string;
+  /** Optional logger for audit-trail events */
+  logger?: {
+    debug: (msg: string, meta?: Record<string, unknown>) => void;
+    warn: (msg: string, meta?: Record<string, unknown>) => void;
+    error: (msg: string, meta?: Record<string, unknown>) => void;
+  };
+  /** When true, gates pass but tool.call() is skipped (for testing pipelines) */
+  dryRun?: boolean;
 }
 
 export interface ApprovalRequest {
