@@ -23,7 +23,7 @@ describe("SleepTool", () => {
     const result = await tool.call({ durationMs }, makeContext());
     expect(result.success).toBe(true);
     const data = result.data as { sleptMs: number };
-    expect(data.sleptMs).toBeGreaterThanOrEqual(durationMs);
+    expect(data.sleptMs).toBeGreaterThanOrEqual(durationMs - 5); // timer precision tolerance
     expect(data.sleptMs).toBeLessThan(durationMs + 50);
   });
 
