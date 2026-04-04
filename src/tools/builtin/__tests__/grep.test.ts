@@ -16,16 +16,31 @@ function makeContext(cwd: string): ToolCallContext {
   };
 }
 
-function isRipgrepAvailable(): boolean {
+function findRgBinary(): string | null {
+  const candidates = [
+    "/opt/homebrew/bin/rg",
+    "/usr/local/bin/rg",
+    "/usr/bin/rg",
+  ];
+  for (const p of candidates) {
+    try {
+      execFileSync(p, ["--version"], { timeout: 3000 });
+      return p;
+    } catch {
+      // not found at this path
+    }
+  }
+  // Try PATH as fallback (works if not a shell function)
   try {
     execFileSync("rg", ["--version"], { timeout: 3000 });
-    return true;
+    return "rg";
   } catch {
-    return false;
+    return null;
   }
 }
 
-const HAS_RG = isRipgrepAvailable();
+const RG_BIN = findRgBinary();
+const HAS_RG = RG_BIN !== null;
 
 describe("GrepTool", () => {
   let tmpDir: string;
@@ -33,13 +48,15 @@ describe("GrepTool", () => {
 
   beforeAll(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "grep-test-"));
-    await fs.writeFile(path.join(tmpDir, "alpha.ts"), "export const hello = "world";
-export const foo = 42;
-");
-    await fs.writeFile(path.join(tmpDir, "beta.ts"), "import { hello } from "./alpha.js";
-console.log(hello);
-");
-    await fs.writeFile(path.join(tmpDir, "other.json"), "{"key": "value"}");
+    await fs.writeFile(
+      path.join(tmpDir, "alpha.ts"),
+      'export const hello = "world";\nexport const foo = 42;\n'
+    );
+    await fs.writeFile(
+      path.join(tmpDir, "beta.ts"),
+      'import { hello } from "./alpha.js";\nconsole.log(hello);\n'
+    );
+    await fs.writeFile(path.join(tmpDir, "other.json"), '{"key": "value"}');
   });
 
   afterAll(async () => {
@@ -53,8 +70,7 @@ console.log(hello);
     );
     expect(result.success).toBe(true);
     const output = result.data as string;
-    const files = output.split("
-").filter(Boolean);
+    const files = output.split("\n").filter(Boolean);
     expect(files.length).toBe(2);
     expect(files.some((f) => f.includes("alpha.ts"))).toBe(true);
     expect(files.some((f) => f.includes("beta.ts"))).toBe(true);
@@ -88,8 +104,7 @@ console.log(hello);
     );
     expect(result.success).toBe(true);
     const output = result.data as string;
-    const files = output.split("
-").filter(Boolean);
+    const files = output.split("\n").filter(Boolean);
     expect(files.length).toBeGreaterThan(0);
   });
 
@@ -100,7 +115,6 @@ console.log(hello);
     );
     expect(result.success).toBe(true);
     const output = result.data as string;
-    // hello does not appear in other.json
     expect(output.trim()).toBe("");
   });
 

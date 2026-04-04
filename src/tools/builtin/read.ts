@@ -36,13 +36,11 @@ export class ReadTool implements ITool<ReadInput, string> {
       : path.resolve(context.cwd, input.file_path);
     try {
       const content = await fs.readFile(filePath, "utf-8");
-      const lines = content.split("
-");
+      const lines = content.split("\n");
       const start = input.offset ?? 0;
       const end = Math.min(start + input.limit, lines.length);
       const selected = lines.slice(start, end);
-      const formatted = selected.map((line, i) => `${start + i + 1}	${line}`).join("
-");
+      const formatted = selected.map((line, i) => `${start + i + 1}\t${line}`).join("\n");
       return {
         success: true,
         data: formatted,
