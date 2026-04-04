@@ -5,7 +5,7 @@ import {
   autoRegisterShellDataSources,
   autoRegisterFileExistenceDataSources,
   SHELL_DIMENSION_PATTERNS,
-} from "../../../cli/commands/goal-utils.js";
+} from "../../../interface/cli/commands/goal-utils.js";
 import { makeTempDir } from "../../../../tests/helpers/temp-dir.js";
 
 // ─── Minimal StateManager stub ───

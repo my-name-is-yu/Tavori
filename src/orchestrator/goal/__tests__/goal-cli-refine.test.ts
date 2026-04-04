@@ -96,7 +96,7 @@ describe("cmdGoalAdd — GoalRefiner integration", () => {
     // Mock dynamic imports inside cmdGoalAdd
     const mockGoalRefiner = { refine: mockRefine };
 
-    vi.doMock("../../../cli/setup.js", () => ({
+    vi.doMock("../../../interface/cli/setup.js", () => ({
       buildDeps: vi.fn(async () => ({
         goalNegotiator: { negotiate: vi.fn() },
         goalRefiner: mockGoalRefiner,
@@ -112,7 +112,7 @@ describe("cmdGoalAdd — GoalRefiner integration", () => {
       collectLeafGoalIds: vi.fn((result: { goal: { id: string }; leaf: boolean; children: null }) => [result.goal.id]),
     }));
 
-    vi.doMock("../../../cli/ensure-api-key.js", () => ({
+    vi.doMock("../../../interface/cli/ensure-api-key.js", () => ({
       ensureProviderConfig: vi.fn(async () => {}),
     }));
 
@@ -141,7 +141,7 @@ describe("cmdGoalAdd — GoalRefiner integration", () => {
     }));
 
     // Import after mocking
-    const { cmdGoalAdd } = await import("../../../cli/commands/goal.js");
+    const { cmdGoalAdd } = await import("../../../interface/cli/commands/goal.js");
 
     // Act
     const code = await cmdGoalAdd(
@@ -169,7 +169,7 @@ describe("cmdGoalAdd — GoalRefiner integration", () => {
     }));
     const mockRefine = vi.fn();
 
-    vi.doMock("../../../cli/setup.js", () => ({
+    vi.doMock("../../../interface/cli/setup.js", () => ({
       buildDeps: vi.fn(async () => ({
         goalNegotiator: { negotiate: mockNegotiate },
         goalRefiner: { refine: mockRefine },
@@ -185,7 +185,7 @@ describe("cmdGoalAdd — GoalRefiner integration", () => {
       collectLeafGoalIds: vi.fn((result: { goal: { id: string }; leaf: boolean; children: null }) => [result.goal.id]),
     }));
 
-    vi.doMock("../../../cli/ensure-api-key.js", () => ({
+    vi.doMock("../../../interface/cli/ensure-api-key.js", () => ({
       ensureProviderConfig: vi.fn(async () => {}),
     }));
 
@@ -194,7 +194,7 @@ describe("cmdGoalAdd — GoalRefiner integration", () => {
       gatherNegotiationContext: vi.fn(async () => null),
     }));
 
-    const { cmdGoalAdd } = await import("../../../cli/commands/goal.js");
+    const { cmdGoalAdd } = await import("../../../interface/cli/commands/goal.js");
 
     // Act
     const code = await cmdGoalAdd(
@@ -220,7 +220,7 @@ describe("cmdGoalAdd — GoalRefiner integration", () => {
 
     const mockGoalRefiner2 = { refine: mockRefine };
 
-    vi.doMock("../../../cli/setup.js", () => ({
+    vi.doMock("../../../interface/cli/setup.js", () => ({
       buildDeps: vi.fn(async () => ({
         goalNegotiator: { negotiate: vi.fn() },
         goalRefiner: mockGoalRefiner2,
@@ -236,7 +236,7 @@ describe("cmdGoalAdd — GoalRefiner integration", () => {
       collectLeafGoalIds: vi.fn((result: { goal: { id: string }; leaf: boolean; children: null }) => [result.goal.id]),
     }));
 
-    vi.doMock("../../../cli/ensure-api-key.js", () => ({
+    vi.doMock("../../../interface/cli/ensure-api-key.js", () => ({
       ensureProviderConfig: vi.fn(async () => {}),
     }));
 
@@ -264,7 +264,7 @@ describe("cmdGoalAdd — GoalRefiner integration", () => {
       createWorkspaceContextProvider: vi.fn(() => ({})),
     }));
 
-    const { cmdGoalAdd } = await import("../../../cli/commands/goal.js");
+    const { cmdGoalAdd } = await import("../../../interface/cli/commands/goal.js");
 
     // Act
     const code = await cmdGoalAdd(
@@ -287,7 +287,7 @@ describe("cmdGoalAddRaw — raw mode unchanged", () => {
   it("saves goal without calling LLM when --title and --dim provided", async () => {
     const stateManager = makeMockStateManager();
 
-    const { cmdGoalAddRaw } = await import("../../../cli/commands/goal-raw.js");
+    const { cmdGoalAddRaw } = await import("../../../interface/cli/commands/goal-raw.js");
 
     const code = await cmdGoalAddRaw(stateManager, {
       title: "tsc zero",

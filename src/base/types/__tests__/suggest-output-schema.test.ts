@@ -102,7 +102,7 @@ vi.mock("../../reporting/reporting-engine.js", async (importOriginal) => {
   };
 });
 
-import { CLIRunner } from "../../../cli/cli-runner.js";
+import { CLIRunner } from "../../../interface/cli/cli-runner.js";
 import { GoalNegotiator } from "../../../orchestrator/goal/goal-negotiator.js";
 import { SuggestOutputSchema } from "../suggest.js";
 import { makeTempDir } from "../../../../tests/helpers/temp-dir.js";
