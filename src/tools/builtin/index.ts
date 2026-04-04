@@ -17,6 +17,7 @@ export { WebSearchTool, createWebSearchClient } from "./web-search.js";
 export type { ISearchClient, SearchResult } from "./web-search.js";
 export { ToolSearchTool } from "./tool-search.js";
 export { EnvTool } from "./env.js";
+export { SleepTool } from "./sleep.js";
 export { GitDiffTool } from "./git-diff.js";
 export { FileWriteTool } from "./file-write.js";
 export { FileEditTool } from "./file-edit.js";
@@ -40,6 +41,7 @@ import { ProgressHistoryTool } from "./progress-history.js";
 import { WebSearchTool, createWebSearchClient } from "./web-search.js";
 import { ToolSearchTool } from "./tool-search.js";
 import { EnvTool } from "./env.js";
+import { SleepTool } from "./sleep.js";
 import { GitDiffTool } from "./git-diff.js";
 import { FileWriteTool } from "./file-write.js";
 import { FileEditTool } from "./file-edit.js";
@@ -70,6 +72,7 @@ export function createBuiltinTools(deps?: BuiltinToolDeps): ITool[] {
     new ProcessStatusTool(),
     new ReadTool(),
     new ShellTool(),
+    new SleepTool(),
     new TestRunnerTool(),
   ];
 
