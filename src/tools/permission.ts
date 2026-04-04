@@ -52,8 +52,8 @@ export class ToolPermissionManager {
       };
     }
 
-    // EthicsGate integration for Shell tool
-    if (tool.metadata.name === "shell" && this.ethicsGate) {
+    // EthicsGate integration for non-read-only tools (shell and future write tools)
+    if ((tool.metadata.name === "shell" || tool.metadata.permissionLevel !== "read_only") && this.ethicsGate) {
       const description = `Tool "${tool.metadata.name}" invocation: ${JSON.stringify(input).slice(0, 200)}`;
       try {
         const ethicsResult = await this.ethicsGate.check("task", context.goalId, description);
