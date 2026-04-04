@@ -77,7 +77,12 @@ export async function buildWorkspaceContext(
 }
 
 function isStringRecord(val: unknown): val is Record<string, string> {
-  return typeof val === "object" && val !== null;
+  return (
+    typeof val === "object" &&
+    val !== null &&
+    !Array.isArray(val) &&
+    Object.values(val as Record<string, unknown>).every((v) => typeof v === "string")
+  );
 }
 
 // --- WorkspaceContextCache ---
