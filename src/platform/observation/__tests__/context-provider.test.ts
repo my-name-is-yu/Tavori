@@ -104,7 +104,7 @@ describe("dimensionNameToSearchTerms", () => {
 });
 
 describe("buildWorkspaceContext (integration)", () => {
-  const projectRoot = path.resolve(__dirname, "../../..");
+  const projectRoot = path.resolve(__dirname, "../../../..");
 
   beforeEach(() => {
     execFileMock.mockReset();
@@ -317,7 +317,7 @@ describe("selectByTier", () => {
 });
 
 describe("buildWorkspaceContextItems", () => {
-  const projectRoot = path.resolve(__dirname, "../../..");
+  const projectRoot = path.resolve(__dirname, "../../../..");
 
   beforeEach(() => {
     execFileMock.mockReset();
