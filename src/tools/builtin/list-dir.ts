@@ -1,5 +1,6 @@
 import { z } from "zod";
 import * as fs from "node:fs/promises";
+import type { Dirent } from "node:fs";
 import * as path from "node:path";
 import type { ITool, ToolResult, ToolCallContext, PermissionCheckResult, ToolMetadata, ToolDescriptionContext } from "../types.js";
 
@@ -101,7 +102,7 @@ async function listDir(
   return results;
 }
 
-async function toDirEntry(dirPath: string, dirent: fs.Dirent): Promise<DirEntry> {
+async function toDirEntry(dirPath: string, dirent: Dirent): Promise<DirEntry> {
   if (dirent.isSymbolicLink()) {
     return { name: dirent.name, type: "symlink" };
   }
