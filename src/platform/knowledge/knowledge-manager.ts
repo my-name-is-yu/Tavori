@@ -452,6 +452,7 @@ export class KnowledgeManager {
     return loadDomainKnowledge(this.stateManager, goalId);
   }
 
+
   // ─── acquireWithTools (Phase 3-B) ───
 
   /**
@@ -466,11 +467,8 @@ export class KnowledgeManager {
   ): Promise<KnowledgeEntry[]> {
     // Step 1: Plan tool calls via LLM
     const planResponse = await this.llmClient.sendMessage(
-      [{ role: "user", content: `Question: ${question}
-Workspace: ${context.cwd}` }],
-      { system: "You are a research planner. Given a question, plan tool calls to gather information.
-Available read-only tools: glob (find files), grep (search content), read (read file), http_fetch (GET URL), json_query (query JSON file), shell (read-only commands like wc, git log, npm ls).
-Return a JSON array of { toolName, input } objects. Return [] if the question cannot be answered with these tools." }
+      [{ role: "user", content: `Question: ${question}\nWorkspace: ${context.cwd}` }],
+      { system: "You are a research planner. Given a question, plan tool calls to gather information.\nAvailable read-only tools: glob (find files), grep (search content), read (read file), http_fetch (GET URL), json_query (query JSON file), shell (read-only commands like wc, git log, npm ls).\nReturn a JSON array of { toolName, input } objects. Return [] if the question cannot be answered with these tools." }
     );
 
     // Step 2: Parse plan, return [] on error or empty
@@ -482,18 +480,12 @@ Return a JSON array of { toolName, input } objects. Return [] if the question ca
     const results = await toolExecutor.executeBatch(toolCalls, context);
     const successfulResults = results
       .filter((r) => r.success)
-      .map((r) => r.summary + "
-" + String(r.data).slice(0, 2000));
+      .map((r) => r.summary + "\n" + String(r.data).slice(0, 2000));
     if (successfulResults.length === 0) return [];
 
     // Step 4: Synthesize via LLM
     const synthesisResponse = await this.llmClient.sendMessage(
-      [{ role: "user", content: `Question: ${question}
-
-Tool outputs:
-${successfulResults.join("
----
-")}` }],
+      [{ role: "user", content: `Question: ${question}\n\nTool outputs:\n${successfulResults.join("\n---\n")}` }],
       { system: "Synthesize the following tool outputs to answer the question. Return a JSON object with: { answer: string, confidence: number (0-1), tags: string[] }" }
     );
     try {
