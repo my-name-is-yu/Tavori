@@ -271,6 +271,8 @@ export const ToolMetadataSchema = z.object({
   alwaysLoad: z.boolean().default(false),
   /** Maximum concurrent invocations (0 = unlimited) */
   maxConcurrency: z.number().default(0),
+  /** Maximum characters of tool output to pass to LLM (excess persisted to disk) */
+  maxOutputChars: z.number().default(8000),
   /**
    * Tags for categorization and filtering.
    * Used by the context-filtered tier of the registry.
@@ -713,6 +715,20 @@ export class ToolExecutor {
       },
     );
 
+    // --- Output Truncation: persist oversized output to disk ---
+    if (result.data) {
+      const serialized = JSON.stringify(result.data);
+      const originalLength = serialized.length;
+      if (originalLength > tool.metadata.maxOutputChars) {
+        const invocationId = `${tool.metadata.name}-${Date.now()}`;
+        const fullPath = `~/.pulseed/tool-output/${invocationId}.json`;
+        // persist full result to disk
+        await this.stateManager.writeFile(fullPath, serialized);
+        result.data = truncateOutput(result.data, tool.metadata.maxOutputChars);
+        result.truncated = { fullOutputPath: fullPath, originalChars: originalLength };
+      }
+    }
+
     this.logger?.debug(
       `Tool ${toolName} completed in ${result.durationMs}ms`,
     );
@@ -723,6 +739,11 @@ export class ToolExecutor {
   /**
    * Execute multiple tool calls, respecting concurrency safety.
    * Safe calls run in parallel; unsafe calls run sequentially.
+   *
+   * NOTE: executeBatch does NOT preserve ordering between safe and unsafe groups.
+   * Safe tools run in parallel first, then unsafe tools run sequentially.
+   * If caller requires strict ordering, use sequential execute() calls instead.
+   * The concurrency partitioning follows CC's StreamingToolExecutor pattern.
    */
   async executeBatch(
     calls: Array<{ toolName: string; input: unknown }>,
@@ -797,7 +818,8 @@ export class ToolExecutor {
   }
 
   private isPathSafe(p: string): boolean {
-    const resolved = require("path").resolve(p);
+    import * as path from "node:path";
+    const resolved = path.resolve(p);
     return !resolved.startsWith("/etc") && !resolved.startsWith("/var");
   }
 
@@ -999,11 +1021,7 @@ export class ToolPermissionManager {
     if (tool.metadata.name === "shell" && this.ethicsGate) {
       const description = `Tool "${tool.metadata.name}" invocation: ${JSON.stringify(input).slice(0, 200)}`;
       try {
-        const ethicsResult = await this.ethicsGate.evaluate({
-          description,
-          dimensions: [],
-          constraints: [],
-        });
+        const ethicsResult = await this.ethicsGate.check("task", context.goalId, description);
         if (ethicsResult.verdict === "reject") {
           return {
             status: "denied",
@@ -1161,10 +1179,10 @@ ObservationEngine.observe(dimension)
 |------|---------------------|-----------------|
 | `Glob` | Check if files/directories exist matching a pattern | mechanical (0.95) |
 | `Read` | Read file contents to extract current values | mechanical (0.95) |
-| `Shell` | Run `npm test`, `wc -l`, `git status`, `git log --oneline` | mechanical (0.90-1.0) |
-| `HttpFetch` | Check API health endpoints, fetch metric values | mechanical (0.85-0.95) |
-| `Grep` | Count occurrences, find patterns in codebase | mechanical (0.90) |
-| `JsonQuery` | Extract values from JSON config/state files | mechanical (0.95) |
+| `ShellTool` (`shell`) | Run `npm test`, `wc -l`, `git status`, `git log --oneline` | mechanical (0.95) |
+| `HttpFetchTool` (`http_fetch`) | Check API health endpoints, fetch metric values | mechanical (0.90) |
+| `GrepTool` (`grep`) | Count occurrences, find patterns in codebase | mechanical (0.98) |
+| `JsonQueryTool` (`json_query`) | Extract values from JSON config/state files | mechanical (0.98) |
 
 All tool-based observations produce **mechanical-tier confidence** because they are deterministic, repeatable, and leave no room for interpretation of the raw data.
 
@@ -1252,7 +1270,7 @@ async observeWithTools(
       return {
         rawData: files,
         parsedValue: files.length > 0 ? 1 : 0,
-        confidence: 0.95,
+        confidence: 0.98,
         toolName: "glob",
         durationMs: result.durationMs,
       };
@@ -1269,7 +1287,7 @@ async observeWithTools(
       return {
         rawData: result.data,
         parsedValue: null, // Requires parsing logic per dimension
-        confidence: 0.92,
+        confidence: 0.95,
         toolName: "shell",
         durationMs: result.durationMs,
       };
@@ -1286,7 +1304,7 @@ async observeWithTools(
       return {
         rawData: result.data,
         parsedValue: null, // Requires parsing logic per dimension
-        confidence: 0.88,
+        confidence: 0.90,
         toolName: "http_fetch",
         durationMs: result.durationMs,
       };
@@ -1420,7 +1438,7 @@ async measureDirectly(
 
   return {
     value: this.parseToolOutput(result.data, dimension),
-    confidence: toolName === "shell" ? 0.92 : 0.88,
+    confidence: toolName === "shell" ? 0.95 : toolName === "http_fetch" ? 0.90 : 0.98,
     measuredAt: new Date(),
     toolUsed: toolName,
   };
@@ -2381,14 +2399,13 @@ export class ShellTool implements ITool<ShellInput, ShellOutput> {
   ): Promise<PermissionCheckResult> {
     const cmd = input.command.trim();
 
-    // Read-only commands that are always safe
-    const safeCommands = [
+    // SAFE_PATTERNS: read-only commands that are always safe
+    const SAFE_PATTERNS = [
       /^(cat|head|tail|wc|ls|pwd|echo|date|hostname|which|type|file)\b/,
       /^git\s+(status|log|diff|show|branch|rev-parse|rev-list|describe|tag\s+-l)\b/,
       /^npm\s+(ls|list|view|info|outdated|audit)\b/,
       /^npx\s+vitest\s+(run|list|--reporter)/,
       /^npx\s+tsc\s+--noEmit/,
-      /^node\s+-e\s+/,
       /^rg\s/,
       /^find\s/,
       /^du\s/,
@@ -2396,12 +2413,8 @@ export class ShellTool implements ITool<ShellInput, ShellOutput> {
       /^tree\s/,
     ];
 
-    if (safeCommands.some((re) => re.test(cmd))) {
-      return { status: "allowed" };
-    }
-
-    // Mutation commands that are always denied in read-only mode
-    const deniedPatterns = [
+    // DENY_PATTERNS: mutation commands that are always denied in read-only mode
+    const DENY_PATTERNS = [
       /\brm\s/,
       /\bmv\s/,
       /\bcp\s/,
@@ -2422,18 +2435,24 @@ export class ShellTool implements ITool<ShellInput, ShellOutput> {
       /\|.*\b(tee|dd|rm|mv)\b/, // Piped to mutating commands
     ];
 
-    if (deniedPatterns.some((re) => re.test(cmd))) {
-      return {
-        status: "denied",
-        reason: `Mutation command blocked in read-only shell: ${cmd.slice(0, 80)}`,
-      };
+    // Split compound commands and check each segment
+    const segments = cmd.split(/\s*(?:&&|\|\||;)\s*/);
+    for (const segment of segments) {
+      const trimmed = segment.trim();
+      if (!trimmed) continue;
+      if (DENY_PATTERNS.some(p => p.test(trimmed))) {
+        return { status: "denied", reason: `Denied command segment: ${trimmed}` };
+      }
     }
-
-    // Unknown commands require approval
-    return {
-      status: "needs_approval",
-      reason: `Unrecognized shell command requires approval: ${cmd.slice(0, 100)}`,
-    };
+    // Then check each segment against safe patterns
+    for (const segment of segments) {
+      const trimmed = segment.trim();
+      if (!trimmed) continue;
+      if (!SAFE_PATTERNS.some(p => p.test(trimmed))) {
+        return { status: "needs_approval", reason: `Unknown command segment requires approval: ${trimmed}` };
+      }
+    }
+    return { status: "allowed" };
   }
 
   isConcurrencySafe(input: ShellInput): boolean {
