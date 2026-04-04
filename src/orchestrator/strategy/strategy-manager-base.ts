@@ -10,6 +10,10 @@ import type { KnowledgeGapSignal } from "../../base/types/knowledge.js";
 import type { KnowledgeManager } from "../../platform/knowledge/knowledge-manager.js";
 import type { StrategyTemplateRegistry } from "./strategy-template-registry.js";
 import type { Logger } from "../../runtime/logger.js";
+import type { ToolExecutor } from "../../tools/executor.js";
+import type { ToolCallContext } from "../../tools/types.js";
+import { WorkspaceContextCache, formatWorkspaceContext } from "./strategy-workspace.js";
+import type { WorkspaceContext } from "./strategy-workspace.js";
 import {
   VALID_TRANSITIONS,
   StrategyArraySchema,
@@ -38,6 +42,12 @@ export class StrategyManagerBase {
   /** In-memory index: strategyId → goalId */
   protected readonly strategyIndex: Map<string, string> = new Map();
 
+  /** Optional ToolExecutor for workspace context gathering (Phase 4-B). */
+  protected toolExecutor?: ToolExecutor;
+
+  /** Per-iteration workspace context cache (Phase 4-B). */
+  protected readonly workspaceCache: WorkspaceContextCache = new WorkspaceContextCache();
+
   constructor(stateManager: StateManager, llmClient: ILLMClient, knowledgeManager?: KnowledgeManager, promptGateway?: IPromptGateway, logger?: Logger) {
     this.stateManager = stateManager;
     this.llmClient = llmClient;
@@ -56,6 +66,11 @@ export class StrategyManagerBase {
     this.strategyTemplateRegistry = registry;
   }
 
+  /** Inject ToolExecutor for workspace context gathering (Phase 4-B). */
+  setToolExecutor(executor: ToolExecutor): void {
+    this.toolExecutor = executor;
+  }
+
   // ─── Core Lifecycle Methods ───
 
   /**
@@ -72,14 +87,36 @@ export class StrategyManagerBase {
       currentGap: number;
       pastStrategies: Strategy[];
     },
-    enrichment?: { templatesBlock?: string; lessonsBlock?: string }
+    enrichment?: { templatesBlock?: string; lessonsBlock?: string },
+    toolContext?: { toolCallContext: ToolCallContext; iteration: number }
   ): Promise<Strategy[]> {
+    // Gather workspace context via tools when available (Phase 4-B)
+    let workspaceCtx: WorkspaceContext | undefined;
+    if (this.toolExecutor && toolContext) {
+      try {
+        workspaceCtx = await this.workspaceCache.get(
+          toolContext.iteration,
+          this.toolExecutor,
+          toolContext.toolCallContext,
+        );
+      } catch {
+        // Non-fatal — proceed without workspace context
+      }
+    }
+
+    const workspaceBlock = workspaceCtx
+      ? formatWorkspaceContext(workspaceCtx)
+      : undefined;
+
     const prompt = buildGenerationPrompt(
       goalId,
       primaryDimension,
       targetDimensions,
       context,
-      enrichment
+      {
+        ...enrichment,
+        workspaceBlock,
+      }
     );
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

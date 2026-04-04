@@ -68,7 +68,7 @@ export function buildGenerationPrompt(
   primaryDimension: string,
   targetDimensions: string[],
   context: { currentGap: number; pastStrategies: Strategy[] },
-  enrichment?: { templatesBlock?: string; lessonsBlock?: string }
+  enrichment?: { templatesBlock?: string; lessonsBlock?: string; workspaceBlock?: string }
 ): string {
   // Sort all past strategies most recent first
   const sorted = [...context.pastStrategies].sort(
@@ -124,6 +124,7 @@ export function buildGenerationPrompt(
   }
 
   const enrichmentSection = [
+    enrichment?.workspaceBlock ?? "",
     enrichment?.templatesBlock ?? "",
     enrichment?.lessonsBlock ?? "",
   ]
