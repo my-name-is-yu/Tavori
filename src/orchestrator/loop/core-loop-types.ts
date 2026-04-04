@@ -32,6 +32,9 @@ import type { GapVector } from "../../base/types/gap.js";
 import type { DriveContext, DriveScore } from "../../base/types/drive.js";
 import type { CompletionJudgment } from "../../base/types/satisficing.js";
 import type { StallReport, StallAnalysis } from "../../base/types/stall.js";
+import type { ToolExecutor } from "../../tools/executor.js";
+import type { ToolRegistry } from "../../tools/registry.js";
+
 
 // ─── GapCalculator module interface (pure functions) ───
 
@@ -302,6 +305,10 @@ export interface CoreLoopDeps extends ObservationDeps, TreeDeps, StallDeps, Task
   strategyTemplateRegistry?: StrategyTemplateRegistry;
   /** Optional HookManager for lifecycle hook events. */
   hookManager?: import("../../runtime/hook-manager.js").HookManager;
+  /** Optional ToolExecutor for direct tool-based operations (observation, verification, knowledge). */
+  toolExecutor?: ToolExecutor;
+  /** Optional ToolRegistry for context-aware tool assembly. */
+  toolRegistry?: ToolRegistry;
 }
 
 export type ProgressPhase =
