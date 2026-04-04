@@ -26,6 +26,7 @@ export class EventServer {
   private port: number;
   private eventsDir: string;
   private fileWatcher: fs.FSWatcher | null = null;
+  private readonly processingFiles = new Set<string>();
   private readonly logger?: Logger;
   private readonly stateManager?: StateManager;
   private readonly triggerMapper?: TriggerMapper;
@@ -93,11 +94,19 @@ export class EventServer {
       if (!filename.endsWith(".json") || filename.endsWith(".tmp")) return;
 
       const filePath = path.join(this.eventsDir, filename);
-      void this.processEventFile(filePath, filename).catch((err) => {
-        this.logger?.error(
-          `EventServer: unhandled error processing event file "${filename}": ${String(err)}`
-        );
-      });
+      if (this.processingFiles.has(filename)) return;
+      this.processingFiles.add(filename);
+      void (async () => {
+        try {
+          await this.processEventFile(filePath, filename);
+        } catch (err) {
+          this.logger?.error(
+            `EventServer: unhandled error processing event file "${filename}": ${String(err)}`
+          );
+        } finally {
+          this.processingFiles.delete(filename);
+        }
+      })();
     });
   }
 
