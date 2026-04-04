@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 
-const BLOCKED_PATTERNS = [".env", "credentials", "secret", ".ssh/", "id_rsa", "node_modules/"];
+const BLOCKED_PATTERNS = [".env", "credentials", "secret", ".ssh/", "id_rsa", "node_modules"];
 
 export function validateFilePath(
   filePath: string,

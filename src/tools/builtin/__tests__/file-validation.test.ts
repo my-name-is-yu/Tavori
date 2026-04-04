@@ -25,12 +25,18 @@ describe("validateFilePath", () => {
   it("rejects node_modules paths", () => {
     const result = validateFilePath("node_modules/somelib/index.js", cwd);
     expect(result.valid).toBe(false);
-    expect(result.error).toContain("node_modules/");
+    expect(result.error).toContain("node_modules");
   });
 
   it("rejects credentials paths", () => {
     const result = validateFilePath("config/credentials.json", cwd);
     expect(result.valid).toBe(false);
     expect(result.error).toContain("credentials");
+  });
+
+  it("rejects node_modules path without trailing slash", () => {
+    const result = validateFilePath("node_modules", cwd);
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("node_modules");
   });
 });
