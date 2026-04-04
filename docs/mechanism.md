@@ -40,13 +40,18 @@ To discover tasks, we must first know reality. PulSeed observes the real-world s
 
 Observation targets change by goal. IoT sensor data, business metrics, database values, API responses, file states, external service conditions. PulSeed's observation is not confined to codebases. Any information source related to the goal is a target.
 
+#### Observation via Read-Only Tools
+
+The highest-trust layer of observation (mechanical verification) can now be performed directly by PulSeed without launching an agent session. Read-only tools — Shell (for running commands like `npx vitest run`), Read/Glob/Grep (for inspecting files and code), HttpFetch (for checking API health), and JsonQuery (for querying configs) — let PulSeed perceive the world synchronously within the core loop. Agent sessions are still used for observations that require multi-step work or interpretation.
+
 #### Observation Confidence
 
 Not all observations carry the same confidence level.
 
 | Observation Type | Confidence | Example |
 |-----------------|------------|---------|
-| Mechanical verification | High | Test results, sensor values, API responses |
+| Mechanical verification (direct tool) | Highest | Test results via Shell, file state via Read/Glob, API health via HttpFetch |
+| Mechanical verification (via agent) | High | Sensor values, complex data queries |
 | Independent evaluator judgment | Medium | Quality evaluation from a third-party perspective |
 | Estimates and self-reports | Low | "Roughly this amount" estimates |
 
@@ -174,9 +179,13 @@ Knowledge deficiency signals occur primarily at two steps.
 
 **During strategy selection**: At the stage of generating strategies to close the gap, the state of "effective approaches in this domain are unknown" or "there's no baseline to compare against" is detected. When StrategyManager cannot generate strategy candidates, it emits a knowledge deficiency signal.
 
+#### Simple Codebase Research via Tools
+
+Before delegating a knowledge acquisition task to an agent, PulSeed first attempts lightweight research using tools directly. Grep (for searching code patterns), Read (for reading specific files), and Glob (for discovering file structure) handle simple codebase questions without the overhead of an agent session. Only when the question requires reasoning, synthesis, or multi-step exploration is a full `KnowledgeAcquisitionTask` delegated to a research agent.
+
 #### KnowledgeAcquisitionTask
 
-When a knowledge deficiency is detected, a task with the dedicated category `task_category: "knowledge_acquisition"` is generated. This is a formal task type handled in parallel with regular goal-achievement tasks. It is delegated to a research agent, and execution results are persisted in `domain_knowledge.json`.
+When a knowledge deficiency is detected and tools alone cannot resolve it, a task with the dedicated category `task_category: "knowledge_acquisition"` is generated. This is a formal task type handled in parallel with regular goal-achievement tasks. It is delegated to a research agent, and execution results are persisted in `domain_knowledge.json`.
 
 #### Knowledge Feedback
 
@@ -394,26 +403,27 @@ PulSeed is the brain. The body already exists. What was missing was only a mecha
 
 ## 6. Execution Boundary
 
-**PulSeed does not execute anything itself. PulSeed always delegates to agents.**
+**PulSeed perceives the world directly through read-only tools; all mutations and multi-step work are delegated to agents.**
 
 ### What PulSeed Does Directly
 
-What PulSeed processes itself is only LLM calls for its own thinking process and reading/writing state.
+PulSeed processes the following itself:
 
 - LLM calls for goal decomposition, observation result analysis, strategy selection, and task concretization
+- Read-only tool invocations: Glob, Read, Grep (file/code inspection), Shell (running read-only commands like test runs or metric checks), HttpFetch (API health checks), JsonQuery (config queries)
 - Reading and writing the goal tree, observation logs, and learning data to files
 
 ### What PulSeed Delegates
 
-Everything related to execution is delegated.
+Everything that mutates state or requires multi-step work is delegated.
 
-- Code implementation, data collection and analysis, file operations → dedicated agents
-- External service integrations, API calls → appropriate agents or tools
+- Code implementation, multi-step data collection, file mutations → dedicated agents
+- External service integrations, write API calls → appropriate agents
 - Notification and report delivery → messaging systems
 - Approval for irreversible actions → humans (mandatory)
 
 ### What "PulSeed Did ○○" Means
 
-Expressions like "PulSeed wrote the code" or "PulSeed built the system" are shorthand. More precisely, they mean "PulSeed instructed an agent to implement the code and verified the results" and "PulSeed delegated construction tasks to a group of agents and confirmed the integration."
+Expressions like "PulSeed wrote the code" or "PulSeed built the system" are shorthand. More precisely, they mean "PulSeed instructed an agent to implement the code and verified the results" and "PulSeed delegated construction tasks to a group of agents and confirmed the integration." Expressions like "PulSeed checked the tests" mean "PulSeed ran `npx vitest run` via Shell tool and parsed the output directly."
 
-PulSeed is an entity that thinks, not an entity that acts. See `design/goal/execution-boundary.md` for details.
+See `design/goal/execution-boundary.md` for the full delegation model and shorthand mapping.
