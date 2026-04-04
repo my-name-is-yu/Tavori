@@ -33,6 +33,11 @@ import {
 } from "./observation-apply.js";
 import { findDataSourceForDimension as findDataSourceForDimensionFn } from "./observation-datasource.js";
 
+import type { ToolExecutor } from "../../tools/executor.js";
+import type { ToolCallContext } from "../../tools/types.js";
+import type { Dimension } from "../../orchestrator/goal/types/goal.js";
+import type { ToolPermissionManager } from "../../tools/permission.js";
+
 // Re-export types and helpers for backward compatibility
 export type { ObservationEngineOptions, CrossValidationResult } from "./observation-helpers.js";
 export {
@@ -43,6 +48,35 @@ export {
   resolveContradiction,
   detectKnowledgeGap,
 } from "./observation-helpers.js";
+
+
+export interface ToolObservationResult {
+  rawData: unknown;
+  parsedValue: number | string | boolean | null;
+  confidence: number;
+  toolName: string;
+  durationMs: number;
+}
+
+export function registerObservationAllowRules(
+  permissionManager: ToolPermissionManager,
+  dimensions: Dimension[],
+): void {
+  for (const dim of dimensions) {
+    const method = dim.observation_method;
+    if (method?.type === "mechanical" && method.endpoint) {
+      const allowedCommand = method.endpoint;
+      permissionManager.addAllowRule({
+        toolName: "shell",
+        inputMatcher: (input) => {
+          const cmd = (input as { command: string }).command;
+          return cmd === allowedCommand;
+        },
+        reason: `Observation command for dimension "${dim.name}"`,
+      });
+    }
+  }
+}
 
 /**
  * ObservationEngine handles the 3-layer observation architecture.
@@ -64,6 +98,7 @@ export class ObservationEngine {
   private readonly logger?: Logger;
   private readonly preChecker?: IDimensionPreChecker;
   private readonly hookManager?: HookManager;
+  private toolExecutor?: ToolExecutor;
 
   constructor(
     stateManager: StateManager,
@@ -73,7 +108,8 @@ export class ObservationEngine {
     options: ObservationEngineOptions = {},
     logger?: Logger,
     preChecker?: IDimensionPreChecker,
-    hookManager?: HookManager
+    hookManager?: HookManager,
+    toolExecutor?: ToolExecutor
   ) {
     this.stateManager = stateManager;
     this.dataSources = dataSources;
@@ -83,6 +119,7 @@ export class ObservationEngine {
     this.logger = logger;
     this.preChecker = preChecker;
     this.hookManager = hookManager;
+    this.toolExecutor = toolExecutor;
   }
 
   // ─── Cross-Validation ───
@@ -676,4 +713,42 @@ export class ObservationEngine {
       domain
     );
   }
+
+  // ─── Tool-Based Observation ───
+
+  /**
+   * Observe a dimension using the tool executor.
+   * Routes to the appropriate tool based on observation_method.type.
+   */
+  async observeWithTools(
+    dimension: Dimension,
+    context: ToolCallContext,
+  ): Promise<ToolObservationResult | null> {
+    if (!this.toolExecutor) return null;
+
+    const method = dimension.observation_method;
+    if (!method || !method.endpoint) return null;
+
+    switch (method.type) {
+      case "file_check": {
+        const result = await this.toolExecutor.execute("glob", { pattern: method.endpoint }, context);
+        if (!result.success) return null;
+        const files = result.data as string[];
+        return { rawData: files, parsedValue: files.length > 0 ? 1 : 0, confidence: 0.98, toolName: "glob", durationMs: result.durationMs };
+      }
+      case "mechanical": {
+        const result = await this.toolExecutor.execute("shell", { command: method.endpoint, timeoutMs: 30_000 }, context);
+        if (!result.success) return null;
+        return { rawData: result.data, parsedValue: null, confidence: 0.95, toolName: "shell", durationMs: result.durationMs };
+      }
+      case "api_query": {
+        const result = await this.toolExecutor.execute("http_fetch", { url: method.endpoint, method: "GET" }, context);
+        if (!result.success) return null;
+        return { rawData: result.data, parsedValue: null, confidence: 0.90, toolName: "http_fetch", durationMs: result.durationMs };
+      }
+      default:
+        return null;
+    }
+  }
+
 }
