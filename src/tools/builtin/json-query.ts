@@ -19,7 +19,7 @@ export class JsonQueryTool implements ITool<JsonQueryInput, unknown> {
   readonly inputSchema = JsonQueryInputSchema;
 
   description(): string {
-    return "Query a JSON file using dot-notation path (e.g., "dependencies.zod", "scripts.build").";
+    return 'Query a JSON file using dot-notation path (e.g., "dependencies.zod", "scripts.build").';
   }
 
   async call(input: JsonQueryInput, context: ToolCallContext): Promise<ToolResult> {
@@ -29,7 +29,7 @@ export class JsonQueryTool implements ITool<JsonQueryInput, unknown> {
       const content = await fs.readFile(filePath, "utf-8");
       const json = JSON.parse(content);
       const value = this.queryPath(json, input.query);
-      return { success: true, data: value, summary: `${input.query} = ${JSON.stringify(value).slice(0, 200)}`, durationMs: Date.now() - startTime };
+      return { success: true, data: value, summary: `${input.query} = ${JSON.stringify(value ?? null).slice(0, 200)}`, durationMs: Date.now() - startTime };
     } catch (err) {
       return { success: false, data: null, summary: `JSON query failed: ${(err as Error).message}`, error: (err as Error).message, durationMs: Date.now() - startTime };
     }
