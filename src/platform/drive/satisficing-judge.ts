@@ -537,7 +537,7 @@ export class SatisficingJudge {
   async propagateSubgoalCompletion(
     subgoalId: string,
     parentGoalId: string,
-    subgoalDimensions?: import("../base/types/goal.js").Dimension[]
+    subgoalDimensions?: import("../../base/types/goal.js").Dimension[]
   ): Promise<void> {
     await propagateSubgoalCompletionFn(
       subgoalId,
