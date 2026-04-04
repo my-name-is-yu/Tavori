@@ -8,7 +8,7 @@ import { MockEmbeddingClient } from "../../../platform/knowledge/embedding-clien
 import type { IEmbeddingClient } from "../../../platform/knowledge/embedding-client.js";
 import { StrategySchema } from "../../../base/types/strategy.js";
 import type { Strategy } from "../../../base/types/strategy.js";
-import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
+import { createMockLLMClient } from "../../../../tests/helpers/mock-llm.js";
 
 // ─── Fixtures ───
 

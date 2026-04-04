@@ -4,13 +4,13 @@ import { StateManager } from "../../../base/state/state-manager.js";
 import { EthicsGate } from "../../../platform/traits/ethics-gate.js";
 import { ObservationEngine } from "../../../platform/observation/observation-engine.js";
 import { GoalNegotiator, EthicsRejectedError } from "../goal-negotiator.js";
-import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
-import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
+import { createMockLLMClient } from "../../../../tests/helpers/mock-llm.js";
+import { makeTempDir } from "../../../../tests/helpers/temp-dir.js";
 import {
   PASS_VERDICT_SAFE_JSON as PASS_VERDICT,
   REJECT_VERDICT_ILLEGAL_JSON as REJECT_VERDICT,
   FLAG_VERDICT_PRIVACY_JSON as FLAG_VERDICT,
-} from "../../../tests/helpers/ethics-fixtures.js";
+} from "../../../../tests/helpers/ethics-fixtures.js";
 
 const SINGLE_DIMENSION_RESPONSE = JSON.stringify([
   {

@@ -3,8 +3,8 @@ import * as fs from "node:fs";
 import { StateManager } from "../../../base/state/state-manager.js";
 import { StrategyManager } from "../../strategy/strategy-manager.js";
 import { trigramSimilarity, generateTask } from "../task/task-generation.js";
-import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
-import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
+import { createMockLLMClient } from "../../../../tests/helpers/mock-llm.js";
+import { makeTempDir } from "../../../../tests/helpers/temp-dir.js";
 
 // ─── Fixtures ───
 

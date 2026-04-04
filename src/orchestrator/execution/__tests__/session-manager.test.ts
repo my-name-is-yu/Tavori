@@ -6,7 +6,7 @@ import { SessionManager, DEFAULT_CONTEXT_BUDGET } from "../session-manager.js";
 import { CheckpointManager } from "../checkpoint-manager.js";
 import type { Session } from "../../../base/types/session.js";
 import type { KnowledgeEntry } from "../../../base/types/knowledge.js";
-import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
+import { makeTempDir } from "../../../../tests/helpers/temp-dir.js";
 import { randomUUID } from "node:crypto";
 
 // ─── Tests ───

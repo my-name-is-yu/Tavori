@@ -12,8 +12,8 @@ import { GoalDependencyGraph } from "../goal-dependency-graph.js";
 import { TreeLoopOrchestrator } from "../tree-loop-orchestrator.js";
 import type { Goal, Dimension } from "../../../base/types/goal.js";
 import type { GoalDecompositionConfig } from "../../../base/types/goal-tree.js";
-import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
-import { makeGoal } from "../../../tests/helpers/fixtures.js";
+import { createMockLLMClient } from "../../../../tests/helpers/mock-llm.js";
+import { makeGoal } from "../../../../tests/helpers/fixtures.js";
 
 // ─── Fixtures ───
 

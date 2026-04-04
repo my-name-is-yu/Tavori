@@ -16,8 +16,8 @@ import type {
   LLMRequestOptions,
   LLMResponse,
 } from "../../../base/llm/llm-client.js";
-import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
-import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
+import { createMockLLMClient } from "../../../../tests/helpers/mock-llm.js";
+import { makeTempDir } from "../../../../tests/helpers/temp-dir.js";
 
 // ─── Spy LLM Client ───
 

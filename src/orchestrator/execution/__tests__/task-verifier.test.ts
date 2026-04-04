@@ -8,8 +8,8 @@ import { verifyTask } from "../task/task-verifier.js";
 import type { VerifierDeps } from "../task/task-verifier.js";
 import type { Task } from "../../../base/types/task.js";
 import type { Logger } from "../../../runtime/logger.js";
-import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
-import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
+import { createMockLLMClient } from "../../../../tests/helpers/mock-llm.js";
+import { makeTempDir } from "../../../../tests/helpers/temp-dir.js";
 
 function makeTask(overrides: Partial<Task> = {}): Task {
   return {

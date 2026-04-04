@@ -31,8 +31,8 @@ import * as GapCalculator from "../../../platform/drive/gap-calculator.js";
 import * as DriveScorer from "../../../platform/drive/drive-scorer.js";
 
 // ─── Mock utilities ───
-import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
-import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
+import { createMockLLMClient } from "../../../../tests/helpers/mock-llm.js";
+import { makeTempDir } from "../../../../tests/helpers/temp-dir.js";
 
 // ─── Types ───
 import type { Goal } from "../../../base/types/goal.js";

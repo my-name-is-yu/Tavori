@@ -34,8 +34,8 @@ import type { Goal } from "../../../base/types/goal.js";
 import type { StallReport } from "../../../base/types/stall.js";
 import type { LoopIterationResult } from "../core-loop-types.js";
 import type { PhaseCtx } from "../core-loop-phases.js";
-import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
-import { makeGoal } from "../../../tests/helpers/fixtures.js";
+import { makeTempDir } from "../../../../tests/helpers/temp-dir.js";
+import { makeGoal } from "../../../../tests/helpers/fixtures.js";
 
 // ─── Helpers ───
 

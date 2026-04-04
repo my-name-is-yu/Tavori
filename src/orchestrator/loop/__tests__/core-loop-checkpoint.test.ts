@@ -19,8 +19,8 @@ import type { AdapterRegistry, IAdapter } from "../../execution/adapter-layer.js
 import type { GapVector } from "../../../base/types/gap.js";
 import type { CompletionJudgment } from "../../../base/types/satisficing.js";
 import type { DriveScore } from "../../../base/types/drive.js";
-import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
-import { makeGoal, makeDimension } from "../../../tests/helpers/fixtures.js";
+import { makeTempDir } from "../../../../tests/helpers/temp-dir.js";
+import { makeGoal, makeDimension } from "../../../../tests/helpers/fixtures.js";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 

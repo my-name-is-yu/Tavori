@@ -6,9 +6,9 @@ import { GoalNegotiator, EthicsRejectedError } from "../goal-negotiator.js";
 import { StateManager } from "../../../base/state/state-manager.js";
 import type { DimensionDecomposition } from "../../../base/types/negotiation.js";
 import type { Goal } from "../../../base/types/goal.js";
-import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
-import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
-import { makeGoal } from "../../../tests/helpers/fixtures.js";
+import { createMockLLMClient } from "../../../../tests/helpers/mock-llm.js";
+import { makeTempDir } from "../../../../tests/helpers/temp-dir.js";
+import { makeGoal } from "../../../../tests/helpers/fixtures.js";
 
 type EthicsVerdict = {
   verdict: "pass" | "flag" | "reject";

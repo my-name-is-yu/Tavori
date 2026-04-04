@@ -6,10 +6,10 @@ import { EthicsGate } from "../../../platform/traits/ethics-gate.js";
 import { GoalDependencyGraph } from "../goal-dependency-graph.js";
 import { GoalTreeManager } from "../goal-tree-manager.js";
 import type { GoalDecompositionConfig } from "../../../base/types/goal-tree.js";
-import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
-import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
-import { makeGoal as _makeGoal, makeDimension } from "../../../tests/helpers/fixtures.js";
-import { PASS_VERDICT_SIMPLE_JSON as PASS_VERDICT } from "../../../tests/helpers/ethics-fixtures.js";
+import { createMockLLMClient } from "../../../../tests/helpers/mock-llm.js";
+import { makeTempDir } from "../../../../tests/helpers/temp-dir.js";
+import { makeGoal as _makeGoal, makeDimension } from "../../../../tests/helpers/fixtures.js";
+import { PASS_VERDICT_SIMPLE_JSON as PASS_VERDICT } from "../../../../tests/helpers/ethics-fixtures.js";
 import { randomUUID } from "node:crypto";
 
 // ─── Local defaults matching the original local makeGoal ───

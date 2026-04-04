@@ -19,8 +19,8 @@ import type { GapVector } from "../../../base/types/gap.js";
 import type { CompletionJudgment } from "../../../base/types/satisficing.js";
 import type { StallReport } from "../../../base/types/stall.js";
 import type { DriveScore } from "../../../base/types/drive.js";
-import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
-import { makeGoal } from "../../../tests/helpers/fixtures.js";
+import { makeTempDir } from "../../../../tests/helpers/temp-dir.js";
+import { makeGoal } from "../../../../tests/helpers/fixtures.js";
 
 function makeGapVector(goalId = "goal-1"): GapVector {
   return {

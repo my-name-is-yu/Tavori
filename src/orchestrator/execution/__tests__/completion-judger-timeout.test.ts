@@ -19,7 +19,7 @@ import type { Task } from "../../../base/types/task.js";
 import type { AgentResult } from "../adapter-layer.js";
 import type { ILLMClient, LLMMessage, LLMRequestOptions, LLMResponse } from "../../../base/llm/llm-client.js";
 import type { z } from "zod";
-import { makeTempDir, cleanupTempDir } from "../../../tests/helpers/temp-dir.js";
+import { makeTempDir, cleanupTempDir } from "../../../../tests/helpers/temp-dir.js";
 
 // ─── Helpers ───
 

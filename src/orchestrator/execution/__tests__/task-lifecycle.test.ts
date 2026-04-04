@@ -24,8 +24,8 @@ import type { Task } from "../../../base/types/task.js";
 import type { GapVector } from "../../../base/types/gap.js";
 import type { DriveContext } from "../../../base/types/drive.js";
 import type { IGuardrailHook } from "../../../base/types/guardrail.js";
-import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
-import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
+import { createMockLLMClient } from "../../../../tests/helpers/mock-llm.js";
+import { makeTempDir } from "../../../../tests/helpers/temp-dir.js";
 
 // ─── Fixtures ───
 

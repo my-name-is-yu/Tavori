@@ -15,7 +15,7 @@ import type {
   LLMRequestOptions,
   LLMResponse,
 } from "../../../base/llm/llm-client.js";
-import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
+import { makeTempDir } from "../../../../tests/helpers/temp-dir.js";
 
 // ─── Minimal mock LLM ───
 

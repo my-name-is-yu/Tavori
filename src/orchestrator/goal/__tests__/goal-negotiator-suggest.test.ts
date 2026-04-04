@@ -8,11 +8,11 @@ import { ObservationEngine } from "../../../platform/observation/observation-eng
 import { GoalNegotiator } from "../goal-negotiator.js";
 import type { GoalSuggestion } from "../goal-negotiator.js";
 import { buildSuggestGoalsPrompt, looksLikeSoftwareGoal } from "../goal-suggest.js";
-import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
+import { createMockLLMClient } from "../../../../tests/helpers/mock-llm.js";
 import {
   PASS_VERDICT_SAFE_JSON as PASS_VERDICT,
   REJECT_VERDICT_ILLEGAL_JSON as REJECT_VERDICT,
-} from "../../../tests/helpers/ethics-fixtures.js";
+} from "../../../../tests/helpers/ethics-fixtures.js";
 
 const SUGGESTION_LIST = JSON.stringify([
   {

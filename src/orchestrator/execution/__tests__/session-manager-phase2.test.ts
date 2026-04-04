@@ -5,7 +5,7 @@ import { StateManager } from "../../../base/state/state-manager.js";
 import { SessionManager } from "../session-manager.js";
 import { GoalDependencyGraph } from "../../goal/goal-dependency-graph.js";
 import type { ContextSlot } from "../../../base/types/session.js";
-import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
+import { makeTempDir } from "../../../../tests/helpers/temp-dir.js";
 
 // ─── Helpers ───
 

@@ -6,9 +6,9 @@ import { GoalNegotiator } from "../goal-negotiator.js";
 import { StateManager } from "../../../base/state/state-manager.js";
 import { EthicsGate } from "../../../platform/traits/ethics-gate.js";
 import { ObservationEngine } from "../../../platform/observation/observation-engine.js";
-import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
-import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
-import { PASS_VERDICT_SIMPLE_JSON as PASS_VERDICT } from "../../../tests/helpers/ethics-fixtures.js";
+import { createMockLLMClient } from "../../../../tests/helpers/mock-llm.js";
+import { makeTempDir } from "../../../../tests/helpers/temp-dir.js";
+import { PASS_VERDICT_SIMPLE_JSON as PASS_VERDICT } from "../../../../tests/helpers/ethics-fixtures.js";
 
 // ─── Helpers ───
 

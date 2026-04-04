@@ -22,8 +22,8 @@ import type { CompletionJudgment } from "../../../base/types/satisficing.js";
 import type { GapVector } from "../../../base/types/gap.js";
 import type { DriveScore } from "../../../base/types/drive.js";
 import type { TaskCycleResult } from "../../execution/task/task-lifecycle.js";
-import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
-import { makeGoal } from "../../../tests/helpers/fixtures.js";
+import { makeTempDir } from "../../../../tests/helpers/temp-dir.js";
+import { makeGoal } from "../../../../tests/helpers/fixtures.js";
 
 // ─── Helpers ───
 

@@ -5,7 +5,7 @@ import {
   MEDIUM_BAND,
   NEAR_COMPLETE_GAP_THRESHOLD,
 } from "../subgoal-curriculum.js";
-import { makeGoal, makeDimension } from "../../../tests/helpers/fixtures.js";
+import { makeGoal, makeDimension } from "../../../../tests/helpers/fixtures.js";
 
 // ─── estimateDifficulty ───
 

@@ -6,8 +6,8 @@ import type { ObservationEngine } from "../../../platform/observation/observatio
 import type { GoalNegotiator } from "../goal-negotiator.js";
 import type { GoalTreeManager } from "../goal-tree-manager.js";
 import type { EthicsGate } from "../../../platform/traits/ethics-gate.js";
-import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
-import { makeGoal, makeDimension } from "../../../tests/helpers/fixtures.js";
+import { createMockLLMClient } from "../../../../tests/helpers/mock-llm.js";
+import { makeGoal, makeDimension } from "../../../../tests/helpers/fixtures.js";
 
 const measurableResponses = {
   shell: JSON.stringify({

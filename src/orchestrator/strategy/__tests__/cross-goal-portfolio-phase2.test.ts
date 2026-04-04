@@ -16,7 +16,7 @@ import type {
   DependencySchedule,
 } from "../../../base/types/cross-portfolio.js";
 
-import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
+import { makeTempDir } from "../../../../tests/helpers/temp-dir.js";
 
 // ─── Helpers ───
 

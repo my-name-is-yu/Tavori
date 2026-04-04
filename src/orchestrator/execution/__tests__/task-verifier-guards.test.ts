@@ -8,8 +8,8 @@ import { clampDimensionUpdate, handleVerdict, checkDimensionDirection } from "..
 import type { VerifierDeps } from "../task/task-verifier.js";
 import type { Task, VerificationResult } from "../../../base/types/task.js";
 import type { Logger } from "../../../runtime/logger.js";
-import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
-import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
+import { createMockLLMClient } from "../../../../tests/helpers/mock-llm.js";
+import { makeTempDir } from "../../../../tests/helpers/temp-dir.js";
 
 // ─── Fixtures ───
 

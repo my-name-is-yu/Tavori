@@ -5,8 +5,8 @@ import { StateManager } from "../../../base/state/state-manager.js";
 import { StrategyManager } from "../strategy-manager.js";
 import type { ILLMClient } from "../../../base/llm/llm-client.js";
 import type { Strategy } from "../../../base/types/strategy.js";
-import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
-import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
+import { createMockLLMClient } from "../../../../tests/helpers/mock-llm.js";
+import { makeTempDir } from "../../../../tests/helpers/temp-dir.js";
 
 // ─── Fixtures ───
 

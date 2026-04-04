@@ -6,12 +6,12 @@ import { ObservationEngine } from "../../../platform/observation/observation-eng
 import { GoalNegotiator, EthicsRejectedError } from "../goal-negotiator.js";
 import { GoalSchema } from "../../../base/types/goal.js";
 import type { Goal } from "../../../base/types/goal.js";
-import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
-import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
+import { createMockLLMClient } from "../../../../tests/helpers/mock-llm.js";
+import { makeTempDir } from "../../../../tests/helpers/temp-dir.js";
 import {
   PASS_VERDICT_SAFE_JSON as PASS_VERDICT,
   REJECT_VERDICT_ILLEGAL_JSON as REJECT_VERDICT,
-} from "../../../tests/helpers/ethics-fixtures.js";
+} from "../../../../tests/helpers/ethics-fixtures.js";
 
 const SINGLE_DIMENSION_RESPONSE = JSON.stringify([
   {

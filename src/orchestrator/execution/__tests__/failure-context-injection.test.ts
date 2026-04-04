@@ -8,9 +8,9 @@ import type { Task, VerificationResult } from "../../../base/types/task.js";
 import { SessionManager } from "../session-manager.js";
 import { TrustManager } from "../../../platform/traits/trust-manager.js";
 import { StallDetector } from "../../../platform/drive/stall-detector.js";
-import { createMockLLMClient } from "../../../tests/helpers/mock-llm.js";
-import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
-import { makeGoal, makeDimension } from "../../../tests/helpers/fixtures.js";
+import { createMockLLMClient } from "../../../../tests/helpers/mock-llm.js";
+import { makeTempDir } from "../../../../tests/helpers/temp-dir.js";
+import { makeGoal, makeDimension } from "../../../../tests/helpers/fixtures.js";
 
 // ─── failure-context injection tests (§4.7) ───
 
