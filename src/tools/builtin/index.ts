@@ -16,6 +16,9 @@ export { ProgressHistoryTool } from "./progress-history.js";
 export { WebSearchTool, createWebSearchClient } from "./web-search.js";
 export type { ISearchClient, SearchResult } from "./web-search.js";
 export { ToolSearchTool } from "./tool-search.js";
+export { FileWriteTool } from "./file-write.js";
+export { FileEditTool } from "./file-edit.js";
+export { validateFilePath } from "./file-validation.js";
 
 import { GlobTool } from "./glob.js";
 import { GrepTool } from "./grep.js";
@@ -34,6 +37,8 @@ import { KnowledgeQueryTool } from "./knowledge-query.js";
 import { ProgressHistoryTool } from "./progress-history.js";
 import { WebSearchTool, createWebSearchClient } from "./web-search.js";
 import { ToolSearchTool } from "./tool-search.js";
+import { FileWriteTool } from "./file-write.js";
+import { FileEditTool } from "./file-edit.js";
 import type { ITool } from "../types.js";
 import type { StateManager } from "../../base/state/state-manager.js";
 import type { KnowledgeManager } from "../../platform/knowledge/knowledge-manager.js";
@@ -48,6 +53,8 @@ export interface BuiltinToolDeps {
 /** All built-in tools, sorted alphabetically by name. */
 export function createBuiltinTools(deps?: BuiltinToolDeps): ITool[] {
   const tools: ITool[] = [
+    new FileEditTool(),
+    new FileWriteTool(),
     new GitLogTool(),
     new GlobTool(),
     new GrepTool(),
