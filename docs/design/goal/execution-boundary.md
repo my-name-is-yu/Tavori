@@ -4,11 +4,11 @@
 
 ## 1. Core Principle
 
-**PulSeed does not execute on its own. PulSeed always delegates to agents.**
+**PulSeed perceives the world directly through read-only tools; all mutations and multi-step work are delegated to agents.**
 
 "PulSeed wrote the code," "PulSeed collected the data," "PulSeed built the system" — none of these are accurate. The precise statements are: "PulSeed instructed an agent to implement the code," "PulSeed asked an agent to collect the data," "PulSeed delegated system construction to an agent."
 
-PulSeed is the brain, not the body. It decides; it does not act.
+PulSeed perceives directly but does not mutate. It observes, decides, and delegates execution.
 
 ---
 
@@ -24,6 +24,7 @@ The only thing PulSeed does directly is **LLM calls for its own thinking process
 | LLM calls for task concretization | Convert a strategy into a single executable task and define success criteria |
 | LLM calls for completion judgment | Evaluate whether a goal is "good enough" against satisficing criteria |
 | State read/write | Save and load goal trees, observation logs, and learning data to files |
+| Read-only tool invocations | Perceive the world: check files (Glob, Read), search code (Grep), run metrics commands (Shell), check API health (HttpFetch), query configs (JsonQuery) |
 
 Everything else is delegated to agents.
 
@@ -44,7 +45,7 @@ Anything related to execution is outside PulSeed's scope.
 | Communication and notifications | Sending reports, firing alerts, approval requests | Messaging systems |
 | Human confirmation | Approval requests for irreversible actions | Humans (directly) |
 
-Think of it this way: "PulSeed has no body." PulSeed observes, thinks, and instructs. It is always another entity that moves its hands.
+Think of it this way: "PulSeed has no body." PulSeed perceives the world directly through read-only tools, then thinks and instructs. For simple mechanical data collection (e.g., reading a config file, listing files, checking an API endpoint), PulSeed uses tools directly rather than delegating to an agent. All mutations, writes, and multi-step work remain delegated.
 
 ---
 
@@ -301,6 +302,8 @@ An explicit mapping of expressions:
 | PulSeed sent the notification | PulSeed delegated message delivery to the notification system |
 | PulSeed built the tool | PulSeed instructed a code implementation agent to create the tool and verified its operation |
 | PulSeed investigated | PulSeed delegated an investigation task to an agent and analyzed the result |
+| PulSeed checked the tests | PulSeed ran `npx vitest run` via Shell tool and parsed the output |
+| PulSeed read the config | PulSeed used the Read tool to access the configuration file |
 
 The shorthand is convenient in conversation, but use the precise form when discussing design.
 
@@ -326,8 +329,8 @@ The approval flow is itself a form of delegation. The question "is it okay to pe
 
 PulSeed's execution boundary in one sentence:
 
-> **PulSeed thinks. Agents act.**
+> **PulSeed perceives the world directly through read-only tools; all mutations and multi-step work are delegated to agents.**
 
-PulSeed's value lies in continuously discovering "what should be done next" from the gap between goals and reality. It is always agents, humans, or existing systems that carry out the results of that discovery.
+PulSeed's value lies in continuously discovering "what should be done next" from the gap between goals and reality. It perceives directly (via read-only tools) to minimize latency on mechanical observations, then delegates all execution to the agent best suited at that moment.
 
 This separation makes PulSeed scalable. No matter how complex the goal, PulSeed keeps deciding "what should be done." "How to execute it" is handled by whichever agent is best suited at that moment.
