@@ -96,7 +96,7 @@ describe("cmdGoalAdd — GoalRefiner integration", () => {
     // Mock dynamic imports inside cmdGoalAdd
     const mockGoalRefiner = { refine: mockRefine };
 
-    vi.doMock("../../cli/setup.js", () => ({
+    vi.doMock("../../../cli/setup.js", () => ({
       buildDeps: vi.fn(async () => ({
         goalNegotiator: { negotiate: vi.fn() },
         goalRefiner: mockGoalRefiner,
@@ -112,19 +112,19 @@ describe("cmdGoalAdd — GoalRefiner integration", () => {
       collectLeafGoalIds: vi.fn((result: { goal: { id: string }; leaf: boolean; children: null }) => [result.goal.id]),
     }));
 
-    vi.doMock("../../cli/ensure-api-key.js", () => ({
+    vi.doMock("../../../cli/ensure-api-key.js", () => ({
       ensureProviderConfig: vi.fn(async () => {}),
     }));
 
-    vi.doMock("../../base/llm/provider-factory.js", () => ({
+    vi.doMock("../../../base/llm/provider-factory.js", () => ({
       buildLLMClient: vi.fn(async () => ({})),
     }));
 
-    vi.doMock("../../observation/observation-engine.js", () => ({
+    vi.doMock("../../../platform/observation/observation-engine.js", () => ({
       ObservationEngine: vi.fn().mockImplementation(() => ({})),
     }));
 
-    vi.doMock("../../traits/ethics-gate.js", () => ({
+    vi.doMock("../../../platform/traits/ethics-gate.js", () => ({
       EthicsGate: vi.fn().mockImplementation(() => ({})),
     }));
 
@@ -136,7 +136,7 @@ describe("cmdGoalAdd — GoalRefiner integration", () => {
       GoalDependencyGraph: vi.fn().mockImplementation(() => ({})),
     }));
 
-    vi.doMock("../../observation/workspace-context.js", () => ({
+    vi.doMock("../../../platform/observation/workspace-context.js", () => ({
       createWorkspaceContextProvider: vi.fn(() => ({})),
     }));
 
@@ -169,7 +169,7 @@ describe("cmdGoalAdd — GoalRefiner integration", () => {
     }));
     const mockRefine = vi.fn();
 
-    vi.doMock("../../cli/setup.js", () => ({
+    vi.doMock("../../../cli/setup.js", () => ({
       buildDeps: vi.fn(async () => ({
         goalNegotiator: { negotiate: mockNegotiate },
         goalRefiner: { refine: mockRefine },
@@ -185,7 +185,7 @@ describe("cmdGoalAdd — GoalRefiner integration", () => {
       collectLeafGoalIds: vi.fn((result: { goal: { id: string }; leaf: boolean; children: null }) => [result.goal.id]),
     }));
 
-    vi.doMock("../../cli/ensure-api-key.js", () => ({
+    vi.doMock("../../../cli/ensure-api-key.js", () => ({
       ensureProviderConfig: vi.fn(async () => {}),
     }));
 
@@ -220,7 +220,7 @@ describe("cmdGoalAdd — GoalRefiner integration", () => {
 
     const mockGoalRefiner2 = { refine: mockRefine };
 
-    vi.doMock("../../cli/setup.js", () => ({
+    vi.doMock("../../../cli/setup.js", () => ({
       buildDeps: vi.fn(async () => ({
         goalNegotiator: { negotiate: vi.fn() },
         goalRefiner: mockGoalRefiner2,
@@ -236,19 +236,19 @@ describe("cmdGoalAdd — GoalRefiner integration", () => {
       collectLeafGoalIds: vi.fn((result: { goal: { id: string }; leaf: boolean; children: null }) => [result.goal.id]),
     }));
 
-    vi.doMock("../../cli/ensure-api-key.js", () => ({
+    vi.doMock("../../../cli/ensure-api-key.js", () => ({
       ensureProviderConfig: vi.fn(async () => {}),
     }));
 
-    vi.doMock("../../base/llm/provider-factory.js", () => ({
+    vi.doMock("../../../base/llm/provider-factory.js", () => ({
       buildLLMClient: vi.fn(async () => ({})),
     }));
 
-    vi.doMock("../../observation/observation-engine.js", () => ({
+    vi.doMock("../../../platform/observation/observation-engine.js", () => ({
       ObservationEngine: vi.fn().mockImplementation(() => ({})),
     }));
 
-    vi.doMock("../../traits/ethics-gate.js", () => ({
+    vi.doMock("../../../platform/traits/ethics-gate.js", () => ({
       EthicsGate: vi.fn().mockImplementation(() => ({})),
     }));
 
@@ -260,7 +260,7 @@ describe("cmdGoalAdd — GoalRefiner integration", () => {
       GoalDependencyGraph: vi.fn().mockImplementation(() => ({})),
     }));
 
-    vi.doMock("../../observation/workspace-context.js", () => ({
+    vi.doMock("../../../platform/observation/workspace-context.js", () => ({
       createWorkspaceContextProvider: vi.fn(() => ({})),
     }));
 
