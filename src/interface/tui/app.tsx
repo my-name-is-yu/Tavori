@@ -21,6 +21,7 @@ import type { CoreLoop } from "../../orchestrator/loop/core-loop.js";
 import type { StateManager } from "../../base/state/state-manager.js";
 import type { TrustManager } from "../../platform/traits/trust-manager.js";
 import type { Task } from "../../base/types/task.js";
+import type { ChatRunner } from "../../interface/chat/chat-runner.js";
 
 const MAX_MESSAGES = 200;
 
@@ -35,6 +36,7 @@ interface AppProps {
   trustManager: TrustManager;
   actionHandler: ActionHandler;
   intentRecognizer: IntentRecognizer;
+  chatRunner?: ChatRunner;
   onApprovalReady?: (requestFn: (req: ApprovalRequest) => void) => void;
   cwd?: string;
   gitBranch?: string;
@@ -67,6 +69,7 @@ export function App({
   trustManager,
   actionHandler,
   intentRecognizer,
+  chatRunner,
   onApprovalReady,
   cwd,
   gitBranch,
@@ -106,6 +109,13 @@ export function App({
     }
   }, [onApprovalReady]);
 
+  // Start ChatRunner session on mount (persists history across turns)
+  useEffect(() => {
+    if (chatRunner) {
+      chatRunner.startSession(process.cwd());
+    }
+  }, [chatRunner]);
+
   // Pre-load active/waiting goal names for fuzzy completion in Chat
   useEffect(() => {
     (async () => {
@@ -141,6 +151,7 @@ export function App({
 
   const handleInput = useCallback(
     async (input: string) => {
+      if (isProcessing) return;
       // Dismiss report overlay on any input
       if (reportToShow !== null) {
         setReportToShow(null);
@@ -151,57 +162,92 @@ export function App({
       setIsProcessing(true);
 
       try {
-        // Recognize intent
-        const intent = await intentRecognizer.recognize(input);
+        // Slash commands go through IntentRecognizer -> ActionHandler
+        if (input.startsWith("/")) {
+          // Recognize intent
+          const intent = await intentRecognizer.recognize(input);
 
-        // Execute action
-        const result = await actionHandler.handle(intent);
+          // Execute action
+          const result = await actionHandler.handle(intent);
 
-        // Handle help overlay signal — do not add messages to chat
-        if (result.showHelp) {
-          setShowHelp(true);
-          return;
-        }
-
-        // Handle report overlay signal — do not add messages to chat
-        if (result.showReport) {
-          setReportToShow(result.showReport);
-          return;
-        }
-
-        // Add response messages
-        setMessages((prev) => [
-          ...prev,
-          ...result.messages.map((text) => ({
-            role: "pulseed" as const,
-            text,
-            timestamp: new Date(),
-            messageType: result.messageType ?? ("info" as const),
-          })),
-        ].slice(-MAX_MESSAGES));
-
-        // Handle dashboard toggle signal
-        if (result.toggleDashboard === "toggle") {
-          setShowSidebar(prev => !prev);
-        }
-
-        // Handle loop signals
-        if (result.startLoop) {
-          start(result.startLoop.goalId);
-        }
-        if (result.stopLoop) {
-          // Reject any pending approval before stopping
-          if (approvalRequestRef.current) {
-            approvalRequestRef.current.resolve(false);
-            approvalRequestRef.current = null;
-            setApprovalRequest(null);
+          // Handle help overlay signal — do not add messages to chat
+          if (result.showHelp) {
+            setShowHelp(true);
+            return;
           }
-          stop();
+
+          // Handle report overlay signal — do not add messages to chat
+          if (result.showReport) {
+            setReportToShow(result.showReport);
+            return;
+          }
+
+          // Add response messages
+          setMessages((prev) => [
+            ...prev,
+            ...result.messages.map((text) => ({
+              role: "pulseed" as const,
+              text,
+              timestamp: new Date(),
+              messageType: result.messageType ?? ("info" as const),
+            })),
+          ].slice(-MAX_MESSAGES));
+
+          // Handle dashboard toggle signal
+          if (result.toggleDashboard === "toggle") {
+            setShowSidebar(prev => !prev);
+          }
+
+          // Handle loop signals
+          if (result.startLoop) {
+            start(result.startLoop.goalId);
+          }
+          if (result.stopLoop) {
+            // Reject any pending approval before stopping
+            if (approvalRequestRef.current) {
+              approvalRequestRef.current.resolve(false);
+              approvalRequestRef.current = null;
+              setApprovalRequest(null);
+            }
+            stop();
+          }
+        } else if (chatRunner) {
+          // Free-form text goes through ChatRunner for live LLM chat
+          setMessages((prev) => [
+            ...prev,
+            { role: "pulseed" as const, text: "Thinking...", timestamp: new Date(), messageType: "info" as const },
+          ].slice(-MAX_MESSAGES));
+
+          const result = await chatRunner.execute(input, process.cwd());
+
+          // Replace the "Thinking..." message with the actual response
+          setMessages((prev) => [
+            ...prev.slice(0, -1),
+            {
+              role: "pulseed" as const,
+              text: result.output || "(no response)",
+              timestamp: new Date(),
+              messageType: result.success ? ("info" as const) : ("error" as const),
+            },
+          ].slice(-MAX_MESSAGES));
+        } else {
+          // No chatRunner available — fall through to intent recognizer
+          const intent = await intentRecognizer.recognize(input);
+          const result = await actionHandler.handle(intent);
+          setMessages((prev) => [
+            ...prev,
+            ...result.messages.map((text) => ({
+              role: "pulseed" as const,
+              text,
+              timestamp: new Date(),
+              messageType: result.messageType ?? ("info" as const),
+            })),
+          ].slice(-MAX_MESSAGES));
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         setMessages((prev) => [
-          ...prev,
+          ...prev.slice(0, -1),
           {
             role: "pulseed" as const,
             text: `Error: ${message}`,
@@ -213,7 +259,7 @@ export function App({
         setIsProcessing(false);
       }
     },
-    [intentRecognizer, actionHandler, start, stop]
+    [intentRecognizer, actionHandler, chatRunner, start, stop]
   );
 
   // Expose controller for SIGINT shutdown in entry.ts
