@@ -4,7 +4,7 @@
  */
 
 // Unique marker: zero-width space + ◉ — won't appear in message history
-const INPUT_MARKER = "\u200B\u2767";
+const INPUT_MARKER = "\u200B\u25C9";
 
 /**
  * Find the row index of the input prompt in a rendered frame.
