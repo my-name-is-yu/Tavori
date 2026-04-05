@@ -7,7 +7,7 @@ import { DriveSystem } from "../platform/drive/drive-system.js";
 import { StateManager } from "../base/state/state-manager.js";
 import { PIDManager } from "./pid-manager.js";
 import { Logger } from "./logger.js";
-import type { EventServer } from "./event-server.js";
+import { EventServer } from "./event-server.js";
 import type { PulSeedEvent } from "../base/types/drive.js";
 import type { DaemonConfig, DaemonState } from "../base/types/daemon.js";
 import { DaemonConfigSchema, DaemonStateSchema } from "../base/types/daemon.js";
@@ -77,6 +77,7 @@ export class DaemonRunner {
   private logPath: string;
   private shutdownHandler: (() => void) | null = null;
   private eventServer: EventServer | undefined;
+  private approvalFn: ((task: Record<string, unknown>) => Promise<boolean>) | undefined;
   private sleepAbortController: AbortController | null = null;
   private currentGoalIds: string[] = [];
   private currentLoopIndex = 0;
@@ -142,15 +143,44 @@ export class DaemonRunner {
     await this.rotateLog();
     await this.checkCrashRecovery();
 
-    // 2c. Start EventServer (if provided) and file watcher
-    if (this.eventServer) {
-      await this.eventServer.start();
-      this.eventServer.startFileWatcher();
-      this.logger.info("EventServer started", {
-        host: this.eventServer.getHost(),
-        port: this.eventServer.getPort(),
-      });
+    // 2c. Start EventServer (always-on) and file watcher
+    if (!this.eventServer) {
+      this.eventServer = new EventServer(this.driveSystem, {
+        port: 41700,
+        stateManager: this.stateManager,
+      }, this.logger);
     }
+    await this.eventServer.start();
+    this.eventServer.startFileWatcher();
+    this.logger.info("EventServer started", { port: 41700 });
+
+    // Wire approval bridge if not already provided
+    if (!this.approvalFn && this.eventServer) {
+      const es = this.eventServer;
+      this.approvalFn = async (task: Record<string, unknown>): Promise<boolean> => {
+        return es.requestApproval(
+          String(task["goal_id"] ?? "unknown"),
+          {
+            id: String(task["id"] ?? ""),
+            description: String(task["description"] ?? ""),
+            action: String(task["action"] ?? ""),
+          }
+        );
+      };
+    }
+
+    // Start heartbeat (every 30s)
+    const heartbeatInterval = setInterval(() => {
+      if (this.eventServer && this.state.status === "running") {
+        this.eventServer.broadcast("daemon_status", {
+          status: this.state.status,
+          activeGoals: this.state.active_goals,
+          loopCount: this.state.loop_count,
+          uptime: Date.now() - new Date(this.state.started_at).getTime(),
+        });
+      }
+    }, 30_000);
+
     this.driveSystem.startWatcher((event) => this.onEventReceived(event));
 
     // 3. Set up signal handlers for graceful shutdown
@@ -227,6 +257,7 @@ export class DaemonRunner {
         this.shutdownHandler = null;
       }
       // Stop file watcher and EventServer
+      clearInterval(heartbeatInterval);
       this.driveSystem.stopWatcher();
       if (this.eventServer) {
         this.eventServer.stopFileWatcher();
@@ -234,6 +265,11 @@ export class DaemonRunner {
         this.logger.info("EventServer stopped");
       }
     }
+  }
+
+  /** Expose approvalFn for callers (e.g. cmdStart) to wire into TaskLifecycle */
+  getApprovalFn(): ((task: Record<string, unknown>) => Promise<boolean>) | undefined {
+    return this.approvalFn;
   }
 
   /**
@@ -284,6 +320,14 @@ export class DaemonRunner {
               status: result.finalStatus,
               iterations: result.totalIterations,
             });
+            if (this.eventServer) {
+              const goal = await this.stateManager.loadGoal(goalId).catch(() => null);
+              this.eventServer.broadcast("iteration_complete", {
+                goalId,
+                loopCount: this.state.loop_count,
+                status: goal?.status ?? "unknown",
+              });
+            }
           } catch (err) {
             this.handleLoopError(goalId, err);
           }
@@ -294,6 +338,14 @@ export class DaemonRunner {
 
         // 3. Save state
         await this.saveDaemonState();
+        if (this.eventServer) {
+          this.eventServer.broadcast("daemon_status", {
+            status: this.state.status,
+            activeGoals: this.state.active_goals,
+            loopCount: this.state.loop_count,
+            lastLoopAt: this.state.last_loop_at,
+          });
+        }
 
         // 3b. Process due cron-scheduled tasks
         await this.processCronTasks();
