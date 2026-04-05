@@ -343,6 +343,34 @@ export class ObservationEngine {
         }
       }
 
+      // Step 0.5: Tool-based observation (highest confidence, when available)
+      if (this.toolExecutor) {
+        const methodType = dim.observation_method?.type;
+        if (methodType === 'file_check' || methodType === 'mechanical' || methodType === 'api_query') {
+          try {
+            const toolResult = await this.observeWithTools(dim, { goalId });
+            if (toolResult !== null) {
+              const toolEntry = createObservationEntry({
+                goalId,
+                dimensionName: dim.name,
+                layer: 'mechanical',
+                method: { ...method, source: toolResult.toolName },
+                trigger: 'periodic',
+                rawResult: toolResult.rawData,
+                extractedValue: toolResult.parsedValue,
+                confidence: toolResult.confidence,
+              });
+              await this.applyObservation(goalId, toolEntry);
+              this.logger?.debug(`[ObservationEngine] Tool observation succeeded for ${dim.name}: confidence=${toolResult.confidence}`);
+              void this.hookManager?.emit('PostObserve', { goal_id: goalId, dimension: dim.name, data: { value: toolEntry.extracted_value, confidence: toolEntry.confidence } });
+              continue;
+            }
+          } catch (err) {
+            this.logger?.warn(`[ObservationEngine] Tool observation failed for ${dim.name}, falling through: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        }
+      }
+
       // 1. Try DataSource first
       const dataSource = this.findDataSourceForDimension(dim.name, goalId);
       if (dataSource) {
