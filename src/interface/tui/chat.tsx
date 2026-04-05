@@ -291,7 +291,7 @@ export function Chat({
 
   // ── Message selection & copy ──
   const [selectedMsgIndex, setSelectedMsgIndex] = useState<number | null>(null);
-  const [copyToast, setCopyToast] = useState(false);
+  const [copyToast, setCopyToast] = useState<string | null>(null);
   const isMountedRef = React.useRef(true);
   React.useEffect(() => () => { isMountedRef.current = false; }, []);
   const emptyHintTimer = React.useRef<ReturnType<typeof setTimeout> | null>(
@@ -305,10 +305,11 @@ export function Chat({
   const selectAndCopy = useCallback((index: number | null) => {
     setSelectedMsgIndex(index);
     if (index !== null && messages[index]) {
-      copyToClipboard(messages[index].text).then(() => {
+      const text = messages[index].text;
+      copyToClipboard(text).then(() => {
         if (!isMountedRef.current) return;
-        setCopyToast(true);
-        setTimeout(() => { if (isMountedRef.current) setCopyToast(false); }, 1200);
+        setCopyToast(`copied ${text.length} chars to clipboard`);
+        setTimeout(() => { if (isMountedRef.current) setCopyToast(null); }, 1200);
       });
     }
   }, [messages]);
@@ -371,7 +372,7 @@ export function Chat({
         if (key.downArrow || inputChar === "j") {
           if (selectedMsgIndex >= messages.length - 1) {
             setSelectedMsgIndex(null);
-            setCopyToast(false);
+            setCopyToast(null);
           } else {
             const next = selectedMsgIndex + 1;
             selectAndCopy(next);
@@ -387,13 +388,13 @@ export function Chat({
         }
         if (key.escape) {
           setSelectedMsgIndex(null);
-          setCopyToast(false);
+          setCopyToast(null);
           return;
         }
         // Any other key: deselect
         if (inputChar && inputChar.length > 0) {
           setSelectedMsgIndex(null);
-          setCopyToast(false);
+          setCopyToast(null);
         }
         return;
       }
@@ -591,7 +592,6 @@ export function Chat({
                   <Box flexDirection="column" flexGrow={1}>
                     <MessageRow msg={msg} />
                   </Box>
-                  {copyToast && <Text color="green"> Copied!</Text>}
                 </Box>
               ) : (
                 <MessageRow msg={msg} />
@@ -617,13 +617,19 @@ export function Chat({
 
         {/* Input area with borders — always at bottom */}
         <Box flexDirection="column">
-          <Box
-            borderStyle="single"
-            borderColor={theme.border}
-            borderBottom={false}
-            borderLeft={false}
-            borderRight={false}
-          />
+          <Box>
+            <Box
+              borderStyle="single"
+              borderColor={theme.border}
+              borderBottom={false}
+              borderLeft={false}
+              borderRight={false}
+              flexGrow={1}
+            />
+            {copyToast && (
+              <Text color="cyan" dimColor>{` ${copyToast} `}</Text>
+            )}
+          </Box>
           <Box>
             <Text color={theme.userPrompt} bold>
               {"​◉ "}
@@ -634,7 +640,7 @@ export function Chat({
                 justSelected.current = false;
                 if (selectedMsgIndex !== null) {
                   setSelectedMsgIndex(null);
-                  setCopyToast(false);
+                  setCopyToast(null);
                 }
                 setInput(val);
               }}
