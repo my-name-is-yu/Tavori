@@ -190,7 +190,7 @@ export async function observeAndReload(
         if (reloaded) return reloaded;
         return goal;
       }
-      ctx.logger?.warn();
+      ctx.logger?.warn(`CoreLoop: observe-goal tool failed: ${toolResult.error}, falling back to direct call`);
     } catch (err) {
       ctx.logger?.warn("CoreLoop: observe-goal tool threw (falling back to direct call)", { error: err instanceof Error ? err.message : String(err) });
     }
