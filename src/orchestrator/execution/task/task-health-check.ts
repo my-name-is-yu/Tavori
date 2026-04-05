@@ -34,7 +34,7 @@ async function runCommandViaToolExecutor(
   const ctx = makeHealthCheckContext();
   const result = await toolExecutor.execute(
     "shell",
-    { command, timeout: timeoutMs },
+    { command, timeoutMs },
     ctx,
   );
   if (!result.success) {
