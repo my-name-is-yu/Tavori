@@ -17,6 +17,8 @@ export interface ObservationEngineOptions {
   gitContextFetcher?: (maxChars: number) => string | Promise<string>;
   /** Optional VectorIndex for indexing dimension names after observation. */
   vectorIndex?: VectorIndex;
+  /** Optional ToolExecutor for git diff via tool system (preferred over raw execFile). */
+  toolExecutor?: import("../../tools/executor.js").ToolExecutor;
 }
 
 // ─── Cross-Validation Result ───
