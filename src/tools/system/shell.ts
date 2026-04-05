@@ -51,7 +51,10 @@ export class ShellTool implements ITool<ShellInput, ShellOutput> {
     }
   }
 
-  async checkPermissions(input: ShellInput): Promise<PermissionCheckResult> {
+  async checkPermissions(input: ShellInput, context?: ToolCallContext): Promise<PermissionCheckResult> {
+    if (context?.trusted) {
+      return { status: "allowed" };
+    }
     const cmd = input.command.trim();
     const SAFE_PATTERNS = [
       /^(cat|head|tail|wc|ls|pwd|echo|date|hostname|which|type|file)/,
