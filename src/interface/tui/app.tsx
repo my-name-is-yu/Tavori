@@ -171,6 +171,18 @@ export function App({
     }
   }, { isActive: reportToShow === null && approvalRequest === null });
 
+  const handleClear = useCallback(() => {
+    setMessages([
+      {
+        id: randomUUID(),
+        role: "pulseed" as const,
+        text: "Chat cleared. Type '/help' for available commands.",
+        timestamp: new Date(),
+        messageType: "info" as const,
+      },
+    ]);
+  }, []);
+
   const handleInput = useCallback(
     async (input: string) => {
       if (isProcessing) return;
@@ -337,7 +349,7 @@ export function App({
           ) : showHelp ? (
             <HelpOverlay onDismiss={() => setShowHelp(false)} />
           ) : (
-            <Chat messages={messages} onSubmit={handleInput} isProcessing={isProcessing} goalNames={goalNames} />
+            <Chat messages={messages} onSubmit={handleInput} onClear={handleClear} isProcessing={isProcessing} goalNames={goalNames} />
           )}
         </Box>
       </Box>
