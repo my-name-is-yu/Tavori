@@ -1,6 +1,9 @@
 import { getConfigKeys, updateGlobalConfig } from "../../base/config/global-config.js";
 
 export type { ApprovalLevel, MutationToolDeps } from "./mutation-tool-defs.js";
+/**
+ * @deprecated Use ToolRegistry.listAll() + toToolDefinitions() instead.
+ */
 export { getMutationToolDefinitions } from "./mutation-tool-defs.js";
 
 import type { MutationToolDeps } from "./mutation-tool-defs.js";
@@ -277,6 +280,10 @@ async function handleResetTrust(
 
 // ─── Dispatcher ───
 
+/**
+ * @deprecated Use ToolRegistry.get(name).call() via ChatRunner instead.
+ * This function is a backward-compatibility shim.
+ */
 export async function handleMutationToolCall(
   toolName: string,
   args: Record<string, unknown>,

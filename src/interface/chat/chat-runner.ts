@@ -12,12 +12,10 @@ import { buildChatContext, resolveGitRoot } from "../../platform/observation/con
 import type { EscalationHandler } from "./escalation.js";
 import { buildSystemPrompt } from "./grounding.js";
 import { verifyChatAction } from "./chat-verifier.js";
-import { getSelfKnowledgeToolDefinitions, handleSelfKnowledgeToolCall } from "./self-knowledge-tools.js";
-import type { SelfKnowledgeDeps } from "./self-knowledge-tools.js";
-import { getMutationToolDefinitions, handleMutationToolCall } from "./self-knowledge-mutation-tools.js";
-import type { MutationToolDeps, ApprovalLevel } from "./self-knowledge-mutation-tools.js";
-import type { TrustManager } from "../../platform/traits/trust-manager.js";
-import type { PluginLoader } from "../../runtime/plugin-loader.js";
+import type { ApprovalLevel } from "./self-knowledge-mutation-tools.js";
+import type { ToolRegistry } from "../../tools/registry.js";
+import { toToolDefinitions } from "../../tools/tool-definition-adapter.js";
+import type { ToolCallContext } from "../../tools/types.js";
 import type { ToolExecutor } from "../../tools/executor.js";
 import type { LLMMessage, LLMResponse } from "../../base/llm/llm-client.js";
 
@@ -31,15 +29,17 @@ export interface ChatRunnerDeps {
   /** Optional: escalation handler for /track command (Phase 1c). */
   escalationHandler?: EscalationHandler;
   /** Optional: trust manager for self-knowledge tools and mutations. */
-  trustManager?: TrustManager | { getBalance(domain: string): Promise<{ balance: number }> };
+  trustManager?: { getBalance(domain: string): Promise<{ balance: number }>; setOverride?(domain: string, balance: number, reason: string): Promise<void> };
   /** Optional: plugin loader for self-knowledge tools and mutations. */
-  pluginLoader?: PluginLoader | { loadAll(): Promise<Array<{ name: string; type?: string; enabled?: boolean }>> };
+  pluginLoader?: { loadAll(): Promise<Array<{ name: string; type?: string; enabled?: boolean }>> };
   /** Optional: approval handler for mutation tools. */
   approvalFn?: (description: string) => Promise<boolean>;
   /** Optional: per-tool approval level overrides. */
   approvalConfig?: Record<string, ApprovalLevel>;
   /** Optional: tool executor for post-change verification (git diff + tests). */
   toolExecutor?: ToolExecutor;
+  /** Optional: tool registry providing unified tool catalog. */
+  registry?: ToolRegistry;
 }
 
 export interface ChatRunResult {
@@ -292,14 +292,11 @@ export class ChatRunner {
    */
   private async executeWithTools(prompt: string, systemPrompt?: string): Promise<string> {
     const llmClient = this.deps.llmClient!;
-    const tools = [...getSelfKnowledgeToolDefinitions(), ...getMutationToolDefinitions()];
-    const skDeps = this.buildSelfKnowledgeDeps();
-    const mutDeps = this.buildMutationToolDeps();
+    const tools = this.deps.registry
+      ? toToolDefinitions(this.deps.registry.listAll())
+      : [];
     const messages: LLMMessage[] = [{ role: "user", content: prompt }];
-    const mutationToolNames = new Set([
-      "set_goal", "update_goal", "archive_goal", "delete_goal",
-      "toggle_plugin", "update_config", "reset_trust",
-    ]);
+    const toolCallContext = this.buildToolCallContext();
 
     for (let loop = 0; loop < MAX_TOOL_LOOPS; loop++) {
       let response: LLMResponse;
@@ -329,9 +326,7 @@ export class ChatRunner {
         } catch {
           // ignore parse errors, use empty args
         }
-        const toolResult = mutationToolNames.has(tc.function.name)
-          ? await handleMutationToolCall(tc.function.name, args, mutDeps)
-          : await handleSelfKnowledgeToolCall(tc.function.name, args, skDeps);
+        const toolResult = await this.dispatchToolCall(tc.function.name, args, toolCallContext);
         messages.push({ role: "user", content: `Tool result for ${tc.function.name}:\n${toolResult}` });
       }
     }
@@ -341,28 +336,45 @@ export class ChatRunner {
     return lastAssistant?.content || "I was unable to complete the request within the allowed tool call limit.";
   }
 
-  /** Build SelfKnowledgeDeps from ChatRunnerDeps. */
-  private buildSelfKnowledgeDeps(): SelfKnowledgeDeps {
-    return {
-      stateManager: this.deps.stateManager,
-      trustManager: this.deps.trustManager,
-      pluginLoader: this.deps.pluginLoader as SelfKnowledgeDeps["pluginLoader"],
-      homeDir: process.env.HOME ?? process.env.USERPROFILE ?? "/tmp",
-    };
+  /** Dispatch a tool call through the registry. */
+  private async dispatchToolCall(
+    name: string,
+    args: Record<string, unknown>,
+    context: ToolCallContext,
+  ): Promise<string> {
+    if (!this.deps.registry) {
+      return JSON.stringify({ error: `No tool registry configured` });
+    }
+    const tool = this.deps.registry.get(name);
+    if (!tool) {
+      return JSON.stringify({ error: `Unknown tool: ${name}` });
+    }
+    try {
+      const parsed = tool.inputSchema.safeParse(args);
+      if (!parsed.success) {
+        return JSON.stringify({ error: `Invalid input: ${parsed.error.message}` });
+      }
+      const result = await tool.call(parsed.data, context);
+      return result.summary || JSON.stringify(result.data);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return JSON.stringify({ error: `Tool ${name} failed: ${message}` });
+    }
   }
 
-  /** Build MutationToolDeps from ChatRunnerDeps. */
-  private buildMutationToolDeps(): MutationToolDeps {
-    const tm = this.deps.trustManager;
-    const pl = this.deps.pluginLoader;
+  /** Build a ToolCallContext from ChatRunnerDeps for tool dispatch. */
+  private buildToolCallContext(): ToolCallContext {
     return {
-      stateManager: this.deps.stateManager,
-      trustManager: tm && "setOverride" in tm ? (tm as TrustManager) : undefined,
-      pluginLoader: pl && "getPluginState" in pl && "updatePluginState" in pl
-        ? (pl as PluginLoader)
-        : undefined,
-      approvalFn: this.deps.approvalFn,
-      approvalConfig: this.deps.approvalConfig,
+      cwd: this.sessionCwd ?? process.cwd(),
+      goalId: "",
+      trustBalance: 0,
+      preApproved: false,
+      approvalFn: async (req) => {
+        if (this.deps.approvalFn) {
+          return this.deps.approvalFn(req.reason);
+        }
+        return false;
+      },
     };
   }
 }

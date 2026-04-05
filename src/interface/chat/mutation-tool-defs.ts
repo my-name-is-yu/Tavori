@@ -61,6 +61,10 @@ export async function checkApproval(
 
 // ─── Tool Definitions ───
 
+/**
+ * @deprecated Use ToolRegistry.listAll() + toToolDefinitions() instead.
+ * This function is a backward-compatibility shim.
+ */
 export function getMutationToolDefinitions(): ToolDefinition[] {
   return [
     {

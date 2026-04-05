@@ -2,268 +2,218 @@
 
 ## 1. Overview
 
-PulSeed's tool system unifies interactive (AgentLoop) and autonomous (CoreLoop) execution through shared tool primitives, inspired by Claude Code's architecture.
+PulSeed has two existing tool systems that need to be unified:
 
-Two loops, one tool layer:
+**System A** (`src/tools/`): ITool class-based registry with ToolRegistry, ToolExecutor, ToolPermissionManager. Used by CoreLoop and ObservationEngine. Contains 20+ tools across `filesystem/`, `git/`, `state/`, `network/`, `system/`, `meta/` categories.
+
+**System B** (`src/interface/chat/`): Raw ToolDefinition JSON schemas used by ChatRunner for LLM function calling. Contains 6 self-knowledge read tools and 7 mutation tools.
+
+**Decision**: Integrate System B into System A. ChatRunner adapts ITool instances to ToolDefinition JSON via a `toToolDefinition()` adapter. No third system.
 
 ```
-┌─────────────────────────────────┐
-│       Shared Tool Layer         │
-│  ReadState, WriteState, ...     │
-└──────────┬──────────┬───────────┘
-           │          │
-    ┌──────▼─────┐  ┌▼────────────┐
-    │  AgentLoop  │  │  CoreLoop   │
-    │  LLM-driven │  │  Goal-driven│
-    │  free pick  │  │  fixed seq  │
-    └─────────────┘  └─────────────┘
+┌──────────────────────────────────────┐
+│   System A: ITool Registry           │
+│   src/tools/ — ToolRegistry,         │
+│   ToolExecutor, ToolPermissionManager│
+│   (filesystem, git, state, network,  │
+│    system, meta + new state tools)   │
+└──────────┬───────────────┬───────────┘
+           │               │
+    ┌──────▼──────┐  ┌─────▼──────────────┐
+    │  CoreLoop   │  │  ChatRunner         │
+    │  Goal-driven│  │  LLM function calls │
+    │  (existing) │  │  via toToolDef()    │
+    └─────────────┘  └────────────────────┘
 ```
 
-**AgentLoop** (interactive): LLM freely picks tools, stops at end_turn. Used for single-task, conversational sessions.
+**AgentLoop** (interactive): ChatRunner exposes ITool instances as ToolDefinition JSON for LLM function calling. LLM freely picks tools.
 
-**CoreLoop** (autonomous): fixed sequence — ReadState → QueryDataSource → (gap calc in code) → RunAdapter → QueryDataSource (verify). Stops when satisficing judge clears the gap.
-
-**Handoff**: Future `track` command transfers context from AgentLoop to CoreLoop.
+**CoreLoop** (autonomous): Fixed sequence using ITool instances directly via ToolExecutor.
 
 ---
 
-## 2. Tool Definition Type
+## 2. Tool Primitives
 
-Follows Claude Code's `buildTool()` pattern — each tool owns its prompt, UI rendering, and execution:
+System A tools implement the existing `ITool` interface from `src/tools/types.ts` (or equivalent). No new tool type abstraction is introduced.
+
+For ChatRunner compatibility, a single adapter converts any ITool to LLM-compatible JSON:
 
 ```typescript
-// src/tools/tool-types.ts
-import { z } from 'zod';
+// src/tools/tool-definition-adapter.ts
+import type { ITool } from './types.js';
+import type { ToolDefinition } from '../base/llm/llm-client.js';
 
-interface ToolDef<TInput = unknown, TOutput = unknown> {
-  name: string;
-  description: string;
-  parameters: z.ZodSchema<TInput>;
-  isReadOnly?: boolean;          // default: false (safe side)
-  isConcurrencySafe?: boolean;   // default: false (exclusive execution)
-  isDestructive?: boolean;       // default: false
-  statusVerb: string;            // e.g., "Reading state", "Running adapter"
-  statusArgKey?: string;         // param key for status display
-  maxResultSizeChars?: number;   // overflow → disk + preview
-  prompt: () => string;          // system prompt fragment injected per-tool
-  call: (input: TInput, ctx: ToolContext) => Promise<ToolResult<TOutput>>;
-  renderToolUse?: (input: TInput) => string;    // TUI display
-  renderToolResult?: (result: ToolResult<TOutput>) => string;
-}
-
-interface ToolResult<T = unknown> {
-  success: boolean;
-  data?: T;
-  error?: string;               // errors as data, not exceptions
-}
-
-interface ToolContext {
-  stateManager: StateManager;
-  llmClient: LLMClient;
-  approvalFn?: (desc: string) => Promise<boolean>;
-  onStatus?: (text: string) => void;
-}
-
-function buildTool<TInput, TOutput>(def: ToolDef<TInput, TOutput>): Tool<TInput, TOutput> {
+export function toToolDefinition(tool: ITool): ToolDefinition {
   return {
-    isReadOnly: false,
-    isConcurrencySafe: false,
-    isDestructive: false,
-    maxResultSizeChars: 50_000,
-    ...def,
+    type: 'function',
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters: {
+        type: 'object',
+        ...tool.inputSchema,  // ITool already carries JSON schema properties/required
+      },
+    },
   };
 }
 ```
 
+ChatRunner calls `registry.getAll().map(toToolDefinition)` to build its tool list. ToolRegistry and ToolExecutor remain unchanged.
+
 ---
 
-## 3. Tool Directory Structure
+## 3. Directory Structure
 
-Following Claude Code's pattern, each tool is a directory with 3 files:
+`src/tools/` already exists. New tools are added to the existing `state/` category using the flat-file pattern already established (no per-tool subdirectories needed — see existing `state/goal-state.ts` pattern).
+
+**Current structure (System A, existing):**
 
 ```
 src/tools/
-├── state/
-│   ├── ReadState/
-│   │   ├── read-state.ts     # ToolDef + call()
-│   │   ├── prompt.ts         # System prompt fragment for LLM
-│   │   └── ui.tsx            # renderToolUse + renderToolResult
-│   ├── ListStates/
-│   │   ├── list-states.ts
-│   │   ├── prompt.ts
-│   │   └── ui.tsx
-│   └── WriteState/
-│       ├── write-state.ts
-│       ├── prompt.ts
-│       └── ui.tsx
-├── execution/
-│   ├── RunAdapter/
-│   │   ├── run-adapter.ts
-│   │   ├── prompt.ts
-│   │   └── ui.tsx
-│   └── SpawnSession/
-│       ├── spawn-session.ts
-│       ├── prompt.ts
-│       └── ui.tsx
-├── knowledge/
-│   ├── SearchKnowledge/
-│   │   ├── search-knowledge.ts
-│   │   ├── prompt.ts
-│   │   └── ui.tsx
-│   ├── WriteKnowledge/
-│   │   ├── write-knowledge.ts
-│   │   ├── prompt.ts
-│   │   └── ui.tsx
-│   └── QueryDataSource/
-│       ├── query-data-source.ts
-│       ├── prompt.ts
-│       └── ui.tsx
-├── file/
-│   ├── ReadPulseedFile/
-│   │   ├── read-pulseed-file.ts
-│   │   ├── prompt.ts
-│   │   └── ui.tsx
-│   └── WritePulseedFile/
-│       ├── write-pulseed-file.ts
-│       ├── prompt.ts
-│       └── ui.tsx
-├── interaction/
-│   ├── AskHuman/
-│   │   ├── ask-human.ts
-│   │   ├── prompt.ts
-│   │   └── ui.tsx
-│   ├── CreatePlan/
-│   │   ├── create-plan.ts
-│   │   ├── prompt.ts
-│   │   └── ui.tsx
-│   └── ReadPlan/
-│       ├── read-plan.ts
-│       ├── prompt.ts
-│       └── ui.tsx
-└── index.ts              # getAllTools() — flat array, no registry class
+├── registry.ts             # ToolRegistry
+├── executor.ts             # ToolExecutor
+├── permission.ts           # ToolPermissionManager
+├── concurrency.ts
+├── index.ts
+├── filesystem/             # read, write, edit, glob, grep, list-dir, json-query, file-validation
+├── git/                    # git-diff, git-log
+├── state/                  # goal-state, trust-state, session-history, progress-history, knowledge-query
+├── network/                # http-fetch, web-search
+├── system/                 # shell, env, process-status, sleep, test-runner
+├── meta/                   # tool-search
+└── builtin/
 ```
 
-**Three files per tool:**
+**After Phase 0 migration (new files in `state/`):**
 
-| File | Responsibility | Example (ReadState) |
-|------|---------------|---------------------|
-| `<name>.ts` | ToolDef + `call()` implementation | Parse target/id, read from StateManager, return ToolResult |
-| `prompt.ts` | LLM system prompt fragment (`prompt()`) | "Read PulSeed state. target: goal|session|trust|config|plugin..." |
-| `ui.tsx` | `renderToolUse()` + `renderToolResult()` | Use: `goal:improve-coverage` / Result: `Read 1 goal (3 dimensions)` |
+```
+src/tools/state/
+├── goal-state.ts           # existing (≈ ReadState)
+├── trust-state.ts          # existing
+├── session-history.ts      # existing
+├── progress-history.ts     # existing
+├── knowledge-query.ts      # existing (≈ SearchKnowledge)
+├── config-tool.ts          # NEW — read config/provider settings
+├── plugin-state-tool.ts    # NEW — list active plugins
+├── architecture-tool.ts    # NEW — read module map / architecture
+├── set-goal-tool.ts        # NEW — create goal (from mutation-tool-defs.ts)
+├── update-goal-tool.ts     # NEW — update goal fields (from mutation-tool-defs.ts)
+├── archive-goal-tool.ts    # NEW — archive a completed goal (from mutation-tool-defs.ts)
+├── delete-goal-tool.ts     # NEW — delete a goal (from mutation-tool-defs.ts)
+├── toggle-plugin-tool.ts   # NEW — enable/disable plugin (from mutation-tool-defs.ts)
+├── update-config-tool.ts   # NEW — update config key (from mutation-tool-defs.ts)
+└── reset-trust-tool.ts     # NEW — reset trust score (from mutation-tool-defs.ts)
+```
 
-**Render functions:**
-
-- `renderToolUse(input)` — one-line summary shown when tool is called (e.g., `∿ Reading goal:improve-coverage`)
-- `renderToolResult(result)` — summarized result (e.g., `Read 1 goal (3 dimensions)`, NOT the full state dump)
-- Both accept `{ verbose: boolean }` for detail level control
-
-Tool addition = new directory + one line in `index.ts`. No registry class changes needed.
+```
+src/tools/
+└── tool-definition-adapter.ts   # NEW — toToolDefinition() adapter
+```
 
 ---
 
 ## 4. Tool Inventory
 
-13 tools across 5 categories. Granularity is CC-level: primitive operations, not domain-composite.
+**Existing System A tools (unchanged):**
 
-| Tool | Category | readOnly | concurrent | statusVerb |
-|------|----------|----------|-----------|------------|
-| ReadState | state | true | true | Reading |
-| ListStates | state | true | true | Listing |
-| WriteState | state | false | false | Updating |
-| RunAdapter | execution | false | false | Running |
-| SpawnSession | execution | false | false | Spawning |
-| QueryDataSource | knowledge | true | true | Querying |
-| SearchKnowledge | knowledge | true | true | Searching |
-| WriteKnowledge | knowledge | false | false | Storing |
-| ReadPulseedFile | file | true | true | Reading |
-| WritePulseedFile | file | false | false | Writing |
-| AskHuman | interaction | true | false | Asking |
-| CreatePlan | interaction | false | false | Planning |
-| ReadPlan | interaction | true | true | Reading plan |
+| Tool | Category | Notes |
+|------|----------|-------|
+| read, file-write, file-edit, glob, grep, list-dir, json-query, file-validation | filesystem | |
+| git-diff, git-log | git | |
+| goal-state, trust-state, session-history, progress-history, knowledge-query | state | ≈ System B read tools |
+| http-fetch, web-search | network | |
+| shell, env, process-status, sleep, test-runner | system | |
+| tool-search | meta | |
 
-Note: only irreversible/damaging operations (delete, reset_trust) get rich LLM descriptions with risk warnings.
+**New tools added in Phase 0 (migrated from System B):**
+
+| Tool | Category | readOnly | Destructive | Source |
+|------|----------|----------|-------------|--------|
+| config-tool | state | true | false | self-knowledge-tools.ts |
+| plugin-state-tool | state | true | false | self-knowledge-tools.ts |
+| architecture-tool | state | true | false | self-knowledge-tools.ts |
+| set-goal-tool | state | false | false | mutation-tool-defs.ts |
+| update-goal-tool | state | false | false | mutation-tool-defs.ts |
+| archive-goal-tool | state | false | false | mutation-tool-defs.ts |
+| delete-goal-tool | state | false | false | mutation-tool-defs.ts |
+| toggle-plugin-tool | state | false | false | mutation-tool-defs.ts |
+| update-config-tool | state | false | false | mutation-tool-defs.ts |
+| reset-trust-tool | state | false | true | mutation-tool-defs.ts |
+
+Note: only irreversible/damaging operations (reset-trust-tool) get rich LLM descriptions with risk warnings.
 
 ---
 
 ## 5. Tool Registration
 
-No registry class — CC pattern uses a plain function returning an array:
+ToolRegistry already provides `register()` and `getAll()`. New tools are registered at startup alongside existing tools. No changes to registry internals.
 
 ```typescript
-// src/tools/index.ts
-export function getAllTools(): Tool[] {
-  return [readStateTool, listStatesTool, writeStateTool, runAdapterTool,
-          spawnSessionTool, queryDataSourceTool, searchKnowledgeTool,
-          writeKnowledgeTool, readPulseedFileTool, writePulseedFileTool,
-          askHumanTool, createPlanTool, readPlanTool];
+// src/tools/index.ts (modified)
+import { toToolDefinition } from './tool-definition-adapter.js';
+
+export function getAllTools(): ITool[] {
+  return registry.getAll();  // existing + new state tools
 }
+
+export { toToolDefinition };
+```
+
+ChatRunner replaces its hardcoded ToolDefinition arrays:
+
+```typescript
+// src/interface/chat/chat-runner.ts (modified)
+import { getAllTools, toToolDefinition } from '../../tools/index.js';
+
+const tools = getAllTools().map(toToolDefinition);
 ```
 
 ---
 
 ## 6. Real-Time Status Display
 
-Each tool's `statusVerb` + `statusArgKey` generates a one-line status emitted via `ToolContext.onStatus`:
-
-```
-∿ Reading goal:improve-test-coverage
-∿ Running adapter:claude-code-cli
-∿ Searching knowledge:test patterns
-```
-
-Separate from spinner verbs (shown during LLM thinking). New TUI component:
-
-```typescript
-// src/interface/tui/tool-status.tsx
-const ToolStatusLine: FC<{ status: string | null }> = ({ status }) => {
-  if (!status) return null;
-  return <Text dimColor>  ∿ {status}</Text>;
-};
-```
+Existing tools already emit status through ToolExecutor. Status format follows the existing `∿` symbol pattern used in TUI.
 
 ---
 
 ## 7. Implementation Phases
 
-**Phase 0: Existing Tool Migration**
-Migrate current self-knowledge tools and mutation tools to the new directory structure before adding new tools.
+**Phase 0: Integration Migration**
 
-- Create `src/tools/` directory structure with 5 category subdirectories (state/, execution/, knowledge/, file/, interaction/)
-- Create `src/tools/tool-types.ts` — ToolDef, ToolResult, ToolContext, buildTool (from Phase A, moved here)
-- Migrate `self-knowledge-tools.ts` (5 read tools) → individual tool directories (src/tools/state/ReadState/, src/tools/state/ListStates/)
-- Migrate `mutation-tool-defs.ts` + `self-knowledge-mutation-tools.ts` (7 mutation tools) → src/tools/state/WriteState/ directory
-- Migrate `tool-metadata.ts` → per-tool `prompt.ts` files
-- Old files become re-export shims for backward compatibility
-- Wire `getAllTools()` into ChatRunner
-- Files: 8-10 new (tool dirs + types), 3 modified (chat-runner, old shims)
-- Tests: Verify existing tool behavior unchanged after migration
+Migrate System B into System A. No new functionality — behavior preserved exactly.
 
-**Phase A: New Tools + Status Display** (builds on Phase 0's foundation)
-Phase 0 already provides tool types and directory structure. Phase A adds new tools.
+1. Add 3 missing read tools to `src/tools/state/`: `config-tool.ts`, `plugin-state-tool.ts`, `architecture-tool.ts` (from `self-knowledge-tools.ts`)
+2. Add 7 mutation tools to `src/tools/state/`: set-goal-tool, update-goal-tool, archive-goal-tool, delete-goal-tool, toggle-plugin-tool, update-config-tool, reset-trust-tool (from `mutation-tool-defs.ts` + `self-knowledge-mutation-tools.ts`)
+3. Create `src/tools/tool-definition-adapter.ts` — `toToolDefinition(tool: ITool): ToolDefinition`
+4. Wire `chat-runner.ts` to use `getAllTools().map(toToolDefinition)` instead of raw definitions
+5. Deprecate System B files with re-export shims for backward compatibility
 
-- Implement: RunAdapter, SpawnSession, QueryDataSource
-- Implement: SearchKnowledge, WriteKnowledge, ReadPulseedFile, WritePulseedFile
-- Implement: AskHuman, CreatePlan, ReadPlan
-- Create `src/interface/tui/tool-status.tsx`
-- Files: 10 new, 1 modified | Tests: per-tool unit tests + AgentLoop integration test
+Files: ~11 new (state tools + adapter), 2 modified (chat-runner.ts, tools/index.ts), 3 shims (self-knowledge-tools.ts, mutation-tool-defs.ts, self-knowledge-mutation-tools.ts)
+
+Tests: verify all existing chat-runner and self-knowledge tool tests pass unchanged after migration.
+
+**Phase A: New Tools**
+
+Add tools not currently in System A, using ITool interface.
+
+- RunAdapter — wrap AdapterLayer.run() as ITool
+- SpawnSession — wrap SessionManager.spawn() as ITool
+- QueryDataSource — wrap ObservationEngine data source query as ITool
+- AskHuman, CreatePlan, ReadPlan — interaction tools for AgentLoop
+
+Files: ~5-7 new tools in existing categories | Tests: unit tests per tool + AgentLoop integration
 
 **Phase B: CoreLoop Migration**
-Refactor CoreLoop to call tool primitives instead of modules directly.
 
-- CoreLoop calls ReadState instead of `stateManager.getGoal()` directly
-- CoreLoop calls QueryDataSource instead of `observationEngine.observe()` directly
-- Both loops verified sharing tools correctly
-- Files: 3-5 modified (core-loop.ts, observation-engine.ts, etc.)
-- Tests: CoreLoop integration tests with tool layer
+Refactor CoreLoop to call tool primitives via ToolExecutor instead of module methods directly. Both loops verified sharing tools correctly.
+
+Files: 3-5 modified (core-loop.ts, observation-engine.ts) | Tests: CoreLoop integration tests
 
 **Phase C: Concurrency & Polish**
-Performance optimizations, no API changes.
 
-- Concurrent execution for isConcurrencySafe tools (parallel reads)
-- Result overflow to disk (maxResultSizeChars exceeded → disk + preview)
-- Tool-owned `prompt()` fragments injected into system prompt
-- Deferred tool loading for scale
-- Files: 2-3 modified | Tests: concurrency tests, overflow tests
+Leverage existing concurrency.ts for parallel read-only tool execution. Result overflow to disk. Tool prompt fragments injected into system prompt.
+
+Files: 2-3 modified | Tests: concurrency, overflow
 
 ---
 
@@ -271,23 +221,28 @@ Performance optimizations, no API changes.
 
 | File | Phase | Action |
 |------|-------|--------|
-| src/tools/tool-types.ts | 0 | Create |
-| src/tools/index.ts | 0 | Create |
-| src/tools/state/ReadState/ | 0 | Create (3 files) |
-| src/tools/state/ListStates/ | 0 | Create (3 files) |
-| src/tools/state/WriteState/ | 0 | Create (3 files) |
-| src/interface/chat/chat-runner.ts | 0 | Modify (wire tools) |
-| src/tools/execution/RunAdapter/ | A | Create (3 files) |
-| src/tools/execution/SpawnSession/ | A | Create (3 files) |
-| src/tools/knowledge/QueryDataSource/ | A | Create (3 files) |
-| src/tools/knowledge/SearchKnowledge/ | A | Create (3 files) |
-| src/tools/knowledge/WriteKnowledge/ | A | Create (3 files) |
-| src/tools/file/ReadPulseedFile/ | A | Create (3 files) |
-| src/tools/file/WritePulseedFile/ | A | Create (3 files) |
-| src/tools/interaction/AskHuman/ | A | Create (3 files) |
-| src/tools/interaction/CreatePlan/ | A | Create (3 files) |
-| src/tools/interaction/ReadPlan/ | A | Create (3 files) |
-| src/interface/tui/tool-status.tsx | A | Create |
+| src/tools/tool-definition-adapter.ts | 0 | Create |
+| src/tools/state/config-tool.ts | 0 | Create |
+| src/tools/state/plugin-state-tool.ts | 0 | Create |
+| src/tools/state/architecture-tool.ts | 0 | Create |
+| src/tools/state/set-goal-tool.ts | 0 | Create |
+| src/tools/state/update-goal-tool.ts | 0 | Create |
+| src/tools/state/archive-goal-tool.ts | 0 | Create |
+| src/tools/state/delete-goal-tool.ts | 0 | Create |
+| src/tools/state/toggle-plugin-tool.ts | 0 | Create |
+| src/tools/state/update-config-tool.ts | 0 | Create |
+| src/tools/state/reset-trust-tool.ts | 0 | Create |
+| src/tools/index.ts | 0 | Modify (export toToolDefinition) |
+| src/interface/chat/chat-runner.ts | 0 | Modify (use registry) |
+| src/interface/chat/self-knowledge-tools.ts | 0 | Shim (re-export) |
+| src/interface/chat/mutation-tool-defs.ts | 0 | Shim (re-export) |
+| src/interface/chat/self-knowledge-mutation-tools.ts | 0 | Shim (re-export) |
+| src/tools/execution/run-adapter.ts | A | Create |
+| src/tools/execution/spawn-session.ts | A | Create |
+| src/tools/knowledge/query-data-source.ts | A | Create |
+| src/tools/interaction/ask-human.ts | A | Create |
+| src/tools/interaction/create-plan.ts | A | Create |
+| src/tools/interaction/read-plan.ts | A | Create |
 | src/orchestrator/loop/core-loop.ts | B | Modify |
 | src/platform/observation/observation-engine.ts | B | Modify |
 
@@ -295,8 +250,8 @@ Performance optimizations, no API changes.
 
 ## 9. Test Strategy
 
-- **Unit**: each tool tested independently with mock ToolContext
-- **Integration (AgentLoop)**: user input → tool calls → result, end-to-end
-- **Integration (CoreLoop)**: CoreLoop with tool layer, full round-trip
-- **Concurrency**: parallel read-only tools execute simultaneously; write tools are exclusive
-- **Overflow**: results exceeding maxResultSizeChars persisted to disk, preview returned
+- **Unit**: each new tool tested independently with mock dependencies (same pattern as existing state/ tests)
+- **Migration**: all existing `self-knowledge-tools.test.ts` and `self-knowledge-mutation-tools.test.ts` pass unchanged
+- **Integration (ChatRunner)**: LLM tool calls routed through registry produce same results as before
+- **Integration (CoreLoop)**: CoreLoop with tool layer, full round-trip (Phase B)
+- **Concurrency**: parallel read-only tools execute simultaneously via existing concurrency.ts (Phase C)

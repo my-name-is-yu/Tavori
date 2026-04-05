@@ -15,6 +15,10 @@ export interface SelfKnowledgeDeps {
 
 // ─── Tool Definitions ───
 
+/**
+ * @deprecated Use ToolRegistry.listAll() + toToolDefinitions() instead.
+ * This function is a backward-compatibility shim that returns hardcoded definitions.
+ */
 export function getSelfKnowledgeToolDefinitions(): ToolDefinition[] {
   return [
     {
@@ -23,11 +27,7 @@ export function getSelfKnowledgeToolDefinitions(): ToolDefinition[] {
         name: "get_goals",
         description:
           "Returns detailed information about all goals: title, description, thresholds, status, loop_status, confidence, current_state, and gap_score.",
-        parameters: {
-          type: "object",
-          properties: {},
-          required: [],
-        },
+        parameters: { type: "object", properties: {}, required: [] },
       },
     },
     {
@@ -39,10 +39,7 @@ export function getSelfKnowledgeToolDefinitions(): ToolDefinition[] {
         parameters: {
           type: "object",
           properties: {
-            limit: {
-              type: "number",
-              description: "Number of recent sessions to return (default: 5)",
-            },
+            limit: { type: "number", description: "Number of recent sessions to return (default: 5)" },
           },
           required: [],
         },
@@ -54,11 +51,7 @@ export function getSelfKnowledgeToolDefinitions(): ToolDefinition[] {
         name: "get_trust_state",
         description:
           "Returns the current trust state: trust_score, balance range, delta_success, delta_failure, high_trust_threshold, ethics_gate_level, and execution_boundary.",
-        parameters: {
-          type: "object",
-          properties: {},
-          required: [],
-        },
+        parameters: { type: "object", properties: {}, required: [] },
       },
     },
     {
@@ -67,11 +60,7 @@ export function getSelfKnowledgeToolDefinitions(): ToolDefinition[] {
         name: "get_config",
         description:
           "Returns runtime configuration: provider, model, default_adapter, and pulseed_home_dir.",
-        parameters: {
-          type: "object",
-          properties: {},
-          required: [],
-        },
+        parameters: { type: "object", properties: {}, required: [] },
       },
     },
     {
@@ -80,11 +69,7 @@ export function getSelfKnowledgeToolDefinitions(): ToolDefinition[] {
         name: "get_plugins",
         description:
           "Returns the list of installed plugins with name, type, and enabled status.",
-        parameters: {
-          type: "object",
-          properties: {},
-          required: [],
-        },
+        parameters: { type: "object", properties: {}, required: [] },
       },
     },
     {
@@ -93,11 +78,7 @@ export function getSelfKnowledgeToolDefinitions(): ToolDefinition[] {
         name: "get_architecture",
         description:
           "Returns a static description of PulSeed architecture, layer structure, core loop, 4-element model, and execution boundary.",
-        parameters: {
-          type: "object",
-          properties: {},
-          required: [],
-        },
+        parameters: { type: "object", properties: {}, required: [] },
       },
     },
   ];
@@ -269,6 +250,10 @@ Execution boundary: PulSeed always delegates. Direct actions are LLM calls (for 
 
 // ─── Dispatcher ───
 
+/**
+ * @deprecated Use ToolRegistry.get(name).call() via ChatRunner instead.
+ * This function is a backward-compatibility shim.
+ */
 export async function handleSelfKnowledgeToolCall(
   toolName: string,
   args: Record<string, unknown>,
