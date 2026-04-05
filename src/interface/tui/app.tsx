@@ -303,6 +303,23 @@ export function App({
 
           // Handle /settings command
           const trimmedInput = input.trim().toLowerCase();
+          if (trimmedInput === "/flicker") {
+            const { loadGlobalConfig, updateGlobalConfig } = await import("../../base/config/global-config.js");
+            const config = await loadGlobalConfig();
+            const newValue = !config.no_flicker;
+            await updateGlobalConfig({ no_flicker: newValue });
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: randomUUID(),
+                role: "pulseed" as const,
+                text: `No-flicker mode ${newValue ? "enabled" : "disabled"}. Takes effect on next TUI launch.`,
+                timestamp: new Date(),
+                messageType: "success" as const,
+              },
+            ].slice(-MAX_MESSAGES));
+            return;
+          }
           if (trimmedInput === "/settings" || trimmedInput === "/config") {
             setShowSettings(true);
             return;
@@ -348,6 +365,16 @@ export function App({
             setShowSettings(true);
           } else if (trimmed === "/dashboard" || trimmed === "/d") {
             setShowSidebar(prev => !prev);
+          } else if (trimmed === "/flicker") {
+            const { loadGlobalConfig, updateGlobalConfig } = await import("../../base/config/global-config.js");
+            const config = await loadGlobalConfig();
+            const newValue = !config.no_flicker;
+            await updateGlobalConfig({ no_flicker: newValue });
+            setMessages((prev) => [...prev, {
+              id: randomUUID(), role: "pulseed" as const,
+              text: `No-flicker mode ${newValue ? "enabled" : "disabled"}. Takes effect on next TUI launch.`,
+              timestamp: new Date(), messageType: "success" as const,
+            }].slice(-MAX_MESSAGES));
           } else if (trimmed.startsWith("/start ")) {
             const goalId = input.slice(7).trim();
             if (goalId) {
