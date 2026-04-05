@@ -23,7 +23,7 @@ const WAVE_COLORS = [
 ] as const;
 
 const WAVE_LEN = WAVE_COLORS.length;
-const TICK_MS = 100;
+const TICK_MS = 180;
 
 interface ShimmerTextProps {
   children: string;
