@@ -73,6 +73,40 @@ describe("ShellTool", () => {
       const result = await tool.checkPermissions({ command: "echo hello > file.txt", timeoutMs: 120_000 });
       expect(result.status).toBe("denied");
     });
+
+    describe("trusted mode", () => {
+      const trustedCtx = {
+        cwd: process.cwd(),
+        goalId: "test",
+        trustBalance: 0,
+        preApproved: false,
+        approvalFn: async () => false,
+        trusted: true,
+      };
+
+      it("allows denied commands when trusted", async () => {
+        const result = await tool.checkPermissions(
+          { command: "npm run build", timeoutMs: 120_000 },
+          trustedCtx,
+        );
+        expect(result.status).toBe("allowed");
+      });
+
+      it("allows git push when trusted", async () => {
+        const result = await tool.checkPermissions(
+          { command: "git push origin main", timeoutMs: 120_000 },
+          trustedCtx,
+        );
+        expect(result.status).toBe("allowed");
+      });
+
+      it("still denies without trusted flag", async () => {
+        const result = await tool.checkPermissions(
+          { command: "npm run build", timeoutMs: 120_000 },
+        );
+        expect(result.status).toBe("denied");
+      });
+    });
   });
 
   describe("isConcurrencySafe", () => {
