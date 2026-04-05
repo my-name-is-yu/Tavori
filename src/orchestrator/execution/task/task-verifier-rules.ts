@@ -195,17 +195,23 @@ export async function attemptRevert(deps: VerifierDeps, task: Task): Promise<boo
           trusted: true,
           approvalFn: async () => true,
         };
-        const quotedFiles = filesToRestore.map((f) => JSON.stringify(f)).join(" ");
-        const result = await deps.toolExecutor.execute(
-          "shell",
-          { command: `git restore ${quotedFiles}` },
-          ctx
-        );
-        if (result.success) {
-          deps.logger?.info?.(`[attemptRevert] git restore succeeded for ${filesToRestore.length} files (via ToolExecutor)`);
-          return true;
+        const SAFE_PATH = /^[\w./@\-]+$/;
+        const allSafe = filesToRestore.every((f) => SAFE_PATH.test(f));
+        if (!allSafe) {
+          deps.logger?.warn?.("[attemptRevert] unsafe file path detected, falling back to execFileSync");
+          // Fall through to execFileSync fallback below
+        } else {
+          const result = await deps.toolExecutor.execute(
+            "shell",
+            { command: "git restore " + filesToRestore.join(" ") },
+            ctx
+          );
+          if (result.success) {
+            deps.logger?.info?.(`[attemptRevert] git restore succeeded for ${filesToRestore.length} files (via ToolExecutor)`);
+            return true;
+          }
+          // Fall through to LLM-based revert if shell tool failed
         }
-        // Fall through to LLM-based revert if shell tool failed
       } else {
         // Fallback: raw child_process (no ToolExecutor available)
         const { execFileSync } = await import("child_process");
