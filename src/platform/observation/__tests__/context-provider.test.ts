@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as path from "path";
+import type { ToolExecutor } from "../../tools/executor.js";
 
 // ---------------------------------------------------------------------------
 // Create mock BEFORE vi.mock so we have a direct reference.
@@ -31,13 +32,14 @@ vi.mock("child_process", () => ({
 import {
   buildWorkspaceContext,
   buildWorkspaceContextItems,
+  buildChatContext,
   selectByTier,
   dimensionNameToSearchTerms,
   type ContextItem,
 } from "../context-provider.js";
 
 // Build a callback-style mock compatible with util.promisify.
-// `handler` receives (file, args) and returns { stdout } on success or an
+//  receives (file, args) and returns { stdout } on success or an
 // Error instance to simulate a non-zero exit / missing command.
 function makeExecFileMock(
   handler: (file: string, args: string[]) => { stdout: string } | Error
@@ -58,6 +60,25 @@ function makeExecFileMock(
       }
     });
   };
+}
+
+// ─── Mock ToolExecutor factory ───
+
+function createMockExecutor(overrides: Record<string, unknown> = {}): ToolExecutor {
+  return {
+    execute: vi.fn().mockImplementation((toolName: string, _input: unknown) => {
+      const defaults: Record<string, unknown> = {
+        grep: { success: true, data: "src/foo.ts
+src/bar.ts", summary: "2 files", durationMs: 10 },
+        read: { success: true, data: "1	const x = 1;
+2	export default x;", summary: "2 lines", durationMs: 5 },
+        git_log: { success: true, data: ["abc1234 feat: add feature X", "def5678 fix: resolve bug Y"], summary: "2 commits", durationMs: 8 },
+        "test-runner": { success: true, data: { passed: 10, failed: 0, skipped: 0, total: 10, success: true, rawOutput: "✓ 10 tests passed
+Done in 1.2s", duration: 1200 }, summary: "10 passed", durationMs: 1200 },
+      };
+      return Promise.resolve(overrides[toolName] ?? defaults[toolName] ?? { success: false, data: null, summary: "unknown tool", durationMs: 0 });
+    }),
+  } as unknown as ToolExecutor;
 }
 
 describe("dimensionNameToSearchTerms", () => {
@@ -119,16 +140,23 @@ describe("buildWorkspaceContext (integration)", () => {
       makeExecFileMock((file) => {
         if (file === "grep") {
           return {
-            stdout: `${projectRoot}/src/foo.ts\n${projectRoot}/src/bar.ts\n`,
+            stdout: `${projectRoot}/src/foo.ts
+${projectRoot}/src/bar.ts
+`,
           };
         }
         if (file === "git") {
-          return { stdout: "src/foo.ts | 3 +++\n1 file changed" };
+          return { stdout: "src/foo.ts | 3 +++
+1 file changed" };
         }
         if (file === "npx") {
           return {
             stdout:
-              "........\n\nTest Files  1 passed (1)\nTests  10 passed (10)\n",
+              "........
+
+Test Files  1 passed (1)
+Tests  10 passed (10)
+",
           };
         }
         return { stdout: "" };
@@ -150,16 +178,19 @@ describe("buildWorkspaceContext (integration)", () => {
     execFileMock.mockImplementation(
       makeExecFileMock((file) => {
         if (file === "grep") {
-          return { stdout: `${realFile}\n` };
+          return { stdout: `${realFile}
+` };
         }
         if (file === "git") {
           return {
             stdout:
-              "src/observation/context-provider.ts | 5 +++++\n1 file changed",
+              "src/observation/context-provider.ts | 5 +++++
+1 file changed",
           };
         }
         if (file === "npx") {
-          return { stdout: "Tests  100 passed (100)\n" };
+          return { stdout: "Tests  100 passed (100)
+" };
         }
         return { stdout: "" };
       })
@@ -185,7 +216,8 @@ describe("buildWorkspaceContext (integration)", () => {
           return { stdout: "" };
         }
         if (file === "npx") {
-          return { stdout: "Tests  10 passed (10)\n" };
+          return { stdout: "Tests  10 passed (10)
+" };
         }
         return { stdout: "" };
       })
@@ -208,15 +240,18 @@ describe("buildWorkspaceContext (integration)", () => {
     execFileMock.mockImplementation(
       makeExecFileMock((file) => {
         if (file === "grep") {
-          return { stdout: `${realFile}\n` };
+          return { stdout: `${realFile}
+` };
         }
         if (file === "git") {
           return {
-            stdout: "context-provider.ts | 10 ++++++++++\n1 file changed",
+            stdout: "context-provider.ts | 10 ++++++++++
+1 file changed",
           };
         }
         if (file === "npx") {
-          return { stdout: "Tests  3412 passed (3412)\n" };
+          return { stdout: "Tests  3412 passed (3412)
+" };
         }
         return { stdout: "" };
       })
@@ -228,12 +263,15 @@ describe("buildWorkspaceContext (integration)", () => {
     });
     expect(typeof result).toBe("string");
     const fileSectionRegex =
-      /\[File: [^\]]+\]\n([\s\S]*?)(?=\n\[(?:grep|File|Recent|Test)|$)/g;
+      /\[File: [^\]]+\]
+([\s\S]*?)(?=
+\[(?:grep|File|Recent|Test)|$)/g;
     let match: RegExpExecArray | null;
     while ((match = fileSectionRegex.exec(result)) !== null) {
       const fileContent = match[1];
       const nonEmptyLines = fileContent
-        .split("\n")
+        .split("
+")
         .filter((l) => l.trim() !== "");
       expect(nonEmptyLines.length).toBeLessThanOrEqual(20);
     }
@@ -331,8 +369,10 @@ describe("buildWorkspaceContextItems", () => {
     execFileMock.mockImplementation(
       makeExecFileMock((file) => {
         if (file === "grep") return { stdout: "" };
-        if (file === "git") return { stdout: "src/foo.ts | 3 +++\n1 file changed" };
-        if (file === "npx") return { stdout: "Tests  10 passed (10)\n" };
+        if (file === "git") return { stdout: "src/foo.ts | 3 +++
+1 file changed" };
+        if (file === "npx") return { stdout: "Tests  10 passed (10)
+" };
         return { stdout: "" };
       })
     );
@@ -350,9 +390,12 @@ describe("buildWorkspaceContextItems", () => {
   it("respects maxItems cap via tier-priority selection", async () => {
     execFileMock.mockImplementation(
       makeExecFileMock((file) => {
-        if (file === "grep") return { stdout: `${projectRoot}/src/observation/context-provider.ts\n` };
-        if (file === "git") return { stdout: "src/foo.ts | 3 +++\n1 file changed" };
-        if (file === "npx") return { stdout: "Tests  10 passed (10)\n" };
+        if (file === "grep") return { stdout: `${projectRoot}/src/observation/context-provider.ts
+` };
+        if (file === "git") return { stdout: "src/foo.ts | 3 +++
+1 file changed" };
+        if (file === "npx") return { stdout: "Tests  10 passed (10)
+" };
         return { stdout: "" };
       })
     );
@@ -368,8 +411,10 @@ describe("buildWorkspaceContextItems", () => {
     execFileMock.mockImplementation(
       makeExecFileMock((file) => {
         if (file === "grep") return new Error("no matches");
-        if (file === "git") return { stdout: "src/foo.ts | 3 +++\n1 file changed" };
-        if (file === "npx") return { stdout: "Tests  5 passed (5)\n" };
+        if (file === "git") return { stdout: "src/foo.ts | 3 +++
+1 file changed" };
+        if (file === "npx") return { stdout: "Tests  5 passed (5)
+" };
         return { stdout: "" };
       })
     );
@@ -380,5 +425,176 @@ describe("buildWorkspaceContextItems", () => {
     const gitItem = items.find((i) => i.label.includes("Recent changes"));
     expect(gitItem).toBeDefined();
     expect(gitItem?.memory_tier).toBe("recall");
+  });
+});
+
+// ─── ToolExecutor integration tests ───
+
+describe("collectContextItems with toolExecutor", () => {
+  const projectRoot = path.resolve(__dirname, "../../../..");
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("calls grep/read/git_log/test-runner via toolExecutor", async () => {
+    const executor = createMockExecutor();
+    const executeFn = executor.execute as ReturnType<typeof vi.fn>;
+
+    const result = await buildWorkspaceContext("goal-tool-1", "todo_count", {
+      cwd: projectRoot,
+      toolExecutor: executor,
+    });
+
+    expect(typeof result).toBe("string");
+    const calledTools = executeFn.mock.calls.map((c: unknown[]) => c[0]);
+    expect(calledTools).toContain("grep");
+    expect(calledTools).toContain("read");
+    expect(calledTools).toContain("git_log");
+    expect(calledTools).toContain("test-runner");
+    // execFileMock should NOT be called when toolExecutor is provided
+    expect(execFileMock).not.toHaveBeenCalled();
+  });
+
+  it("includes grep-matched files in output", async () => {
+    const executor = createMockExecutor();
+
+    const result = await buildWorkspaceContext("goal-tool-2", "todo_count", {
+      cwd: projectRoot,
+      toolExecutor: executor,
+    });
+
+    expect(result).toMatch(/\[grep "TODO"/);
+    expect(result).toMatch(/\[File: /);
+  });
+
+  it("includes git log in output", async () => {
+    const executor = createMockExecutor();
+
+    const result = await buildWorkspaceContext("goal-tool-3", "todo_count", {
+      cwd: projectRoot,
+      toolExecutor: executor,
+    });
+
+    expect(result).toMatch(/Recent changes: git log --oneline/);
+    expect(result).toContain("abc1234 feat: add feature X");
+  });
+
+  it("includes test status in output", async () => {
+    const executor = createMockExecutor();
+
+    const result = await buildWorkspaceContext("goal-tool-4", "todo_count", {
+      cwd: projectRoot,
+      toolExecutor: executor,
+    });
+
+    expect(result).toMatch(/\[Test status\]/);
+    expect(result).toContain("10 tests passed");
+  });
+
+  it("skips gracefully when grep tool fails", async () => {
+    const executor = createMockExecutor({
+      grep: { success: false, data: null, summary: "grep failed", durationMs: 0 },
+    });
+
+    const result = await buildWorkspaceContext("goal-tool-fallback-1", "todo_count", {
+      cwd: projectRoot,
+      toolExecutor: executor,
+    });
+
+    expect(typeof result).toBe("string");
+    // grep failed → no grep section
+    expect(result).not.toMatch(/\[grep "TODO"/);
+  });
+
+  it("skips gracefully when git_log tool fails", async () => {
+    const executor = createMockExecutor({
+      git_log: { success: false, data: null, summary: "git_log failed", durationMs: 0 },
+    });
+
+    const result = await buildWorkspaceContext("goal-tool-fallback-2", "todo_count", {
+      cwd: projectRoot,
+      toolExecutor: executor,
+    });
+
+    expect(typeof result).toBe("string");
+    expect(result).not.toMatch(/Recent changes: git log --oneline/);
+  });
+
+  it("skips gracefully when test-runner tool fails", async () => {
+    const executor = createMockExecutor({
+      "test-runner": { success: false, data: null, summary: "runner failed", durationMs: 0 },
+    });
+
+    const result = await buildWorkspaceContext("goal-tool-fallback-3", "todo_count", {
+      cwd: projectRoot,
+      toolExecutor: executor,
+    });
+
+    expect(typeof result).toBe("string");
+    expect(result).not.toMatch(/\[Test status\]/);
+  });
+});
+
+describe("buildChatContext with toolExecutor", () => {
+  const projectRoot = path.resolve(__dirname, "../../../..");
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("calls grep/read/git_log/test-runner for chat context", async () => {
+    const executor = createMockExecutor();
+    const executeFn = executor.execute as ReturnType<typeof vi.fn>;
+
+    const result = await buildChatContext("fix the todo items in auth module", projectRoot, {
+      toolExecutor: executor,
+    });
+
+    expect(typeof result).toBe("string");
+    const calledTools = executeFn.mock.calls.map((c: unknown[]) => c[0]);
+    expect(calledTools).toContain("git_log");
+    expect(calledTools).toContain("test-runner");
+    expect(calledTools).toContain("grep");
+    expect(calledTools).toContain("read");
+  });
+
+  it("includes working directory header in output", async () => {
+    const executor = createMockExecutor();
+
+    const result = await buildChatContext("refactor the auth module", projectRoot, {
+      toolExecutor: executor,
+    });
+
+    expect(result).toContain(`Working directory: ${projectRoot}`);
+    expect(result).toContain("Task: refactor the auth module");
+  });
+
+  it("includes git log output in chat context", async () => {
+    const executor = createMockExecutor();
+
+    const result = await buildChatContext("add tests for login", projectRoot, {
+      toolExecutor: executor,
+    });
+
+    expect(result).toMatch(/Recent changes: git log --oneline/);
+    expect(result).toContain("abc1234 feat: add feature X");
+  });
+
+  it("skips gracefully when all tool calls fail", async () => {
+    const executor = createMockExecutor({
+      grep: { success: false, data: null, summary: "fail", durationMs: 0 },
+      read: { success: false, data: null, summary: "fail", durationMs: 0 },
+      git_log: { success: false, data: null, summary: "fail", durationMs: 0 },
+      "test-runner": { success: false, data: null, summary: "fail", durationMs: 0 },
+    });
+
+    const result = await buildChatContext("fix the bug", projectRoot, {
+      toolExecutor: executor,
+    });
+
+    // Should not throw; basic header info should still be present
+    expect(typeof result).toBe("string");
+    expect(result).toContain(`Working directory: ${projectRoot}`);
   });
 });
