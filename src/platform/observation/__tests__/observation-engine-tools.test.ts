@@ -221,7 +221,7 @@ describe("observeWithTools", () => {
     expect(result).not.toBeNull();
     expect(result!.toolName).toBe("shell");
     expect(result!.confidence).toBe(0.95);
-    expect(result!.parsedValue).toBeNull();
+    expect(result!.parsedValue).toBe("output");
     expect(mockExecutor.execute).toHaveBeenCalledWith(
       "shell",
       { command: "echo hello", timeoutMs: 30_000 },
