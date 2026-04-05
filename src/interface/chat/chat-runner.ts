@@ -411,7 +411,8 @@ export class ChatRunner {
       const result = await tool.call(parsed.data, context);
       const durationMs = Date.now() - startTime;
       this.deps.onToolEnd?.(name, { success: result.success, summary: result.summary || '...', durationMs });
-      return result.summary || JSON.stringify(result.data);
+      // Prefer structured data (JSON) over plain summary so the LLM gets actionable content
+      return result.data != null ? JSON.stringify(result.data) : (result.summary ?? "(no result)");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.deps.onToolEnd?.(name, { success: false, summary: message, durationMs: Date.now() - startTime });

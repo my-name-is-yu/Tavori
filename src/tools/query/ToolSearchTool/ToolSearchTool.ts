@@ -41,6 +41,8 @@ export class ToolSearchTool implements ITool<ToolSearchInput, ToolSearchResult[]
 
   async call(input: ToolSearchInput, _context: ToolCallContext): Promise<ToolResult> {
     const startTime = Date.now();
+    // Searches the full registry including deferred tools.
+    // ChatRunner uses the returned tool names to activate deferred tools for the next turn.
     const results = this.registry.searchTools(input.query, input.category);
     return {
       success: true,
