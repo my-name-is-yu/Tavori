@@ -13,6 +13,7 @@ import { fuzzyMatch, fuzzyFilter } from "./fuzzy.js";
 import { theme, getMessageTypeColor } from "./theme.js";
 import { pickSpinnerVerb } from "./spinner-verbs.js";
 import { ShimmerText } from "./shimmer-text.js";
+import { findCursorRow, computeCursorX } from "./cursor-tracker.js";
 
 export interface ChatMessage {
   id: string;
@@ -330,38 +331,36 @@ export function Chat({ messages, onSubmit, onClear, isProcessing, goalNames = []
     };
   }, []);
 
-  // IME cursor positioning: report cursor x position so the IME candidate window
-  // appears next to the input caret instead of at the top-left corner.
-  // Layout (0-indexed rows from top):
-  //   row 0:          header
-  //   rows 1..N:      Chat area (flexGrow=1)
-  //   rows N+1..N+3:  StatusBar (borderStyle="single" = top border + content + bottom border)
-  //   row N+4:        optional ctrlCPending hint
-  // Within the Chat input area (bottom of Chat, from bottom up):
-  //   row termRows-4:  bottom separator border (borderTop=false)
-  //   row termRows-5:  input row  ← cursor is here in the baseline case
-  //   row termRows-6:  top separator border (borderBottom=false)
-  // When emptyHint or hasMatches are showing, additional rows appear below the
-  // input row pushing it further up.
+  // Capture rendered frames via stdout.write intercept (read-only)
+  const frameRef = React.useRef("");
+  React.useEffect(() => {
+    const original = process.stdout.write.bind(process.stdout);
+    const patched = function (chunk: any, ...args: any[]) {
+      if (typeof chunk === "string" && chunk.length > 50) {
+        frameRef.current = chunk;
+      }
+      return (original as any)(chunk, ...args);
+    } as typeof process.stdout.write;
+    process.stdout.write = patched;
+    return () => { process.stdout.write = original; };
+  }, []);
+
+  // IME cursor positioning: scan rendered frame to find input prompt row
   const { setCursorPosition } = useCursor();
   React.useEffect(() => {
     if (isProcessing) {
       setCursorPosition(undefined);
       return;
     }
-    let displayWidth = 0;
-    for (const ch of input) {
-      const cp = ch.codePointAt(0) ?? 0;
-      displayWidth += cp > 0x2E7F ? 2 : 1;
+    const row = findCursorRow(frameRef.current);
+    if (row === null) {
+      setCursorPosition(undefined);
+      return;
     }
-    // x: prompt prefix "❧ " = 2 columns (U+2767 is 1 col, space is 1 col)
-    const x = 2 + displayWidth;
-    // y: bottom separator (1) + rows below input for hints/suggestions
-    const rowsBelow = 1 + (emptyHint ? 1 : 0) + (hasMatches ? matches.length + 1 : 0);
-    const y = Math.max(0, termRows - 4 - rowsBelow);
-    setCursorPosition({ x, y });
+    const x = computeCursorX(input);
+    setCursorPosition({ x, y: row });
     return () => { setCursorPosition(undefined); };
-  }, [input, isProcessing, setCursorPosition, termRows, emptyHint, hasMatches, matches.length]);
+  }, [input, isProcessing, setCursorPosition]);
 
   const handleSubmit = (value: string) => {
     if (hasMatches) return; // let useInput handle enter when suggestions are shown
@@ -425,7 +424,7 @@ export function Chat({ messages, onSubmit, onClear, isProcessing, goalNames = []
           <Box borderStyle="single" borderColor={theme.border} borderBottom={false} borderLeft={false} borderRight={false} />
           <Box>
             <Text color={theme.userPrompt} bold>
-              {"❧ "}
+              {"​❧ "}
             </Text>
             <TextInput
               value={input}
