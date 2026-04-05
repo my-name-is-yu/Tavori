@@ -1,6 +1,7 @@
 import type { Dimension } from "../../base/types/goal.js";
 import type { ToolCallContext, ToolResult } from "../../tools/types.js";
 import type { ToolExecutor } from "../../tools/executor.js";
+import { parseToolOutput as parseRawToolOutput } from "../../tools/builtin/shared/parse-tool-output.js";
 
 /**
  * Direct measurement result from a tool call.
@@ -52,7 +53,7 @@ export async function measureDirectly(
   if (!result.success) return null;
 
   return {
-    value: parseToolOutput(result, dimension),
+    value: parseToolOutput(toolName, result),
     confidence: confidenceForTool(toolName),
     measuredAt: new Date(),
     toolUsed: toolName,
@@ -95,52 +96,13 @@ function confidenceForTool(toolName: string): number {
 
 /**
  * Parse tool output into a scalar value suitable for gap calculation.
- *
- * - glob: returns array of matches -> boolean (file exists)
- * - shell: returns { stdout, stderr, exitCode } -> number or string
- * - http_fetch: returns { statusCode, body } -> boolean (200 OK)
+ * Delegates to shared parseRawToolOutput utility.
  */
 function parseToolOutput(
+  toolName: string,
   result: ToolResult,
-  _dimension: Dimension,
 ): number | string | boolean {
-  const data = result.data;
-
-  // Glob: array of matches -> boolean presence check
-  if (Array.isArray(data)) {
-    return data.length > 0;
-  }
-
-  // Shell: { stdout, ... } -> numeric parse or trimmed string
-  if (isShellOutput(data)) {
-    const stdout = data.stdout.trim();
-    const num = Number(stdout);
-    if (!isNaN(num) && stdout !== "") return num;
-    return stdout;
-  }
-
-  // HttpFetch: { statusCode, ... } -> true if 2xx
-  if (isHttpOutput(data)) {
-    return data.statusCode >= 200 && data.statusCode < 300;
-  }
-
-  return String(data ?? "");
-}
-
-function isShellOutput(data: unknown): data is { stdout: string } {
-  return (
-    typeof data === "object" &&
-    data !== null &&
-    "stdout" in data &&
-    typeof (data as Record<string, unknown>).stdout === "string"
-  );
-}
-
-function isHttpOutput(data: unknown): data is { statusCode: number } {
-  return (
-    typeof data === "object" &&
-    data !== null &&
-    "statusCode" in data &&
-    typeof (data as Record<string, unknown>).statusCode === "number"
-  );
+  const parsed = parseRawToolOutput(toolName, result.data);
+  if (parsed.value === null) return "";
+  return parsed.value;
 }
