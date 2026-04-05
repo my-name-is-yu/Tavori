@@ -197,61 +197,9 @@ function getMatchingSuggestions(input: string, goalNames: string[]): Suggestion[
   return scored.slice(0, 6).map((s) => s.cmd);
 }
 
-/** Debounced IME input buffer.
- * For ASCII chars: passes through immediately.
- * For non-ASCII (IME composition): debounces updates by 50ms to let the
- * IME candidate buffer settle before updating React state.
- */
-function useIMEBuffer(setInput: (val: string) => void) {
-  const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingRef = React.useRef<string | null>(null);
-
-  const bufferedSetInput = React.useCallback((newVal: string) => {
-    // Detect if any non-ASCII char was added (compare with current pending or last flush)
-    let hasNonAscii = false;
-    for (const ch of newVal) {
-      const cp = ch.codePointAt(0) ?? 0;
-      if (cp > 0x7F) { hasNonAscii = true; break; }
-    }
-
-    if (!hasNonAscii) {
-      // ASCII only — flush immediately
-      if (timerRef.current !== null) {
-        clearTimeout(timerRef.current);
-        timerRef.current = null;
-      }
-      pendingRef.current = null;
-      setInput(newVal);
-    } else {
-      // Non-ASCII — debounce by 50ms
-      pendingRef.current = newVal;
-      if (timerRef.current !== null) {
-        clearTimeout(timerRef.current);
-      }
-      timerRef.current = setTimeout(() => {
-        timerRef.current = null;
-        if (pendingRef.current !== null) {
-          setInput(pendingRef.current);
-          pendingRef.current = null;
-        }
-      }, 50);
-    }
-  }, [setInput]);
-
-  // Cleanup on unmount
-  React.useEffect(() => {
-    return () => {
-      if (timerRef.current !== null) clearTimeout(timerRef.current);
-    };
-  }, []);
-
-  return bufferedSetInput;
-}
-
 export function Chat({ messages, onSubmit, onClear, isProcessing, goalNames = [] }: ChatProps) {
   const [input, setInput] = useState("");
   const [selectedIdx, setSelectedIdx] = useState(0);
-  const bufferedSetInput = useIMEBuffer(setInput);
   // Tracks whether a suggestion was just selected so getMatchingSuggestions
   // returns [] for one render cycle, allowing Enter to submit unblocked.
   const justSelected = React.useRef(false);
@@ -467,7 +415,7 @@ export function Chat({ messages, onSubmit, onClear, isProcessing, goalNames = []
             </Text>
             <TextInput
               value={input}
-              onChange={(val) => { justSelected.current = false; bufferedSetInput(val); }}
+              onChange={(val) => { justSelected.current = false; setInput(val); }}
               onSubmit={handleSubmit}
               placeholder="/ for commands"
             />
