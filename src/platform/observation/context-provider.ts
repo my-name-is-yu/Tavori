@@ -283,30 +283,7 @@ export async function buildChatContext(taskDescription: string, cwd: string): Pr
     // ignore
   }
 
-  // 2. vitest last 20 lines (5s timeout)
-  try {
-    const { stdout } = await execFileAsync(
-      "npx",
-      ["vitest", "run", "--reporter=dot"],
-      { cwd: gitRoot, timeout: 5000 }
-    );
-    const lastLines = stdout.split("\n").slice(-20).join("\n");
-    if (lastLines.trim()) {
-      parts.push(`[Test status]\n${lastLines}`);
-    }
-  } catch (err: unknown) {
-    if (typeof err === "object" && err !== null && "stdout" in err) {
-      const lastLines = ((err as { stdout: string }).stdout || "")
-        .split("\n")
-        .slice(-20)
-        .join("\n");
-      if (lastLines.trim()) {
-        parts.push(`[Test status (failures detected)]\n${lastLines}`);
-      }
-    }
-  }
-
-  // 3. Keyword-based file search (words >= 4 chars, max 3 keywords, max 3 files, 50 lines each)
+  // 2. Keyword-based file search (words >= 4 chars, max 3 keywords, max 3 files, 50 lines each)
   const keywords = taskDescription
     .split(/\s+/)
     .filter((w) => w.length >= 4)
