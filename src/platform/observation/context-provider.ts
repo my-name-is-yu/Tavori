@@ -405,52 +405,7 @@ export async function buildChatContext(
     // ignore
   }
 
-  // 2. vitest last 20 lines (5s timeout) or test-runner tool
-  try {
-    if (toolExecutor) {
-      const result = await toolExecutor.execute(
-        "test-runner",
-        { command: "npx vitest run --reporter=dot", timeout: 30000 },
-        ctx
-      );
-      if (result.success && result.data && typeof result.data === "object" && "rawOutput" in result.data) {
-        const testData = result.data as { rawOutput: string };
-        const lastLines = testData.rawOutput.split("\n").slice(-20).join("\n");
-        if (lastLines.trim()) {
-          parts.push(`[Test status]\n${lastLines}`);
-        }
-      } else if (result.success && typeof result.data === "string") {
-        // Truncated output — use raw string directly
-        const lastLines = result.data.split("\n").slice(-20).join("\n");
-        if (lastLines.trim()) {
-          parts.push(`[Test status]\n${lastLines}`);
-        }
-      }
-    } else {
-      const { stdout } = await execFileAsync(
-        "npx",
-        ["vitest", "run", "--reporter=dot"],
-        { cwd: gitRoot, timeout: 5000 }
-      );
-      const lastLines = stdout.split("\n").slice(-20).join("\n");
-      if (lastLines.trim()) {
-        parts.push(`[Test status]\n${lastLines}`);
-      }
-    }
-  } catch (err: unknown) {
-    if (!toolExecutor && typeof err === "object" && err !== null && "stdout" in err) {
-      const lastLines = ((err as { stdout: string }).stdout || "")
-        .split("\n")
-        .slice(-20)
-        .join("\n");
-      if (lastLines.trim()) {
-        parts.push(`[Test status (failures detected)]\n${lastLines}`);
-      }
-    }
-    // For toolExecutor path: skip gracefully on failure
-  }
-
-  // 3. Keyword-based file search (words >= 4 chars, max 3 keywords, max 3 files, 50 lines each)
+  // 2. Keyword-based file search (words >= 4 chars, max 3 keywords, max 3 files, 50 lines each)
   const keywords = taskDescription
     .split(/\s+/)
     .filter((w) => w.length >= 4)

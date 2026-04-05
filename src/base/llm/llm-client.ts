@@ -63,6 +63,13 @@ export interface ILLMClient {
   ): Promise<LLMResponse>;
   parseJSON<T>(content: string, schema: ZodSchema<T>): T;
   parseJSON<T>(content: string, schema: ZodSchema<T>, options: ParseJSONOptions): Promise<T>;
+  /**
+   * Whether this client supports function/tool calling in sendMessage().
+   * CLI-wrapping clients (e.g., CodexLLMClient) that cannot handle tool
+   * definitions should override this to return false.
+   * When absent or returning true, the chat runner routes through executeWithTools.
+   */
+  supportsToolCalling?(): boolean;
 }
 
 // ─── Constants ───

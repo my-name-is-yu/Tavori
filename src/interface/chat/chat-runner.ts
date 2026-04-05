@@ -218,7 +218,8 @@ export class ChatRunner {
     const start = Date.now();
 
     // Use llmClient with self-knowledge tools when available (function calling path)
-    if (this.deps.llmClient) {
+    // Skip executeWithTools for clients that don't support tool calling (e.g. CodexLLMClient)
+    if (this.deps.llmClient && this.deps.llmClient.supportsToolCalling?.() !== false) {
       const toolResult = await this.executeWithTools(prompt, this.cachedSystemPrompt ?? undefined);
       const elapsed_ms = Date.now() - start;
       await history.appendAssistantMessage(toolResult);

@@ -84,7 +84,7 @@ export class OpenAICodexCLIAdapter implements IAdapter {
     const result = await spawnWithTimeout(
       this.cliPath,
       spawnArgs,
-      { cwd, env: process.env, stdinData: task.system_prompt ? `[System Context]
+      { cwd, env: { ...process.env, TERM: "dumb", NO_COLOR: "1" }, stdinData: task.system_prompt ? `[System Context]
 ${task.system_prompt}
 
 [User Request]

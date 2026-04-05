@@ -335,4 +335,43 @@ describe("ChatRunner", () => {
       expect(writeIndex).toBeLessThan(executeIndex);
     });
   });
+
+  describe("supportsToolCalling routing", () => {
+    it("routes to adapter.execute when supportsToolCalling() returns false", async () => {
+      const adapter = makeMockAdapter();
+      const llmClient = {
+        supportsToolCalling: () => false,
+        sendMessage: vi.fn().mockRejectedValue(new Error("sendMessage must not be called")),
+        parseJSON: vi.fn(),
+      };
+
+      const runner = new ChatRunner(makeDeps({ adapter, llmClient: llmClient as never }));
+      const result = await runner.execute("Do something", "/repo");
+
+      expect(adapter.execute).toHaveBeenCalledOnce();
+      expect(llmClient.sendMessage).not.toHaveBeenCalled();
+      expect(result.success).toBe(true);
+    });
+
+    it("routes to executeWithTools (calls sendMessage) when supportsToolCalling is absent", async () => {
+      const adapter = makeMockAdapter();
+      const llmClient = {
+        // no supportsToolCalling method
+        sendMessage: vi.fn().mockResolvedValue({
+          content: "Tool-aware response",
+          usage: { input_tokens: 5, output_tokens: 5 },
+          stop_reason: "end_turn",
+        }),
+        parseJSON: vi.fn(),
+      };
+
+      const runner = new ChatRunner(makeDeps({ adapter, llmClient: llmClient as never }));
+      const result = await runner.execute("Do something", "/repo");
+
+      expect(llmClient.sendMessage).toHaveBeenCalled();
+      expect(adapter.execute).not.toHaveBeenCalled();
+      expect(result.success).toBe(true);
+      expect(result.output).toBe("Tool-aware response");
+    });
+  });
 });

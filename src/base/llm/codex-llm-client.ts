@@ -118,6 +118,9 @@ export class CodexLLMClient extends BaseLLMClient implements ILLMClient {
     throw lastError;
   }
 
+  /** CodexLLMClient does not support function/tool calling. */
+  supportsToolCalling(): boolean { return false; }
+
   /**
    * Spawn `codex exec -s danger-full-access [-o <tmpfile>] [--model <model>] "PROMPT"`
    * and return the response content read from the temp output file.
@@ -142,7 +145,7 @@ export class CodexLLMClient extends BaseLLMClient implements ILLMClient {
 
       const child = spawn(this.cliPath, spawnArgs, {
         stdio: ["pipe", "pipe", "pipe"],
-        env: process.env,
+        env: { ...process.env, TERM: "dumb" },
         cwd: this.repoPath,
       });
 
