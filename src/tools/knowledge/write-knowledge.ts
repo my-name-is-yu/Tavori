@@ -59,7 +59,7 @@ export class WriteKnowledgeTool implements ITool<WriteKnowledgeInput, unknown> {
       return {
         success: true,
         data: { entryId: entry.entry_id, key: input.key },
-        summary: ,
+        summary: `Knowledge stored: ${input.key}`,
         durationMs: Date.now() - startTime,
       };
     } catch (err) {
