@@ -55,6 +55,9 @@ export const StrategySchema = z.object({
   // Toolset immutability: snapshot tools at strategy activation
   toolset_locked: z.boolean().default(false),
   allowed_tools: z.array(z.string()).default([]),
+
+  // Tool availability scoring: tools required by this strategy candidate
+  required_tools: z.array(z.string()).default([]),
 });
 export type Strategy = z.infer<typeof StrategySchema>;
 
