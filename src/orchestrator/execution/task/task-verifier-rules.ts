@@ -185,10 +185,34 @@ export async function attemptRevert(deps: VerifierDeps, task: Task): Promise<boo
   try {
     const filesToRestore = task.scope_boundary.in_scope;
     if (filesToRestore.length > 0) {
-      const { execFileSync } = await import("child_process");
-      execFileSync("git", ["restore", ...filesToRestore], { cwd: process.cwd(), encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
-      deps.logger?.info?.(`[attemptRevert] git restore succeeded for ${filesToRestore.length} files`);
-      return true;
+      if (deps.toolExecutor) {
+        // Use ToolExecutor (preferred): keeps all shell ops in the tool pipeline
+        const ctx: import("../../../tools/types.js").ToolCallContext = {
+          cwd: process.cwd(),
+          goalId: task.goal_id,
+          trustBalance: 100,
+          preApproved: true,
+          trusted: true,
+          approvalFn: async () => true,
+        };
+        const quotedFiles = filesToRestore.map((f) => JSON.stringify(f)).join(" ");
+        const result = await deps.toolExecutor.execute(
+          "shell",
+          { command: `git restore ${quotedFiles}` },
+          ctx
+        );
+        if (result.success) {
+          deps.logger?.info?.(`[attemptRevert] git restore succeeded for ${filesToRestore.length} files (via ToolExecutor)`);
+          return true;
+        }
+        // Fall through to LLM-based revert if shell tool failed
+      } else {
+        // Fallback: raw child_process (no ToolExecutor available)
+        const { execFileSync } = await import("child_process");
+        execFileSync("git", ["restore", ...filesToRestore], { cwd: process.cwd(), encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+        deps.logger?.info?.(`[attemptRevert] git restore succeeded for ${filesToRestore.length} files`);
+        return true;
+      }
     }
   } catch {
     // git not available or failed — fall back to LLM-based revert
