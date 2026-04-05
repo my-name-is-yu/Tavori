@@ -47,8 +47,8 @@ describe("WriteKnowledgeTool", () => {
   });
 
   describe("isConcurrencySafe", () => {
-    it("returns true", () => {
-      expect(tool.isConcurrencySafe({ key: "k", content: "c" })).toBe(true);
+    it("returns false", () => {
+      expect(tool.isConcurrencySafe({ key: "k", content: "c" })).toBe(false);
     });
   });
 

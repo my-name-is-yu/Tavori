@@ -52,16 +52,16 @@ describe("CreatePlanTool", () => {
     expect(tool.description()).toBeTruthy();
   });
 
-  it("checkPermissions returns allowed", async () => {
+  it("checkPermissions returns needs_approval", async () => {
     const result = await tool.checkPermissions(
       { plan_id: planId, title: "T", content: "C" },
       makeContext()
     );
-    expect(result.status).toBe("allowed");
+    expect(result.status).toBe("needs_approval");
   });
 
-  it("isConcurrencySafe returns true", () => {
-    expect(tool.isConcurrencySafe({ plan_id: "x", title: "T", content: "C" })).toBe(true);
+  it("isConcurrencySafe returns false", () => {
+    expect(tool.isConcurrencySafe({ plan_id: "x", title: "T", content: "C" })).toBe(false);
   });
 
   it("writes plan file with frontmatter", async () => {
