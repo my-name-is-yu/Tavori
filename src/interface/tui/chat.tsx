@@ -360,6 +360,7 @@ export function Chat({
 
   useInput(
     (inputChar, key) => {
+      process.stderr.write(`[DEBUG useInput] char=${JSON.stringify(inputChar)} upArrow=${key.upArrow} hasMatches=${hasMatches} selIdx=${selectedMsgIndex}\n`);
       // ── Message selection: ↑/↓ when a message is selected ──
       if (selectedMsgIndex !== null) {
         if (key.upArrow || inputChar === "k") {
