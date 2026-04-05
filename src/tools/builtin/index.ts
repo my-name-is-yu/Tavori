@@ -183,6 +183,7 @@ export function createBuiltinTools(deps?: BuiltinToolDeps): ITool[] {
   }
   if (deps?.observationEngine) {
     tools.push(new QueryDataSourceTool(deps.observationEngine));
+    tools.push(new ObserveGoalTool(deps.observationEngine));
   }
 
   // File and interaction tools (no deps)
