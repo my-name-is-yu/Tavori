@@ -99,8 +99,7 @@ export async function startTUI(): Promise<void> {
     daemonClient.connect();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    getCliLogger().error(
-          );
+    getCliLogger().error(`Error: Failed to connect to daemon: ${message}`);
     process.exit(1);
   }
 
