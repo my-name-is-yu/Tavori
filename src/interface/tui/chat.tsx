@@ -293,7 +293,7 @@ export function Chat({
     if (!isProcessing) return;
     const interval = setInterval(() => {
       setSpinnerVerb(pickSpinnerVerb());
-    }, 3000);
+    }, 5000);
     return () => clearInterval(interval);
   }, [isProcessing]);
 
