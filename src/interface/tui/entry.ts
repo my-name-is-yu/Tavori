@@ -41,6 +41,7 @@ import { App, type ApprovalRequest } from "./app.js";
 import { getCliLogger } from "../cli/cli-logger.js";
 import { ensureProviderConfig } from "../cli/ensure-api-key.js";
 import { ActionHandler } from "./actions.js";
+import { ChatRunner } from "../../interface/chat/chat-runner.js";
 import { IntentRecognizer } from "./intent-recognizer.js";
 import type { Task } from "../../base/types/task.js";
 
@@ -205,7 +206,18 @@ async function buildDeps() {
     }
   };
 
-  return { stateManager, llmClient, trustManager, coreLoop, goalNegotiator, reportingEngine, setRequestApproval };
+  // Build ChatRunner for live chat in TUI
+  let chatRunner: ChatRunner | undefined;
+  try {
+    const provConfig = await loadProviderConfig();
+    const adapterType = provConfig.adapter ?? "claude_code_cli";
+    const adapter = adapterRegistry.getAdapter(adapterType);
+    chatRunner = new ChatRunner({ stateManager, adapter, llmClient, trustManager });
+  } catch (err) {
+    getCliLogger().warn(`[pulseed] ChatRunner init failed — free-form chat disabled: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  return { stateManager, llmClient, trustManager, coreLoop, goalNegotiator, reportingEngine, setRequestApproval, chatRunner };
 }
 
 // ─── Breadcrumb helpers ───
@@ -245,7 +257,7 @@ export async function startTUI(): Promise<void> {
     process.exit(1);
   }
 
-  const { stateManager, llmClient, trustManager, coreLoop, goalNegotiator, reportingEngine, setRequestApproval } = deps;
+  const { stateManager, llmClient, trustManager, coreLoop, goalNegotiator, reportingEngine, setRequestApproval, chatRunner } = deps;
 
   // 3. Create TUI-specific instances
   // Note: LoopController is no longer instantiated here — App uses the
@@ -282,6 +294,7 @@ export async function startTUI(): Promise<void> {
       trustManager,
       actionHandler,
       intentRecognizer,
+      chatRunner,
       onApprovalReady: setRequestApproval,
       ...breadcrumb,
     })
