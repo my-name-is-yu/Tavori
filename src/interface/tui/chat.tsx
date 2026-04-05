@@ -337,6 +337,7 @@ export function Chat({
   // Scroll-slicing: clip messages to visible terminal height
   const { stdout } = useStdout();
   const termRows = stdout?.rows ?? 24;
+  const termCols = stdout?.columns ?? 80;
   const maxVisible = Math.max(1, termRows - 8); // reserve rows for header, input, status bar
 
   // Auto-scroll to bottom when new messages arrive and we're at the bottom
@@ -378,7 +379,6 @@ export function Chat({
         if (key.downArrow || inputChar === "j") {
           if (selectedMsgIndex >= messages.length - 1) {
             setSelectedMsgIndex(null);
-            setCopyToast(null);
           } else {
             const next = selectedMsgIndex + 1;
             selectAndCopy(next);
@@ -394,13 +394,11 @@ export function Chat({
         }
         if (key.escape) {
           setSelectedMsgIndex(null);
-          setCopyToast(null);
           return;
         }
         // Any other key: deselect
         if (inputChar && inputChar.length > 0) {
           setSelectedMsgIndex(null);
-          setCopyToast(null);
         }
         return;
       }
@@ -629,13 +627,10 @@ export function Chat({
 
         {/* Input area with borders — always at bottom */}
         <Box flexDirection="column">
-          <Box
-              borderStyle="single"
-              borderColor={theme.border}
-              borderBottom={false}
-              borderLeft={false}
-              borderRight={false}
-            />
+          <Box>
+              <Text dimColor>{"─".repeat(Math.max(1, termCols - (copyToast ? copyToast.length + 1 : 0)))}</Text>
+              {copyToast && <Text color="cyan">{copyToast}</Text>}
+            </Box>
           <Box>
             <Text color={theme.userPrompt} bold>
               {"​◉ "}
@@ -655,11 +650,6 @@ export function Chat({
             />
           </Box>
           {(() => { process.stderr.write(`[DEBUG render] copyToast=${JSON.stringify(copyToast)}\n`); return null; })()}
-          {copyToast && (
-            <Box justifyContent="flex-end">
-              <Text color="cyan">{copyToast}</Text>
-            </Box>
-          )}
           <Box
             borderStyle="single"
             borderColor={theme.border}
