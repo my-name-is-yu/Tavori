@@ -14,7 +14,7 @@ import { buildSystemPrompt } from "./grounding.js";
 import { verifyChatAction } from "./chat-verifier.js";
 import type { ApprovalLevel } from "./self-knowledge-mutation-tools.js";
 import type { ToolRegistry } from "../../tools/registry.js";
-import { toToolDefinitions } from "../../tools/tool-definition-adapter.js";
+import { toToolDefinitionsFiltered } from "../../tools/tool-definition-adapter.js";
 import type { ToolCallContext } from "../../tools/types.js";
 import type { ToolExecutor } from "../../tools/executor.js";
 import type { LLMMessage, LLMResponse } from "../../base/llm/llm-client.js";
@@ -300,13 +300,14 @@ export class ChatRunner {
    */
   private async executeWithTools(prompt: string, systemPrompt?: string): Promise<string> {
     const llmClient = this.deps.llmClient!;
-    const tools = this.deps.registry
-      ? toToolDefinitionsFiltered(this.deps.registry.listAll(), { activatedTools: this.activatedTools })
-      : [];
     const messages: LLMMessage[] = [{ role: "user", content: prompt }];
     const toolCallContext = this.buildToolCallContext();
 
     for (let loop = 0; loop < MAX_TOOL_LOOPS; loop++) {
+      // Recompute tools each iteration so newly activated deferred tools are included
+      const tools = this.deps.registry
+        ? toToolDefinitionsFiltered(this.deps.registry.listAll(), { activatedTools: this.activatedTools })
+        : [];
       let response: LLMResponse;
       try {
         response = await llmClient.sendMessage(messages, {
