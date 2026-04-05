@@ -46,6 +46,25 @@ export async function observeWithTools(
         const parsedApi = parseToolOutput("http_fetch", result.data);
         return { rawData: result.data, parsedValue: parsedApi.value, confidence: 0.90, toolName: "http_fetch", durationMs: result.durationMs };
       }
+      case "git_diff": {
+        const result = await toolExecutor.execute("git-diff", { target: "unstaged", path: method.endpoint }, context);
+        if (!result.success) return null;
+        const diff = typeof result.data === "string" ? result.data : String(result.data ?? "");
+        return { rawData: result.data, parsedValue: diff.length > 0, confidence: 0.90, toolName: "git-diff", durationMs: result.durationMs };
+      }
+      case "grep_check": {
+        const result = await toolExecutor.execute("grep", { pattern: method.endpoint }, context);
+        if (!result.success) return null;
+        const output = typeof result.data === "string" ? result.data : String(result.data ?? "");
+        return { rawData: result.data, parsedValue: output.trim().length > 0, confidence: 0.92, toolName: "grep", durationMs: result.durationMs };
+      }
+      case "test_run": {
+        const result = await toolExecutor.execute("test-runner", { command: method.endpoint }, context);
+        if (!result.success) return null;
+        const testOut = result.data as { success?: boolean; passed?: number; failed?: number };
+        const passed = testOut?.success === true || (typeof testOut?.failed === "number" && testOut.failed === 0);
+        return { rawData: result.data, parsedValue: passed, confidence: 0.95, toolName: "test-runner", durationMs: result.durationMs };
+      }
       default:
         return null;
     }
