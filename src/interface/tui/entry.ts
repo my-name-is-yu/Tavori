@@ -212,6 +212,7 @@ async function buildDeps() {
     const provConfig = await loadProviderConfig();
     const adapterType = provConfig.adapter ?? "claude_code_cli";
     const adapter = adapterRegistry.getAdapter(adapterType);
+    // Note: escalationHandler omitted — TUI handles /track via ActionHandler
     chatRunner = new ChatRunner({ stateManager, adapter, llmClient, trustManager });
   } catch (err) {
     getCliLogger().warn(`[pulseed] ChatRunner init failed — free-form chat disabled: ${err instanceof Error ? err.message : String(err)}`);

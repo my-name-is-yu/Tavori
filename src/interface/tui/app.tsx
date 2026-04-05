@@ -151,6 +151,7 @@ export function App({
 
   const handleInput = useCallback(
     async (input: string) => {
+      if (isProcessing) return;
       // Dismiss report overlay on any input
       if (reportToShow !== null) {
         setReportToShow(null);
@@ -246,7 +247,7 @@ export function App({
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         setMessages((prev) => [
-          ...prev,
+          ...prev.slice(0, -1),
           {
             role: "pulseed" as const,
             text: `Error: ${message}`,
