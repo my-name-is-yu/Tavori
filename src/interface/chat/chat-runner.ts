@@ -18,6 +18,7 @@ import { getMutationToolDefinitions, handleMutationToolCall } from "./self-knowl
 import type { MutationToolDeps, ApprovalLevel } from "./self-knowledge-mutation-tools.js";
 import type { TrustManager } from "../../platform/traits/trust-manager.js";
 import type { PluginLoader } from "../../runtime/plugin-loader.js";
+import type { ToolExecutor } from "../../tools/executor.js";
 import type { LLMMessage, LLMResponse } from "../../base/llm/llm-client.js";
 
 // ─── Types ───
@@ -37,6 +38,8 @@ export interface ChatRunnerDeps {
   approvalFn?: (description: string) => Promise<boolean>;
   /** Optional: per-tool approval level overrides. */
   approvalConfig?: Record<string, ApprovalLevel>;
+  /** Optional: tool executor for post-change verification (git diff + tests). */
+  toolExecutor?: ToolExecutor;
 }
 
 export interface ChatRunResult {
@@ -236,14 +239,14 @@ export class ChatRunner {
     const gitChanges = await checkGitChanges(gitRoot);
     if (gitChanges !== null && gitChanges !== "") {
       let retries = 0;
-      let verification = await verifyChatAction(gitRoot);
+      let verification = await verifyChatAction(gitRoot, this.deps.toolExecutor);
 
       while (!verification.passed && retries < MAX_VERIFY_RETRIES) {
         retries++;
         const retryPrompt = `The previous changes caused test failures. Please fix them.\n\nTest output:\n${verification.testOutput ?? verification.errors.join("\n")}`;
         const retryTask: AgentTask = { ...task, prompt: retryPrompt };
         result = await this.deps.adapter.execute(retryTask);
-        verification = await verifyChatAction(gitRoot);
+        verification = await verifyChatAction(gitRoot, this.deps.toolExecutor);
       }
 
       if (!verification.passed) {

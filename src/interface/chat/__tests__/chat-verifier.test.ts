@@ -1,28 +1,36 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { verifyChatAction } from "../chat-verifier.js";
-import * as childProcess from "node:child_process";
-import { promisify } from "node:util";
+import type { ToolExecutor } from "../../../tools/executor.js";
+import type { TestRunnerOutput } from "../../../tools/system/test-runner.js";
 
-// We mock execFile at the module level
-vi.mock("node:child_process", () => ({
-  execFile: vi.fn(),
-}));
+// Helper to build a mock ToolExecutor
+function makeMockExecutor(
+  diffResult: { success: boolean; data: unknown } | null,
+  testResult: { success: boolean; data: TestRunnerOutput } | null,
+): ToolExecutor {
+  const execute = vi.fn();
+  if (diffResult !== null) {
+    execute.mockResolvedValueOnce({ success: diffResult.success, data: diffResult.data, summary: "", durationMs: 0 });
+  }
+  if (testResult !== null) {
+    execute.mockResolvedValueOnce({ success: testResult.success, data: testResult.data, summary: "", durationMs: 0 });
+  }
+  return { execute } as unknown as ToolExecutor;
+}
 
-// Helper to simulate promisified execFile resolving or rejecting
-function mockExecFile(responses: Array<{ stdout: string; stderr: string } | Error>) {
-  let callIndex = 0;
-  vi.mocked(childProcess.execFile).mockImplementation(
-    (_cmd: unknown, _args: unknown, _opts: unknown, callback: unknown) => {
-      const cb = callback as (err: Error | null, stdout: string, stderr: string) => void;
-      const response = responses[callIndex++] ?? responses[responses.length - 1];
-      if (response instanceof Error) {
-        cb(response, "", "");
-      } else {
-        cb(null, response.stdout, response.stderr);
-      }
-      return {} as ReturnType<typeof childProcess.execFile>;
-    }
-  );
+function passedTestOutput(): TestRunnerOutput {
+  return { passed: 42, failed: 0, skipped: 0, total: 42, success: true, rawOutput: "42 tests passed" };
+}
+
+function failedTestOutput(): TestRunnerOutput {
+  return {
+    passed: 0,
+    failed: 3,
+    skipped: 0,
+    total: 3,
+    success: false,
+    rawOutput: "FAIL src/foo.test.ts\n3 failed | 0 passed",
+  };
 }
 
 beforeEach(() => {
@@ -30,55 +38,61 @@ beforeEach(() => {
 });
 
 describe("verifyChatAction", () => {
-  it("returns passed=true when tests pass after changes", async () => {
-    mockExecFile([
-      { stdout: " 1 file changed, 2 insertions(+)", stderr: "" }, // git diff
-      { stdout: "✓ 42 tests passed\n", stderr: "" },              // vitest
-    ]);
-
+  it("returns passed=true when no toolExecutor provided (graceful degradation)", async () => {
     const result = await verifyChatAction("/fake/cwd");
+    expect(result.passed).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it("returns passed=true when tests pass after changes", async () => {
+    const executor = makeMockExecutor(
+      { success: true, data: "diff --git a/src/foo.ts b/src/foo.ts\n1 file changed" },
+      { success: true, data: passedTestOutput() },
+    );
+    const result = await verifyChatAction("/fake/cwd", executor);
     expect(result.passed).toBe(true);
     expect(result.errors).toHaveLength(0);
   });
 
   it("returns passed=false with testOutput when tests fail", async () => {
-    const vitestOutput = "FAIL src/foo.test.ts\n3 failed | 0 passed\n";
-    mockExecFile([
-      { stdout: " 1 file changed", stderr: "" }, // git diff
-      { stdout: vitestOutput, stderr: "" },        // vitest
-    ]);
-
-    const result = await verifyChatAction("/fake/cwd");
+    const executor = makeMockExecutor(
+      { success: true, data: "diff --git a/src/foo.ts b/src/foo.ts\n1 file changed" },
+      { success: true, data: failedTestOutput() },
+    );
+    const result = await verifyChatAction("/fake/cwd", executor);
     expect(result.passed).toBe(false);
     expect(result.errors.length).toBeGreaterThan(0);
     expect(result.testOutput).toBeTruthy();
   });
 
-  it("returns passed=true when git is unavailable (skip verification)", async () => {
-    mockExecFile([new Error("git: command not found")]);
-
-    const result = await verifyChatAction("/fake/cwd");
+  it("returns passed=true when git diff tool fails (graceful degradation)", async () => {
+    const executor = makeMockExecutor({ success: false, data: null }, null);
+    const result = await verifyChatAction("/fake/cwd", executor);
     expect(result.passed).toBe(true);
     expect(result.errors).toHaveLength(0);
   });
 
-  it("returns passed=true when vitest times out (graceful degradation)", async () => {
-    mockExecFile([
-      { stdout: " 1 file changed", stderr: "" },     // git diff — has changes
-      new Error("Command timed out"),                  // vitest times out
-    ]);
-
-    const result = await verifyChatAction("/fake/cwd");
+  it("returns passed=true when test runner tool fails (graceful degradation)", async () => {
+    const executor = makeMockExecutor(
+      { success: true, data: "1 file changed" },
+      { success: false, data: { passed: 0, failed: 0, skipped: 0, total: 0, success: false, rawOutput: "" } },
+    );
+    const result = await verifyChatAction("/fake/cwd", executor);
     expect(result.passed).toBe(true);
     expect(result.errors).toHaveLength(0);
   });
 
   it("returns passed=true when there are no git changes", async () => {
-    mockExecFile([
-      { stdout: "", stderr: "" }, // git diff — empty = no changes
-    ]);
+    const executor = makeMockExecutor({ success: true, data: "" }, null);
+    const result = await verifyChatAction("/fake/cwd", executor);
+    expect(result.passed).toBe(true);
+    expect(result.errors).toHaveLength(0);
+  });
 
-    const result = await verifyChatAction("/fake/cwd");
+  it("returns passed=true when git diff throws (graceful degradation)", async () => {
+    const execute = vi.fn().mockRejectedValueOnce(new Error("git: command not found"));
+    const executor = { execute } as unknown as ToolExecutor;
+    const result = await verifyChatAction("/fake/cwd", executor);
     expect(result.passed).toBe(true);
     expect(result.errors).toHaveLength(0);
   });
