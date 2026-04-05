@@ -77,6 +77,16 @@ describe("getMutationToolDefinitions()", () => {
     expect(names).toContain("update_config");
     expect(names).toContain("reset_trust");
   });
+
+  it("delete_goal description contains rich metadata (effects, risks, revert)", () => {
+    const tools = getMutationToolDefinitions();
+    const deleteGoal = tools.find((t) => t.function.name === "delete_goal");
+    expect(deleteGoal).toBeDefined();
+    expect(deleteGoal!.function.description).toContain("Effects");
+    expect(deleteGoal!.function.description).toContain("Risks");
+    expect(deleteGoal!.function.description).toContain("Revert");
+    expect(deleteGoal!.function.description).toContain("cannot be undone");
+  });
 });
 
 // ─── set_goal ───
@@ -211,27 +221,32 @@ describe("handleMutationToolCall — archive_goal", () => {
 // ─── delete_goal ───
 
 describe("handleMutationToolCall — delete_goal", () => {
-  it("deletes a goal when approved", async () => {
+  it("deletes a goal without requiring approvalFn (LLM conversational confirmation)", async () => {
     const sm = makeStateManager({ deleteGoal: vi.fn().mockResolvedValue(true) });
-    const deps = makeDeps({
-      stateManager: sm,
-      approvalFn: vi.fn().mockResolvedValue(true),
-    });
+    // No approvalFn provided — should succeed because approvalLevel is "none"
+    const deps = makeDeps({ stateManager: sm });
     const result = await handleMutationToolCall("delete_goal", { goal_id: "g1" }, deps);
     const parsed = JSON.parse(result) as { success: boolean };
     expect(parsed.success).toBe(true);
     expect(sm.deleteGoal).toHaveBeenCalledWith("g1");
   });
 
-  it("returns error when user denies approval", async () => {
+  it("does not call approvalFn even when one is provided", async () => {
     const sm = makeStateManager({ deleteGoal: vi.fn().mockResolvedValue(true) });
-    const deps = makeDeps({
-      stateManager: sm,
-      approvalFn: vi.fn().mockResolvedValue(false),
-    });
+    const approvalFn = vi.fn().mockResolvedValue(true);
+    const deps = makeDeps({ stateManager: sm, approvalFn });
     const result = await handleMutationToolCall("delete_goal", { goal_id: "g1" }, deps);
+    const parsed = JSON.parse(result) as { success: boolean };
+    expect(parsed.success).toBe(true);
+    expect(approvalFn).not.toHaveBeenCalled();
+  });
+
+  it("returns error when goal is not found", async () => {
+    const sm = makeStateManager({ deleteGoal: vi.fn().mockResolvedValue(false) });
+    const deps = makeDeps({ stateManager: sm });
+    const result = await handleMutationToolCall("delete_goal", { goal_id: "nonexistent" }, deps);
     const parsed = JSON.parse(result) as { error: string };
-    expect(parsed.error).toContain("denied");
+    expect(parsed.error).toContain("not found");
   });
 
   it("returns error when goal_id is missing", async () => {
@@ -437,17 +452,25 @@ describe("handleMutationToolCall — approval config override", () => {
     expect(approvalFn).toHaveBeenCalled();
   });
 
-  it("can override delete_goal to skip approval via approvalConfig", async () => {
+  it("delete_goal does not require approvalFn by default (approval level none)", async () => {
+    const sm = makeStateManager({ deleteGoal: vi.fn().mockResolvedValue(true) });
+    const approvalFn = vi.fn().mockResolvedValue(true);
+    const deps = makeDeps({ stateManager: sm, approvalFn });
+    await handleMutationToolCall("delete_goal", { goal_id: "g1" }, deps);
+    expect(approvalFn).not.toHaveBeenCalled();
+    expect(sm.deleteGoal).toHaveBeenCalledWith("g1");
+  });
+
+  it("can override delete_goal to require approval via approvalConfig", async () => {
     const sm = makeStateManager({ deleteGoal: vi.fn().mockResolvedValue(true) });
     const approvalFn = vi.fn().mockResolvedValue(true);
     const deps = makeDeps({
       stateManager: sm,
       approvalFn,
-      approvalConfig: { delete_goal: "none" },
+      approvalConfig: { delete_goal: "required" },
     });
     await handleMutationToolCall("delete_goal", { goal_id: "g1" }, deps);
-    expect(approvalFn).not.toHaveBeenCalled();
-    expect(sm.deleteGoal).toHaveBeenCalledWith("g1");
+    expect(approvalFn).toHaveBeenCalled();
   });
 });
 
