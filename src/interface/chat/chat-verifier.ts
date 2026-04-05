@@ -1,7 +1,7 @@
 // Lightweight post-execution verification for chat mode (git diff + vitest).
 import type { ToolExecutor } from "../../tools/executor.js";
 import type { ToolCallContext } from "../../tools/types.js";
-import type { TestRunnerOutput } from "../../tools/system/test-runner.js";
+import type { TestRunnerOutput } from "../../tools/system/TestRunnerTool/TestRunnerTool.js";
 
 export interface ChatVerificationResult {
   passed: boolean;

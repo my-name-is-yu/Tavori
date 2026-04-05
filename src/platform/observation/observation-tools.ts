@@ -3,7 +3,7 @@ import type { ToolExecutor } from "../../tools/executor.js";
 import type { ToolCallContext } from "../../tools/types.js";
 import type { ToolPermissionManager } from "../../tools/permission.js";
 import type { Dimension } from "../../orchestrator/goal/types/goal.js";
-import { parseToolOutput } from "../../tools/builtin/shared/parse-tool-output.js";
+import { parseToolOutput } from "../../tools/shared/parse-tool-output.js";
 
 export interface ToolObservationResult {
   rawData: unknown;

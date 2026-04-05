@@ -1,0 +1,1 @@
+export const DESCRIPTION = "Retrieve time-series progress history for a goal's dimensions. Returns dimension gap values per iteration and a trend label (improving/stagnating/declining/insufficient_data).";

@@ -1,7 +1,7 @@
 import type { Dimension } from "../../base/types/goal.js";
 import type { ToolCallContext, ToolResult } from "../../tools/types.js";
 import type { ToolExecutor } from "../../tools/executor.js";
-import { parseToolOutput as parseRawToolOutput } from "../../tools/builtin/shared/parse-tool-output.js";
+import { parseToolOutput as parseRawToolOutput } from "../../tools/shared/parse-tool-output.js";
 
 /**
  * Direct measurement result from a tool call.
