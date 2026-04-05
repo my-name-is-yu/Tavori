@@ -67,10 +67,10 @@ export class CreatePlanTool implements ITool<CreatePlanInput, unknown> {
     _input: CreatePlanInput,
     _context: ToolCallContext,
   ): Promise<PermissionCheckResult> {
-    return { status: "allowed" };
+    return { status: "needs_approval", reason: "Writing plan to ~/.pulseed/decisions/" };
   }
 
   isConcurrencySafe(_input: CreatePlanInput): boolean {
-    return true;
+    return false;
   }
 }
