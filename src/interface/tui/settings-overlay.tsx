@@ -26,6 +26,12 @@ const SETTINGS: SettingItem[] = [
     description: "Run CoreLoop as background daemon. TUI becomes a client that can disconnect without stopping the loop.",
     type: "boolean",
   },
+  {
+    key: "no_flicker",
+    label: "No-Flicker Mode",
+    description: "Use alt-screen + synchronized output for flicker-free TUI. Takes effect on next launch.",
+    type: "boolean",
+  },
 ];
 
 export function SettingsOverlay({ onClose }: SettingsOverlayProps): React.ReactElement {
