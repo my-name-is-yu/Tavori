@@ -84,6 +84,8 @@ export class ChatRunner {
   private sessionCwd: string | null = null;
   /** True when startSession() has been called — enables session persistence across execute() calls. */
   private sessionActive = false;
+  /** Deferred tools activated by ToolSearch results — included in tool definitions for subsequent turns. */
+  private activatedTools: Set<string> = new Set();
   /** Cached system prompt — built once per session, reused across turns. */
   private cachedSystemPrompt: string | null = null;
 
@@ -299,7 +301,7 @@ export class ChatRunner {
   private async executeWithTools(prompt: string, systemPrompt?: string): Promise<string> {
     const llmClient = this.deps.llmClient!;
     const tools = this.deps.registry
-      ? toToolDefinitions(this.deps.registry.listAll())
+      ? toToolDefinitionsFiltered(this.deps.registry.listAll(), { activatedTools: this.activatedTools })
       : [];
     const messages: LLMMessage[] = [{ role: "user", content: prompt }];
     const toolCallContext = this.buildToolCallContext();
@@ -333,6 +335,10 @@ export class ChatRunner {
           // ignore parse errors, use empty args
         }
         const toolResult = await this.dispatchToolCall(tc.function.name, args, toolCallContext);
+        // When ToolSearch returns results, activate deferred tools for subsequent turns
+        if (tc.function.name === "tool_search") {
+          this.activateToolSearchResults(toolResult);
+        }
         messages.push({ role: "user", content: `Tool result for ${tc.function.name}:\n${toolResult}` });
       }
     }
@@ -340,6 +346,26 @@ export class ChatRunner {
     // Max loops reached — return last assistant content or fallback
     const lastAssistant = [...messages].reverse().find(m => m.role === "assistant");
     return lastAssistant?.content || "I was unable to complete the request within the allowed tool call limit.";
+  }
+
+  /**
+   * Parse ToolSearch result JSON and activate any deferred tools found.
+   * Called after each tool_search execution so the LLM can call found tools on the next turn.
+   */
+  private activateToolSearchResults(toolResult: string): void {
+    try {
+      const parsed = JSON.parse(toolResult) as unknown;
+      const results = Array.isArray(parsed) ? parsed : null;
+      if (results) {
+        for (const item of results) {
+          if (item && typeof item === "object" && typeof (item as Record<string, unknown>)["name"] === "string") {
+            this.activatedTools.add((item as Record<string, unknown>)["name"] as string);
+          }
+        }
+      }
+    } catch {
+      // Non-JSON result or unexpected shape — ignore
+    }
   }
 
   /** Dispatch a tool call through the registry. */
