@@ -18,6 +18,7 @@ import { theme, getMessageTypeColor } from "./theme.js";
 import { pickSpinnerVerb } from "./spinner-verbs.js";
 import { ShimmerText } from "./shimmer-text.js";
 import { positionCursorInFrame, buildCursorEscape } from "./cursor-tracker.js";
+import { copyToClipboard } from "./clipboard.js";
 
 export interface ChatMessage {
   id: string;
@@ -293,6 +294,9 @@ export function Chat({
 
   // ── Scroll offset for chat scroll ──
   const [scrollOffset, setScrollOffset] = React.useState(0);
+  const [copyMode, setCopyMode] = useState(false);
+  const [copyIndex, setCopyIndex] = useState(0);
+  const [copyToast, setCopyToast] = useState(false);
   const prevMsgCount = React.useRef(messages.length);
 
   const [spinnerVerb, setSpinnerVerb] = React.useState(() => pickSpinnerVerb());
@@ -336,6 +340,33 @@ export function Chat({
 
   useInput(
     (inputChar, key) => {
+      // ── Copy mode: Ctrl+Y to enter ──
+      if (!copyMode && inputChar === "y" && key.ctrl) {
+        if (messages.length > 0) {
+          setCopyMode(true);
+          setCopyIndex(messages.length - 1);
+        }
+        return;
+      }
+
+      // ── Copy mode navigation ──
+      if (copyMode) {
+        if (key.upArrow || inputChar === "k") {
+          setCopyIndex((i) => Math.max(0, i - 1));
+        } else if (key.downArrow || inputChar === "j") {
+          setCopyIndex((i) => Math.min(messages.length - 1, i + 1));
+        } else if (key.return) {
+          copyToClipboard(messages[copyIndex].text).then(() => {
+            setCopyToast(true);
+            setTimeout(() => setCopyToast(false), 1500);
+          });
+          setCopyMode(false);
+        } else if (key.escape) {
+          setCopyMode(false);
+        }
+        return;
+      }
+
       // ── Scroll: Shift+↑/↓ or PageUp/PageDown ──
       if (key.upArrow && key.shift) {
         setScrollOffset((prev) =>
@@ -511,7 +542,16 @@ export function Chat({
           const prevMsg = idx > 0 ? visibleMessages[idx - 1] : null;
           return (
             <React.Fragment key={msg.id}>
-              <MessageRow msg={msg} />
+              {copyMode && startIdx + idx === copyIndex ? (
+                <Box>
+                  <Text bold color="cyan">{"▶ "}</Text>
+                  <Box flexGrow={1}>
+                    <MessageRow msg={msg} />
+                  </Box>
+                </Box>
+              ) : (
+                <MessageRow msg={msg} />
+              )}
             </React.Fragment>
           );
         })}
@@ -523,6 +563,8 @@ export function Chat({
             <ShimmerText>{`${spinnerVerb}...`}</ShimmerText>
           </Box>
         )}
+
+        {copyToast && <Text color="green"> Copied!</Text>}
 
         {/* Scroll-down indicator */}
         {hiddenBelow > 0 && (
@@ -563,6 +605,9 @@ export function Chat({
           />
           {emptyHint && (
             <Text dimColor> Type a message or /help for commands</Text>
+          )}
+          {copyMode && (
+            <Text dimColor>Copy mode: ↑↓/jk navigate, Enter copy, Esc cancel</Text>
           )}
           {hasMatches && (
             <Box flexDirection="column">
