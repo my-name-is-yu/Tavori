@@ -5,8 +5,8 @@
 // weekly_report) with type-specific headers, plus a generic fallback for
 // notification types (urgent_alert, approval_request, stall_escalation, etc.).
 
-import React from "react";
-import { Box, Text } from "ink";
+import React, { useState } from "react";
+import { Box, Text, useInput, useStdout } from "ink";
 import { renderMarkdownLines } from "./markdown-renderer.js";
 import type { Report } from "../../base/types/report.js";
 import { reportColor } from "./theme.js";
@@ -40,14 +40,18 @@ function reportIcon(reportType: Report["report_type"]): string {
 
 export interface ReportViewProps {
   report: Report;
+  onDismiss: () => void;
 }
 
-export function ReportView({ report }: ReportViewProps) {
+export function ReportView({ report, onDismiss }: ReportViewProps) {
+  const { stdout } = useStdout();
+  const termRows = stdout?.rows ?? 24;
+  const [scrollOffset, setScrollOffset] = useState(0);
+
   const color = reportColor(report.report_type);
   const icon = reportIcon(report.report_type);
   const mdLines = renderMarkdownLines(report.content);
 
-  // Format generated_at as a readable timestamp
   const generatedAt = report.generated_at
     ? new Date(report.generated_at).toLocaleString("en-US", {
         month: "short",
@@ -58,6 +62,25 @@ export function ReportView({ report }: ReportViewProps) {
       })
     : "";
 
+  // Reserve rows: 1 header box border top + 1 header row + 1 goal row + 1 separator + 2 border bottom/footer + 1 footer hint
+  const reservedRows = 7;
+  const visibleLines = Math.max(1, termRows - reservedRows);
+  const maxScroll = Math.max(0, mdLines.length - visibleLines);
+  const clampedOffset = Math.min(scrollOffset, maxScroll);
+  const visibleMdLines = mdLines.slice(clampedOffset, clampedOffset + visibleLines);
+
+  useInput((input, key) => {
+    if (input === "q" || key.escape) {
+      onDismiss();
+      return;
+    }
+    if (key.upArrow || input === "k") {
+      setScrollOffset((prev) => Math.max(0, prev - 1));
+    } else if (key.downArrow || input === "j") {
+      setScrollOffset((prev) => Math.min(maxScroll, prev + 1));
+    }
+  });
+
   return (
     <Box
       flexDirection="column"
@@ -66,7 +89,6 @@ export function ReportView({ report }: ReportViewProps) {
       paddingX={1}
       marginBottom={1}
     >
-      {/* Header row */}
       <Box justifyContent="space-between">
         <Text bold color={color}>
           {icon} {report.title}
@@ -76,17 +98,14 @@ export function ReportView({ report }: ReportViewProps) {
         )}
       </Box>
 
-      {/* Goal ID row (when present) */}
       {report.goal_id !== null && (
         <Text dimColor>goal: {report.goal_id}</Text>
       )}
 
-      {/* Separator */}
       <Text dimColor>{"─".repeat(40)}</Text>
 
-      {/* Report content rendered as markdown */}
       <Box flexDirection="column">
-        {mdLines.map((line, i) => {
+        {visibleMdLines.map((line, i) => {
           if (line.text === "") {
             return <Text key={i}> </Text>;
           }
@@ -100,6 +119,9 @@ export function ReportView({ report }: ReportViewProps) {
           );
         })}
       </Box>
+
+      <Text dimColor>{"─".repeat(40)}</Text>
+      <Text dimColor>↑↓ scroll • q/Esc to close</Text>
     </Box>
   );
 }
