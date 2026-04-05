@@ -161,8 +161,6 @@ export interface ToolCallContext {
   };
   /** When true, gates pass but tool.call() is skipped (for testing pipelines) */
   dryRun?: boolean;
-  /** When true, bypass DENY_PATTERNS in ShellTool (internal use only) */
-  trusted?: boolean;
 }
 
 export interface ApprovalRequest {
