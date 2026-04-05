@@ -5,7 +5,7 @@
 // styled user/AI distinction, spinner, timestamps, and color-coded message types.
 
 import React, { useState } from "react";
-import { Box, Text, useInput, useStdout, useCursor } from "ink";
+import { Box, Text, useInput, useStdout } from "ink";
 import TextInput from "ink-text-input";
 import Spinner from "ink-spinner";
 import { renderMarkdownLines, type MarkdownLine, type MarkdownSegment } from "./markdown-renderer.js";
@@ -13,7 +13,7 @@ import { fuzzyMatch, fuzzyFilter } from "./fuzzy.js";
 import { theme, getMessageTypeColor } from "./theme.js";
 import { pickSpinnerVerb } from "./spinner-verbs.js";
 import { ShimmerText } from "./shimmer-text.js";
-import { findCursorRow, computeCursorX } from "./cursor-tracker.js";
+import { positionCursorInFrame } from "./cursor-tracker.js";
 
 export interface ChatMessage {
   id: string;
@@ -331,36 +331,34 @@ export function Chat({ messages, onSubmit, onClear, isProcessing, goalNames = []
     };
   }, []);
 
-  // Capture rendered frames via stdout.write intercept (read-only)
-  const frameRef = React.useRef("");
+  // Refs for stdout intercept to access current state without re-renders
+  const inputRef = React.useRef(input);
+  const isProcessingRef = React.useRef(isProcessing);
+  React.useEffect(() => { inputRef.current = input; }, [input]);
+  React.useEffect(() => { isProcessingRef.current = isProcessing; }, [isProcessing]);
+
+  // Stdout intercept: capture frame AND position cursor via direct ANSI injection
   React.useEffect(() => {
     const original = process.stdout.write.bind(process.stdout);
     const patched = function (chunk: any, ...args: any[]) {
-      if (typeof chunk === "string" && chunk.length > 50) {
-        frameRef.current = chunk;
+      const result = (original as any)(chunk, ...args);
+      // Only process full Ink frames (not small escape sequences)
+      if (typeof chunk === "string" && chunk.length > 50 && !isProcessingRef.current) {
+        positionCursorInFrame(chunk, inputRef.current, original);
       }
-      return (original as any)(chunk, ...args);
+      return result;
     } as typeof process.stdout.write;
     process.stdout.write = patched;
     return () => { process.stdout.write = original; };
   }, []);
 
-  // IME cursor positioning: scan rendered frame to find input prompt row
-  const { setCursorPosition } = useCursor();
+  // Hide cursor during AI processing
   React.useEffect(() => {
     if (isProcessing) {
-      setCursorPosition(undefined);
-      return;
+      const original = process.stdout.write.bind(process.stdout);
+      original("\x1b[?25l");
     }
-    const row = findCursorRow(frameRef.current);
-    if (row === null) {
-      setCursorPosition(undefined);
-      return;
-    }
-    const x = computeCursorX(input);
-    setCursorPosition({ x, y: row });
-    return () => { setCursorPosition(undefined); };
-  }, [input, isProcessing, setCursorPosition]);
+  }, [isProcessing]);
 
   const handleSubmit = (value: string) => {
     if (hasMatches) return; // let useInput handle enter when suggestions are shown

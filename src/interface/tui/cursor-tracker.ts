@@ -32,3 +32,19 @@ export function computeCursorX(input: string): number {
   }
   return width;
 }
+
+/**
+ * Write ANSI escape to position the terminal cursor at the input caret.
+ * Called directly from the stdout intercept — no React state involved.
+ */
+export function positionCursorInFrame(
+  frame: string,
+  inputText: string,
+  write: (s: string) => boolean,
+): void {
+  const row = findCursorRow(frame);
+  if (row === null) return;
+  const x = computeCursorX(inputText);
+  // ANSI CSI: move to row;col (1-indexed) and show cursor
+  write(`\x1b[${row + 1};${x + 1}H\x1b[?25h`);
+}
