@@ -73,6 +73,10 @@ export function HelpOverlay({ onDismiss }: HelpOverlayProps) {
             <Text>Clear chat messages</Text>
           </Box>
           <Box>
+            <Box width={20}><Text color={theme.command} bold>/settings</Text></Box>
+            <Text>View and toggle config</Text>
+          </Box>
+          <Box>
             <Box width={20}><Text dimColor>{"<anything else>"}</Text></Box>
             <Text>Chat with PulSeed</Text>
           </Box>

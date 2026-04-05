@@ -193,6 +193,12 @@ const COMMANDS: Suggestion[] = [
     description: "Toggle dashboard sidebar",
     type: "command" as const,
   },
+  {
+    name: "/settings",
+    aliases: ["/config"],
+    description: "View and toggle config",
+    type: "command",
+  },
 ];
 
 /** Commands that accept a goal name as argument */
