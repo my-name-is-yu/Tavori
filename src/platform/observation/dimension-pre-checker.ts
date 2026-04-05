@@ -68,28 +68,24 @@ async function checkGitDiff(
         goalId: "pre-check",
         trustBalance: 0,
         preApproved: true,
-        approvalFn: async () => false,
+        approvalFn: async () => true,
         callId: "pre-check-dirty",
         sessionId: "observation",
       };
 
-      const [unstaged, staged] = await Promise.all([
-        toolExecutor.execute("git_diff", { target: "unstaged", maxLines: 1 }, ctx),
-        toolExecutor.execute("git_diff", { target: "staged", maxLines: 1 }, ctx),
-      ]);
+      // Use ShellTool with `git status --short` to detect all changes
+      // (staged, unstaged, AND untracked files — unlike git diff which misses untracked)
+      const result = await toolExecutor.execute(
+        "shell",
+        { command: "git status --short", timeoutMs: 8000 },
+        ctx,
+      );
 
-      const isDirty =
-        (unstaged.success && unstaged.data != null && String(unstaged.data).trim().length > 0) ||
-        (staged.success && staged.data != null && String(staged.data).trim().length > 0);
-
-      if (!isDirty) return { changed: false };
-
-      const hint = [unstaged.data, staged.data]
-        .filter(Boolean)
-        .join("\n")
-        .trim()
-        .slice(0, 200);
-      return { changed: true, hint: hint || undefined };
+      if (result.success && typeof result.data === "object" && result.data !== null) {
+        const stdout = String((result.data as { stdout?: string }).stdout ?? "").trim();
+        if (stdout.length === 0) return { changed: false };
+        return { changed: true, hint: stdout.slice(0, 200) };
+      }
     } catch {
       // ToolExecutor call failed -- fall through to execFile fallback
     }
