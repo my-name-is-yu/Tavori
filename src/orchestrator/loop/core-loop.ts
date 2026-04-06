@@ -226,10 +226,8 @@ export class CoreLoop {
       void this.deps.hookManager?.emit("LoopCycleEnd", { goal_id: goalId, data: { loopIndex, status: iterationResult.error ? "error" : "ok" } });
 
       iterations.push(iterationResult);
-      // Accumulate token usage from iteration (LoopIterationResult does not currently expose
-      // token counts directly — individual LLM calls tracked inside sub-phases).
-      // TODO: when LoopIterationResult gains a tokensUsed field, replace 0 with iteration.tokensUsed ?? 0.
-      totalTokens += 0;
+      // Accumulate token usage from iteration.
+      totalTokens += iterationResult.tokensUsed ?? 0;
 
       // Save checkpoint after each successful verify step (§4.8)
       if (!this.config.dryRun && iterationResult.error === null && iterationResult.taskResult !== null) {
