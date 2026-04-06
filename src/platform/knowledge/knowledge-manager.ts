@@ -577,6 +577,171 @@ export class KnowledgeManager {
     return true;
   }
 
+  // ─── consolidateAgentMemory ───
+
+  /**
+   * Consolidate raw agent memory entries into compiled entries via LLM.
+   * Groups entries by category+memory_type; groups with 2+ entries are consolidated.
+   * Source entries are archived after consolidation.
+   */
+  async consolidateAgentMemory(opts: {
+    category?: string;
+    memory_type?: AgentMemoryType;
+    llmCall: (prompt: string) => Promise<string>;
+  }): Promise<{ compiled: AgentMemoryEntry[]; archived: number }> {
+    const store = await this._loadAgentMemoryStore();
+    const now = new Date().toISOString();
+
+    // Filter raw entries
+    let rawEntries = store.entries.filter((e) => e.status === "raw");
+    if (opts.category) rawEntries = rawEntries.filter((e) => e.category === opts.category);
+    if (opts.memory_type) rawEntries = rawEntries.filter((e) => e.memory_type === opts.memory_type);
+
+    // Group by category+memory_type
+    const groups = new Map<string, AgentMemoryEntry[]>();
+    for (const entry of rawEntries) {
+      const groupKey = `${entry.category ?? "_"}::${entry.memory_type}`;
+      const group = groups.get(groupKey) ?? [];
+      group.push(entry);
+      groups.set(groupKey, group);
+    }
+
+    const compiledSchema = z.object({
+      key: z.string(),
+      value: z.string(),
+      summary: z.string(),
+      tags: z.array(z.string()),
+    });
+
+    const compiled: AgentMemoryEntry[] = [];
+    const archivedIds = new Set<string>();
+
+    for (const [, group] of groups) {
+      if (group.length < 2) continue;
+
+      const entryLines = group
+        .map((e) => `- [${e.key}]: ${e.value} (tags: ${e.tags.join(", ")})`)
+        .join("\n");
+
+      const prompt = [
+        "Consolidate the following memory entries into a single entry.",
+        "Return ONLY a JSON object with these fields:",
+        "- key: a descriptive key for the consolidated memory",
+        "- value: the consolidated content (comprehensive but concise)",
+        "- summary: a one-line summary (under 100 chars)",
+        "- tags: relevant tags as string array",
+        "",
+        "Entries to consolidate:",
+        entryLines,
+      ].join("\n");
+
+      let llmRaw: string;
+      try {
+        llmRaw = await opts.llmCall(prompt);
+      } catch (err) {
+        console.warn("[KnowledgeManager] consolidateAgentMemory: llmCall failed, skipping group", err);
+        continue;
+      }
+
+      // Strip markdown fences and trim
+      const sanitized = llmRaw
+        .replace(/^```(?:json)?\s*/i, "")
+        .replace(/\s*```$/, "")
+        .trim();
+
+      let parsedResult: z.infer<typeof compiledSchema>;
+      try {
+        parsedResult = compiledSchema.parse(JSON.parse(sanitized));
+      } catch (err) {
+        console.warn("[KnowledgeManager] consolidateAgentMemory: failed to parse LLM response, skipping group", err);
+        continue;
+      }
+
+      const firstEntry = group[0]!;
+      const newEntry = AgentMemoryEntrySchema.parse({
+        id: crypto.randomUUID(),
+        key: parsedResult.key,
+        value: parsedResult.value,
+        summary: parsedResult.summary,
+        tags: parsedResult.tags,
+        category: firstEntry.category,
+        memory_type: firstEntry.memory_type,
+        status: "compiled",
+        compiled_from: group.map((e) => e.id),
+        created_at: now,
+        updated_at: now,
+      });
+
+      compiled.push(newEntry);
+      store.entries.push(newEntry);
+
+      for (const src of group) {
+        archivedIds.add(src.id);
+      }
+    }
+
+    // Archive source entries
+    for (const entry of store.entries) {
+      if (archivedIds.has(entry.id)) {
+        entry.status = "archived";
+        entry.updated_at = now;
+      }
+    }
+
+    if (compiled.length > 0) {
+      store.last_consolidated_at = now;
+      await this.stateManager.writeRaw(AGENT_MEMORY_PATH, store);
+    }
+
+    return { compiled, archived: archivedIds.size };
+  }
+
+  // ─── archiveAgentMemory ───
+
+  /**
+   * Archive agent memory entries by IDs.
+   * Returns the count of entries actually archived (skips already-archived).
+   */
+  async archiveAgentMemory(ids: string[]): Promise<number> {
+    const store = await this._loadAgentMemoryStore();
+    const now = new Date().toISOString();
+    let count = 0;
+
+    for (const entry of store.entries) {
+      if (ids.includes(entry.id) && entry.status !== "archived") {
+        entry.status = "archived";
+        entry.updated_at = now;
+        count++;
+      }
+    }
+
+    if (count > 0) {
+      await this.stateManager.writeRaw(AGENT_MEMORY_PATH, store);
+    }
+    return count;
+  }
+
+  // ─── getAgentMemoryStats ───
+
+  /**
+   * Return counts of agent memory entries grouped by status.
+   */
+  async getAgentMemoryStats(): Promise<{
+    raw: number;
+    compiled: number;
+    archived: number;
+    total: number;
+  }> {
+    const store = await this._loadAgentMemoryStore();
+    const stats = { raw: 0, compiled: 0, archived: 0, total: store.entries.length };
+    for (const e of store.entries) {
+      if (e.status === "raw") stats.raw++;
+      else if (e.status === "compiled") stats.compiled++;
+      else if (e.status === "archived") stats.archived++;
+    }
+    return stats;
+  }
+
   // ─── Private Helpers ───
 
   private async _loadAgentMemoryStore(): Promise<import('./types/agent-memory.js').AgentMemoryStore> {
