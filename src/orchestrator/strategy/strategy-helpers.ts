@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { StrategySchema } from "../../base/types/strategy.js";
+import { parseStrategy } from "./types/strategy.js";
 import { KnowledgeGapSignalSchema } from "../../base/types/knowledge.js";
 import type { StrategyState } from "../../base/types/core.js";
 import type { Strategy } from "../../base/types/strategy.js";
@@ -185,7 +186,7 @@ export function redistributeAllocation(
       totalRemainingAlloc > 0
         ? s.allocation / totalRemainingAlloc
         : 1.0 / remaining.length;
-    return StrategySchema.parse({
+    return parseStrategy({
       ...s,
       allocation: s.allocation + freedAllocation * share,
     });
