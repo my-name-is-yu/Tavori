@@ -1,6 +1,5 @@
 import type { ChannelAdapter, EnvelopeHandler, ReplyChannel } from "./channel-adapter.js";
-import { createEnvelope } from "../types/envelope.js";
-import type { EnvelopeType, EnvelopePriority } from "../types/envelope.js";
+import { createEnvelope, EnvelopeTypeSchema, EnvelopePrioritySchema } from "../types/envelope.js";
 
 /** Minimal interface for a WebSocket-like socket */
 export interface WsSocketLike {
@@ -8,6 +7,7 @@ export interface WsSocketLike {
   on(event: "close", cb: () => void): void;
   on(event: "error", cb: (err: Error) => void): void;
   send(data: string): void;
+  close(): void;
 }
 
 /** Minimal interface for a WebSocket-like server */
@@ -79,12 +79,15 @@ export class WsChannelAdapter implements ChannelAdapter {
       return;
     }
 
+    const typeParsed = EnvelopeTypeSchema.safeParse(parsed["type"]);
+    const priorityParsed = EnvelopePrioritySchema.safeParse(parsed["priority"]);
+
     const envelope = createEnvelope({
-      type: (parsed["type"] as EnvelopeType) ?? "event",
+      type: typeParsed.success ? typeParsed.data : "event",
       name: String(parsed["name"] ?? "ws_message"),
       source: "websocket",
       goal_id: parsed["goal_id"] as string | undefined,
-      priority: (parsed["priority"] as EnvelopePriority) ?? "normal",
+      priority: priorityParsed.success ? priorityParsed.data : "normal",
       payload: parsed["payload"] ?? parsed,
     });
 
@@ -93,7 +96,7 @@ export class WsChannelAdapter implements ChannelAdapter {
         socket.send(JSON.stringify(responseData));
       },
       close(): void {
-        // WebSocket close is handled at socket level; no-op here
+        socket.close();
       },
     };
 
