@@ -242,28 +242,32 @@ async function stepDaemon(): Promise<{ start: boolean; port: number }> {
 
   if (!start) return { start: false, port: DEFAULT_PORT };
 
-  // If default port is free, use it silently — no need to bother the user.
-  if (await isPortAvailable(DEFAULT_PORT)) {
-    return { start: true, port: DEFAULT_PORT };
+  // Determine suggested port: DEFAULT_PORT if free, otherwise find the next available one.
+  let suggestedPort: number;
+  const defaultFree = await isPortAvailable(DEFAULT_PORT);
+  if (defaultFree) {
+    suggestedPort = DEFAULT_PORT;
+  } else {
+    try {
+      suggestedPort = await findAvailablePort(DEFAULT_PORT + 1);
+    } catch {
+      suggestedPort = DEFAULT_PORT + 1;
+    }
   }
 
-  // Default port is occupied — find the next available one and ask.
-  let suggestedPort: number;
-  try {
-    suggestedPort = await findAvailablePort(DEFAULT_PORT + 1);
-  } catch {
-    // All ports in the scan range are busy; fall through to manual entry only.
-    suggestedPort = DEFAULT_PORT + 1;
-  }
+  // Always show the port selection — even when DEFAULT_PORT is free.
+  const suggestedLabel = defaultFree
+    ? `Use port ${DEFAULT_PORT}`
+    : `Use port ${suggestedPort} instead (41700 is in use)`;
 
   const portChoice = guardCancel(
     await p.select({
-      message: `Port ${DEFAULT_PORT} is already in use. What would you like to do?`,
+      message: "Select a port for the daemon:",
       options: [
         {
           value: "suggested" as const,
-          label: `Use port ${suggestedPort} instead`,
-          hint: "auto-detected available port",
+          label: suggestedLabel,
+          hint: defaultFree ? "default port" : "auto-detected available port",
         },
         {
           value: "custom" as const,
