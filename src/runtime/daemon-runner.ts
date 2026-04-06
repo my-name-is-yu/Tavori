@@ -177,6 +177,16 @@ export class DaemonRunner {
       const httpAdapter = new HttpChannelAdapter(this.eventServer);
       this.gateway.registerAdapter(httpAdapter);
       this.gateway.onEnvelope(async (envelope: Envelope) => {
+        // Route by envelope type when buses are configured
+        if (envelope.type === "command" && this.commandBus) {
+          this.commandBus.push(envelope);
+          return;
+        }
+        if (envelope.type === "event" && this.eventBus) {
+          this.eventBus.push(envelope);
+          return;
+        }
+        // Fallback: no bus configured — keep legacy driveSystem.writeEvent() behavior
         const payload = envelope.payload as Record<string, unknown>;
         try {
           const event = PulSeedEventSchema.parse(payload);
@@ -188,6 +198,9 @@ export class DaemonRunner {
           });
         }
       });
+      // Wire onHighPriority to abort sleep — done via the abortSleep() public method.
+      // Callers who construct buses should pass: onHighPriority: () => daemon.abortSleep()
+      // The daemon provides abortSleep() below for this purpose.
       await this.gateway.start();
       this.logger.info("Gateway started with HTTP adapter", { port: this.eventServer.getPort() });
     } else {
@@ -316,6 +329,15 @@ export class DaemonRunner {
   /** Expose approvalFn for callers (e.g. cmdStart) to wire into TaskLifecycle */
   getApprovalFn(): ((task: Record<string, unknown>) => Promise<boolean>) | undefined {
     return this.approvalFn;
+  }
+
+  /**
+   * Abort the current sleep cycle immediately.
+   * Intended for use as the onHighPriority callback when constructing EventBus/CommandBus:
+   *   new EventBus({ onHighPriority: () => daemon.abortSleep() })
+   */
+  abortSleep(): void {
+    this.sleepAbortController?.abort();
   }
 
   /**
