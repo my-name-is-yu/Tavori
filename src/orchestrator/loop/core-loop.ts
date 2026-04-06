@@ -39,6 +39,8 @@ import {
   type StateDiffState,
 } from "./core-loop-phases-c.js";
 import { handleCapabilityAcquisition } from "./core-loop-capability.js";
+import type { ITimeHorizonEngine } from "../../platform/time/time-horizon-engine.js";
+import type { PacingResult } from "../../base/types/time-horizon.js";
 import { CoreLoopLearning } from "./core-loop-learning.js";
 
 // Re-export types for backward compatibility
@@ -95,6 +97,10 @@ export class CoreLoop {
   private stateDiffState = new Map<string, StateDiffState>();
   /** Tracks goals that have already been through auto-decompose this run. */
   private decomposedGoals = new Set<string>();
+  /** Optional TimeHorizonEngine for adaptive observation interval (Gap 4). */
+  private timeHorizonEngine?: ITimeHorizonEngine;
+  /** Last known pacing result — updated each iteration for adaptive delay. */
+  private lastPacingResult?: PacingResult;
 
   constructor(deps: CoreLoopDeps, config?: LoopConfig, stateDiff?: StateDiffCalculator) {
     this.deps = deps;
@@ -303,9 +309,25 @@ export class CoreLoop {
       // Periodic learning review
       await this.learning.checkPeriodicReview(goalId, this.deps, this.logger);
 
+      // Gap 4: derive a PacingResult from this iteration to feed adaptive delay.
+      if (this.timeHorizonEngine) {
+        this.lastPacingResult = this.timeHorizonEngine.evaluatePacing(
+          goalId,
+          iterationResult.gapAggregate,
+          null,  // no deadline available at this scope; pacing classifies as no_deadline
+          []     // no history; velocity will be zero → critical if gap > 0
+        );
+      }
+
       // Delay between loops (skip on last iteration)
       if (loopIndex < startLoopIndex + effectiveMaxIterations - 1 && this.config.delayBetweenLoopsMs > 0) {
-        await sleep(this.config.delayBetweenLoopsMs);
+        // Gap 4: adaptive observation frequency — scale delay by pacing status when
+        // a TimeHorizonEngine is available. Falls back to fixed delayBetweenLoopsMs.
+        let delay = this.config.delayBetweenLoopsMs;
+        if (this.timeHorizonEngine && this.lastPacingResult) {
+          delay = this.timeHorizonEngine.suggestObservationInterval(this.lastPacingResult, delay);
+        }
+        await sleep(delay);
       }
     }
 
@@ -476,6 +498,15 @@ export class CoreLoop {
    */
   stop(): void {
     this.stopped = true;
+  }
+
+  /**
+   * Attach a TimeHorizonEngine for adaptive observation frequency (Gap 4).
+   * When set, the delay between iterations is scaled by pacing status instead
+   * of using the fixed delayBetweenLoopsMs value.
+   */
+  setTimeHorizonEngine(engine: ITimeHorizonEngine): void {
+    this.timeHorizonEngine = engine;
   }
 
   /**
