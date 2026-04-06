@@ -113,6 +113,8 @@ export class DaemonRunner {
     this.cronScheduler = deps.cronScheduler;
     this.scheduleEngine = deps.scheduleEngine;
     this.gateway = deps.gateway;
+    this.eventBus = deps.eventBus;
+    this.commandBus = deps.commandBus;
     this.lastProactiveTickAt = Date.now();
 
     // Parse config with defaults via DaemonConfigSchema.parse()
