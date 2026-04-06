@@ -1,59 +1,23 @@
-// ─── pulseed setup — Interactive setup wizard ───
+// ─── pulseed setup — Setup command entry point ───
 //
-// Guides the user through first-time configuration of their LLM provider,
-// model, and execution adapter. Saves the result to ~/.pulseed/provider.json.
+// Routes to either non-interactive (flag-based) mode or the @clack wizard.
 
-import * as readline from "node:readline";
 import { parseArgs } from "node:util";
 import {
-  loadProviderConfig,
   saveProviderConfig,
   validateProviderConfig,
 } from "../../../base/llm/provider-config.js";
 import type { ProviderConfig } from "../../../base/llm/provider-config.js";
-import { getPulseedDirPath } from "../../../base/utils/paths.js";
-import * as fsp from "node:fs/promises";
-import * as path from "node:path";
 import {
   PROVIDERS,
-  PROVIDER_LABELS,
   ENV_KEY_NAMES,
   RECOMMENDED_MODELS,
   RECOMMENDED_ADAPTERS,
   MODEL_REGISTRY,
-  detectApiKeys,
-  getModelsForProvider,
   getAdaptersForModel,
-  maskKey,
 } from "./setup-shared.js";
 import type { Provider } from "./setup-shared.js";
-
-// ─── Readline helpers ───
-
-function createInterface(): readline.Interface {
-  return readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-}
-
-async function ask(rl: readline.Interface, question: string): Promise<string> {
-  return new Promise((resolve) => {
-    rl.question(question, (answer) => resolve(answer.trim()));
-  });
-}
-
-// ─── Config file check ───
-
-async function configFileExists(): Promise<boolean> {
-  const configPath = path.join(getPulseedDirPath(), "provider.json");
-  try {
-    await fsp.access(configPath);
-    return true;
-  } catch {
-    return false;
-  }
-}
+import { runSetupWizard } from "./setup-wizard.js";
 
 // ─── Non-interactive mode ───
 
@@ -144,179 +108,6 @@ async function runNonInteractive(argv: string[]): Promise<number> {
   return 0;
 }
 
-// ─── Banner ───
-
-function printBanner(): void {
-  const green = "\x1b[38;2;76;175;80m";
-  const bold = "\x1b[1m";
-  const reset = "\x1b[0m";
-
-  const banner = `
-${green}  ██████╗ ██╗   ██╗██╗     ███████╗███████╗███████╗██████╗
-  ██╔══██╗██║   ██║██║     ██╔════╝██╔════╝██╔════╝██╔══██╗
-  ██████╔╝██║   ██║██║     ███████╗█████╗  █████╗  ██║  ██║
-  ██╔═══╝ ██║   ██║██║     ╚════██║██╔══╝  ██╔══╝  ██║  ██║
-  ██║     ╚██████╔╝███████╗███████║███████╗███████╗██████╔╝
-  ╚═╝      ╚═════╝ ╚══════╝╚══════╝╚══════╝╚══════╝╚═════╝${reset}
-
-  ${bold}🌱 Welcome to ${green}PulSeed${reset}${bold} setup!${reset}
-`;
-  console.log(banner);
-}
-
-// ─── Interactive mode ───
-
-async function runInteractive(): Promise<number> {
-  printBanner();
-  // Check for existing config
-  if (await configFileExists()) {
-    const current = await loadProviderConfig();
-    console.log("\nExisting configuration found:");
-    console.log(`  Provider: ${current.provider}`);
-    console.log(`  Model:    ${current.model}`);
-    console.log(`  Adapter:  ${current.adapter}`);
-    console.log(`  API Key:  ${maskKey(current.api_key)}`);
-
-    const rl = createInterface();
-    const answer = await ask(rl, "\nReconfigure? (y/N) ");
-    rl.close();
-
-    if (answer.toLowerCase() !== "y") {
-      console.log("Setup cancelled. Keeping existing configuration.");
-      return 0;
-    }
-  }
-
-  const detectedKeys = detectApiKeys();
-  const rl = createInterface();
-
-  try {
-    // Step 1: Select provider
-    console.log("\n? Select LLM provider:");
-    for (let i = 0; i < PROVIDERS.length; i++) {
-      const p = PROVIDERS[i];
-      const detected = detectedKeys[p] ? ` (${ENV_KEY_NAMES[p]} detected)` : "";
-      console.log(`  ${i + 1}) ${PROVIDER_LABELS[p]}${detected}`);
-    }
-
-    const providerChoice = await ask(rl, "> ");
-    const providerIndex = parseInt(providerChoice, 10) - 1;
-    if (isNaN(providerIndex) || providerIndex < 0 || providerIndex >= PROVIDERS.length) {
-      console.error("Error: invalid selection.");
-      return 1;
-    }
-    const provider = PROVIDERS[providerIndex];
-
-    // Step 2: Select model
-    const models = getModelsForProvider(provider);
-    const recommended = RECOMMENDED_MODELS[provider];
-
-    console.log("\n? Select model:");
-    for (let i = 0; i < models.length; i++) {
-      const rec = models[i] === recommended ? " (recommended)" : "";
-      console.log(`  ${i + 1}) ${models[i]}${rec}`);
-    }
-    const customIndex = models.length + 1;
-    if (provider === "ollama" || models.length === 0) {
-      console.log(`  ${customIndex}) Enter custom model name`);
-    } else {
-      console.log(`  ${customIndex}) Custom (enter model name)`);
-    }
-
-    const modelChoice = await ask(rl, "> ");
-    const modelIndex = parseInt(modelChoice, 10) - 1;
-    let model: string;
-
-    if (modelIndex === models.length) {
-      // Custom model
-      model = await ask(rl, "Enter model name: ");
-      if (!model) {
-        console.error("Error: model name cannot be empty.");
-        return 1;
-      }
-    } else if (modelIndex >= 0 && modelIndex < models.length) {
-      model = models[modelIndex];
-    } else {
-      console.error("Error: invalid selection.");
-      return 1;
-    }
-
-    // Step 3: Select adapter
-    const adapters = getAdaptersForModel(model, provider);
-    const recommendedAdapter = RECOMMENDED_ADAPTERS[provider];
-
-    if (adapters.length === 0 && provider !== "ollama") {
-      console.error(`Error: no compatible adapters found for model "${model}".`);
-      return 1;
-    }
-
-    let adapter: string;
-    if (adapters.length === 1) {
-      adapter = adapters[0];
-      console.log(`\nAdapter: ${adapter} (only compatible option)`);
-    } else if (adapters.length > 1) {
-      console.log("\n? Select execution adapter:");
-      for (let i = 0; i < adapters.length; i++) {
-        const rec = adapters[i] === recommendedAdapter ? " (recommended)" : "";
-        console.log(`  ${i + 1}) ${adapters[i]}${rec}`);
-      }
-
-      const adapterChoice = await ask(rl, "> ");
-      const adapterIndex = parseInt(adapterChoice, 10) - 1;
-      if (isNaN(adapterIndex) || adapterIndex < 0 || adapterIndex >= adapters.length) {
-        console.error("Error: invalid selection.");
-        return 1;
-      }
-      adapter = adapters[adapterIndex];
-    } else {
-      // Ollama with no registry adapters — skip adapter selection
-      adapter = "openai_api"; // Default for ollama
-      console.log(`\nAdapter: ${adapter} (default for ollama)`);
-    }
-
-    // Step 4: API key
-    const config: ProviderConfig = {
-      provider,
-      model,
-      adapter: adapter as ProviderConfig["adapter"],
-    };
-
-    const envKeyName = ENV_KEY_NAMES[provider];
-    if (envKeyName) {
-      if (detectedKeys[provider]) {
-        config.api_key = process.env[envKeyName];
-        console.log(`\nAPI key: using ${envKeyName} from environment`);
-      } else {
-        const key = await ask(rl, `\nEnter ${envKeyName}: `);
-        if (key) {
-          config.api_key = key;
-        } else {
-          console.error(`Warning: no API key provided. Set ${envKeyName} before running PulSeed.`);
-        }
-      }
-    }
-
-    // Step 5: Summary and confirm
-    console.log("\n--- Configuration Summary ---");
-    console.log(`  Provider: ${config.provider}`);
-    console.log(`  Model:    ${config.model}`);
-    console.log(`  Adapter:  ${config.adapter}`);
-    console.log(`  API Key:  ${maskKey(config.api_key)}`);
-
-    const confirm = await ask(rl, "\nSave this configuration? (Y/n) ");
-    if (confirm.toLowerCase() === "n") {
-      console.log("Setup cancelled.");
-      return 0;
-    }
-
-    await saveProviderConfig(config);
-    console.log("\nSetup complete! Configuration saved to ~/.pulseed/provider.json");
-    return 0;
-  } finally {
-    rl.close();
-  }
-}
-
 // ─── Help text ───
 
 const HELP_TEXT = `Usage: pulseed setup [options]
@@ -344,5 +135,7 @@ export async function cmdSetup(argv: string[]): Promise<number> {
   if (hasFlags) {
     return runNonInteractive(argv);
   }
-  return runInteractive();
+
+  // Interactive mode: delegate to @clack wizard
+  return runSetupWizard();
 }
