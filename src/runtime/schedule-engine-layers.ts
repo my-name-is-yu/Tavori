@@ -110,6 +110,8 @@ export async function executeCron(entry: ScheduleEntry, deps: LayerDeps): Promis
     }
 
     // Report output via ReportingEngine
+    // output_format "report" intentionally skips notificationDispatcher — 
+    // report output is delivered only through ReportingEngine
     if (cfg.output_format === "report" || cfg.output_format === "both") {
       if (deps.reportingEngine) {
         await deps.reportingEngine.generateNotification("schedule_report", {
