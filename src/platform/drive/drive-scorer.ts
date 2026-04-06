@@ -92,7 +92,8 @@ export function scoreDissatisfaction(
 export function scoreDeadline(
   normalizedWeightedGap: number,
   timeRemainingHours: number | null,
-  config?: DriveConfig
+  config?: DriveConfig,
+  pacingRatio?: number | null,
 ): DeadlineScore {
   const cfg = config ?? defaultConfig();
   const { deadline_horizon_hours, urgency_steepness } = cfg;
@@ -122,7 +123,10 @@ export function scoreDeadline(
     );
   }
 
-  const score = normalizedWeightedGap * urgency;
+  const pacingBonus = pacingRatio != null
+    ? Math.max(0, pacingRatio - 1.0) * cfg.pacing_urgency_weight
+    : 0;
+  const score = normalizedWeightedGap * (urgency + pacingBonus);
 
   return {
     dimension_name: "",
@@ -279,7 +283,12 @@ export function scoreAllDimensions(
     const opp = context.opportunities[dimName];
 
     const dissatisfactionRaw = scoreDissatisfaction(nwg, timeSince, config);
-    const deadlineRaw = scoreDeadline(nwg, deadline, config);
+    const deadlineRaw = scoreDeadline(
+      nwg,
+      deadline,
+      config,
+      context.pacing[dimName]?.pacingRatio,
+    );
     const opportunityRaw = opp !== null && opp !== undefined
       ? (() => {
           const timeSinceDetected = (Date.now() - new Date(opp.detected_at).getTime()) / (1000 * 60 * 60);

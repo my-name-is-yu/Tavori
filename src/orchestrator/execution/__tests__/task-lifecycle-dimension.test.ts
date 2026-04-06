@@ -79,7 +79,7 @@ function makeDriveContext(
     deadlines[name] = null;
   }
 
-  return { time_since_last_attempt, deadlines, opportunities };
+  return { time_since_last_attempt, deadlines, opportunities, pacing: {} };
 }
 
 function makeDimension(
@@ -253,6 +253,7 @@ describe("TaskLifecycle", async () => {
         time_since_last_attempt: { recent: 0, stale: 100 },
         deadlines: { recent: null, stale: null },
         opportunities: {},
+        pacing: {},
       };
 
       const result = lifecycle.selectTargetDimension(gapVector, context);
@@ -272,6 +273,7 @@ describe("TaskLifecycle", async () => {
         time_since_last_attempt: { no_deadline: 24, urgent: 24 },
         deadlines: { no_deadline: null, urgent: 1 }, // 1 hour remaining
         opportunities: {},
+        pacing: {},
       };
 
       const result = lifecycle.selectTargetDimension(gapVector, context);
@@ -292,6 +294,7 @@ describe("TaskLifecycle", async () => {
         opportunities: {
           opportunistic: { value: 2.0, detected_at: new Date().toISOString() },
         },
+        pacing: {},
       };
 
       const result = lifecycle.selectTargetDimension(gapVector, context);

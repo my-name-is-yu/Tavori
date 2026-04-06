@@ -19,6 +19,7 @@ const DEFAULT_CONFIG: DriveConfig = {
   urgency_steepness: 3.0,
   urgency_override_threshold: 10.0,
   half_life_hours: 12,
+  pacing_urgency_weight: 0.5,
 };
 
 // ─── scoreDissatisfaction ───
@@ -355,6 +356,7 @@ describe("scoreAllDimensions", () => {
         detected_at: new Date(Date.now() - 6 * 3600 * 1000).toISOString(),
       },
     },
+    pacing: {},
   });
 
   it("returns one DriveScore per dimension", () => {
@@ -511,6 +513,7 @@ describe("scoreAllDimensions — edge cases", () => {
       time_since_last_attempt: {}, // no entry for "unknown_dim" → defaults to 0
       deadlines: {},
       opportunities: {},
+      pacing: {},
     };
 
     const scores = scoreAllDimensions(gv, ctx, DEFAULT_CONFIG);
@@ -539,6 +542,7 @@ describe("scoreAllDimensions — edge cases", () => {
       time_since_last_attempt: { dim_null_opp: 0 },
       deadlines: { dim_null_opp: null },
       opportunities: { dim_null_opp: null as any }, // explicitly null → fallback path
+      pacing: {},
     };
 
     const scores = scoreAllDimensions(gv, ctx, DEFAULT_CONFIG);
@@ -557,6 +561,7 @@ describe("scoreAllDimensions — edge cases", () => {
       time_since_last_attempt: {},
       deadlines: {},
       opportunities: {},
+      pacing: {},
     };
     const scores = scoreAllDimensions(gv, ctx, DEFAULT_CONFIG);
     expect(scores).toHaveLength(0);
@@ -581,9 +586,135 @@ describe("scoreAllDimensions — edge cases", () => {
       time_since_last_attempt: { dim: 0 },
       deadlines: {},
       opportunities: {},
+      pacing: {},
     };
     const withDefault = scoreAllDimensions(gv, ctx);
     const withExplicit = scoreAllDimensions(gv, ctx, DEFAULT_CONFIG);
     expect(withDefault[0]!.final_score).toBeCloseTo(withExplicit[0]!.final_score, 5);
+  });
+});
+
+// ─── scoreDeadline with pacingRatio ───
+
+describe("scoreDeadline with pacingRatio", () => {
+  it("pacingRatio=null → same score as without pacing (no bonus)", () => {
+    const withNull = scoreDeadline(0.8, 84, DEFAULT_CONFIG, null);
+    const withoutPacing = scoreDeadline(0.8, 84, DEFAULT_CONFIG);
+    expect(withNull.score).toBeCloseTo(withoutPacing.score, 10);
+  });
+
+  it("pacingRatio=undefined → same score as without pacing (no bonus)", () => {
+    const withUndefined = scoreDeadline(0.8, 84, DEFAULT_CONFIG, undefined);
+    const withoutPacing = scoreDeadline(0.8, 84, DEFAULT_CONFIG);
+    expect(withUndefined.score).toBeCloseTo(withoutPacing.score, 10);
+  });
+
+  it("pacingRatio < 1.0 (ahead of schedule) → no bonus (max(0, ratio-1) = 0)", () => {
+    const ahead = scoreDeadline(0.8, 84, DEFAULT_CONFIG, 0.7);
+    const baseline = scoreDeadline(0.8, 84, DEFAULT_CONFIG);
+    // pacingBonus = max(0, 0.7 - 1.0) * 0.5 = 0, so score is unchanged
+    expect(ahead.score).toBeCloseTo(baseline.score, 10);
+  });
+
+  it("pacingRatio = 1.5 (behind) → adds pacing bonus", () => {
+    const gap = 0.8;
+    const T = 84;
+    const behind = scoreDeadline(gap, T, DEFAULT_CONFIG, 1.5);
+    const baseline = scoreDeadline(gap, T, DEFAULT_CONFIG);
+    // pacingBonus = max(0, 1.5 - 1.0) * 0.5 = 0.25
+    // score = gap * (urgency + 0.25)
+    const urgency = Math.exp(3.0 * (1 - T / 168));
+    const expectedScore = gap * (urgency + 0.25);
+    expect(behind.score).toBeCloseTo(expectedScore, 5);
+    expect(behind.score).toBeGreaterThan(baseline.score);
+  });
+
+  it("pacingRatio = 2.5 (critical) → larger pacing bonus", () => {
+    const gap = 0.8;
+    const T = 84;
+    const critical = scoreDeadline(gap, T, DEFAULT_CONFIG, 2.5);
+    const behind = scoreDeadline(gap, T, DEFAULT_CONFIG, 1.5);
+    // critical: pacingBonus = (2.5 - 1.0) * 0.5 = 0.75
+    // behind:   pacingBonus = (1.5 - 1.0) * 0.5 = 0.25
+    expect(critical.score).toBeGreaterThan(behind.score);
+    const urgency = Math.exp(3.0 * (1 - T / 168));
+    const expectedScore = gap * (urgency + 0.75);
+    expect(critical.score).toBeCloseTo(expectedScore, 5);
+  });
+
+  it("pacing_urgency_weight config is respected", () => {
+    const configLow: DriveConfig = { ...DEFAULT_CONFIG, pacing_urgency_weight: 0.1 };
+    const configHigh: DriveConfig = { ...DEFAULT_CONFIG, pacing_urgency_weight: 1.0 };
+    const gap = 0.8;
+    const T = 84;
+    const pacingRatio = 2.0; // bonus factor = (2.0 - 1.0) = 1.0
+    const scoreLow = scoreDeadline(gap, T, configLow, pacingRatio);
+    const scoreHigh = scoreDeadline(gap, T, configHigh, pacingRatio);
+    // pacingBonus_low = 1.0 * 0.1 = 0.1; pacingBonus_high = 1.0 * 1.0 = 1.0
+    expect(scoreHigh.score).toBeGreaterThan(scoreLow.score);
+    const urgency = Math.exp(3.0 * (1 - T / 168));
+    expect(scoreLow.score).toBeCloseTo(gap * (urgency + 0.1), 5);
+    expect(scoreHigh.score).toBeCloseTo(gap * (urgency + 1.0), 5);
+  });
+
+  it("pacing bonus does not apply when deadline is null (score=0)", () => {
+    const result = scoreDeadline(0.8, null, DEFAULT_CONFIG, 3.0);
+    expect(result.score).toBe(0);
+  });
+});
+
+// ─── scoreAllDimensions with pacing context ───
+
+describe("scoreAllDimensions with pacing context", () => {
+  const makeGapVectorSingle = (): GapVector => ({
+    goal_id: "goal-pacing",
+    gaps: [
+      {
+        dimension_name: "coverage",
+        raw_gap: 0.5,
+        normalized_gap: 0.5,
+        normalized_weighted_gap: 0.5,
+        confidence: 0.8,
+        uncertainty_weight: 1.0,
+      },
+    ],
+    timestamp: new Date().toISOString(),
+  });
+
+  it("pacing data flows through to increase deadline score when behind", () => {
+    const gv = makeGapVectorSingle();
+    const ctxWithPacing: DriveContext = {
+      time_since_last_attempt: { coverage: 0 },
+      deadlines: { coverage: 84 },
+      opportunities: {},
+      pacing: {
+        coverage: { pacingRatio: 2.0, pacingStatus: "behind" },
+      },
+    };
+    const ctxWithoutPacing: DriveContext = {
+      time_since_last_attempt: { coverage: 0 },
+      deadlines: { coverage: 84 },
+      opportunities: {},
+      pacing: {},
+    };
+    const scoresWithPacing = scoreAllDimensions(gv, ctxWithPacing, DEFAULT_CONFIG);
+    const scoresWithoutPacing = scoreAllDimensions(gv, ctxWithoutPacing, DEFAULT_CONFIG);
+    expect(scoresWithPacing[0]!.deadline).toBeGreaterThan(scoresWithoutPacing[0]!.deadline);
+  });
+
+  it("empty pacing record works (backward compatible)", () => {
+    const gv = makeGapVectorSingle();
+    const ctx: DriveContext = {
+      time_since_last_attempt: { coverage: 0 },
+      deadlines: { coverage: 84 },
+      opportunities: {},
+      pacing: {},
+    };
+    const scores = scoreAllDimensions(gv, ctx, DEFAULT_CONFIG);
+    expect(scores).toHaveLength(1);
+    expect(scores[0]!.dimension_name).toBe("coverage");
+    // pacing is empty so no bonus; deadline score = 0.5 * exp(3 * 0.5) ≈ 0.5 * exp(1.5)
+    const urgency = Math.exp(3.0 * (1 - 84 / 168));
+    expect(scores[0]!.deadline).toBeCloseTo(0.5 * urgency, 5);
   });
 });

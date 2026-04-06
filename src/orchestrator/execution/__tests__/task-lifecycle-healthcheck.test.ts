@@ -268,6 +268,7 @@ describe("TaskLifecycle — post-execution health check", () => {
       time_since_last_attempt: { coverage: 24 },
       deadlines: { coverage: null },
       opportunities: {},
+      pacing: {},
     };
     const adapter = makeMockAdapter();
 

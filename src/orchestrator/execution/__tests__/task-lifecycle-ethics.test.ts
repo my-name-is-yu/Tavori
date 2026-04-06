@@ -109,7 +109,7 @@ function makeDriveContext(
     deadlines[name] = null;
   }
 
-  return { time_since_last_attempt, deadlines, opportunities };
+  return { time_since_last_attempt, deadlines, opportunities, pacing: {} };
 }
 
 function createMockAdapter(

@@ -76,7 +76,7 @@ function makeDriveContext(dimensionNames: string[]): DriveContext {
     time_since_last_attempt[name] = 24;
     deadlines[name] = null;
   }
-  return { time_since_last_attempt, deadlines, opportunities: {} };
+  return { time_since_last_attempt, deadlines, opportunities: {}, pacing: {} };
 }
 
 function makeTask(overrides: Partial<Task> = {}): Task {

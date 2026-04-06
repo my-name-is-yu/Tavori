@@ -157,6 +157,7 @@ describe("core functionality", () => {
       time_since_last_attempt: { coverage: 0 },
       deadlines: { coverage: null },
       opportunities: {},
+      pacing: {},
     };
 
     const scores = scoreAllDimensions(

@@ -393,5 +393,6 @@ export function buildDriveContext(goal: Goal): DriveContext {
     time_since_last_attempt: timeSinceLastAttempt,
     deadlines,
     opportunities,
+    pacing: {},
   };
 }

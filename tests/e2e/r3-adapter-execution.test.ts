@@ -107,6 +107,7 @@ function makeDriveContext(_goalId: string): DriveContext {
     time_since_last_attempt: { quality: 0 },
     deadlines: { quality: null },
     opportunities: {},
+    pacing: {},
   };
 }
 
