@@ -51,6 +51,11 @@ import {
 } from "./knowledge-manager-query.js";
 import type { ToolExecutor } from "../../tools/executor.js";
 import type { ToolCallContext } from "../../tools/types.js";
+import {
+  AgentMemoryEntrySchema,
+  AgentMemoryStoreSchema,
+} from "./types/agent-memory.js";
+import type { AgentMemoryEntry, AgentMemoryType } from "./types/agent-memory.js";
 
 
 // Re-export for backward compatibility
@@ -69,6 +74,8 @@ export {
 export { detectKnowledgeGap, generateAcquisitionTask, checkContradiction } from "./knowledge-manager-query.js";
 
 // ─── KnowledgeManager ───
+
+const AGENT_MEMORY_PATH = "memory/agent-memory/entries.json";
 
 /** Key used to store all SharedKnowledgeEntries as a flat array. */
 const SHARED_KB_PATH = "memory/shared-knowledge/entries.json";
@@ -436,7 +443,147 @@ export class KnowledgeManager {
     });
   }
 
+  // ─── Agent Memory ───
+
+  /**
+   * Upsert an agent memory entry by key.
+   * If a matching key exists, update value/tags/category/memory_type/updated_at.
+   * If not, create a new entry with a UUID id and timestamps.
+   */
+  async saveAgentMemory(entry: {
+    key: string;
+    value: string;
+    tags?: string[];
+    category?: string;
+    memory_type?: AgentMemoryType;
+  }): Promise<AgentMemoryEntry> {
+    const store = await this._loadAgentMemoryStore();
+    const now = new Date().toISOString();
+    const existing = store.entries.findIndex((e) => e.key === entry.key);
+
+    let saved: AgentMemoryEntry;
+    if (existing >= 0) {
+      const prev = store.entries[existing]!;
+      saved = AgentMemoryEntrySchema.parse({
+        ...prev,
+        value: entry.value,
+        tags: entry.tags ?? prev.tags,
+        category: entry.category ?? prev.category,
+        memory_type: entry.memory_type ?? prev.memory_type,
+        updated_at: now,
+      });
+      store.entries[existing] = saved;
+    } else {
+      saved = AgentMemoryEntrySchema.parse({
+        id: crypto.randomUUID(),
+        key: entry.key,
+        value: entry.value,
+        tags: entry.tags ?? [],
+        category: entry.category,
+        memory_type: entry.memory_type ?? "fact",
+        created_at: now,
+        updated_at: now,
+      });
+      store.entries.push(saved);
+    }
+
+    await this.stateManager.writeRaw(AGENT_MEMORY_PATH, store);
+    return saved;
+  }
+
+  /**
+   * Search agent memory entries by keyword or exact key match.
+   * exact=true: filter where entry.key === query.
+   * exact=false (default): case-insensitive substring match on key + value + tags.
+   * Optionally filter by category and/or memory_type.
+   * Excludes archived entries unless include_archived=true.
+   * Tiered sort: compiled entries first, then raw, both by updated_at desc.
+   */
+  async recallAgentMemory(
+    query: string,
+    opts?: {
+      exact?: boolean;
+      category?: string;
+      memory_type?: AgentMemoryType;
+      limit?: number;
+      include_archived?: boolean;
+    }
+  ): Promise<AgentMemoryEntry[]> {
+    const store = await this._loadAgentMemoryStore();
+    const { exact = false, category, memory_type, limit = 10, include_archived = false } = opts ?? {};
+    const lower = query.toLowerCase();
+
+    let results = store.entries.filter((e) => {
+      // Exclude archived entries unless explicitly requested
+      if (!include_archived && e.status === "archived") return false;
+
+      const matchesQuery = exact
+        ? e.key === query
+        : e.key.toLowerCase().includes(lower) ||
+          e.value.toLowerCase().includes(lower) ||
+          e.tags.some((t) => t.toLowerCase().includes(lower));
+
+      const matchesCategory = category ? e.category === category : true;
+      const matchesType = memory_type ? e.memory_type === memory_type : true;
+      return matchesQuery && matchesCategory && matchesType;
+    });
+
+    // Tiered sort: compiled entries first, then raw, both sorted by updated_at desc
+    results.sort((a, b) => {
+      const aIsCompiled = a.status === "compiled" ? 0 : 1;
+      const bIsCompiled = b.status === "compiled" ? 0 : 1;
+      if (aIsCompiled !== bIsCompiled) return aIsCompiled - bIsCompiled;
+      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+    });
+    return results.slice(0, limit);
+  }
+
+  /**
+   * List all agent memory entries, optionally filtered by category and/or memory_type.
+   * Sorted by updated_at desc.
+   */
+  async listAgentMemory(opts?: {
+    category?: string;
+    memory_type?: AgentMemoryType;
+    limit?: number;
+  }): Promise<AgentMemoryEntry[]> {
+    const store = await this._loadAgentMemoryStore();
+    const { category, memory_type, limit = 10 } = opts ?? {};
+
+    let results = store.entries.filter((e) => {
+      const matchesCategory = category ? e.category === category : true;
+      const matchesType = memory_type ? e.memory_type === memory_type : true;
+      return matchesCategory && matchesType;
+    });
+
+    results.sort(
+      (a, b) =>
+        new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    );
+    return results.slice(0, limit);
+  }
+
+  /**
+   * Delete an agent memory entry by key.
+   * Returns true if the entry was found and removed, false otherwise.
+   */
+  async deleteAgentMemory(key: string): Promise<boolean> {
+    const store = await this._loadAgentMemoryStore();
+    const idx = store.entries.findIndex((e) => e.key === key);
+    if (idx < 0) return false;
+
+    store.entries.splice(idx, 1);
+    await this.stateManager.writeRaw(AGENT_MEMORY_PATH, store);
+    return true;
+  }
+
   // ─── Private Helpers ───
+
+  private async _loadAgentMemoryStore(): Promise<import('./types/agent-memory.js').AgentMemoryStore> {
+    const raw = await this.stateManager.readRaw(AGENT_MEMORY_PATH);
+    if (!raw) return AgentMemoryStoreSchema.parse({ entries: [], last_consolidated_at: null });
+    return AgentMemoryStoreSchema.parse(raw);
+  }
 
   private async _loadDomainKnowledge(goalId: string): Promise<DomainKnowledge> {
     return loadDomainKnowledge(this.stateManager, goalId);
