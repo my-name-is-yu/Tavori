@@ -37,6 +37,7 @@ export { SpawnSessionTool } from "../execution/SpawnSessionTool/SpawnSessionTool
 export { WriteKnowledgeTool } from "../execution/WriteKnowledgeTool/WriteKnowledgeTool.js";
 export { MemorySaveTool } from "../execution/MemorySaveTool/MemorySaveTool.js";
 export { MemoryConsolidateTool } from "../execution/MemoryConsolidateTool/MemoryConsolidateTool.js";
+export { MemoryLintTool } from "../execution/MemoryLintTool/MemoryLintTool.js";
 export { MemoryRecallTool } from "../query/MemoryRecallTool/MemoryRecallTool.js";
 export { QueryDataSourceTool } from "../execution/QueryDataSourceTool/QueryDataSourceTool.js";
 export { ObserveGoalTool } from "../execution/ObserveGoalTool/ObserveGoalTool.js";
@@ -83,6 +84,7 @@ import { SpawnSessionTool } from "../execution/SpawnSessionTool/SpawnSessionTool
 import { WriteKnowledgeTool } from "../execution/WriteKnowledgeTool/WriteKnowledgeTool.js";
 import { MemorySaveTool } from "../execution/MemorySaveTool/MemorySaveTool.js";
 import { MemoryConsolidateTool } from "../execution/MemoryConsolidateTool/MemoryConsolidateTool.js";
+import { MemoryLintTool } from "../execution/MemoryLintTool/MemoryLintTool.js";
 import { MemoryRecallTool } from "../query/MemoryRecallTool/MemoryRecallTool.js";
 import { QueryDataSourceTool } from "../execution/QueryDataSourceTool/QueryDataSourceTool.js";
 import { ObserveGoalTool } from "../execution/ObserveGoalTool/ObserveGoalTool.js";
@@ -193,6 +195,7 @@ export function createBuiltinTools(deps?: BuiltinToolDeps): ITool[] {
     tools.push(new MemorySaveTool(deps.knowledgeManager));
     const llmCall = deps.llmCall ?? ((_: string) => Promise.reject(new Error("LLM not configured")));
     tools.push(new MemoryConsolidateTool(deps.knowledgeManager, llmCall));
+    tools.push(new MemoryLintTool(deps.knowledgeManager, llmCall));
   }
   if (deps?.observationEngine) {
     tools.push(new QueryDataSourceTool(deps.observationEngine));
