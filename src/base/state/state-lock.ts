@@ -30,13 +30,27 @@ async function isProcessAlive(pid: number): Promise<boolean> {
   }
 }
 
-async function tryAcquire(lockDir: string): Promise<boolean> {
+async function tryAcquire(lockDir: string, checkStale = false): Promise<boolean> {
   try {
     await fsp.mkdir(lockDir, { recursive: false });
     await fsp.writeFile(pidFilePath(lockDir), String(process.pid), "utf-8");
     return true;
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "EEXIST") {
+      if (checkStale) {
+        await clearStaleLock(lockDir);
+        // Retry once after clearing stale lock
+        try {
+          await fsp.mkdir(lockDir, { recursive: false });
+          await fsp.writeFile(pidFilePath(lockDir), String(process.pid), "utf-8");
+          return true;
+        } catch (retryErr) {
+          if ((retryErr as NodeJS.ErrnoException).code === "EEXIST") {
+            return false;
+          }
+          throw retryErr;
+        }
+      }
       return false;
     }
     throw err;
@@ -74,16 +88,8 @@ export async function acquireLock(
   let delay = initialDelayMs;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    if (await tryAcquire(lockDir)) {
+    if (await tryAcquire(lockDir, true)) {
       return;
-    }
-
-    // Check for stale lock on first failure
-    if (attempt === 0) {
-      await clearStaleLock(lockDir);
-      if (await tryAcquire(lockDir)) {
-        return;
-      }
     }
 
     if (Date.now() - start >= maxTotalMs) {
