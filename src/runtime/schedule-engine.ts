@@ -502,6 +502,11 @@ export class ScheduleEngine {
       const jitterMs = trigger.seconds * 1000 * trigger.jitter_factor * (Math.random() * 2 - 1);
       nextTime = new Date(nextTime.getTime() + jitterMs);
     }
+    // Clamp to at least now + 1s to avoid past-scheduling from negative jitter
+    const minTime = Date.now() + 1000;
+    if (nextTime.getTime() < minTime) {
+      nextTime = new Date(minTime);
+    }
     return nextTime.toISOString();
   }
 }
