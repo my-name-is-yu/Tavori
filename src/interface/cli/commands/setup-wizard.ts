@@ -40,15 +40,23 @@ function guardCancel<T>(value: T | symbol): T {
   return value as T;
 }
 
-// ─── ASCII banner ───
+// ─── Block-character banner ───
 
-const BANNER = `
-  ____  _   _ _     ____  _____ _____ ____  
- |  _ \\| | | | |   / ___|| ____| ____|  _ \\ 
- | |_) | | | | |   \\___ \\|  _| |  _| | | | |
- |  __/| |_| | |___ ___) | |___| |___| |_| |
- |_|    \\___/|_____|____/|_____|_____|____/ 
+function getBanner(): string {
+  const green = "\x1b[38;2;76;175;80m";
+  const bold = "\x1b[1m";
+  const reset = "\x1b[0m";
+  return `
+${green}  ██████╗ ██╗   ██╗██╗     ███████╗███████╗███████╗██████╗
+  ██╔══██╗██║   ██║██║     ██╔════╝██╔════╝██╔════╝██╔══██╗
+  ██████╔╝██║   ██║██║     ███████╗█████╗  █████╗  ██║  ██║
+  ██╔═══╝ ██║   ██║██║     ╚════██║██╔══╝  ██╔══╝  ██║  ██║
+  ██║     ╚██████╔╝███████╗███████║███████╗███████╗██████╔╝
+  ╚═╝      ╚═════╝ ╚══════╝╚══════╝╚══════╝╚══════╝╚═════╝${reset}
+
+  ${bold}🌱 Welcome to ${green}PulSeed${reset}${bold} setup!${reset}
 `;
+}
 
 // ─── Step implementations ───
 
@@ -344,7 +352,8 @@ function writeUserMd(dir: string, userName: string): void {
 
 export async function runSetupWizard(): Promise<number> {
   // Step 1: Banner
-  p.intro(BANNER);
+  console.log(getBanner());
+  p.intro("PulSeed Setup");
 
   // Step 2: Experimental disclaimer
   const accepted = guardCancel(
