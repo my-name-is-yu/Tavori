@@ -219,6 +219,8 @@ export interface LoopResult {
   completedAt: string;
   /** Human-readable explanation when finalStatus is "error" */
   errorMessage?: string;
+  /** Total tokens consumed across all iterations */
+  tokensUsed?: number;
 }
 
 // ─── Dependencies ───

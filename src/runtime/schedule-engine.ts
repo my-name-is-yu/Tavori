@@ -34,6 +34,7 @@ interface ScheduleEngineDeps {
   notificationDispatcher?: { dispatch(report: Record<string, unknown>): Promise<any> };
   coreLoop?: { run(goalId: string, options?: { maxIterations?: number }): Promise<any> };
   stateManager?: { loadGoal(goalId: string): Promise<any> };
+  reportingEngine?: { generateNotification(type: string, context: Record<string, unknown>): Promise<any> };
 }
 
 const noopLogger = {
@@ -51,6 +52,7 @@ export class ScheduleEngine {
   private notificationDispatcher?: { dispatch(report: Record<string, unknown>): Promise<any> };
   private coreLoop?: { run(goalId: string, options?: { maxIterations?: number }): Promise<any> };
   private stateManager?: { loadGoal(goalId: string): Promise<any> };
+  private reportingEngine?: { generateNotification(type: string, context: Record<string, unknown>): Promise<any> };
 
   constructor(deps: ScheduleEngineDeps) {
     this.schedulesPath = path.join(deps.baseDir, SCHEDULES_FILE);
@@ -60,6 +62,7 @@ export class ScheduleEngine {
     this.notificationDispatcher = deps.notificationDispatcher;
     this.coreLoop = deps.coreLoop;
     this.stateManager = deps.stateManager;
+    this.reportingEngine = deps.reportingEngine;
   }
 
   // ─── Persistence ───
@@ -101,6 +104,7 @@ export class ScheduleEngine {
       | "max_tokens_per_day"
       | "tokens_used_today"
       | "budget_reset_at"
+      | "escalation_timestamps"
     >
   ): Promise<ScheduleEntry> {
     const now = new Date().toISOString();
@@ -275,6 +279,7 @@ export class ScheduleEngine {
       notificationDispatcher: this.notificationDispatcher,
       coreLoop: this.coreLoop,
       stateManager: this.stateManager,
+      reportingEngine: this.reportingEngine,
       logger: this.logger,
     };
   }
@@ -302,27 +307,31 @@ export class ScheduleEngine {
       }
     }
 
-    // Check minimum interval between escalations (derived from max_per_hour)
-    // Simplified: enforces minimum interval between escalations (60min / max_per_hour).
-    // Full rolling-window tracking deferred to Phase 4.
-    if (entry.last_escalation_at) {
-      const lastEsc = new Date(entry.last_escalation_at).getTime();
-      const hourAgo = now - 60 * 60 * 1000;
-      if (lastEsc > hourAgo) {
-        const minIntervalMs = (60 * 60 * 1000) / esc.max_per_hour;
-        if (now - lastEsc < minIntervalMs) {
-          this.logger.info(`Escalation for "${entry.name}" suppressed (min interval)`);
-          return null;
-        }
-      }
+    // Rolling-window rate-limit: check escalation_timestamps within the last hour
+    const hourAgo = now - 60 * 60 * 1000;
+    const recentTimestamps = (entry.escalation_timestamps ?? []).filter(
+      (ts) => new Date(ts).getTime() > hourAgo
+    );
+    if (recentTimestamps.length >= esc.max_per_hour) {
+      this.logger.info(`Escalation for "${entry.name}" suppressed (max_per_hour=${esc.max_per_hour} reached)`);
+      return null;
     }
 
-    // Update last_escalation_at
+    // Update last_escalation_at and rolling-window escalation_timestamps
+    const nowIso = new Date(now).toISOString();
+    const hourAgoForPrune = now - 60 * 60 * 1000;
     const idx = this.entries.findIndex((e) => e.id === entry.id);
     if (idx !== -1) {
+      const prunedTimestamps = [
+        ...(this.entries[idx].escalation_timestamps ?? []).filter(
+          (ts) => new Date(ts).getTime() > hourAgoForPrune
+        ),
+        nowIso,
+      ];
       this.entries[idx] = {
         ...this.entries[idx],
-        last_escalation_at: new Date().toISOString(),
+        last_escalation_at: nowIso,
+        escalation_timestamps: prunedTimestamps,
       };
     }
 
@@ -485,9 +494,19 @@ export class ScheduleEngine {
 
   private computeNextFireAt(trigger: ScheduleEntry["trigger"]): string {
     if (trigger.type === "cron") {
-      const next = CronExpressionParser.parse(trigger.expression).next();
+      const next = CronExpressionParser.parse(trigger.expression, { tz: trigger.timezone || "UTC" }).next();
       return next.toISOString() ?? new Date().toISOString();
     }
-    return new Date(Date.now() + trigger.seconds * 1000).toISOString();
+    let nextTime = new Date(Date.now() + trigger.seconds * 1000);
+    if (trigger.jitter_factor && trigger.jitter_factor > 0) {
+      const jitterMs = trigger.seconds * 1000 * trigger.jitter_factor * (Math.random() * 2 - 1);
+      nextTime = new Date(nextTime.getTime() + jitterMs);
+    }
+    // Clamp to at least now + 1s to avoid past-scheduling from negative jitter
+    const minTime = Date.now() + 1000;
+    if (nextTime.getTime() < minTime) {
+      nextTime = new Date(minTime);
+    }
+    return nextTime.toISOString();
   }
 }

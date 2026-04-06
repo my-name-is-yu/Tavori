@@ -17,7 +17,7 @@ export type ConfigField = z.infer<typeof ConfigFieldSchema>;
 export const PluginManifestSchema = z.object({
   name: z.string().regex(/^[a-z0-9-]+$/, "プラグイン名は小文字英数字とハイフンのみ"),
   version: z.string().regex(/^\d+\.\d+\.\d+$/),
-  type: z.enum(["adapter", "data_source", "notifier"]),
+  type: z.enum(["adapter", "data_source", "notifier", "schedule_source"]),
 
   // 能力宣言（CapabilityDetectorが参照する）
   capabilities: z.array(z.string()).min(1),

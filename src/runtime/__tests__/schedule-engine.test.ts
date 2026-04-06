@@ -743,10 +743,13 @@ describe("Escalation", () => {
       },
     });
 
-    // Set last_escalation_at to recent (within 1-hour rate window)
+    // Set last_escalation_at and escalation_timestamps to recent (within 1-hour rate window)
+    // The rolling-window rate-limit checks escalation_timestamps; we need to set it too.
     const entries = eng.getEntries();
     const idx = entries.findIndex((e) => e.id === entry.id);
-    entries[idx]!.last_escalation_at = new Date(Date.now() - 5 * 60 * 1000).toISOString(); // 5 min ago
+    const recentTs = new Date(Date.now() - 5 * 60 * 1000).toISOString(); // 5 min ago
+    entries[idx]!.last_escalation_at = recentTs;
+    entries[idx]!.escalation_timestamps = [recentTs]; // fills the 1-slot window (max_per_hour=1)
     entries[idx]!.next_fire_at = new Date(Date.now() - 1000).toISOString();
     await eng.saveEntries();
     await eng.loadEntries();
@@ -1408,7 +1411,46 @@ describe("Cron execution — output_format both and report (Phase 3)", () => {
     expect(notifications[0]!["output_summary"]).toBe("summary for both");
   });
 
-  it("executeCron with output_format 'report' logs warning about unimplemented report path", async () => {
+  it("executeCron with output_format 'report' calls reportingEngine when provided", async () => {
+    const adapter = makeMockAdapter("data-report");
+    const registry = new Map([["test-source", adapter]]);
+    const mockLlm = {
+      sendMessage: vi.fn().mockResolvedValue({
+        content: "report summary",
+        usage: { input_tokens: 10, output_tokens: 5 },
+      }),
+      parseJSON: vi.fn(),
+    };
+    const mockReportingEngine = {
+      generateNotification: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const eng = new ScheduleEngine({
+      baseDir: tempDir,
+      dataSourceRegistry: registry,
+      llmClient: mockLlm as unknown as import("../../base/llm/llm-client.js").ILLMClient,
+      reportingEngine: mockReportingEngine,
+    });
+
+    const entry = await eng.addEntry(makeCronEntry({
+      cron: {
+        prompt_template: "Summarize: {{test-source}}",
+        context_sources: ["test-source"],
+        output_format: "report",
+        max_tokens: 1000,
+      },
+    }));
+    const result = await (eng as any).executeCron(entry);
+
+    expect(result.status).toBe("ok");
+    expect(mockReportingEngine.generateNotification).toHaveBeenCalledOnce();
+    expect(mockReportingEngine.generateNotification).toHaveBeenCalledWith(
+      "schedule_report",
+      expect.objectContaining({ entry_id: entry.id, output: "report summary" })
+    );
+  });
+
+  it("executeCron with output_format 'report' logs warning when no reportingEngine provided", async () => {
     const adapter = makeMockAdapter("data-report");
     const registry = new Map([["test-source", adapter]]);
     const warnMessages: string[] = [];
@@ -1430,6 +1472,7 @@ describe("Cron execution — output_format both and report (Phase 3)", () => {
       dataSourceRegistry: registry,
       llmClient: mockLlm as unknown as import("../../base/llm/llm-client.js").ILLMClient,
       logger: mockLogger,
+      // no reportingEngine provided
     });
 
     const entry = await eng.addEntry(makeCronEntry({
@@ -1442,9 +1485,8 @@ describe("Cron execution — output_format both and report (Phase 3)", () => {
     }));
     await (eng as any).executeCron(entry);
 
-    const reportWarn = warnMessages.find((m) => m.includes("not yet implemented"));
+    const reportWarn = warnMessages.find((m) => m.includes("ReportingEngine not available"));
     expect(reportWarn).toBeDefined();
-    expect(reportWarn).toContain("Phase 4");
   });
 });
 
@@ -1477,5 +1519,431 @@ describe("GoalTrigger execution — token accumulation (Phase 3)", () => {
     // tokens_used is 0 until LoopResult exposes token usage (Phase 4 TODO)
     expect(result.tokens_used).toBe(0);
     expect(mockCoreLoop.run).toHaveBeenCalledWith("test-goal-id", { maxIterations: 3 });
+  });
+});
+
+// ─── Phase 4: Rolling-window escalation tests ───
+
+describe("Rolling-window escalation (Phase 4)", () => {
+  it("escalation rate-limit allows up to max_per_hour escalations", async () => {
+    const notifications: Record<string, unknown>[] = [];
+    const eng = new ScheduleEngine({
+      baseDir: tempDir,
+      notificationDispatcher: {
+        dispatch: async (r) => { notifications.push(r); },
+      },
+    });
+
+    const entry = await eng.addEntry({
+      name: "rate-window-entry",
+      layer: "probe",
+      trigger: { type: "interval", seconds: 60 },
+      enabled: true,
+      probe: {
+        data_source_id: "missing-source",
+        query_params: {},
+        change_detector: { mode: "diff", baseline_window: 5 },
+        llm_on_change: false,
+      },
+      escalation: {
+        enabled: true,
+        circuit_breaker_threshold: 100,
+        cooldown_minutes: 0,
+        max_per_hour: 3,
+      },
+    });
+
+    // Set 2 timestamps within the last hour (below max_per_hour=3)
+    const entries = eng.getEntries();
+    const idx = entries.findIndex((e) => e.id === entry.id);
+    entries[idx]!.escalation_timestamps = [
+      new Date(Date.now() - 50 * 60 * 1000).toISOString(),
+      new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+    ];
+    entries[idx]!.next_fire_at = new Date(Date.now() - 1000).toISOString();
+    await eng.saveEntries();
+    await eng.loadEntries();
+
+    const results = await eng.tick();
+    // 2 recent + 1 new = 3, still within max_per_hour=3, so escalation SHOULD fire
+    expect(results[0]!.status).toBe("escalated");
+  });
+
+  it("escalation rate-limit blocks after max_per_hour exceeded", async () => {
+    const notifications: Record<string, unknown>[] = [];
+    const eng = new ScheduleEngine({
+      baseDir: tempDir,
+      notificationDispatcher: {
+        dispatch: async (r) => { notifications.push(r); },
+      },
+    });
+
+    const entry = await eng.addEntry({
+      name: "rate-blocked-entry",
+      layer: "probe",
+      trigger: { type: "interval", seconds: 60 },
+      enabled: true,
+      probe: {
+        data_source_id: "missing-source",
+        query_params: {},
+        change_detector: { mode: "diff", baseline_window: 5 },
+        llm_on_change: false,
+      },
+      escalation: {
+        enabled: true,
+        circuit_breaker_threshold: 100,
+        cooldown_minutes: 0,
+        max_per_hour: 2,
+      },
+    });
+
+    // Fill the window with max_per_hour escalations already
+    const entries = eng.getEntries();
+    const idx = entries.findIndex((e) => e.id === entry.id);
+    entries[idx]!.escalation_timestamps = [
+      new Date(Date.now() - 40 * 60 * 1000).toISOString(),
+      new Date(Date.now() - 20 * 60 * 1000).toISOString(),
+    ]; // 2 recent = max_per_hour, no room for another
+    entries[idx]!.next_fire_at = new Date(Date.now() - 1000).toISOString();
+    await eng.saveEntries();
+    await eng.loadEntries();
+
+    const results = await eng.tick();
+    // Should NOT escalate — window is full
+    expect(results[0]!.status).not.toBe("escalated");
+  });
+
+  it("escalation timestamps older than 1 hour are pruned from window", async () => {
+    const notifications: Record<string, unknown>[] = [];
+    const eng = new ScheduleEngine({
+      baseDir: tempDir,
+      notificationDispatcher: {
+        dispatch: async (r) => { notifications.push(r); },
+      },
+    });
+
+    const entry = await eng.addEntry({
+      name: "prune-window-entry",
+      layer: "probe",
+      trigger: { type: "interval", seconds: 60 },
+      enabled: true,
+      probe: {
+        data_source_id: "missing-source",
+        query_params: {},
+        change_detector: { mode: "diff", baseline_window: 5 },
+        llm_on_change: false,
+      },
+      escalation: {
+        enabled: true,
+        circuit_breaker_threshold: 100,
+        cooldown_minutes: 0,
+        max_per_hour: 2,
+      },
+    });
+
+    // Set 2 stale timestamps (older than 1 hour) and 1 recent — after pruning, only 1 recent
+    const entries = eng.getEntries();
+    const idx = entries.findIndex((e) => e.id === entry.id);
+    entries[idx]!.escalation_timestamps = [
+      new Date(Date.now() - 90 * 60 * 1000).toISOString(), // 90 min ago (pruned)
+      new Date(Date.now() - 75 * 60 * 1000).toISOString(), // 75 min ago (pruned)
+      new Date(Date.now() - 30 * 60 * 1000).toISOString(), // 30 min ago (kept)
+    ];
+    entries[idx]!.next_fire_at = new Date(Date.now() - 1000).toISOString();
+    await eng.saveEntries();
+    await eng.loadEntries();
+
+    const results = await eng.tick();
+    // After pruning: 1 recent timestamp + this new one = 2, still within max_per_hour=2
+    expect(results[0]!.status).toBe("escalated");
+
+    // Verify the updated entry has pruned timestamps (stale ones removed)
+    const updated = eng.getEntries().find((e) => e.id === entry.id)!;
+    const hourAgo = Date.now() - 60 * 60 * 1000;
+    const allRecent = (updated.escalation_timestamps ?? []).every(
+      (ts) => new Date(ts).getTime() > hourAgo
+    );
+    expect(allRecent).toBe(true);
+  });
+});
+
+// ─── Phase 4: Timezone tests ───
+
+describe("Timezone support (Phase 4)", () => {
+  it("computeNextFireAt uses timezone for cron expressions (UTC default)", async () => {
+    const entry = await engine.addEntry({
+      name: "utc-cron",
+      layer: "cron",
+      trigger: { type: "cron", expression: "0 0 * * *", timezone: "UTC" },
+      enabled: true,
+    });
+
+    const nextFire = new Date(entry.next_fire_at).getTime();
+    // Midnight UTC, always in future (at most 24h away)
+    expect(nextFire).toBeGreaterThan(Date.now());
+    expect(nextFire).toBeLessThanOrEqual(Date.now() + 24 * 60 * 60 * 1000 + 1000);
+  });
+
+  it("cron entry with non-UTC timezone computes a valid next fire time", async () => {
+    const entry = await engine.addEntry({
+      name: "tokyo-cron",
+      layer: "cron",
+      trigger: { type: "cron", expression: "0 9 * * *", timezone: "Asia/Tokyo" },
+      enabled: true,
+    });
+
+    const nextFire = new Date(entry.next_fire_at);
+    // Should be a valid future date within 24 hours
+    expect(nextFire.getTime()).toBeGreaterThan(Date.now());
+    expect(nextFire.getTime()).toBeLessThanOrEqual(Date.now() + 24 * 60 * 60 * 1000 + 1000);
+  });
+});
+
+// ─── Phase 4: Jitter tests ───
+
+describe("Jitter support (Phase 4)", () => {
+  it("computeNextFireAt applies jitter_factor to interval entries", async () => {
+    const samples: number[] = [];
+    for (let i = 0; i < 20; i++) {
+      const eng2 = new ScheduleEngine({ baseDir: tempDir });
+      const entry = await eng2.addEntry({
+        name: `jitter-entry-${i}`,
+        layer: "heartbeat",
+        trigger: { type: "interval", seconds: 60, jitter_factor: 0.5 },
+        enabled: true,
+        heartbeat: {
+          check_type: "custom",
+          check_config: { command: "echo ok" },
+          failure_threshold: 3,
+          timeout_ms: 5000,
+        },
+      });
+      const offset = new Date(entry.next_fire_at).getTime() - Date.now();
+      samples.push(offset);
+    }
+    // With jitter_factor=0.5 on 60s interval, jitter is up to ±30s
+    // Not all samples should be identical (jitter adds randomness)
+    const unique = new Set(samples.map((v) => Math.round(v / 1000)));
+    expect(unique.size).toBeGreaterThan(1);
+    // All samples within ±50% of 60s = 30s to 90s range
+    for (const offset of samples) {
+      expect(offset).toBeGreaterThan(30_000);
+      expect(offset).toBeLessThan(90_000 + 1000);
+    }
+  });
+
+  it("jitter_factor of 0 produces no jitter", async () => {
+    const samples: number[] = [];
+    const baseTime = Date.now();
+    for (let i = 0; i < 5; i++) {
+      const eng2 = new ScheduleEngine({ baseDir: tempDir });
+      const entry = await eng2.addEntry({
+        name: `no-jitter-${i}`,
+        layer: "heartbeat",
+        trigger: { type: "interval", seconds: 60, jitter_factor: 0 },
+        enabled: true,
+        heartbeat: {
+          check_type: "custom",
+          check_config: { command: "echo ok" },
+          failure_threshold: 3,
+          timeout_ms: 5000,
+        },
+      });
+      const offset = new Date(entry.next_fire_at).getTime() - baseTime;
+      samples.push(offset);
+    }
+    // All should be ~60s (within 2s tolerance for execution time)
+    for (const offset of samples) {
+      expect(offset).toBeGreaterThanOrEqual(59_000);
+      expect(offset).toBeLessThanOrEqual(62_000);
+    }
+  });
+});
+
+// ─── Phase 4: ReportingEngine integration tests ───
+
+describe("ReportingEngine integration (Phase 4)", () => {
+  it("executeCron with output_format 'both' calls reportingEngine AND notificationDispatcher", async () => {
+    const adapter = makeMockAdapter("data-both");
+    const registry = new Map([["test-source", adapter]]);
+    const notifications: Record<string, unknown>[] = [];
+    const mockLlm = {
+      sendMessage: vi.fn().mockResolvedValue({
+        content: "combined output",
+        usage: { input_tokens: 10, output_tokens: 5 },
+      }),
+      parseJSON: vi.fn(),
+    };
+    const mockReportingEngine = {
+      generateNotification: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const eng = new ScheduleEngine({
+      baseDir: tempDir,
+      dataSourceRegistry: registry,
+      llmClient: mockLlm as unknown as import("../../base/llm/llm-client.js").ILLMClient,
+      notificationDispatcher: { dispatch: async (r) => { notifications.push(r); } },
+      reportingEngine: mockReportingEngine,
+    });
+
+    const entry = await eng.addEntry(makeCronEntry({
+      cron: {
+        prompt_template: "Summarize: {{test-source}}",
+        context_sources: ["test-source"],
+        output_format: "both",
+        max_tokens: 1000,
+      },
+    }));
+    const result = await (eng as any).executeCron(entry);
+
+    expect(result.status).toBe("ok");
+    expect(mockReportingEngine.generateNotification).toHaveBeenCalledOnce();
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]!["report_type"]).toBe("schedule_report_ready");
+  });
+
+  it("executeCron with output_format 'report' handles missing reportingEngine gracefully", async () => {
+    const adapter = makeMockAdapter("data");
+    const registry = new Map([["test-source", adapter]]);
+    const mockLlm = {
+      sendMessage: vi.fn().mockResolvedValue({
+        content: "output",
+        usage: { input_tokens: 5, output_tokens: 5 },
+      }),
+      parseJSON: vi.fn(),
+    };
+
+    // No reportingEngine provided
+    const eng = new ScheduleEngine({
+      baseDir: tempDir,
+      dataSourceRegistry: registry,
+      llmClient: mockLlm as unknown as import("../../base/llm/llm-client.js").ILLMClient,
+    });
+
+    const entry = await eng.addEntry(makeCronEntry({
+      cron: {
+        prompt_template: "Report: {{test-source}}",
+        context_sources: ["test-source"],
+        output_format: "report",
+        max_tokens: 1000,
+      },
+    }));
+    const result = await (eng as any).executeCron(entry);
+
+    // Should not throw — graceful degradation
+    expect(result.status).toBe("ok");
+    expect(result.output_summary).toBe("output");
+  });
+});
+
+// ─── Phase 4: GoalTrigger token tracking ───
+
+describe("GoalTrigger token tracking (Phase 4)", () => {
+  it("executeGoalTrigger records tokensUsed from CoreLoop result when provided", async () => {
+    const mockCoreLoop = {
+      run: vi.fn().mockResolvedValue({
+        finalStatus: "completed",
+        totalIterations: 2,
+        goalId: "goal-abc",
+        tokensUsed: 1500,
+      }),
+    };
+
+    const eng = new ScheduleEngine({
+      baseDir: tempDir,
+      coreLoop: mockCoreLoop,
+    });
+
+    const entry = await eng.addEntry(makeGoalTriggerEntry({
+      goal_trigger: { goal_id: "goal-abc", max_iterations: 5, skip_if_active: false },
+    }));
+    const result = await (eng as any).executeGoalTrigger(entry);
+
+    expect(result.status).toBe("ok");
+    expect(result.tokens_used).toBe(1500);
+    expect(mockCoreLoop.run).toHaveBeenCalledWith("goal-abc", { maxIterations: 5 });
+  });
+});
+
+// ─── Phase 4: IScheduleSource / PluginLoader integration ───
+
+describe("PluginLoader schedule_source interface validation (Phase 4)", () => {
+  it("PluginLoader validates schedule_source interface (fetchEntries, healthCheck)", async () => {
+    const { PluginLoader } = await import("../plugin-loader.js");
+    const { NotifierRegistry } = await import("../notifier-registry.js");
+
+    const adapterRegistry = {
+      register: vi.fn(),
+      findAdapter: vi.fn(),
+      listAdapters: vi.fn().mockReturnValue([]),
+    };
+    const dataSourceRegistry = {
+      register: vi.fn(),
+      findBySourceId: vi.fn(),
+      findByDimension: vi.fn(),
+      list: vi.fn().mockReturnValue([]),
+    };
+    const notifierRegistry = new NotifierRegistry();
+    const loader = new PluginLoader(
+      adapterRegistry as any,
+      dataSourceRegistry as any,
+      notifierRegistry,
+      "/tmp/plugins"
+    );
+
+    // Missing fetchEntries — should throw
+    const badImpl = { id: "bad-source", healthCheck: vi.fn() };
+    expect(() => loader.validateInterface("schedule_source", badImpl)).toThrow(/fetchEntries/);
+
+    // Missing healthCheck — should throw
+    const badImpl2 = { id: "bad-source2", fetchEntries: vi.fn() };
+    expect(() => loader.validateInterface("schedule_source", badImpl2)).toThrow(/healthCheck/);
+  });
+
+  it("PluginLoader registers schedule_source and returns it from getScheduleSources", async () => {
+    const { PluginLoader } = await import("../plugin-loader.js");
+    const { NotifierRegistry } = await import("../notifier-registry.js");
+
+    const adapterRegistry = {
+      register: vi.fn(),
+      findAdapter: vi.fn(),
+      listAdapters: vi.fn().mockReturnValue([]),
+    };
+    const dataSourceRegistry = {
+      register: vi.fn(),
+      findBySourceId: vi.fn(),
+      findByDimension: vi.fn(),
+      list: vi.fn().mockReturnValue([]),
+    };
+    const notifierRegistry = new NotifierRegistry();
+    const loader = new PluginLoader(
+      adapterRegistry as any,
+      dataSourceRegistry as any,
+      notifierRegistry,
+      "/tmp/plugins"
+    );
+
+    const scheduleSource = {
+      id: "my-schedule-source",
+      fetchEntries: vi.fn().mockResolvedValue([]),
+      healthCheck: vi.fn().mockResolvedValue(true),
+    };
+
+    // Valid impl — should not throw
+    expect(() => loader.validateInterface("schedule_source", scheduleSource)).not.toThrow();
+
+    // Register it via registerPlugin with a schedule_source manifest
+    const { PluginManifestSchema } = await import("../../base/types/plugin.js");
+    const manifest = PluginManifestSchema.parse({
+      name: "my-schedule-source",
+      version: "1.0.0",
+      type: "schedule_source",
+      capabilities: ["custom_schedule"],
+      description: "Test schedule source plugin",
+    });
+    await loader.registerPlugin(manifest, scheduleSource, "/tmp/plugins/my-schedule-source");
+    const sources = loader.getScheduleSources();
+    expect(sources).toHaveLength(1);
+    expect(sources[0]!.id).toBe("my-schedule-source");
   });
 });

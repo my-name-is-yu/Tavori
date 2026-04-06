@@ -18,6 +18,7 @@ import {
 import type { AdapterRegistry, IAdapter } from "../orchestrator/execution/adapter-layer.js";
 import type { DataSourceRegistry, IDataSourceAdapter } from "../platform/observation/data-source-adapter.js";
 import type { NotifierRegistry } from "./notifier-registry.js";
+import type { IScheduleSource } from "./schedule-source.js";
 
 // ─── PluginLoader ───
 
@@ -36,6 +37,7 @@ export class PluginLoader {
   private notifierRegistry: NotifierRegistry;
   private pluginsDir: string;
   private pluginStates: Map<string, PluginState> = new Map();
+  private scheduleSources: Map<string, IScheduleSource> = new Map();
   private readonly logger?: Logger;
 
   constructor(
@@ -216,6 +218,7 @@ export class PluginLoader {
       adapter: ["execute", "adapterType"],
       data_source: ["connect", "query", "disconnect", "healthCheck"],
       notifier: ["name", "notify", "supports"],
+      schedule_source: ["id", "fetchEntries", "healthCheck"],
     };
 
     const required = requiredMethods[type];
@@ -246,7 +249,17 @@ export class PluginLoader {
       case "notifier":
         this.notifierRegistry.register(manifest.name, impl as INotifier);
         break;
+      case "schedule_source":
+        this.scheduleSources.set((impl as IScheduleSource).id, impl as IScheduleSource);
+        break;
     }
+  }
+
+  /**
+   * Return all loaded schedule source plugins.
+   */
+  getScheduleSources(): IScheduleSource[] {
+    return Array.from(this.scheduleSources.values());
   }
 
   // ─── State builders ───

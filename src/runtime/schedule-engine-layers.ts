@@ -18,6 +18,7 @@ interface LayerDeps {
   notificationDispatcher?: { dispatch(report: Record<string, unknown>): Promise<any> };
   coreLoop?: { run(goalId: string, options?: { maxIterations?: number }): Promise<any> };
   stateManager?: { loadGoal(goalId: string): Promise<any> };
+  reportingEngine?: { generateNotification(type: string, context: Record<string, unknown>): Promise<any> };
   logger: {
     info: (msg: string, ctx?: Record<string, unknown>) => void;
     warn: (msg: string, ctx?: Record<string, unknown>) => void;
@@ -108,9 +109,20 @@ export async function executeCron(entry: ScheduleEntry, deps: LayerDeps): Promis
       outputSummary = llmResponse.content;
     }
 
-    // TODO Phase 4: integrate ReportingEngine for report/both output_format
+    // Report output via ReportingEngine
+    // output_format "report" intentionally skips notificationDispatcher — 
+    // report output is delivered only through ReportingEngine
     if (cfg.output_format === "report" || cfg.output_format === "both") {
-      deps.logger.warn('output_format "report" not yet implemented — ReportingEngine integration deferred to Phase 4');
+      if (deps.reportingEngine) {
+        await deps.reportingEngine.generateNotification("schedule_report", {
+          entry_name: entry.name,
+          entry_id: entry.id,
+          output: outputSummary,
+          report_type: cfg.report_type || "schedule_cron",
+        });
+      } else {
+        deps.logger.warn('ReportingEngine not available for output_format report');
+      }
     }
 
     // Dispatch notification if configured
@@ -206,9 +218,7 @@ export async function executeGoalTrigger(entry: ScheduleEntry, deps: LayerDeps):
 
   try {
     const result = await deps.coreLoop.run(cfg.goal_id, { maxIterations: cfg.max_iterations });
-    // TODO Phase 4: LoopResult does not currently expose token usage.
-    // When CoreLoop adds a tokensUsed field, replace the 0 below.
-    const tokensUsed = 0;
+    const tokensUsed = result?.tokensUsed ?? 0;
     if (result) {
       deps.logger.info(`GoalTrigger "${entry.name}" completed: status=${result.finalStatus}, iterations=${result.totalIterations}`);
     }

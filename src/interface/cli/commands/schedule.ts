@@ -75,8 +75,8 @@ async function scheduleAdd(engine: ScheduleEngine, argv: string[]): Promise<void
   if (values.command) checkConfig.command = values.command;
 
   const trigger = values.cron
-    ? { type: "cron" as const, expression: values.cron as string }
-    : { type: "interval" as const, seconds: parseInt(values.interval as string || "60", 10) };
+    ? { type: "cron" as const, expression: values.cron as string, timezone: "UTC" }
+    : { type: "interval" as const, seconds: parseInt(values.interval as string || "60", 10), jitter_factor: 0 };
 
   const entry = await engine.addEntry({
     name: values.name as string,

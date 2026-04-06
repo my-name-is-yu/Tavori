@@ -59,8 +59,8 @@ export type EscalationConfig = z.infer<typeof EscalationConfigSchema>;
 export const ScheduleLayerSchema = z.enum(["heartbeat", "probe", "cron", "goal_trigger"]);
 
 export const ScheduleTriggerSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("cron"), expression: z.string() }),
-  z.object({ type: z.literal("interval"), seconds: z.number().int().min(1) }),
+  z.object({ type: z.literal("cron"), expression: z.string(), timezone: z.string().default("UTC") }),
+  z.object({ type: z.literal("interval"), seconds: z.number().int().min(1), jitter_factor: z.number().min(0).max(1).default(0) }),
 ]);
 
 export const ScheduleEntrySchema = z.object({
@@ -79,6 +79,7 @@ export const ScheduleEntrySchema = z.object({
   next_fire_at: z.string().datetime(),
   consecutive_failures: z.number().int().default(0),
   last_escalation_at: z.string().datetime().nullable().default(null),
+  escalation_timestamps: z.array(z.string().datetime()).default([]),
   total_executions: z.number().int().default(0),
   total_tokens_used: z.number().int().default(0),
   max_tokens_per_day: z.number().default(100000),
