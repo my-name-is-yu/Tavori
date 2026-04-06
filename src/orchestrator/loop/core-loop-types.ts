@@ -34,6 +34,7 @@ import type { CompletionJudgment } from "../../base/types/satisficing.js";
 import type { StallReport, StallAnalysis } from "../../base/types/stall.js";
 import type { ToolExecutor } from "../../tools/executor.js";
 import type { ToolRegistry } from "../../tools/registry.js";
+import type { VerificationLayer1Result } from "./verification-layer1.js";
 
 
 // ─── GapCalculator module interface (pure functions) ───
