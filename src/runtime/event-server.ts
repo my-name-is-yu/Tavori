@@ -35,6 +35,7 @@ export class EventServer {
   private sseClients: Set<http.ServerResponse> = new Set();
   private eventIdCounter = 0;
   private approvalQueue: Map<string, { resolve: (approved: boolean) => void; timer: ReturnType<typeof setTimeout> }> = new Map();
+  private envelopeHook?: (eventData: Record<string, unknown>) => void;
 
   constructor(driveSystem: DriveSystem, config?: EventServerConfig, logger?: Logger) {
     this.driveSystem = driveSystem;
@@ -241,6 +242,11 @@ export class EventServer {
   }
 
   /** Handle incoming HTTP request */
+  /** Set a hook to intercept incoming events as Envelopes (used by HttpChannelAdapter). */
+  setEnvelopeHook(hook: (eventData: Record<string, unknown>) => void): void {
+    this.envelopeHook = hook;
+  }
+
   private handleRequest(req: http.IncomingMessage, res: http.ServerResponse): void {
     const urlPath = req.url?.split("?")[0] ?? "/";
 
@@ -366,9 +372,15 @@ export class EventServer {
       try {
         const data = JSON.parse(body) as unknown;
         const event = PulSeedEventSchema.parse(data);
-        void this.driveSystem.writeEvent(event).catch((err) => {
-          this.logger?.error(`EventServer: writeEvent failed: ${String(err)}`);
-        });
+        if (this.envelopeHook) {
+          // Route through Gateway Envelope path
+          this.envelopeHook(event as unknown as Record<string, unknown>);
+        } else {
+          // Direct path (no Gateway configured)
+          void this.driveSystem.writeEvent(event).catch((err) => {
+            this.logger?.error(`EventServer: writeEvent failed: ${String(err)}`);
+          });
+        }
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ status: "accepted", event_type: event.type }));
       } catch (err) {
