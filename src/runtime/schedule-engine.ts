@@ -278,9 +278,8 @@ export class ScheduleEngine {
 
   private computeNextFireAt(trigger: ScheduleEntry["trigger"]): string {
     if (trigger.type === "cron") {
-      return CronExpressionParser.parse(trigger.expression)
-        .next()
-        .toISOString();
+      const next = CronExpressionParser.parse(trigger.expression).next();
+      return next.toISOString() ?? new Date().toISOString();
     }
     return new Date(Date.now() + trigger.seconds * 1000).toISOString();
   }
