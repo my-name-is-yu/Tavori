@@ -189,6 +189,12 @@ Return JSON:
   }
 
   const verifierTokens = response.usage ? (response.usage.input_tokens + response.usage.output_tokens) : 0;
+
+  // ALWAYS write to accumulator, even if parsing fails afterward
+  if (deps._tokenAccumulator) {
+    deps._tokenAccumulator.tokensUsed = (deps._tokenAccumulator.tokensUsed ?? 0) + verifierTokens;
+  }
+
   try {
     const rawJson = response.content.replace(/```json\n?/g, "").replace(/```/g, "").trim();
     const parseResult = CompletionJudgerResponseSchema.safeParse(JSON.parse(rawJson));
@@ -214,7 +220,6 @@ Return JSON:
       criteria_total: parsed.criteria_total,
       tokensUsed: verifierTokens,
     };
-    if (deps._tokenAccumulator) deps._tokenAccumulator.tokensUsed += result.tokensUsed;
     await deps.sessionManager.endSession(reviewSession.id, `LLM review: ${verdictStr}`);
     return result;
   } catch {
