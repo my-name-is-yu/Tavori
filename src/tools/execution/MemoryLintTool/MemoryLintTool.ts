@@ -78,7 +78,7 @@ export class MemoryLintTool implements ITool<MemoryLintInput, MemoryLintOutput> 
 
       const summary =
         result.findings.length === 0
-          ? `No issues found. ${result.repairs_applied} repairs applied.`
+          ? "No issues found."
           : `Found ${result.findings.length} issue${result.findings.length !== 1 ? "s" : ""}${issueBreakdown ? ` (${issueBreakdown})` : ""}. ${result.repairs_applied} repair${result.repairs_applied !== 1 ? "s" : ""} applied.`;
 
       const output: MemoryLintOutput = {
