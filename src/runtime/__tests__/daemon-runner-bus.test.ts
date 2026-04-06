@@ -300,9 +300,9 @@ describe("DaemonRunner — Bus Wiring", () => {
       currentStartPromise = null;
 
       // eventBus.push should have been called with a schedule_activated envelope
-      expect(mockEventBus.push).toHaveBeenCalled();
-      const pushedEnvelope = mockEventBus.push.mock.calls[0][0];
-      expect(pushedEnvelope.name).toBe("schedule_activated");
+      const allPushed = mockEventBus.push.mock.calls.map((c: any[]) => c[0]);
+      const pushedEnvelope = allPushed.find((e: any) => e.name === "schedule_activated");
+      expect(pushedEnvelope).toBeDefined();
       expect(pushedEnvelope.source).toBe("schedule-engine");
       expect(pushedEnvelope.type).toBe("event");
       expect(pushedEnvelope.goal_id).toBe("g-42");
@@ -338,8 +338,10 @@ describe("DaemonRunner — Bus Wiring", () => {
       currentDaemon = null;
       currentStartPromise = null;
 
-      // No envelope pushed for error entries
-      expect(mockEventBus.push).not.toHaveBeenCalled();
+      // No schedule_activated envelope pushed for error entries (supervisor may push goal_activated)
+      const allPushed = mockEventBus.push.mock.calls.map((c: any[]) => c[0]);
+      const scheduleEnvelope = allPushed.find((e: any) => e.name === "schedule_activated");
+      expect(scheduleEnvelope).toBeUndefined();
     });
   });
 
@@ -381,9 +383,9 @@ describe("DaemonRunner — Bus Wiring", () => {
       currentStartPromise = null;
 
       // eventBus should receive a cron_task_due envelope
-      expect(mockEventBus.push).toHaveBeenCalled();
-      const pushedEnvelope = mockEventBus.push.mock.calls[0][0];
-      expect(pushedEnvelope.name).toBe("cron_task_due");
+      const allPushed = mockEventBus.push.mock.calls.map((c: any[]) => c[0]);
+      const pushedEnvelope = allPushed.find((e: any) => e.name === "cron_task_due");
+      expect(pushedEnvelope).toBeDefined();
       expect(pushedEnvelope.source).toBe("cron-scheduler");
       expect(pushedEnvelope.type).toBe("event");
       expect(pushedEnvelope.dedupe_key).toBe("cron-task-1");
@@ -426,8 +428,10 @@ describe("DaemonRunner — Bus Wiring", () => {
 
       // markFired MUST NOT be called — it happens at consume time, not push time
       expect(mockCronScheduler.markFired).not.toHaveBeenCalled();
-      // But the envelope should still be pushed
-      expect(mockEventBus.push).toHaveBeenCalledOnce();
+      // A cron_task_due envelope must be pushed (supervisor may also push goal_activated)
+      const allPushed = mockEventBus.push.mock.calls.map((c: any[]) => c[0]);
+      const cronEnvelope = allPushed.find((e: any) => e.name === "cron_task_due");
+      expect(cronEnvelope).toBeDefined();
     });
 
     it("calls markFired directly (legacy) when no eventBus configured", async () => {
