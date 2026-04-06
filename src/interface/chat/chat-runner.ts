@@ -102,8 +102,8 @@ export class ChatRunner {
   private activatedTools: Set<string> = new Set();
   /** Cached system prompt — built once per session, reused across turns. */
   private cachedSystemPrompt: string | null = null;
-  /** Pending /tend goal ID awaiting user confirmation (Y/n). */
-  private pendingTendGoalId: string | null = null;
+  /** Pending /tend state awaiting user confirmation (Y/n). */
+  private pendingTend: { goalId: string; maxIterations?: number } | null = null;
   /** Active EventSubscriber instances keyed by goalId. */
   private activeSubscribers: Map<string, EventSubscriber> = new Map();
   /**
@@ -155,7 +155,7 @@ export class ChatRunner {
     }
 
     // Check if this is a confirmation response for a pending /tend
-    if (this.pendingTendGoalId !== null) {
+    if (this.pendingTend !== null) {
       return this.handleTendConfirmation(trimmed, start);
     }
 
@@ -234,7 +234,7 @@ export class ChatRunner {
     const result = await tendCommand.execute(args, tendDeps);
 
     if (result.needsConfirmation && result.goalId) {
-      this.pendingTendGoalId = result.goalId;
+      this.pendingTend = { goalId: result.goalId, maxIterations: result.maxIterations };
       return {
         success: true,
         output: result.confirmation ?? result.message,
@@ -250,13 +250,15 @@ export class ChatRunner {
   }
 
   private async handleTendConfirmation(input: string, start: number): Promise<ChatRunResult> {
-    const goalId = this.pendingTendGoalId!;
-    this.pendingTendGoalId = null;
+    const pending = this.pendingTend!;
+    this.pendingTend = null;
 
     const normalized = input.trim().toLowerCase();
     const confirmed = normalized === "" || normalized === "y" || normalized === "yes";
+    const cancelled = normalized === "n" || normalized === "no";
 
     if (!confirmed) {
+      // Bug 2: treat any non-y/yes/empty/n/no input as cancellation too
       return {
         success: true,
         output: "Tend cancelled. Continue chatting to refine your goal, then try /tend again.",
@@ -273,7 +275,7 @@ export class ChatRunner {
     }
 
     try {
-      await this.deps.daemonClient.startGoal(goalId);
+      await this.deps.daemonClient.startGoal(pending.goalId);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return {
@@ -328,12 +330,9 @@ export class ChatRunner {
       return commandResult;
     }
 
-    // Intercept plain Y/n responses when a /tend confirmation is pending
-    if (this.pendingTendGoalId !== null) {
-      const normalized = input.trim().toLowerCase();
-      if (["y", "yes", "n", "no", ""].includes(normalized)) {
-        return this.handleTendConfirmation(normalized, Date.now());
-      }
+    // Intercept plain Y/n responses (and any other input) when a /tend confirmation is pending
+    if (this.pendingTend !== null) {
+      return this.handleTendConfirmation(input.trim(), Date.now());
     }
 
     // Reuse session (interactive mode) or create a fresh one per call (1-shot mode)
