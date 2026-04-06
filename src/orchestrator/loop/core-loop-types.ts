@@ -162,6 +162,8 @@ export interface LoopIterationResult {
   skipped?: boolean;
   /** Reason for the skip, when skipped=true. */
   skipReason?: string;
+  /** Result from Phase 7 tool-based verification (Layer 1). Present when toolExecutor is set and task has success_criteria. */
+  toolVerification?: VerificationLayer1Result;
 }
 
 /**
