@@ -470,6 +470,8 @@ export class KnowledgeManager {
         tags: entry.tags ?? prev.tags,
         category: entry.category ?? prev.category,
         memory_type: entry.memory_type ?? prev.memory_type,
+        // When updating, explicitly preserve status
+        status: prev.status,
         updated_at: now,
       });
       store.entries[existing] = saved;
@@ -546,11 +548,14 @@ export class KnowledgeManager {
     category?: string;
     memory_type?: AgentMemoryType;
     limit?: number;
+    include_archived?: boolean;
   }): Promise<AgentMemoryEntry[]> {
     const store = await this._loadAgentMemoryStore();
-    const { category, memory_type, limit = 10 } = opts ?? {};
+    const { category, memory_type, limit = 10, include_archived = false } = opts ?? {};
 
     let results = store.entries.filter((e) => {
+      // Exclude archived entries unless explicitly requested
+      if (!include_archived && e.status === "archived") return false;
       const matchesCategory = category ? e.category === category : true;
       const matchesType = memory_type ? e.memory_type === memory_type : true;
       return matchesCategory && matchesType;
@@ -587,15 +592,20 @@ export class KnowledgeManager {
   async consolidateAgentMemory(opts: {
     category?: string;
     memory_type?: AgentMemoryType;
+    max_entries?: number;
     llmCall: (prompt: string) => Promise<string>;
   }): Promise<{ compiled: AgentMemoryEntry[]; archived: number }> {
     const store = await this._loadAgentMemoryStore();
     const now = new Date().toISOString();
+    const maxEntries = opts.max_entries ?? 50;
 
     // Filter raw entries
     let rawEntries = store.entries.filter((e) => e.status === "raw");
     if (opts.category) rawEntries = rawEntries.filter((e) => e.category === opts.category);
     if (opts.memory_type) rawEntries = rawEntries.filter((e) => e.memory_type === opts.memory_type);
+
+    // Limit number of raw entries processed per consolidation call
+    rawEntries = rawEntries.slice(0, maxEntries);
 
     // Group by category+memory_type
     const groups = new Map<string, AgentMemoryEntry[]>();
@@ -643,15 +653,18 @@ export class KnowledgeManager {
         continue;
       }
 
-      // Strip markdown fences and trim
-      const sanitized = llmRaw
-        .replace(/^```(?:json)?\s*/i, "")
-        .replace(/\s*```$/, "")
-        .trim();
+      // Strip markdown fences and find first JSON object
+      let cleaned = llmRaw.trim();
+      const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        console.warn("[KnowledgeManager] consolidateAgentMemory: no JSON object found in LLM response, skipping group");
+        continue;
+      }
+      cleaned = jsonMatch[0];
 
       let parsedResult: z.infer<typeof compiledSchema>;
       try {
-        parsedResult = compiledSchema.parse(JSON.parse(sanitized));
+        parsedResult = compiledSchema.parse(JSON.parse(cleaned));
       } catch (err) {
         console.warn("[KnowledgeManager] consolidateAgentMemory: failed to parse LLM response, skipping group", err);
         continue;
