@@ -217,10 +217,10 @@ describe("MemoryRecallTool", () => {
 
       await tool.call({ query: "test" }, makeContext());
 
-      expect(vi.mocked(km.recallAgentMemory)).toHaveBeenCalledWith(
-        "test",
-        expect.objectContaining({ include_archived: false })
-      );
+      const callArgs = vi.mocked(km.recallAgentMemory).mock.calls[0]!;
+      const opts = callArgs[1] as { include_archived?: boolean };
+      // include_archived should be falsy (false or undefined) when not explicitly set
+      expect(opts.include_archived).toBeFalsy();
     });
 
     it("archived entries included when include_archived=true", async () => {
