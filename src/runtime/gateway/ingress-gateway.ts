@@ -16,6 +16,7 @@ export class IngressGateway {
     this.logger = logger;
   }
 
+  /** Register an adapter. Throws if name is already registered. */
   registerAdapter(adapter: ChannelAdapter): void {
     if (this.adapters.has(adapter.name)) {
       throw new Error(`ChannelAdapter "${adapter.name}" already registered`);
@@ -25,10 +26,12 @@ export class IngressGateway {
     this.logger?.info(`Gateway: registered adapter "${adapter.name}"`);
   }
 
+  /** Set the handler that receives all Envelopes from all adapters. */
   onEnvelope(handler: EnvelopeHandler): void {
     this.handler = handler;
   }
 
+  /** Start all registered adapters. */
   async start(): Promise<void> {
     for (const [name, adapter] of this.adapters) {
       await adapter.start();
@@ -36,6 +39,7 @@ export class IngressGateway {
     }
   }
 
+  /** Stop all registered adapters. */
   async stop(): Promise<void> {
     for (const [name, adapter] of this.adapters) {
       await adapter.stop();
@@ -43,10 +47,12 @@ export class IngressGateway {
     }
   }
 
+  /** Get a registered adapter by name. */
   getAdapter(name: string): ChannelAdapter | undefined {
     return this.adapters.get(name);
   }
 
+  /** List all registered adapter names. */
   get adapterNames(): string[] {
     return Array.from(this.adapters.keys());
   }
