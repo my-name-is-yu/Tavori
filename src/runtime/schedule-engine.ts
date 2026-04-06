@@ -12,6 +12,7 @@ import {
   type ScheduleResult,
 } from "./types/schedule.js";
 import type { IDataSourceAdapter } from "../platform/observation/data-source-adapter.js";
+import type { DataSourceRegistry } from "../platform/observation/data-source-adapter.js";
 import type { ILLMClient } from "../base/llm/llm-client.js";
 import { detectChange } from "./change-detector.js";
 
@@ -24,7 +25,7 @@ interface ScheduleEngineDeps {
     warn: (...args: unknown[]) => void;
     error: (...args: unknown[]) => void;
   };
-  dataSourceRegistry?: Map<string, IDataSourceAdapter>;
+  dataSourceRegistry?: Map<string, IDataSourceAdapter> | DataSourceRegistry;
   llmClient?: ILLMClient;
   notificationDispatcher?: { dispatch(report: Record<string, unknown>): Promise<void> };
 }
@@ -39,7 +40,7 @@ export class ScheduleEngine {
   private entries: ScheduleEntry[] = [];
   private schedulesPath: string;
   private logger: NonNullable<ScheduleEngineDeps["logger"]>;
-  private dataSourceRegistry?: Map<string, IDataSourceAdapter>;
+  private dataSourceRegistry?: Map<string, IDataSourceAdapter> | DataSourceRegistry;
   private llmClient?: ILLMClient;
   private notificationDispatcher?: { dispatch(report: Record<string, unknown>): Promise<void> };
 
@@ -224,7 +225,18 @@ export class ScheduleEngine {
     }
 
     // Look up data source adapter
-    const adapter = this.dataSourceRegistry?.get(cfg.data_source_id);
+    let adapter: IDataSourceAdapter | undefined;
+    if (this.dataSourceRegistry) {
+      if (this.dataSourceRegistry instanceof Map) {
+        adapter = this.dataSourceRegistry.get(cfg.data_source_id);
+      } else {
+        try {
+          adapter = (this.dataSourceRegistry as DataSourceRegistry).getSource(cfg.data_source_id);
+        } catch {
+          adapter = undefined;
+        }
+      }
+    }
     if (!adapter) {
       return ScheduleResultSchema.parse({
         entry_id: entry.id,
