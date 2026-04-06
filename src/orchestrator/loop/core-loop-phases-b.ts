@@ -158,7 +158,7 @@ export async function detectStallsAndRebalance(
               result.waitSuppressed = true;
               // Portfolio rebalance still runs (WaitStrategy expiry check)
               if (ctx.deps.portfolioManager) {
-                await rebalancePortfolio(ctx, goalId, goal);
+                await rebalancePortfolio(ctx, goalId, goal, result);
               }
               return;
             }
@@ -215,7 +215,7 @@ export async function detectStallsAndRebalance(
 
     // Portfolio: check rebalance after stall detection
     if (ctx.deps.portfolioManager) {
-      await rebalancePortfolio(ctx, goalId, goal);
+      await rebalancePortfolio(ctx, goalId, goal, result);
     }
   } catch (err) {
     ctx.logger?.warn("CoreLoop: stall detection failed (non-fatal)", { error: err instanceof Error ? err.message : String(err) });
@@ -389,7 +389,8 @@ async function checkGlobalStall(
 async function rebalancePortfolio(
   ctx: PhaseCtx,
   goalId: string,
-  goal: Goal
+  goal: Goal,
+  result?: LoopIterationResult
 ): Promise<void> {
   if (!ctx.deps.portfolioManager) return;
   try {
@@ -409,6 +410,38 @@ async function rebalancePortfolio(
     if (portfolio) {
       for (const strategy of portfolio.strategies) {
         if (ctx.deps.portfolioManager.isWaitStrategy(strategy)) {
+          // Gap 1: canAffordWait gate — if TimeHorizonEngine is available, check whether
+          // the goal can afford the wait before processing WaitStrategy expiry.
+          if (ctx.timeHorizonEngine) {
+            try {
+              const ws = strategy as Record<string, unknown>;
+              const waitUntil = typeof ws["wait_until"] === "string" ? ws["wait_until"] as string : null;
+              const startedAt = typeof ws["started_at"] === "string" ? ws["started_at"] as string : (goal.created_at ?? new Date().toISOString());
+              const waitHours = waitUntil
+                ? Math.max(0, (new Date(waitUntil).getTime() - new Date(startedAt).getTime()) / 3_600_000)
+                : 0;
+              const currentGap = result?.gapAggregate ?? 1;
+              const initialGap = typeof ws["gap_snapshot_at_start"] === "number" ? ws["gap_snapshot_at_start"] as number : currentGap;
+              const budget = ctx.timeHorizonEngine.getTimeBudget(
+                goal.deadline ?? null,
+                startedAt,
+                currentGap,
+                initialGap,
+                0 // velocity unknown here; conservative default
+              );
+              if (!budget.canAffordWait(waitHours)) {
+                ctx.logger?.info("CoreLoop: canAffordWait=false, skipping WaitStrategy processing", {
+                  goalId,
+                  strategyId: strategy.id,
+                  waitHours,
+                });
+                continue;
+              }
+            } catch {
+              // Non-fatal: if canAffordWait check fails, proceed normally
+            }
+          }
+
           const waitTrigger = await ctx.deps.portfolioManager.handleWaitStrategyExpiry(
             goalId,
             strategy.id
