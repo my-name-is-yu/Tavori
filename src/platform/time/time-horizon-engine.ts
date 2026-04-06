@@ -4,7 +4,7 @@ import type {
   PacingStatus,
   PacingRecommendation,
   CompletionProjection,
-  TimeBudget,
+  TimeBudgetWithWait,
   TimeHorizonConfig,
 } from "../../base/types/time-horizon.js";
 import { TimeHorizonConfigSchema } from "../../base/types/time-horizon.js";
@@ -36,7 +36,7 @@ export interface ITimeHorizonEngine {
     currentGap: number,
     initialGap: number,
     velocityPerHour: number
-  ): TimeBudget & { canAffordWait(waitHours: number): boolean };
+  ): TimeBudgetWithWait;
 }
 
 // ─── Velocity helpers ─────────────────────────────────────────────────────────
@@ -134,15 +134,11 @@ export class TimeHorizonEngine implements ITimeHorizonEngine {
     if (deadline === null) {
       const isVelocityDeclining = this.isVelocityDeclining(history);
       const recommendation = deriveRecommendation("no_deadline", confidence, isVelocityDeclining);
-      const projection =
-        observationCount >= min_observations_for_projection && velocityPerHour > 0
-          ? this.projectCompletion(velocityPerHour, velocityStddev, currentGap)
-          : null;
       return {
         status: "no_deadline",
         velocityPerHour,
         velocityStddev,
-        projectedCompletionDate: projection?.estimatedDate ?? null,
+        projectedCompletionDate: null, // §6.2: no burn-down projection for perpetual goals
         timeRemainingHours: null,
         pacingRatio: null,
         confidence,
@@ -242,7 +238,7 @@ export class TimeHorizonEngine implements ITimeHorizonEngine {
     currentGap: number,
     initialGap: number,
     velocityPerHour: number
-  ): TimeBudget & { canAffordWait(waitHours: number): boolean } {
+  ): TimeBudgetWithWait {
     const now = Date.now();
     const startMs = new Date(startTime).getTime();
     const elapsedHours = (now - startMs) / 3_600_000;
@@ -263,15 +259,16 @@ export class TimeHorizonEngine implements ITimeHorizonEngine {
     const criticalThreshold = this.config.pacing_thresholds.critical;
     const capturedRemainingHours = remainingHours;
     const capturedVelocity = velocityPerHour;
+    const capturedCurrentGap = currentGap;
 
     const canAffordWait = (waitHours: number): boolean => {
       if (capturedVelocity <= 0) return false;
       if (capturedRemainingHours === null) return true; // no deadline, can always wait
       const newRemainingHours = capturedRemainingHours - waitHours;
       if (newRemainingHours <= 0) return false;
-      const newRequiredVelocity = currentGap / newRemainingHours;
+      const newRequiredVelocity = capturedCurrentGap / newRemainingHours;
       const newPacingRatio = newRequiredVelocity / Math.max(capturedVelocity, EPSILON);
-      return newPacingRatio < criticalThreshold;
+      return newPacingRatio <= criticalThreshold;
     };
 
     return {
@@ -305,7 +302,7 @@ export class TimeHorizonEngine implements ITimeHorizonEngine {
     const historicalEma = calcEmaVelocity(allVelocities, velocity_ema_alpha);
     const recentEma = calcEmaVelocity(recentVelocities, velocity_ema_alpha);
 
-    if (historicalEma <= 0) return false;
+    if (historicalEma <= 0) return true; // no positive historical velocity is itself a decline
     return recentEma < historicalEma * (1 - sustainable_pace_decline_threshold);
   }
 }
