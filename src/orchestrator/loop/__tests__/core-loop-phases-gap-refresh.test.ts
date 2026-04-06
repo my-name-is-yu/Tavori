@@ -198,3 +198,64 @@ describe("calculateGapOrComplete — dimension refresh persistence", () => {
     expect(ctx.deps.stateManager.saveGoal).not.toHaveBeenCalled();
   });
 });
+
+describe("calculateGapOrComplete — parallel dimension measurement", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("measures multiple stale dimensions concurrently via Promise.all", async () => {
+    const tools = await import("../../../platform/drive/gap-calculator-tools.js");
+    vi.mocked(tools.needsDirectMeasurement).mockReturnValue(true);
+
+    const callOrder: number[] = [];
+    vi.mocked(tools.measureDirectly).mockImplementation(async (dim) => {
+      callOrder.push(Date.now());
+      // Simulate async work
+      await new Promise((r) => setTimeout(r, 10));
+      return { value: 75, confidence: 0.95, measuredAt: new Date(), toolUsed: "shell" };
+    });
+
+    const dim1 = { ...makeStaleDimension(), name: "coverage" };
+    const dim2 = { ...makeStaleDimension(), name: "lint" };
+    const goal = makeGoal({ dimensions: [dim1, dim2] });
+    const ctx = makePhaseCtx();
+    const result = makeResult();
+
+    await calculateGapOrComplete(ctx, "goal-1", goal, 0, result, Date.now());
+
+    // Both dimensions must have been measured
+    expect(tools.measureDirectly).toHaveBeenCalledTimes(2);
+    // Both must have updated values
+    expect(goal.dimensions![0].current_value).toBe(75);
+    expect(goal.dimensions![1].current_value).toBe(75);
+    // saveGoal called once (after all measurements complete)
+    expect(ctx.deps.stateManager.saveGoal).toHaveBeenCalledTimes(1);
+  });
+
+  it("still refreshes other dimensions when one measurement fails", async () => {
+    const tools = await import("../../../platform/drive/gap-calculator-tools.js");
+    vi.mocked(tools.needsDirectMeasurement).mockReturnValue(true);
+
+    let callCount = 0;
+    vi.mocked(tools.measureDirectly).mockImplementation(async (dim) => {
+      callCount++;
+      if (callCount === 1) throw new Error("tool error");
+      return { value: 90, confidence: 0.98, measuredAt: new Date(), toolUsed: "shell" };
+    });
+
+    const dim1 = { ...makeStaleDimension(), name: "failing-dim" };
+    const dim2 = { ...makeStaleDimension(), name: "passing-dim" };
+    const goal = makeGoal({ dimensions: [dim1, dim2] });
+    const ctx = makePhaseCtx();
+    const result = makeResult();
+
+    await calculateGapOrComplete(ctx, "goal-1", goal, 0, result, Date.now());
+
+    // Only the second dimension should have been refreshed
+    expect(goal.dimensions![0].current_value).toBe(50); // unchanged (original stale value)
+    expect(goal.dimensions![1].current_value).toBe(90); // refreshed
+    // saveGoal still called because anyRefreshed=true from second dim
+    expect(ctx.deps.stateManager.saveGoal).toHaveBeenCalledTimes(1);
+  });
+});

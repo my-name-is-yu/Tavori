@@ -341,6 +341,202 @@ describe("observeWithTools", () => {
     expect(mockExecutor.execute).not.toHaveBeenCalled();
   });
 
+
+  it("handles git_diff type — has changes", async () => {
+    const mockExecutor = {
+      execute: vi.fn().mockResolvedValue({ success: true, data: "diff --git a/file.ts", durationMs: 15, summary: "ok" }),
+    } as unknown as ToolExecutor;
+    const engineWithExecutor = new ObservationEngine(
+      stateManager,
+      [],
+      undefined,
+      undefined,
+      {},
+      undefined,
+      undefined,
+      undefined,
+      mockExecutor,
+    );
+    const dim = makeDimension({
+      observation_method: {
+        type: "git_diff",
+        source: "git",
+        schedule: null,
+        endpoint: "src/",
+        confidence_tier: "mechanical",
+      },
+    });
+    const result = await engineWithExecutor.observeWithTools(dim, ctx);
+    expect(result).not.toBeNull();
+    expect(result!.toolName).toBe("git-diff");
+    expect(result!.confidence).toBe(0.90);
+    expect(result!.parsedValue).toBe(true);
+    expect(mockExecutor.execute).toHaveBeenCalledWith(
+      "git-diff",
+      { target: "unstaged", path: "src/" },
+      ctx,
+    );
+  });
+
+  it("handles git_diff type — no changes", async () => {
+    const mockExecutor = {
+      execute: vi.fn().mockResolvedValue({ success: true, data: "", durationMs: 10, summary: "ok" }),
+    } as unknown as ToolExecutor;
+    const engineWithExecutor = new ObservationEngine(
+      stateManager,
+      [],
+      undefined,
+      undefined,
+      {},
+      undefined,
+      undefined,
+      undefined,
+      mockExecutor,
+    );
+    const dim = makeDimension({
+      observation_method: {
+        type: "git_diff",
+        source: "git",
+        schedule: null,
+        endpoint: "src/",
+        confidence_tier: "mechanical",
+      },
+    });
+    const result = await engineWithExecutor.observeWithTools(dim, ctx);
+    expect(result).not.toBeNull();
+    expect(result!.parsedValue).toBe(false);
+  });
+
+  it("handles grep_check type — pattern found", async () => {
+    const mockExecutor = {
+      execute: vi.fn().mockResolvedValue({ success: true, data: "src/file.ts", durationMs: 20, summary: "ok" }),
+    } as unknown as ToolExecutor;
+    const engineWithExecutor = new ObservationEngine(
+      stateManager,
+      [],
+      undefined,
+      undefined,
+      {},
+      undefined,
+      undefined,
+      undefined,
+      mockExecutor,
+    );
+    const dim = makeDimension({
+      observation_method: {
+        type: "grep_check",
+        source: "filesystem",
+        schedule: null,
+        endpoint: "TODO",
+        confidence_tier: "mechanical",
+      },
+    });
+    const result = await engineWithExecutor.observeWithTools(dim, ctx);
+    expect(result).not.toBeNull();
+    expect(result!.toolName).toBe("grep");
+    expect(result!.confidence).toBe(0.92);
+    expect(result!.parsedValue).toBe(true);
+    expect(mockExecutor.execute).toHaveBeenCalledWith(
+      "grep",
+      { pattern: "TODO" },
+      ctx,
+    );
+  });
+
+  it("handles grep_check type — pattern not found", async () => {
+    const mockExecutor = {
+      execute: vi.fn().mockResolvedValue({ success: true, data: "", durationMs: 15, summary: "ok" }),
+    } as unknown as ToolExecutor;
+    const engineWithExecutor = new ObservationEngine(
+      stateManager,
+      [],
+      undefined,
+      undefined,
+      {},
+      undefined,
+      undefined,
+      undefined,
+      mockExecutor,
+    );
+    const dim = makeDimension({
+      observation_method: {
+        type: "grep_check",
+        source: "filesystem",
+        schedule: null,
+        endpoint: "FIXME",
+        confidence_tier: "mechanical",
+      },
+    });
+    const result = await engineWithExecutor.observeWithTools(dim, ctx);
+    expect(result).not.toBeNull();
+    expect(result!.parsedValue).toBe(false);
+  });
+
+  it("handles test_run type — tests pass", async () => {
+    const mockExecutor = {
+      execute: vi.fn().mockResolvedValue({ success: true, data: { success: true, passed: 5, failed: 0 }, durationMs: 300, summary: "ok" }),
+    } as unknown as ToolExecutor;
+    const engineWithExecutor = new ObservationEngine(
+      stateManager,
+      [],
+      undefined,
+      undefined,
+      {},
+      undefined,
+      undefined,
+      undefined,
+      mockExecutor,
+    );
+    const dim = makeDimension({
+      observation_method: {
+        type: "test_run",
+        source: "test",
+        schedule: null,
+        endpoint: "npx vitest run",
+        confidence_tier: "mechanical",
+      },
+    });
+    const result = await engineWithExecutor.observeWithTools(dim, ctx);
+    expect(result).not.toBeNull();
+    expect(result!.toolName).toBe("test-runner");
+    expect(result!.confidence).toBe(0.95);
+    expect(result!.parsedValue).toBe(true);
+    expect(mockExecutor.execute).toHaveBeenCalledWith(
+      "test-runner",
+      { command: "npx vitest run" },
+      ctx,
+    );
+  });
+
+  it("handles test_run type — tests fail", async () => {
+    const mockExecutor = {
+      execute: vi.fn().mockResolvedValue({ success: true, data: { success: false, passed: 3, failed: 2 }, durationMs: 250, summary: "ok" }),
+    } as unknown as ToolExecutor;
+    const engineWithExecutor = new ObservationEngine(
+      stateManager,
+      [],
+      undefined,
+      undefined,
+      {},
+      undefined,
+      undefined,
+      undefined,
+      mockExecutor,
+    );
+    const dim = makeDimension({
+      observation_method: {
+        type: "test_run",
+        source: "test",
+        schedule: null,
+        endpoint: "npx vitest run",
+        confidence_tier: "mechanical",
+      },
+    });
+    const result = await engineWithExecutor.observeWithTools(dim, ctx);
+    expect(result).not.toBeNull();
+    expect(result!.parsedValue).toBe(false);
+  });
+
   it("observeWithTools returns null when toolExecutor.execute throws", async () => {
     const mockExecutor = {
       execute: vi.fn().mockRejectedValue(new Error("executor crashed")),

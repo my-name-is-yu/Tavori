@@ -1,5 +1,9 @@
 // src/tools/executor.ts
 
+import { mkdirSync, writeFileSync } from "fs";
+import { join } from "path";
+import { homedir } from "os";
+import { randomUUID } from "crypto";
 import type {
   ITool,
   ToolResult,
@@ -140,9 +144,13 @@ export class ToolExecutor {
       if (serialized.length > tool.metadata.maxOutputChars) {
         const originalLength = serialized.length;
         const truncatedStr = serialized.slice(0, tool.metadata.maxOutputChars);
+        const overflowDir = join(homedir(), ".pulseed", "tmp");
+        mkdirSync(overflowDir, { recursive: true });
+        const overflowPath = join(overflowDir, `overflow-${randomUUID()}.json`);
+        writeFileSync(overflowPath, serialized, "utf-8");
         result.data = truncatedStr;
         result.summary = `${result.summary} [truncated: ${originalLength - tool.metadata.maxOutputChars} chars omitted]`;
-        result.truncated = { originalChars: originalLength };
+        result.truncated = { originalChars: originalLength, overflowPath };
       }
     }
 

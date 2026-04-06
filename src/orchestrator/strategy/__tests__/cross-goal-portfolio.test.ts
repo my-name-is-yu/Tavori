@@ -110,8 +110,9 @@ beforeEach(() => {
   );
 });
 
-afterEach(() => {
-  fs.rmSync(tmpDir, { recursive: true, force: true , maxRetries: 3, retryDelay: 100 });
+afterEach(async () => {
+  await new Promise((r) => setTimeout(r, 50));
+  fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 });
 
 // ─── calculateGoalPriorities ───

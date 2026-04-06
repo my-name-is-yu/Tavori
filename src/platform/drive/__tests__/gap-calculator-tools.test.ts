@@ -313,4 +313,118 @@ describe("measureDirectly", () => {
       );
     });
   });
+
+  describe("git_diff -> git-diff", () => {
+    it("resolves to git-diff tool name", async () => {
+      const dim = makeDimension({
+        observation_method: {
+          type: "git_diff",
+          source: "git",
+          schedule: null,
+          endpoint: "src/",
+          confidence_tier: "mechanical",
+        },
+      });
+      const executor = makeExecutor(makeToolResult({ data: "diff output" }));
+      const result = await measureDirectly(dim, executor, baseContext);
+      expect(result).not.toBeNull();
+      expect(result!.toolUsed).toBe("git-diff");
+      expect(result!.confidence).toBe(0.90);
+    });
+
+    it("passes correct input to executor", async () => {
+      const dim = makeDimension({
+        observation_method: {
+          type: "git_diff",
+          source: "git",
+          schedule: null,
+          endpoint: "src/platform/",
+          confidence_tier: "mechanical",
+        },
+      });
+      const executor = makeExecutor(makeToolResult({ data: "" }));
+      await measureDirectly(dim, executor, baseContext);
+      expect(executor.execute).toHaveBeenCalledWith(
+        "git-diff",
+        { target: "unstaged", path: "src/platform/" },
+        baseContext,
+      );
+    });
+  });
+
+  describe("grep_check -> grep", () => {
+    it("resolves to grep tool name", async () => {
+      const dim = makeDimension({
+        observation_method: {
+          type: "grep_check",
+          source: "filesystem",
+          schedule: null,
+          endpoint: "TODO",
+          confidence_tier: "mechanical",
+        },
+      });
+      const executor = makeExecutor(makeToolResult({ data: "file.ts:42:TODO fix this" }));
+      const result = await measureDirectly(dim, executor, baseContext);
+      expect(result).not.toBeNull();
+      expect(result!.toolUsed).toBe("grep");
+      expect(result!.confidence).toBe(0.92);
+    });
+
+    it("passes correct input to executor", async () => {
+      const dim = makeDimension({
+        observation_method: {
+          type: "grep_check",
+          source: "filesystem",
+          schedule: null,
+          endpoint: "TODO",
+          confidence_tier: "mechanical",
+        },
+      });
+      const executor = makeExecutor(makeToolResult({ data: "" }));
+      await measureDirectly(dim, executor, baseContext);
+      expect(executor.execute).toHaveBeenCalledWith(
+        "grep",
+        { pattern: "TODO" },
+        baseContext,
+      );
+    });
+  });
+
+  describe("test_run -> test-runner", () => {
+    it("resolves to test-runner tool name", async () => {
+      const dim = makeDimension({
+        observation_method: {
+          type: "test_run",
+          source: "test",
+          schedule: null,
+          endpoint: "npx vitest run",
+          confidence_tier: "mechanical",
+        },
+      });
+      const executor = makeExecutor(makeToolResult({ data: { success: true, passed: 10, failed: 0 } }));
+      const result = await measureDirectly(dim, executor, baseContext);
+      expect(result).not.toBeNull();
+      expect(result!.toolUsed).toBe("test-runner");
+      expect(result!.confidence).toBe(0.95);
+    });
+
+    it("passes correct input to executor", async () => {
+      const dim = makeDimension({
+        observation_method: {
+          type: "test_run",
+          source: "test",
+          schedule: null,
+          endpoint: "npm test",
+          confidence_tier: "mechanical",
+        },
+      });
+      const executor = makeExecutor(makeToolResult({ data: { success: true, passed: 5, failed: 0 } }));
+      await measureDirectly(dim, executor, baseContext);
+      expect(executor.execute).toHaveBeenCalledWith(
+        "test-runner",
+        { command: "npm test" },
+        baseContext,
+      );
+    });
+  });
 });

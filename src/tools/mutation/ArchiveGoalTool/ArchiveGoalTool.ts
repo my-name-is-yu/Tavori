@@ -17,7 +17,7 @@ export class ArchiveGoalTool implements ITool<ArchiveGoalInput, unknown> {
     permissionLevel: PERMISSION_LEVEL,
     isReadOnly: READ_ONLY,
     isDestructive: false,
-    shouldDefer: false,
+    shouldDefer: true,
     alwaysLoad: false,
     maxConcurrency: 1,
     maxOutputChars: 4000,

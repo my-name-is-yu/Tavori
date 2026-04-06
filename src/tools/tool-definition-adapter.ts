@@ -42,3 +42,19 @@ export function toToolDefinition(tool: ITool): ToolDefinition {
 export function toToolDefinitions(tools: ITool[]): ToolDefinition[] {
   return tools.map(toToolDefinition);
 }
+
+/**
+ * Convert an array of ITool instances to ToolDefinition array,
+ * optionally excluding tools that are deferred (shouldDefer=true)
+ * unless they are marked alwaysLoad=true or are explicitly activated.
+ */
+export function toToolDefinitionsFiltered(
+  tools: ITool[],
+  options?: { activatedTools?: Set<string> }
+): ToolDefinition[] {
+  const activated = options?.activatedTools ?? new Set<string>();
+  const filtered = tools.filter(
+    (t) => !t.metadata.shouldDefer || t.metadata.alwaysLoad || activated.has(t.metadata.name)
+  );
+  return filtered.map(toToolDefinition);
+}

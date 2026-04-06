@@ -21,7 +21,10 @@ export const ToolResultSchema = z.object({
    */
   artifacts: z.array(z.string()).optional(),
   /** Set when output was truncated; contains the original character count */
-  truncated: z.object({ originalChars: z.number() }).optional(),
+  truncated: z.object({ 
+    originalChars: z.number(),
+    overflowPath: z.string().optional()
+  }).optional(),
 });
 
 export type ToolResult = z.infer<typeof ToolResultSchema>;

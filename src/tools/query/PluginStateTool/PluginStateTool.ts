@@ -16,7 +16,7 @@ export class PluginStateTool implements ITool<PluginStateToolInput, unknown> {
     permissionLevel: PERMISSION_LEVEL,
     isReadOnly: true,
     isDestructive: false,
-    shouldDefer: false,
+    shouldDefer: true,
     alwaysLoad: false,
     maxConcurrency: 0,
     maxOutputChars: MAX_OUTPUT_CHARS,

@@ -58,6 +58,9 @@ export const ObservationTypeEnum = z.enum([
   "api_query",
   "file_check",
   "manual",
+  "git_diff",
+  "grep_check",
+  "test_run",
 ]);
 export type ObservationType = z.infer<typeof ObservationTypeEnum>;
 

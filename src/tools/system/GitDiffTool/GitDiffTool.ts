@@ -35,7 +35,7 @@ export class GitDiffTool implements ITool<GitDiffInput, string> {
     permissionLevel: PERMISSION_LEVEL,
     isReadOnly: true,
     isDestructive: false,
-    shouldDefer: false,
+    shouldDefer: true,
     alwaysLoad: false,
     maxConcurrency: 5,
     maxOutputChars: MAX_OUTPUT_CHARS,

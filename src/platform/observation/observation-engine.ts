@@ -346,7 +346,7 @@ export class ObservationEngine {
       // Step 0.5: Tool-based observation (highest confidence, when available)
       if (this.toolExecutor) {
         const methodType = dim.observation_method?.type;
-        if (methodType === 'file_check' || methodType === 'mechanical' || methodType === 'api_query') {
+        if (methodType === 'file_check' || methodType === 'mechanical' || methodType === 'api_query' || methodType === 'git_diff' || methodType === 'grep_check' || methodType === 'test_run') {
           try {
             const toolContext: import('../../tools/types.js').ToolCallContext = {
               cwd: process.cwd(),
