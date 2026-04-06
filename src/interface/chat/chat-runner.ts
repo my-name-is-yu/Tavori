@@ -18,6 +18,11 @@ import { toToolDefinitionsFiltered } from "../../tools/tool-definition-adapter.j
 import type { ToolCallContext } from "../../tools/types.js";
 import type { ToolExecutor } from "../../tools/executor.js";
 import type { LLMMessage, LLMResponse } from "../../base/llm/llm-client.js";
+import { TendCommand } from "./tend-command.js";
+import type { TendDeps } from "./tend-command.js";
+import { EventSubscriber } from "./event-subscriber.js";
+import type { DaemonClient } from "../../runtime/daemon-client.js";
+import type { GoalNegotiator } from "../../orchestrator/goal/goal-negotiator.js";
 
 // ─── Types ───
 
@@ -46,6 +51,14 @@ export interface ChatRunnerDeps {
   onToolStart?: (toolName: string, args: Record<string, unknown>) => void;
   /** Optional: called after each tool execution with result summary and duration. */
   onToolEnd?: (toolName: string, result: { success: boolean; summary: string; durationMs: number }) => void;
+  /** Optional: daemon client for /tend command (start/stop goals via daemon). */
+  daemonClient?: DaemonClient;
+  /** Optional: goal negotiator for /tend command (auto-generate goal from chat). */
+  goalNegotiator?: GoalNegotiator;
+  /** Optional: callback to push a system notification message into the chat UI. */
+  onNotification?: (message: string) => void;
+  /** Optional: daemon event server base URL (e.g. http://127.0.0.1:7823) for EventSubscriber. */
+  daemonBaseUrl?: string;
 }
 
 export interface ChatRunResult {
@@ -64,7 +77,8 @@ const COMMAND_HELP = `Available commands:
   /help    Show this help message
   /clear   Clear conversation history
   /exit    Exit chat mode
-  /track   Promote session to Tier 2 goal pursuit (not yet implemented)`;
+  /track   Promote session to Tier 2 goal pursuit (not yet implemented)
+  /tend    Generate a goal from chat history and start autonomous daemon execution`;
 
 // ─── Helpers ───
 
@@ -88,6 +102,15 @@ export class ChatRunner {
   private activatedTools: Set<string> = new Set();
   /** Cached system prompt — built once per session, reused across turns. */
   private cachedSystemPrompt: string | null = null;
+  /** Pending /tend goal ID awaiting user confirmation (Y/n). */
+  private pendingTendGoalId: string | null = null;
+  /** Active EventSubscriber instances keyed by goalId. */
+  private activeSubscribers: Map<string, EventSubscriber> = new Map();
+  /**
+   * Callback invoked when a /tend daemon notification arrives.
+   * Can be set after construction (e.g. from a React component via useEffect).
+   */
+  onNotification: ((message: string) => void) | undefined = undefined;
 
   constructor(deps: ChatRunnerDeps) {
     this.deps = deps;
@@ -125,6 +148,15 @@ export class ChatRunner {
     }
     if (cmd === "/track") {
       return this.handleTrack(start);
+    }
+    if (cmd === "/tend") {
+      const args = trimmed.slice("/tend".length).trim();
+      return this.handleTend(args, start);
+    }
+
+    // Check if this is a confirmation response for a pending /tend
+    if (this.pendingTendGoalId !== null) {
+      return this.handleTendConfirmation(trimmed, start);
     }
 
     return {
@@ -166,6 +198,117 @@ export class ChatRunner {
     }
   }
 
+  private async handleTend(args: string, start: number): Promise<ChatRunResult> {
+    if (!this.deps.llmClient) {
+      return {
+        success: false,
+        output: "Tend not available — missing LLM configuration",
+        elapsed_ms: Date.now() - start,
+      };
+    }
+    if (!this.deps.goalNegotiator) {
+      return {
+        success: false,
+        output: "Tend not available — missing goal negotiator",
+        elapsed_ms: Date.now() - start,
+      };
+    }
+    if (!this.deps.daemonClient) {
+      return {
+        success: false,
+        output: "Tend not available — daemon client not configured. Start the daemon with 'pulseed daemon start' first.",
+        elapsed_ms: Date.now() - start,
+      };
+    }
+
+    const history = this.history?.getMessages() ?? [];
+    const tendDeps: TendDeps = {
+      llmClient: this.deps.llmClient,
+      goalNegotiator: this.deps.goalNegotiator,
+      daemonClient: this.deps.daemonClient,
+      stateManager: this.deps.stateManager,
+      chatHistory: history,
+    };
+
+    const tendCommand = new TendCommand();
+    const result = await tendCommand.execute(args, tendDeps);
+
+    if (result.needsConfirmation && result.goalId) {
+      this.pendingTendGoalId = result.goalId;
+      return {
+        success: true,
+        output: result.confirmation ?? result.message,
+        elapsed_ms: Date.now() - start,
+      };
+    }
+
+    return {
+      success: result.success,
+      output: result.message,
+      elapsed_ms: Date.now() - start,
+    };
+  }
+
+  private async handleTendConfirmation(input: string, start: number): Promise<ChatRunResult> {
+    const goalId = this.pendingTendGoalId!;
+    this.pendingTendGoalId = null;
+
+    const normalized = input.trim().toLowerCase();
+    const confirmed = normalized === "" || normalized === "y" || normalized === "yes";
+
+    if (!confirmed) {
+      return {
+        success: true,
+        output: "Tend cancelled. Continue chatting to refine your goal, then try /tend again.",
+        elapsed_ms: Date.now() - start,
+      };
+    }
+
+    if (!this.deps.daemonClient) {
+      return {
+        success: false,
+        output: "Daemon client not available.",
+        elapsed_ms: Date.now() - start,
+      };
+    }
+
+    try {
+      await this.deps.daemonClient.startGoal(goalId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return {
+        success: false,
+        output: `Daemon unavailable: ${msg}. Start the daemon with 'pulseed daemon start' first.`,
+        elapsed_ms: Date.now() - start,
+      };
+    }
+
+    // Subscribe to EventServer progress notifications (non-blocking)
+    if (this.deps.daemonBaseUrl && !this.activeSubscribers.has(goalId)) {
+      const subscriber = new EventSubscriber(this.deps.daemonBaseUrl, goalId, "normal");
+      this.activeSubscribers.set(goalId, subscriber);
+
+      subscriber.on("notification", (notification: unknown) => {
+        const n = notification as { message: string };
+        // Invoke both the deps callback (wired at construction) and the public
+        // onNotification property (wired post-construction, e.g. from React useEffect)
+        this.deps.onNotification?.(n.message);
+        this.onNotification?.(n.message);
+      });
+
+      subscriber.subscribe().catch(() => {
+        // Connection failures are handled inside EventSubscriber
+      });
+    }
+
+    const shortId = goalId.length > 12 ? goalId.slice(0, 12) : goalId;
+    return {
+      success: true,
+      output: `[tend] ${shortId}: Started — daemon is now tending your goal.\nRun 'pulseed status' to check progress.`,
+      elapsed_ms: Date.now() - start,
+    };
+  }
+
   /**
    * Execute a single chat turn.
    *
@@ -183,6 +326,14 @@ export class ChatRunner {
     const commandResult = await this.handleCommand(input);
     if (commandResult !== null) {
       return commandResult;
+    }
+
+    // Intercept plain Y/n responses when a /tend confirmation is pending
+    if (this.pendingTendGoalId !== null) {
+      const normalized = input.trim().toLowerCase();
+      if (["y", "yes", "n", "no", ""].includes(normalized)) {
+        return this.handleTendConfirmation(normalized, Date.now());
+      }
     }
 
     // Reuse session (interactive mode) or create a fresh one per call (1-shot mode)

@@ -17,6 +17,7 @@ import { EthicsGate } from "../../../platform/traits/ethics-gate.js";
 import { ObservationEngine } from "../../../platform/observation/observation-engine.js";
 import { GoalNegotiator } from "../../../orchestrator/goal/goal-negotiator.js";
 import { EscalationHandler } from "../../chat/escalation.js";
+import { DaemonClient, isDaemonRunning } from "../../../runtime/daemon-client.js";
 
 const logger = getCliLogger();
 
@@ -41,8 +42,26 @@ function ChatApp({ chatRunner, cwd, timeoutMs }: ChatAppProps) {
   ]);
   const [isProcessing, setIsProcessing] = useState(false);
 
+  const pushNotification = useCallback(
+    (text: string) => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: randomUUID(),
+          role: "pulseed" as const,
+          text,
+          timestamp: new Date(),
+          messageType: "info" as const,
+        },
+      ]);
+    },
+    []
+  );
+
   useEffect(() => {
     chatRunner.startSession(cwd);
+    // Wire notification callback so /tend daemon events appear in chat
+    chatRunner.onNotification = pushNotification;
   }, []);
 
   const onSubmit = useCallback(
@@ -145,20 +164,44 @@ export async function cmdChat(
     const adapterRegistry = await buildAdapterRegistry(llmClient);
     const adapter = adapterRegistry.getAdapter(adapterType);
 
-    // Build escalation deps (optional — /track works only when LLM is available)
+    // Build escalation + tend deps (optional — /track and /tend work only when LLM is available)
     let escalationHandler: EscalationHandler | undefined;
+    let goalNegotiatorForTend: GoalNegotiator | undefined;
     try {
       const ethicsGate = new EthicsGate(stateManager, llmClient);
       const observationEngine = new ObservationEngine(stateManager, [], llmClient);
       const goalNegotiator = new GoalNegotiator(stateManager, llmClient, ethicsGate, observationEngine);
       escalationHandler = new EscalationHandler({ stateManager, llmClient, goalNegotiator });
+      goalNegotiatorForTend = goalNegotiator;
     } catch {
-      // Non-fatal: /track will show "not available" if escalation fails to init
-      logger.warn("Escalation handler could not be initialized — /track will be unavailable");
+      // Non-fatal: /track and /tend will show "not available" if deps fail to init
+      logger.warn("Escalation handler could not be initialized — /track and /tend will be unavailable");
+    }
+
+    // Build daemon client for /tend (optional — degrades gracefully if daemon not running)
+    let daemonClient: DaemonClient | undefined;
+    let daemonBaseUrl: string | undefined;
+    try {
+      const pulseedDir = process.env["PULSEED_DIR"] ?? `${process.env["HOME"] ?? "~"}/.pulseed`;
+      const daemonInfo = await isDaemonRunning(pulseedDir);
+      if (daemonInfo.running) {
+        daemonClient = new DaemonClient({ host: "127.0.0.1", port: daemonInfo.port });
+        daemonBaseUrl = `http://127.0.0.1:${daemonInfo.port}`;
+      }
+    } catch {
+      // Non-fatal: /tend will show "daemon not available" message
     }
 
     const { ChatRunner } = await import("../../chat/chat-runner.js");
-    const chatRunner = new ChatRunner({ adapter, stateManager, llmClient, escalationHandler });
+    const chatRunner = new ChatRunner({
+      adapter,
+      stateManager,
+      llmClient,
+      escalationHandler,
+      goalNegotiator: goalNegotiatorForTend,
+      daemonClient,
+      daemonBaseUrl,
+    });
 
     // Non-interactive: single turn
     if (task) {
