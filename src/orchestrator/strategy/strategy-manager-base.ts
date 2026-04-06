@@ -23,6 +23,16 @@ import {
   unwrapStrategyResponse,
 } from "./strategy-helpers.js";
 
+
+export interface ExecutionFeedback {
+  strategyId: string;
+  taskId: string;
+  success: boolean;
+  verificationPassed: boolean;
+  duration_ms: number;
+  timestamp: number;
+}
+
 /**
  * Base class for StrategyManager.
  * Contains constructor, core lifecycle methods, and private persistence helpers.
@@ -52,6 +62,9 @@ export class StrategyManagerBase {
   /** Per-iteration workspace context cache (Phase 4-B). */
   protected readonly workspaceCache: WorkspaceContextCache = new WorkspaceContextCache();
 
+  /** Execution feedback buffer for strategy scoring (bounded, max 50). */
+  protected executionHistory: ExecutionFeedback[] = [];
+
   constructor(stateManager: StateManager, llmClient: ILLMClient, knowledgeManager?: KnowledgeManager, promptGateway?: IPromptGateway, logger?: Logger) {
     this.stateManager = stateManager;
     this.llmClient = llmClient;
@@ -78,6 +91,14 @@ export class StrategyManagerBase {
   /** Inject ToolRegistry for tool-availability scoring in activateBestCandidate (Issue #476). */
   setToolRegistry(registry: ToolRegistry): void {
     this.toolRegistry = registry;
+  }
+
+  /** Record execution feedback for strategy scoring. Buffer is bounded at 50 entries. */
+  recordExecutionFeedback(feedback: ExecutionFeedback): void {
+    this.executionHistory.push(feedback);
+    if (this.executionHistory.length > 50) {
+      this.executionHistory.shift();
+    }
   }
 
   // ─── Core Lifecycle Methods ───
@@ -217,12 +238,38 @@ export class StrategyManagerBase {
         const missing = c.required_tools.filter((name) => !availableNames.has(name)).length;
         return { candidate: c, score: -missing };
       });
+      // Penalize strategies with high failure rate from execution history
+      if (this.executionHistory.length > 0) {
+        for (const s of scored) {
+          const history = this.executionHistory.filter(h => h.strategyId === s.candidate.hypothesis);
+          if (history.length >= 3) {
+            const successRate = history.filter(h => h.success).length / history.length;
+            if (successRate < 0.3) {
+              s.score -= 0.2;
+            }
+          }
+        }
+      }
       // Stable sort: higher score (fewer missing tools) first
       scored.sort((a, b) => b.score - a.score);
       best = scored[0]!.candidate;
     } else {
-      // Fallback: pick first candidate
-      best = candidates[0]!;
+      // Fallback: pick first candidate (apply failure-rate penalty for ordering)
+      if (this.executionHistory.length > 0) {
+        const scored2 = candidates.map((c) => {
+          const history = this.executionHistory.filter(h => h.strategyId === c.hypothesis);
+          let score = 0;
+          if (history.length >= 3) {
+            const successRate = history.filter(h => h.success).length / history.length;
+            if (successRate < 0.3) score -= 0.2;
+          }
+          return { candidate: c, score };
+        });
+        scored2.sort((a, b) => b.score - a.score);
+        best = scored2[0]!.candidate;
+      } else {
+        best = candidates[0]!;
+      }
     }
     const now = new Date().toISOString();
 
