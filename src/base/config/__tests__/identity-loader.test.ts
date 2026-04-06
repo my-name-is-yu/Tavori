@@ -132,11 +132,11 @@ describe("clearIdentityCache()", () => {
   it("forces re-read on next call after clearing cache", () => {
     noFiles();
     loadIdentity(); // prime cache
-    const callsAfterFirst = mockExistsSync.mock.calls.length;
+    const callsAfterFirst = mockReadFileSync.mock.calls.length;
 
     clearIdentityCache();
     loadIdentity(); // should re-read
-    expect(mockExistsSync.mock.calls.length).toBeGreaterThan(callsAfterFirst);
+    expect(mockReadFileSync.mock.calls.length).toBeGreaterThan(callsAfterFirst);
   });
 });
 
