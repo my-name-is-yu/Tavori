@@ -334,7 +334,7 @@ export class DaemonRunner {
         await this.supervisor.start(mergedGoalIds);
 
         // Run cron/schedule processing once immediately, then on a periodic interval.
-        const cronIntervalMs = this.config.base_interval_ms ?? this.config.check_interval_ms;
+        const cronIntervalMs = this.config.check_interval_ms;
         await this.processCronTasks();
         await this.processScheduleEntries();
         this.cronScheduleInterval = setInterval(async () => {
