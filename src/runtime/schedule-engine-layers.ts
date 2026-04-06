@@ -203,7 +203,12 @@ export async function executeGoalTrigger(entry: ScheduleEntry, deps: LayerDeps):
 
   try {
     const result = await deps.coreLoop.run(cfg.goal_id, { maxIterations: cfg.max_iterations });
-    const tokensUsed = typeof result?.tokensUsed === "number" ? result.tokensUsed : 0;
+    // TODO Phase 4: LoopResult does not currently expose token usage.
+    // When CoreLoop adds a tokensUsed field, replace the 0 below.
+    const tokensUsed = 0;
+    if (result) {
+      deps.logger.info(`GoalTrigger "${entry.name}" completed: status=${result.finalStatus}, iterations=${result.totalIterations}`);
+    }
 
     return ScheduleResultSchema.parse({
       entry_id: entry.id,
