@@ -761,12 +761,16 @@ describe("TaskLifecycle", async () => {
         capabilityDetector: capabilityDetector as unknown as import("../../observation/capability-detector.js").CapabilityDetector,
       });
 
-      // Spy on generateTask to return a task with task_category = "capability_acquisition"
-      const originalGenerateTask = lifecycle.generateTask.bind(lifecycle);
-      vi.spyOn(lifecycle, "generateTask").mockImplementation(async (...args: Parameters<typeof lifecycle.generateTask>) => {
-        const task = await originalGenerateTask(...args);
-        (task as any).task_category = "capability_acquisition";
-        return task;
+      // Spy on _generateTaskWithTokens (internal method used by runTaskCycle) to return a task
+      // with task_category = "capability_acquisition". We spy on the private method because
+      // runTaskCycle calls _generateTaskWithTokens directly for token tracking (#535).
+      const original_generateTaskWithTokens = (lifecycle as any)._generateTaskWithTokens.bind(lifecycle);
+      vi.spyOn(lifecycle as any, "_generateTaskWithTokens").mockImplementation(async (...args: unknown[]) => {
+        const result = await original_generateTaskWithTokens(...args);
+        if (result.task !== null) {
+          (result.task as any).task_category = "capability_acquisition";
+        }
+        return result;
       });
 
       const gapVector = makeGapVector("goal-1", [{ name: "coverage", gap: 0.5 }]);
