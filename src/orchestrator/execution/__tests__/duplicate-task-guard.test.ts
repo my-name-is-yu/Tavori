@@ -101,7 +101,7 @@ describe("generateTask — duplicate guard (§4.2)", () => {
     const llm = createMockLLMClient([VALID_TASK_RESPONSE]);
     const deps = makeDeps(llm);
 
-    const task = await generateTask(deps, "goal-1", "test_coverage");
+    const { task } = await generateTask(deps, "goal-1", "test_coverage");
     expect(task).not.toBeNull();
     expect(task!.work_description).toBe("Add unit tests for the authentication module");
   });
@@ -128,7 +128,7 @@ describe("generateTask — duplicate guard (§4.2)", () => {
       debug: () => {},
     };
 
-    const task = await generateTask(
+    const { task } = await generateTask(
       { ...deps, logger: mockLogger as never },
       "goal-1",
       "test_coverage"
@@ -152,7 +152,7 @@ describe("generateTask — duplicate guard (§4.2)", () => {
     ];
     await stateManager.writeRaw("tasks/goal-1/task-history.json", history);
 
-    const task = await generateTask(deps, "goal-1", "test_coverage");
+    const { task } = await generateTask(deps, "goal-1", "test_coverage");
     expect(task).toBeNull();
   });
 
@@ -169,7 +169,7 @@ describe("generateTask — duplicate guard (§4.2)", () => {
     ];
     await stateManager.writeRaw("tasks/goal-1/task-history.json", history);
 
-    const task = await generateTask(deps, "goal-1", "test_coverage");
+    const { task } = await generateTask(deps, "goal-1", "test_coverage");
     expect(task).not.toBeNull();
   });
 
@@ -186,7 +186,7 @@ describe("generateTask — duplicate guard (§4.2)", () => {
     ];
     await stateManager.writeRaw("tasks/goal-1/task-history.json", history);
 
-    const task = await generateTask(deps, "goal-1", "test_coverage");
+    const { task } = await generateTask(deps, "goal-1", "test_coverage");
     expect(task).not.toBeNull();
   });
 
@@ -213,7 +213,7 @@ describe("generateTask — duplicate guard (§4.2)", () => {
     await stateManager.writeRaw("tasks/goal-1/task-history.json", history);
 
     // The ancient similar entry is beyond the last-10 window, so should NOT reject
-    const task = await generateTask(deps, "goal-1", "test_coverage");
+    const { task } = await generateTask(deps, "goal-1", "test_coverage");
     expect(task).not.toBeNull();
   });
 
@@ -222,7 +222,7 @@ describe("generateTask — duplicate guard (§4.2)", () => {
     const deps = makeDeps(llm);
 
     // No history file written
-    const task = await generateTask(deps, "goal-1", "test_coverage");
+    const { task } = await generateTask(deps, "goal-1", "test_coverage");
     expect(task).not.toBeNull();
   });
 });
