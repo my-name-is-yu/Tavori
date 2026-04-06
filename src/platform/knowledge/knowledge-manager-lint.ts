@@ -38,7 +38,7 @@ function buildUserPrompt(entries: AgentMemoryEntry[]): string {
 
 export async function lintAgentMemory(opts: {
   km: KnowledgeManager;
-  llmCall: (systemPrompt: string, userPrompt: string) => Promise<string>;
+  llmCall: (prompt: string) => Promise<string>;
   autoRepair?: boolean;
   categories?: string[];
 }): Promise<LintResult> {
@@ -56,6 +56,9 @@ export async function lintAgentMemory(opts: {
     return { findings: [], repairs_applied: 0, entries_flagged: 0 };
   }
 
+  // NOTE: Chunking processes entries independently per window. Contradictions/redundancies
+  // across chunk boundaries will not be detected. For most use cases compiled entries
+  // are well under 30, so this limit rarely applies.
   // 2. Chunk if needed (max 30 per call)
   const CHUNK_SIZE = 30;
   const allFindings: z.infer<typeof LintFindingSchema>[] = [];
@@ -63,7 +66,9 @@ export async function lintAgentMemory(opts: {
   for (let i = 0; i < entries.length; i += CHUNK_SIZE) {
     const chunk = entries.slice(i, i + CHUNK_SIZE);
     const userPrompt = buildUserPrompt(chunk);
-    const raw = await llmCall(LINT_SYSTEM_PROMPT, userPrompt);
+    const raw = await llmCall(LINT_SYSTEM_PROMPT + "
+
+" + userPrompt);
 
     // Sanitize: strip markdown fences
     const cleaned = raw
@@ -86,7 +91,6 @@ export async function lintAgentMemory(opts: {
 
   for (const finding of allFindings) {
     if (!autoRepair) {
-      entriesFlagged += finding.entry_ids.length;
       continue;
     }
 
@@ -138,9 +142,11 @@ export async function lintAgentMemory(opts: {
     }
   }
 
+  const flaggedIds = new Set(autoRepair ? [] : allFindings.flatMap((f) => f.entry_ids));
+
   return {
     findings: allFindings,
     repairs_applied: repairsApplied,
-    entries_flagged: entriesFlagged,
+    entries_flagged: flaggedIds.size,
   };
 }
