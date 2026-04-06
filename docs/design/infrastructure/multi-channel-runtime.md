@@ -75,14 +75,20 @@ That normalized form is an `Envelope`:
 
 ```typescript
 interface Envelope {
-  id: string;               // UUID, for deduplication and tracing
-  type: "command" | "event"; // imperative vs. reactive
-  source: string;           // "http", "slack", "cli", "mcp", "webhook"
-  goal_id?: string;         // routing hint when known
-  payload: unknown;         // raw content, further parsed downstream
-  reply: ReplyChannel;      // how to send a response back (if any)
-  received_at: string;      // ISO 8601
-  auth?: AuthContext;        // who sent this
+  id: string;                  // UUID, unique message ID for deduplication and tracing
+  type: "command" | "event";   // imperative vs. reactive
+  name: string;                // e.g. 'goal_activated', 'user_command', 'approval_request'
+  source: string;              // "http", "slack", "cli", "mcp", "webhook"
+  goal_id?: string;            // target goal (optional for system-wide messages)
+  correlation_id?: string;     // links request-response pairs (e.g. approval flow)
+  dedupe_key?: string;         // for coalescing duplicate events
+  priority: "critical" | "high" | "normal" | "low";
+  payload: unknown;            // raw content, further parsed downstream
+  reply: ReplyChannel;         // how to send a response back (if any)
+  reply_channel_id?: string;   // explicit channel to route replies through
+  created_at: number;          // Unix timestamp (ms)
+  ttl_ms?: number;             // time-to-live (default: 300000 = 5 min)
+  auth?: AuthContext;           // who sent this
 }
 ```
 
@@ -98,7 +104,21 @@ The existing modules that become ChannelAdapters:
 
 Auth and rate-limiting live at the Gateway level. Internal channels (CLI stdin, TUI) bypass auth. External channels (HTTP, Slack, webhook) validate tokens or signatures before the Envelope enters the system. A rate-limited channel drops or delays Envelopes before they reach the Queue; the Queue never sees traffic it shouldn't process.
 
-The Gateway is stateless. It holds no goal state. If it crashes and restarts, it simply reconnects its adapters. Envelopes that were in flight but not yet queued are lost, which is acceptable: external senders retry on error, and the Queue's WAL protects in-flight work that was already accepted.
+The Gateway is stateless. It holds no goal state. If it crashes and restarts, it simply reconnects its adapters. Envelopes that were in flight but not yet queued are lost, which is acceptable: external senders retry on error, and the Queue's DLQ and idempotent producers protect in-flight work.
+
+### Request-Response Flows (Approval)
+
+Approval is a **two-way interaction** that does not fit the unidirectional Envelope model. An Executor worker needs to pause, wait for a human decision, and resume -- potentially after minutes.
+
+The Gateway hosts an **ApprovalBroker** that owns this flow:
+
+1. A GoalWorker emits an `approval_request` Envelope (type `"command"`) onto the CommandBus outbound path. The Envelope carries a `correlation_id` and a `reply_channel_id`.
+2. The ApprovalBroker receives the request and broadcasts it to all registered approval channels (TUI, Web UI, Slack, chat).
+3. The first `accept` or `reject` response received within the configurable timeout (default: 5 minutes) is wrapped in a new Envelope with the matching `correlation_id`.
+4. The ApprovalBroker routes the response back to the requesting GoalWorker via the CommandBus, using the `correlation_id` to match the pending request.
+5. If no response arrives within the timeout, the ApprovalBroker emits a synthetic `reject` response -- preserving the current default-reject behavior.
+
+The `approvalQueue` map currently held inside `event-server.ts` migrates to the ApprovalBroker. The GoalWorker does not know which channel the human responded from; it only sees the response Envelope.
 
 ---
 
@@ -129,7 +149,19 @@ Retry behavior is configurable per message type. The default is three attempts w
 
 The `ScheduleEngine` already produces time-based activations. In the new architecture, those activations become NORMAL-priority events on the EventBus. The `ScheduleEngine` does not push directly to the Executor; it pushes to the Queue, and the Executor pulls when a worker is ready. This decouples scheduling from execution, which means a busy Executor does not cause the ScheduleEngine to block.
 
-The Queue is implemented entirely in-process. No Redis, no external broker. In-process queues are sufficient for a single-machine deployment, have zero operational overhead, and can be persisted to disk (WAL) for crash safety. The trade-off is that the queue is lost on process crash — which is why the WAL exists.
+The Queue is implemented entirely in-process. No Redis, no external broker. In-process queues are sufficient for a single-machine deployment and have zero operational overhead.
+
+### Durability
+
+The Queue is **in-process and ephemeral**. On a process crash, all in-flight messages are lost. There is **no Queue-level WAL**.
+
+This is intentional and acceptable because recovery is handled at the producer level:
+
+- **ScheduleEngine** deterministically reproduces scheduled activations on the next tick after restart. No message needs to be stored to recover them.
+- **External event senders** (HTTP clients, Slack, webhooks) are expected to retry on connection timeout. The Gateway's ChannelAdapters signal errors to senders rather than silently dropping.
+- **Completion events** are derived from goal state, which survives crashes via the **State WAL** in section 6.
+
+The **State WAL** (section 6) records intent and commit for every goal state write. It is exclusively for state persistence -- not for queue messages. These two concerns are kept separate by design: conflating them would require the Queue to understand goal state semantics.
 
 ---
 
@@ -140,6 +172,18 @@ The Executor replaces the sequential goal loop in `daemon-runner.ts` with a supe
 The **LoopSupervisor** is the entry point. It starts when the daemon starts and stops when the daemon stops. Its responsibilities: maintain the worker pool, pull activation events from the Queue, assign events to workers, restart crashed workers, and report health.
 
 A **GoalWorker** wraps exactly one `CoreLoop` instance running against one goal. When the LoopSupervisor assigns a `goal_activated` event to a worker, the worker calls `coreLoop.run(goalId)` and waits for the result. While the worker is running, it is unavailable for other events. When it finishes, it signals readiness back to the Supervisor, which assigns the next pending activation.
+
+### Goal Exclusivity Invariant
+
+**Invariant**: At most one GoalWorker may execute for a given `goal_id` at any time.
+
+**Enforcement**: The LoopSupervisor maintains an `activeGoals: Map<string, GoalWorker>` keyed by `goal_id`. When a `goal_activated` event is dequeued, the Supervisor checks this map before spawning. If the goal is already active, the spawn request is rejected -- the event is not processed.
+
+**Coalescing**: If a `goal_activated` event arrives for an already-running goal, the event is coalesced: the existing worker is notified to extend its run (e.g., reset its iteration cap), rather than a duplicate worker being spawned. The event is not re-queued.
+
+This invariant is distinct from the per-goal advisory locks in the State layer (section 6). The State locks protect concurrent file writes within a single goal's directory. The Goal Exclusivity Invariant prevents a higher-level problem: two CoreLoop instances issuing conflicting decisions about the same goal simultaneously.
+
+GoalWorkers are **pool-allocated**: the Supervisor spawns a generic worker and assigns it a goal at activation time. When the goal's loop iteration completes and no immediate re-activation is pending, the worker is returned to the pool. There is no persistent affinity between a worker instance and a goal.
 
 Workers are cooperative, not threads. Node.js is single-threaded; workers are async tasks that yield at every `await`. Concurrency is achieved through interleaving, not parallelism. This means two workers running simultaneously are actually taking turns at every I/O boundary — which is the right model for PulSeed, where most work is I/O-bound (LLM calls, file reads, HTTP requests).
 
@@ -215,6 +259,8 @@ Files changed: `src/runtime/event-server.ts` (thin wrapper), new `src/runtime/ga
 
 Introduce `CommandBus` and `EventBus` with priority queuing. Route `ScheduleEngine.tick()` output through the EventBus instead of direct invocation from `daemon-runner.ts`. Route incoming Envelopes from the Gateway through the appropriate bus. The daemon loop now pulls from the bus instead of calling `processScheduleEntries()` inline.
 
+Both `processScheduleEntries()` (which calls `ScheduleEngine.tick()`) and `processCronTasks()` (which processes cron-based triggers) must route their output through the EventBus. These are currently separate call paths in `daemon-runner.ts` (lines ~357 and ~361) and both need migration.
+
 Files changed: `src/runtime/daemon-runner.ts` (pull from bus), new `src/runtime/queue/command-bus.ts`, new `src/runtime/queue/event-bus.ts`, new `src/runtime/queue/priority-queue.ts`.
 
 **Phase C: Refactor daemon-runner into LoopSupervisor + GoalWorker**
@@ -245,7 +291,7 @@ Each layer fails independently. A failure in one layer does not cascade to other
 
 **Gateway layer.** If an individual ChannelAdapter crashes (e.g., the WebSocket server drops), only that channel is affected. Other adapters continue. The Supervisor monitors adapter health and restarts crashed adapters with exponential backoff. Messages in flight when the adapter crashed are lost; senders receive a connection error and retry at the protocol level. The Gateway itself does not crash unless all adapters crash simultaneously, which is handled by the process supervisor (systemd, launchd, or the PIDManager restart logic).
 
-**Queue layer.** The in-process queue is lost on process crash. On restart, the WAL in the Eternal State layer contains the intent records for all messages that were accepted but not yet committed. The Queue reads the WAL on startup and re-enqueues pending work. Messages that were dispatched to a GoalWorker but not yet committed to state are replayed from the last checkpoint. The DLQ file persists across restarts; failed messages are not re-enqueued automatically.
+**Queue layer.** The in-process queue is lost on process crash. In-flight messages are lost. This is acceptable because: (a) ScheduleEngine deterministically reproduces scheduled activations on restart, (b) external event senders are expected to retry on timeout, (c) completion events are derived from goal State which survives via its own WAL in the Eternal State layer. The Queue does not have its own WAL; recovery is the responsibility of idempotent producers and the State layer. The DLQ file persists across restarts; failed messages are not re-enqueued automatically.
 
 **Executor layer.** A GoalWorker crash does not affect the LoopSupervisor or other workers. The Supervisor detects the crash (the worker's Promise rejects), logs it, releases the worker slot, and decides whether to re-queue the activation or suspend the goal. The Supervisor's own state table is persisted to `supervisor-state.json` on each update, so a Supervisor restart can resume from its last known state.
 
@@ -298,3 +344,19 @@ These events are LOW priority on the EventBus; they do not compete with goal wor
 **Multi-machine operation.** Running multiple PulSeed instances against the same goal set requires a shared state layer and leader election. SQLite (embedded, file-based) or Turso (libSQL over the network) could replace the per-file JSON approach while preserving the human-readable audit trail. Leader election (using a TTL-based lock in the shared database) would allow one machine to be the primary Executor while others hot-standby. This is not needed until a single machine's I/O or LLM rate limits become the bottleneck — likely years away for most deployments.
 
 **WebSocket push for real-time Web UI.** The SSE stream in `EventServer` already gives the Web UI real-time updates. WebSocket would allow bidirectional communication: the Web UI could send commands (goal start/stop, chat messages, approvals) through the same connection that receives updates. In the Gateway architecture this is a new ChannelAdapter that wraps a WebSocket server; the rest of the system sees it as another source of Envelopes. The outbound path (broadcasting events back to the Web UI) uses the same `reply` field on the Envelope to route responses through the WebSocket connection rather than a REST response.
+
+---
+
+## 11. Deferred Design Decisions
+
+These are implementation-time decisions that are intentionally left open in this design document. Each item should be resolved when the relevant phase is implemented.
+
+**1. Queue-level coalescing, deduplication, and TTL.** Policy for same-goal `goal_activated` dedup, external webhook retry handling, and stale scheduled tick expiry. The `dedupe_key` and `ttl_ms` fields on Envelope provide the mechanism; the specific policy (e.g., which event types are coalesced, how long stale ticks are valid) should be specified when implementing the Queue layer.
+
+**2. Gateway "stateless" definition precision.** The document states the Gateway is stateless, but the Gateway does hold ephemeral operational state: reply handles, auth context, rate-limit counters, dedupe bloom filter, and adapter health. What it does NOT hold is goal state, queue state, or execution state. Document this distinction explicitly in the Gateway implementation to avoid misinterpretation.
+
+**3. CommandBus / EventBus physical separation.** Whether these are two physical priority queues or logical partitions on a single shared PriorityQueue. Current design: conceptual split only. Decide at implementation time based on performance profiling and whether priority inversion between buses is observed in practice.
+
+**4. Snapshot / WAL replay alignment conditions.** Snapshot header format (version, last_wal_offset, checksum), replay-from-offset semantics, and compaction boundary rules are not specified here. Define these when implementing the Eternal State layer (Phase D) to ensure consistent recovery behavior.
+
+**5. event-subscriber.ts role clarification.** `src/interface/chat/event-subscriber.ts` exists and is referenced in section 3 as the chat/TUI subscriber. Verify its exact migration path when implementing Gateway ChannelAdapters in Phase A/E: confirm whether it becomes a read-only ChannelAdapter or is replaced by the Gateway's outbound broadcast path.
