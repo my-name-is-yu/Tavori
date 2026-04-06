@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { StrategySchema, WaitStrategySchema, parseStrategy } from "../../base/types/strategy.js";
+import { isWaitStrategy } from "./portfolio-allocation.js";
 import type { Strategy } from "../../base/types/strategy.js";
 import { redistributeAllocation } from "./strategy-helpers.js";
 import { StrategyManagerBase } from "./strategy-manager-base.js";
@@ -102,12 +103,9 @@ export class StrategyManager extends StrategyManagerBase {
   ): Promise<void> {
     for (const strategy of activated) {
       try {
-        const meta = await this.stateManager.readRaw(
-          `strategies/${goalId}/wait-meta/${strategy.id}.json`
-        ) as { wait_until?: string } | null;
-        if (!meta?.wait_until) continue;
-
-        const waitUntil = meta.wait_until;
+        if (!isWaitStrategy(strategy)) continue;
+        const waitUntil = strategy.wait_until;
+        if (!waitUntil) continue;
 
         // WaitStrategy has allocation=0 and generates no tasks, so tasks_generated is always
         // empty. Instead, find the goal's current active task from the task-history log.
