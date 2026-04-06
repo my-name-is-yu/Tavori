@@ -158,6 +158,20 @@ export class TaskLifecycle {
     existingTasks?: string[],
     workspaceContext?: string
   ): Promise<Task | null> {
+    const result = await this._generateTaskWithTokens(goalId, targetDimension, strategyId, knowledgeContext, adapterType, existingTasks, workspaceContext);
+    return result.task;
+  }
+
+  /** Internal: generate task and return token count alongside the task. */
+  private async _generateTaskWithTokens(
+    goalId: string,
+    targetDimension: string,
+    strategyId?: string,
+    knowledgeContext?: string,
+    adapterType?: string,
+    existingTasks?: string[],
+    workspaceContext?: string
+  ): Promise<{ task: Task | null; tokensUsed: number }> {
     return _generateTask(
       {
         stateManager: this.stateManager,
@@ -346,7 +360,9 @@ export class TaskLifecycle {
 
     // 3. Generate task (optionally with injected knowledge context)
     void this.hookManager?.emit("PreTaskCreate", { goal_id: goalId, data: { task_type: targetDimension } });
-    const task = await this.generateTask(goalId, targetDimension, undefined, enrichedKnowledgeContext, adapter.adapterType, existingTasks, workspaceContext);
+    const genResult = await this._generateTaskWithTokens(goalId, targetDimension, undefined, enrichedKnowledgeContext, adapter.adapterType, existingTasks, workspaceContext);
+    let taskCycleTokens = genResult.tokensUsed;
+    const task = genResult.task;
     if (task === null) {
       this.logger?.warn("TaskLifecycle: task generation returned null (duplicate detected), skipping cycle");
       return createSkippedTaskResult(goalId, targetDimension);
@@ -403,8 +419,11 @@ export class TaskLifecycle {
     // Reload task from disk to get accurate status/started_at/completed_at set by executeTask
     const taskForVerification = await reloadTaskFromDisk(this.stateManager, task);
 
-    // 5. Verify task
-    const verificationResult = await this.verifyTask(taskForVerification, executionResult);
+    // 5. Verify task — use token accumulator to capture LLM tokens consumed during verification
+    const verifierTokenAccumulator = { tokensUsed: 0 };
+    const verifierDepsWithAccumulator = { ...this.verifierDeps(), _tokenAccumulator: verifierTokenAccumulator };
+    const verificationResult = await _verifyTask(verifierDepsWithAccumulator, taskForVerification, executionResult);
+    taskCycleTokens += verifierTokenAccumulator.tokensUsed;
     this.logger?.debug(`[DEBUG-TL] Verification: verdict=${verificationResult.verdict}, evidence=${verificationResult.evidence.map(e => e.description).join('; ').substring(0, 300)}`);
 
     // 6. Handle verdict
@@ -456,6 +475,7 @@ export class TaskLifecycle {
       task: verdictResult.task,
       verificationResult,
       action: verdictResult.action,
+      tokensUsed: taskCycleTokens,
     };
   }
 
