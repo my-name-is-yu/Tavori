@@ -138,20 +138,102 @@ export const SEEDY_ASCII_COMPACT: string = [
 // ---------------------------------------------------------------------------
 
 export type SeedyState = "default" | "thinking" | "success" | "error" | "active";
-export type SeedySize = "small" | "medium";
+
+// ---------------------------------------------------------------------------
+// SEEDY_PIXEL  — half-block pixel art (9 cols × 5 terminal lines)
+//
+// Source: assets/seedy.piskel (32×32 sprite, 9×9 non-transparent bounding box)
+// Rendering: each pair of pixel rows (top, bottom) maps to one terminal line
+// using ▀ (upper half-block) with ANSI 24-bit foreground/background colors.
+// Row pairs: (0,1), (2,3), (4,5), (6,7), (8,∅) → 5 terminal lines.
+//
+// Colors:
+//   1 = green  (#4CAF50)  → fg 76;175;80
+//   2 = cream  (#F5F0E8)  → fg 245;240;232  (matches CREAM above)
+//   3 = black  (near-blk) → fg 30;30;30     (matches BLACK above)
+//   0 = transparent       → space or omitted from fg/bg
+// ---------------------------------------------------------------------------
+
+// Pixel grid (9 columns × 9 rows):
+// 0=transparent, 1=green, 2=cream, 3=black
+const _PIXEL_GRID: readonly (readonly number[])[] = [
+  [0, 1, 1, 1, 0, 1, 1, 1, 0], // row 0
+  [1, 1, 1, 1, 1, 1, 1, 1, 1], // row 1
+  [0, 0, 0, 0, 1, 0, 0, 0, 0], // row 2
+  [0, 0, 2, 2, 2, 2, 2, 0, 0], // row 3
+  [0, 2, 2, 2, 2, 2, 2, 2, 0], // row 4
+  [2, 2, 2, 3, 2, 2, 3, 2, 2], // row 5
+  [2, 2, 2, 2, 2, 2, 2, 2, 2], // row 6
+  [0, 2, 2, 2, 2, 2, 2, 2, 0], // row 7
+  [0, 0, 2, 2, 2, 2, 2, 0, 0], // row 8
+] as const;
+
+const _PIXEL_COLORS: Record<number, [number, number, number]> = {
+  1: [76, 175, 80],    // green  #4CAF50
+  2: [245, 240, 232],  // cream  #F5F0E8
+  3: [30, 30, 30],     // black  near-black
+};
+
+function _buildPixelArt(): string {
+  const _R = "\x1b[0m";
+  const _fg = (r: number, g: number, b: number) => `\x1b[38;2;${r};${g};${b}m`;
+  const _bg = (r: number, g: number, b: number) => `\x1b[48;2;${r};${g};${b}m`;
+
+  const rowPairs: [number, number | null][] = [
+    [0, 1], [2, 3], [4, 5], [6, 7], [8, null],
+  ];
+
+  const lines: string[] = [];
+
+  for (const [topIdx, botIdx] of rowPairs) {
+    const topRow = _PIXEL_GRID[topIdx];
+    const botRow = botIdx !== null ? _PIXEL_GRID[botIdx] : Array(9).fill(0);
+    let line = "";
+
+    for (let col = 0; col < 9; col++) {
+      const tp = topRow[col];
+      const bp = botRow[col];
+
+      if (tp === 0 && bp === 0) {
+        line += " ";
+      } else if (tp !== 0 && bp === 0) {
+        const [r, g, b] = _PIXEL_COLORS[tp];
+        line += _fg(r, g, b) + "▀" + _R;
+      } else if (tp === 0 && bp !== 0) {
+        const [r, g, b] = _PIXEL_COLORS[bp];
+        line += _fg(r, g, b) + "▄" + _R;
+      } else {
+        const [tr, tg, tb] = _PIXEL_COLORS[tp];
+        const [br, bg_, bb] = _PIXEL_COLORS[bp];
+        line += _fg(tr, tg, tb) + _bg(br, bg_, bb) + "▀" + _R;
+      }
+    }
+    lines.push(line);
+  }
+
+  return lines.join("\n");
+}
+
+/** Pre-built ANSI pixel art of Seedy — 9 cols wide × 5 terminal lines tall */
+export const SEEDY_PIXEL: string = _buildPixelArt();
+
+// ---------------------------------------------------------------------------
+// getSeedyArt — updated to support "pixel" size
+// ---------------------------------------------------------------------------
+
+export type SeedySize = "small" | "medium" | "pixel";
 
 /**
  * Returns the ANSI-colored Seedy art string for a given state and size.
  *
  * @param state  - Emotional/activity state of Seedy (default: 'default')
- * @param size   - 'small' (~7 lines) or 'medium' (~12 lines) (default: 'small')
+ * @param size   - 'small' (~7 lines), 'medium' (~12 lines), or 'pixel' (9×5 half-block art)
  * @returns Multi-line string with embedded ANSI escape codes
- *
- * @example
- * console.log(getSeedyArt('success', 'small'));
- * console.log(getSeedyArt('default', 'medium'));
  */
 export function getSeedyArt(state: SeedyState = "default", size: SeedySize = "small"): string {
+  if (size === "pixel") {
+    return SEEDY_PIXEL;
+  }
   if (size === "medium") {
     return SEEDY_MEDIUM; // medium only has a default variant
   }
@@ -169,3 +251,4 @@ export function getSeedyArt(state: SeedyState = "default", size: SeedySize = "sm
       return SEEDY_SMALL;
   }
 }
+
