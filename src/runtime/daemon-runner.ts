@@ -20,6 +20,9 @@ import { generateCronEntry } from "./daemon-signals.js";
 import { rotateDaemonLog, calculateAdaptiveInterval as calcAdaptiveInterval } from "./daemon-health.js";
 import { IngressGateway, HttpChannelAdapter } from "./gateway/index.js";
 import type { Envelope } from "./types/envelope.js";
+import { createEnvelope } from "./types/envelope.js";
+import { EventBus } from "./queue/event-bus.js";
+import { CommandBus } from "./queue/command-bus.js";
 import { PulSeedEventSchema } from "../base/types/drive.js";
 
 // Re-exports for callers that imported these from daemon-runner
