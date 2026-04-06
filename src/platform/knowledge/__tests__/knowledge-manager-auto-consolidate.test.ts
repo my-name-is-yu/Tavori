@@ -93,14 +93,10 @@ describe("autoConsolidate", () => {
   });
 
   it("catches errors and returns { consolidated: false } without throwing", async () => {
-    for (let i = 0; i < 25; i++) {
-      await manager.saveAgentMemory({ key: `fact_${i}`, value: `value ${i}`, memory_type: "fact" });
-    }
+    // Make stateManager.readRaw throw to force the outer try/catch in autoConsolidate
+    vi.spyOn(stateManager, "readRaw").mockRejectedValue(new Error("Storage failure"));
 
-    // Make LLM throw so consolidation fails
-    (mockLLM.sendMessage as ReturnType<typeof vi.fn>).mockRejectedValue(new Error("LLM timeout"));
-
-    const result = await manager.autoConsolidate({ rawThreshold: 20 });
+    const result = await manager.autoConsolidate({ rawThreshold: 5 });
     expect(result.consolidated).toBe(false);
   });
 
