@@ -10,6 +10,7 @@ import {
   loadProviderConfig,
   saveProviderConfig,
   validateProviderConfig,
+  readCodexOAuthToken,
 } from "../../../base/llm/provider-config.js";
 import type { ProviderConfig } from "../../../base/llm/provider-config.js";
 import { getPulseedDirPath } from "../../../base/utils/paths.js";
@@ -29,6 +30,7 @@ import {
 } from "./setup-shared.js";
 import type { Provider } from "./setup-shared.js";
 import { findAvailablePort, isPortAvailable, DEFAULT_PORT } from "../../../runtime/port-utils.js";
+import { SEEDY_PIXEL } from "../../tui/seedy-art.js";
 
 // ─── Guard helper ───
 
