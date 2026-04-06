@@ -1,12 +1,12 @@
 // Re-export from new location for backward compatibility
 export {
+  HeartbeatCheckTypeSchema,
+  HeartbeatConfigSchema,
+  ScheduleLayerSchema,
+  ScheduleTriggerSchema,
   ScheduleEntrySchema,
   ScheduleEntryListSchema,
   ScheduleResultSchema,
-  ScheduleExpressionSchema,
-  LayerConfigSchema,
-  type ScheduleExpression,
-  type LayerConfig,
   type HeartbeatConfig,
   type ScheduleEntry,
   type ScheduleResult,
