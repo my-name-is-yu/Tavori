@@ -105,6 +105,11 @@ export async function executeCron(entry: ScheduleEntry, deps: LayerDeps): Promis
       outputSummary = llmResponse.content;
     }
 
+    // TODO Phase 4: integrate ReportingEngine for report/both output_format
+    if (cfg.output_format === "report" || cfg.output_format === "both") {
+      deps.logger.warn('output_format "report" not yet implemented — ReportingEngine integration deferred to Phase 4');
+    }
+
     // Dispatch notification if configured
     if ((cfg.output_format === "notification" || cfg.output_format === "both") && deps.notificationDispatcher) {
       try {
