@@ -5,11 +5,12 @@
  */
 
 import { z } from "zod";
+import { getInternalIdentityPrefix } from "../../base/config/identity-loader.js";
 
 // ─── CURIOSITY_PROPOSE ────────────────────────────────────────────────────────
 
 export const CURIOSITY_PROPOSE_SYSTEM_PROMPT =
-  "You are PulSeed, an AI agent orchestrator. " +
+  getInternalIdentityPrefix("curiosity analyzer") +
   "Analyze curiosity triggers and propose new exploration goals based on observed patterns and learning history. " +
   "Proposals must be grounded in evidence, directly related to current goal domains, and have clear rationale. " +
   "Return only valid JSON, no markdown or explanation outside the JSON.";
