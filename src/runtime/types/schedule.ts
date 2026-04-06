@@ -25,6 +25,26 @@ export const ProbeConfigSchema = z.object({
 
 export type ProbeConfig = z.infer<typeof ProbeConfigSchema>;
 
+export const CronConfigSchema = z.object({
+  prompt_template: z.string(),
+  context_sources: z.array(z.string()).default([]),
+  output_format: z.enum(['notification', 'report', 'both']).default('notification'),
+  report_type: z.string().optional(),
+  max_tokens: z.number().default(4000),
+});
+
+export type CronConfig = z.infer<typeof CronConfigSchema>;
+
+export const GoalTriggerConfigSchema = z.object({
+  goal_id: z.string(),
+  max_iterations: z.number().default(10),
+  skip_if_active: z.boolean().default(true),
+});
+
+export type GoalTriggerConfig = z.infer<typeof GoalTriggerConfigSchema>;
+
+
+
 export const EscalationConfigSchema = z.object({
   enabled: z.boolean().default(false),
   target_layer: z.enum(["probe", "cron", "goal_trigger"]).optional(),
@@ -61,6 +81,11 @@ export const ScheduleEntrySchema = z.object({
   last_escalation_at: z.string().datetime().nullable().default(null),
   total_executions: z.number().int().default(0),
   total_tokens_used: z.number().int().default(0),
+  max_tokens_per_day: z.number().default(100000),
+  tokens_used_today: z.number().default(0),
+  budget_reset_at: z.string().datetime().nullable().default(null),
+  cron: CronConfigSchema.optional(),
+  goal_trigger: GoalTriggerConfigSchema.optional(),
 });
 
 export type ScheduleEntry = z.infer<typeof ScheduleEntrySchema>;
