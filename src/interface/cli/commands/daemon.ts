@@ -16,6 +16,7 @@ import { DaemonRunner } from "../../../runtime/daemon-runner.js";
 import { PIDManager } from "../../../runtime/pid-manager.js";
 import { EventServer } from "../../../runtime/event-server.js";
 import { CronScheduler } from "../../../runtime/cron-scheduler.js";
+import { ScheduleEngine } from "../../../runtime/schedule-engine.js";
 import { PluginLoader } from "../../../runtime/plugin-loader.js";
 import { NotifierRegistry } from "../../../runtime/notifier-registry.js";
 import { NotificationDispatcher } from "../../../runtime/notification-dispatcher.js";
@@ -174,6 +175,15 @@ export async function cmdStart(
   // Gap 4: Create CronScheduler for scheduled tasks
   const cronScheduler = new CronScheduler(baseDir);
 
+  // Create ScheduleEngine with data source registry and LLM client
+  const scheduleEngine = new ScheduleEngine({
+    baseDir,
+    logger,
+    dataSourceRegistry,
+    llmClient: deps.llmClient,
+  });
+  await scheduleEngine.loadEntries();
+
   const daemon = new DaemonRunner({
     coreLoop: deps.coreLoop,
     driveSystem: deps.driveSystem,
@@ -184,6 +194,7 @@ export async function cmdStart(
     ...(eventServer ? { eventServer } : {}),
     llmClient: deps.llmClient,
     cronScheduler,
+    scheduleEngine,
   });
 
   logger.info(`Starting PulSeed daemon for goals: ${goalIds.join(", ")}`);
