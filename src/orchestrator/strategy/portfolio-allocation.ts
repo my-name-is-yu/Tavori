@@ -264,10 +264,11 @@ export function rebalanceOnStall(
  * Pure function — no class dependency.
  */
 export function isWaitStrategy(strategy: Strategy | Record<string, unknown>): strategy is WaitStrategy {
+  const s = strategy as Record<string, unknown>;
   return (
-    typeof strategy["wait_reason"] === "string" &&
-    typeof strategy["wait_until"] === "string" &&
-    typeof strategy["measurement_plan"] === "string"
+    typeof s["wait_reason"] === "string" &&
+    typeof s["wait_until"] === "string" &&
+    typeof s["measurement_plan"] === "string"
   );
 }
 
