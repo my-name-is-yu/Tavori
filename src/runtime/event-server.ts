@@ -50,6 +50,9 @@ export class EventServer {
 
   /** Start HTTP server, auto-retrying on EADDRINUSE up to MAX_PORT_ATTEMPTS times */
   async start(): Promise<void> {
+    if (this.server) {
+      return; // Already running
+    }
     await fsp.mkdir(this.eventsDir, { recursive: true });
     // If a specific non-zero port was requested, find the first available port
     // starting from it. Port 0 means OS-assigned — skip auto-detection.
@@ -186,8 +189,12 @@ export class EventServer {
       const raw = JSON.parse(content) as unknown;
       const event = PulSeedEventSchema.parse(raw);
 
-      // Dispatch to DriveSystem
-      await this.driveSystem.writeEvent(event);
+      // Dispatch through Gateway Envelope path or direct
+      if (this.envelopeHook) {
+        this.envelopeHook(event as unknown as Record<string, unknown>);
+      } else {
+        await this.driveSystem.writeEvent(event);
+      }
 
       // Move to processed/
       const processedDir = path.join(this.eventsDir, "processed");
