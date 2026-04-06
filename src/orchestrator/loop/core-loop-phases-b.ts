@@ -138,29 +138,28 @@ export async function detectStallsAndRebalance(
       }
     }
 
-    // Gap 3: isSuppressed wiring — check if an active WaitStrategy suppresses stall detection
-    // If the goal has an active WaitStrategy whose wait_until is in the future, skip stall detection.
+    // Gap 3: isSuppressed wiring — suppression is per-dimension only.
+    // Collect suppressed dimensions from all active WaitStrategies; skip those dims in stall loop.
+    const suppressedDimensions = new Set<string>();
     if (ctx.deps.portfolioManager) {
       try {
         const portfolio = await ctx.deps.strategyManager.getPortfolio(goalId);
         if (portfolio) {
-          const activeWait = portfolio.strategies.find(
-            (s) => s.state === "active" && ctx.deps.portfolioManager!.isWaitStrategy(s)
-          );
-          if (activeWait) {
-            const waitUntil = (activeWait as Record<string, unknown>)["wait_until"];
-            const plateauUntil = typeof waitUntil === "string" ? waitUntil : null;
-            if (ctx.deps.stallDetector.isSuppressed(plateauUntil)) {
-              ctx.logger?.info("CoreLoop: stall detection suppressed by active WaitStrategy", {
+          for (const s of portfolio.strategies) {
+            if (s.state !== "active" || !ctx.deps.portfolioManager.isWaitStrategy(s)) continue;
+            const ws = s as Record<string, unknown>;
+            const waitUntil = typeof ws["wait_until"] === "string" ? ws["wait_until"] as string : null;
+            if (!ctx.deps.stallDetector.isSuppressed(waitUntil)) continue;
+            // Suppress only the primary_dimension of this WaitStrategy
+            const primaryDim = typeof ws["primary_dimension"] === "string" ? ws["primary_dimension"] as string : null;
+            if (primaryDim) {
+              suppressedDimensions.add(primaryDim);
+              ctx.logger?.info("CoreLoop: stall detection suppressed for dimension by active WaitStrategy", {
                 goalId,
-                waitUntil: plateauUntil,
+                dimension: primaryDim,
+                waitUntil,
               });
               result.waitSuppressed = true;
-              // Portfolio rebalance still runs (WaitStrategy expiry check)
-              if (ctx.deps.portfolioManager) {
-                await rebalancePortfolio(ctx, goalId, goal, result);
-              }
-              return;
             }
           }
         }
@@ -169,8 +168,9 @@ export async function detectStallsAndRebalance(
       }
     }
 
-    // Per-dimension stall check
+    // Per-dimension stall check (skip dimensions suppressed by active WaitStrategies)
     for (const dim of goal.dimensions) {
+      if (suppressedDimensions.has(dim.name)) continue;
       const dimGapHistory = gapHistory
         .filter((entry) =>
           entry.gap_vector.some((g) => g.dimension_name === dim.name)
@@ -417,17 +417,27 @@ async function rebalancePortfolio(
               const ws = strategy as Record<string, unknown>;
               const waitUntil = typeof ws["wait_until"] === "string" ? ws["wait_until"] as string : null;
               const startedAt = typeof ws["started_at"] === "string" ? ws["started_at"] as string : (goal.created_at ?? new Date().toISOString());
+              // Remaining wait time (not total): use now as reference so nearly-expired waits pass
               const waitHours = waitUntil
-                ? Math.max(0, (new Date(waitUntil).getTime() - new Date(startedAt).getTime()) / 3_600_000)
+                ? Math.max(0, (new Date(waitUntil).getTime() - Date.now()) / 3_600_000)
                 : 0;
               const currentGap = result?.gapAggregate ?? 1;
               const initialGap = typeof ws["gap_snapshot_at_start"] === "number" ? ws["gap_snapshot_at_start"] as number : currentGap;
+              // Compute an approximate velocity from gap progress and elapsed time.
+              // Fallback to a small positive value (0.01/h) when elapsed is too short to measure.
+              const elapsedHours = waitUntil
+                ? Math.max(0, (Date.now() - new Date(startedAt).getTime()) / 3_600_000)
+                : 0;
+              const gapDelta = initialGap - currentGap;
+              const velocity = elapsedHours > 0.001 && gapDelta > 0
+                ? gapDelta / elapsedHours
+                : 0.01; // conservative positive fallback; replace with real velocity when available
               const budget = ctx.timeHorizonEngine.getTimeBudget(
                 goal.deadline ?? null,
                 startedAt,
                 currentGap,
                 initialGap,
-                0 // velocity unknown here; conservative default
+                velocity
               );
               if (!budget.canAffordWait(waitHours)) {
                 ctx.logger?.info("CoreLoop: canAffordWait=false, skipping WaitStrategy processing", {
