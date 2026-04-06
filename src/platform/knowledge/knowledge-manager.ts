@@ -755,7 +755,31 @@ export class KnowledgeManager {
     return stats;
   }
 
-  // ─── Private Helpers ───
+  // ─── autoConsolidate ───
+
+  /**
+   * Automatically consolidate agent memory if raw entry count exceeds threshold.
+   * Non-fatal: errors are caught and logged; the loop continues regardless.
+   */
+  async autoConsolidate(opts?: { rawThreshold?: number }): Promise<{ consolidated: boolean; compiled?: number; archived?: number }> {
+    try {
+      const stats = await this.getAgentMemoryStats();
+      if (stats.raw < (opts?.rawThreshold ?? 20)) {
+        return { consolidated: false };
+      }
+      const llmCall = (prompt: string) =>
+        this.llmClient.sendMessage([{ role: "user", content: prompt }]).then((r) => r.content);
+      const result = await this.consolidateAgentMemory({ llmCall });
+      return { consolidated: true, compiled: result.compiled.length, archived: result.archived };
+    } catch (err) {
+      // Consolidation failure must never crash the loop
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn("KnowledgeManager.autoConsolidate: failed (non-fatal)", msg);
+      return { consolidated: false };
+    }
+  }
+
+    // ─── Private Helpers ───
 
   private async _loadAgentMemoryStore(): Promise<import('./types/agent-memory.js').AgentMemoryStore> {
     const raw = await this.stateManager.readRaw(AGENT_MEMORY_PATH);
