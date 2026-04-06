@@ -87,14 +87,14 @@ export async function acquireLock(
     }
 
     if (Date.now() - start >= maxTotalMs) {
-      throw new Error();
+      throw new Error(`acquireLock: timeout exceeded for goal "${goalId}" after ${maxTotalMs}ms`);
     }
 
     await new Promise((resolve) => setTimeout(resolve, delay));
     delay = Math.min(delay * 2, maxTotalMs);
   }
 
-  throw new Error();
+  throw new Error(`acquireLock: max retries exceeded for goal "${goalId}"`);
 }
 
 /** Release the advisory lock for the given goalId. No-op if lock does not exist. */
