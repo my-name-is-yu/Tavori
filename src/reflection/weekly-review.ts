@@ -6,6 +6,7 @@ import type { ILLMClient } from "../base/llm/llm-client.js";
 import type { INotificationDispatcher } from "../runtime/notification-dispatcher.js";
 import { z } from "zod";
 import type { WeeklyReviewReport } from "./types.js";
+import { getInternalIdentityPrefix } from "../base/config/identity-loader.js";
 import { WeeklyReviewReportSchema } from "./types.js";
 
 // ─── LLM response schema ───
@@ -87,7 +88,7 @@ export async function runWeeklyReview(deps: {
   let summary = "";
 
   if (goalSummaries.length > 0) {
-    const prompt = `You are PulSeed's weekly reviewer. Analyze this week's goal progress and provide a strategic review.
+    const prompt = `${getInternalIdentityPrefix("weekly reviewer")} Analyze this week's goal progress and provide a strategic review.
 
 Goals (weekly_delta = how much gap closed this week, 0-1):
 ${JSON.stringify(goalSummaries, null, 2)}

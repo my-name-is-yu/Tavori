@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ILLMClient } from "../../base/llm/llm-client.js";
+import { getInternalIdentityPrefix } from "../../base/config/identity-loader.js";
 
 // ─── Types ───
 
@@ -81,7 +82,8 @@ const LLMIntentSchema = z.object({
   }).optional(),
 });
 
-const SYSTEM_PROMPT = `You are PulSeed's assistant. PulSeed is an AI agent orchestrator that manages goals with measurable dimensions.
+function getSystemPrompt(): string {
+  return `${getInternalIdentityPrefix("assistant")} PulSeed is an AI agent orchestrator that manages goals with measurable dimensions.
 
 Available actions you can trigger:
 - goal_create: When the user clearly wants to create a new goal. Extract the description.
@@ -91,6 +93,7 @@ Available actions you can trigger:
 For any other input, respond conversationally. Explain PulSeed's state, answer questions, or suggest what to do.
 
 Respond in JSON: { "intent": "chat" | "goal_create" | "loop_start" | "loop_stop", "response": "your response text", "params": { "description": "..." } }`;
+}
 
 // ─── IntentRecognizer ───
 
@@ -140,7 +143,7 @@ export class IntentRecognizer {
     try {
       const llmResponse = await llmClient.sendMessage(
         [{ role: "user", content: input }],
-        { system: SYSTEM_PROMPT, max_tokens: 512, temperature: 0 }
+        { system: getSystemPrompt(), max_tokens: 512, temperature: 0 }
       );
 
       const parsed = llmClient.parseJSON(llmResponse.content, LLMIntentSchema);

@@ -8,6 +8,7 @@ import { z } from "zod";
 import type { CatchupReport, GoalSummary } from "./types.js";
 import { CatchupReportSchema } from "./types.js";
 import type { HookManager } from "../runtime/hook-manager.js";
+import { getInternalIdentityPrefix } from "../base/config/identity-loader.js";
 
 // ─── LLM response schema ───
 
@@ -82,7 +83,7 @@ export async function runEveningCatchup(deps: {
       // No morning report available
     }
 
-    const prompt = `You are PulSeed's evening catch-up assistant. Review today's goal progress.
+    const prompt = `${getInternalIdentityPrefix("evening catch-up assistant")} Review today's goal progress.
 
 Current goal state:
 ${JSON.stringify(goalSummaries, null, 2)}

@@ -13,6 +13,7 @@ import type { DaemonConfig, DaemonState } from "../base/types/daemon.js";
 import { DaemonConfigSchema, DaemonStateSchema } from "../base/types/daemon.js";
 import type { ILLMClient } from "../base/llm/llm-client.js";
 import { CronScheduler } from "./cron-scheduler.js";
+import { getInternalIdentityPrefix } from "../base/config/identity-loader.js";
 import { z } from "zod";
 import { generateCronEntry } from "./daemon-signals.js";
 import { rotateDaemonLog, calculateAdaptiveInterval as calcAdaptiveInterval } from "./daemon-health.js";
@@ -692,7 +693,7 @@ export class DaemonRunner {
         ? this.state.active_goals.map((id) => `- ${id}`).join("\n")
         : "(no active goals)";
 
-      const prompt = `You are PulSeed's proactive engine. Given the current state of all goals:\n${goalSummaries}\n\nDecide what action to take:\n- "suggest_goal": A new goal should be created (provide title + description)\n- "investigate": Something needs investigation (provide what and why)\n- "preemptive_check": Run a pre-emptive observation (provide goal_id)\n- "sleep": Nothing needs attention right now\n\nRespond with JSON: { "action": "...", "details": { ... } }`;
+      const prompt = `${getInternalIdentityPrefix("proactive engine")} Given the current state of all goals:\n${goalSummaries}\n\nDecide what action to take:\n- "suggest_goal": A new goal should be created (provide title + description)\n- "investigate": Something needs investigation (provide what and why)\n- "preemptive_check": Run a pre-emptive observation (provide goal_id)\n- "sleep": Nothing needs attention right now\n\nRespond with JSON: { "action": "...", "details": { ... } }`;
 
       const response = await this.llmClient.sendMessage(
         [{ role: "user", content: prompt }],

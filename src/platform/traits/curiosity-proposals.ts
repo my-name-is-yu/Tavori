@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { getInternalIdentityPrefix } from "../../base/config/identity-loader.js";
 import { z } from "zod";
 import type { ILLMClient } from "../../base/llm/llm-client.js";
 import type { IPromptGateway } from "../../prompt/gateway.js";
@@ -91,7 +92,7 @@ export function buildProposalPrompt(
     )
     .join("\n");
 
-  return `You are PulSeed, an AI agent orchestrator analyzing curiosity triggers to propose new exploration goals.
+  return `Analyzing curiosity triggers to propose new exploration goals.
 
 ## Current Trigger
 Type: ${trigger.type}

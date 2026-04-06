@@ -1,11 +1,12 @@
 // ─── Chat Grounding ───
 //
 // Builds a system prompt that gives the LLM self-knowledge about PulSeed:
-// identity, available commands, current state (goals, plugins, provider).
+// identity, current state (goals, plugins, provider).
 
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
 import type { StateManager } from "../../base/state/state-manager.js";
+import { getUserFacingIdentity, getAgentName } from "../../base/config/identity-loader.js";
 
 export interface GroundingOptions {
   stateManager: StateManager;
@@ -69,34 +70,13 @@ export async function buildSystemPrompt(options: GroundingOptions): Promise<stri
   ]);
 
   const pluginsLine = plugins.length > 0 ? plugins.join(", ") : "none";
+  const identity = getUserFacingIdentity();
+  const name = getAgentName();
 
   return `
-You are PulSeed, an AI agent orchestrator. You help users manage goals, observe progress, and operate PulSeed.
-You are NOT a general-purpose assistant — you are PulSeed itself, talking to your operator.
-Your purpose: autonomously pursue goals by delegating to agents, observing results, and adjusting strategy.
-You do not execute tasks yourself — you orchestrate.
+${identity}
 
-## Available Commands
-- \`pulseed goal add "<description>"\`    Register a new goal (via GoalRefiner)
-- \`pulseed goal list\`                   List all registered goals
-- \`pulseed goal show <id>\`              Show goal details
-- \`pulseed goal reset <id>\`             Reset goal state for re-running
-- \`pulseed run --goal <id>\`             Start the orchestration loop for a goal
-- \`pulseed status --goal <id>\`          Show current progress
-- \`pulseed report --goal <id>\`          Show latest report
-- \`pulseed start --goal <id> -d\`        Start daemon mode (background)
-- \`pulseed stop\`                        Stop the running daemon
-- \`pulseed daemon status\`               Show daemon status
-- \`pulseed suggest "<context>"\`         Suggest new goals for a project
-- \`pulseed improve [path]\`              Analyze path and suggest improvement goals
-- \`pulseed tui\`                         Launch interactive TUI
-- \`pulseed setup\`                       Interactive first-time setup wizard
-- \`pulseed provider set\`                Set LLM provider and adapter
-- \`pulseed plugin list\`                 List installed plugins
-- \`pulseed logs\`                        View daemon logs
-- \`pulseed doctor\`                      Run health checks
-- \`pulseed chat\`                        This conversation
-- \`/track\`                              Promote this chat session to a tracked goal
+---
 
 ## Current State
 ### Goals
@@ -108,11 +88,7 @@ Installed: ${pluginsLine}
 ### Provider
 ${provider}
 
-## How to Help
-- When the user asks to set something up, guide them step by step using specific commands above
-- Reference exact CLI commands with flags when applicable
-- If state is needed, tell the user which command to run rather than guessing
-- Use \`/track\` to convert this conversation into a persistent goal when the user defines an objective
+## Safety Instructions
 - 設定変更について：
   ユーザーが設定の変更を求めた場合、update_configツールを使用できます。
   ただし、ツールを呼ぶ前に必ず以下を行ってください：
@@ -129,6 +105,6 @@ ${provider}
   4. ユーザーの明示的な確認（「はい」「削除する」など）を得る
   5. 確認を得てからツールを呼び出す
   ユーザーが迷っている場合や削除の影響を理解していない様子であれば、追加説明をしてください。
-- Be concise and direct — you are a tool, not a conversationalist
+- Stay focused on goals — you're here to help them grow (${name})
 `.trim();
 }

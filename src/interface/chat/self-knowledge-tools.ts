@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import type { StateManager } from "../../base/state/state-manager.js";
 import type { ToolDefinition } from "../../base/llm/llm-client.js";
+import { getAgentName } from "../../base/config/identity-loader.js";
 export type { ToolDefinition };
 
 // ─── Dependencies ───
@@ -77,7 +78,7 @@ export function getSelfKnowledgeToolDefinitions(): ToolDefinition[] {
       function: {
         name: "get_architecture",
         description:
-          "Returns a static description of PulSeed architecture, layer structure, core loop, 4-element model, and execution boundary.",
+          `Returns a static description of ${getAgentName()} architecture, layer structure, core loop, 4-element model, and execution boundary.`,
         parameters: { type: "object", properties: {}, required: [] },
       },
     },
@@ -161,7 +162,7 @@ async function handleGetTrustState(deps: SelfKnowledgeDeps): Promise<string> {
     high_trust_threshold: 20,
     ethics_gate_level: "L1",
     execution_boundary:
-      "PulSeed always delegates. Direct actions are LLM calls (for thinking) and state read/write only.",
+      `${getAgentName()} always delegates. Direct actions are LLM calls (for thinking) and state read/write only.`,
   });
 }
 
@@ -208,12 +209,13 @@ async function handleGetPlugins(deps: SelfKnowledgeDeps): Promise<string> {
 }
 
 function handleGetArchitecture(): string {
-  const text = `PulSeed Architecture
+  const name = getAgentName();
+  const text = `${name} Architecture
 
 ## Core Concept
 4-element model: Goal (with thresholds) -> Current State (observation + confidence) -> Gap -> Constraints
 Core loop: observe -> gap -> score -> task -> execute -> verify (NEVER STOP)
-Execution boundary: PulSeed always delegates. Direct actions are LLM calls (for thinking) and state read/write only.
+Execution boundary: ${name} always delegates. Direct actions are LLM calls (for thinking) and state read/write only.
 
 ## Layer Structure
 - Layer 0:  StateManager, AdapterLayer (no dependencies)

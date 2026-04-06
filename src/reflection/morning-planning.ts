@@ -8,6 +8,7 @@ import { z } from "zod";
 import type { PlanningReport, GoalSummary } from "./types.js";
 import { PlanningReportSchema } from "./types.js";
 import type { HookManager } from "../runtime/hook-manager.js";
+import { getInternalIdentityPrefix } from "../base/config/identity-loader.js";
 
 // ─── LLM response schema ───
 
@@ -79,7 +80,7 @@ export async function runMorningPlanning(deps: {
   let concerns: string[] = [];
 
   if (goalSummaries.length > 0) {
-    const prompt = `You are PulSeed's morning planner. Review these active goals and create a daily plan.
+    const prompt = `${getInternalIdentityPrefix("morning planner")} Review these active goals and create a daily plan.
 
 Goals:
 ${JSON.stringify(goalSummaries, null, 2)}

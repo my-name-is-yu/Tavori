@@ -95,24 +95,20 @@ describe("buildSystemPrompt (grounding.ts)", () => {
     await fsp.rm(tmpDir, { recursive: true, force: true });
   });
 
-  it("includes PulSeed identity text", async () => {
+  it("includes Seedy identity text", async () => {
     const sm = makeMockStateManager();
     const prompt = await buildSystemPrompt({ stateManager: sm, homeDir: tmpDir });
 
-    expect(prompt).toContain("You are PulSeed");
-    expect(prompt).toContain("AI agent orchestrator");
-    expect(prompt).toContain("orchestrate");
+    expect(prompt).toContain("Seedy");
+    expect(prompt).toContain("goals");
   });
 
-  it("includes CLI commands section", async () => {
+  it("includes identity system content", async () => {
     const sm = makeMockStateManager();
     const prompt = await buildSystemPrompt({ stateManager: sm, homeDir: tmpDir });
 
-    expect(prompt).toContain("Available Commands");
-    expect(prompt).toContain("pulseed goal add");
-    expect(prompt).toContain("pulseed run --goal");
-    expect(prompt).toContain("pulseed chat");
-    expect(prompt).toContain("/track");
+    expect(prompt).toContain("Seedy");
+    expect(prompt.length).toBeGreaterThan(0);
   });
 
   it("shows goals from stateManager", async () => {
