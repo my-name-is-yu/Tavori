@@ -56,6 +56,9 @@ async function waitFor(
   throw new Error("waitFor: condition not met within timeout");
 }
 
+/** Give FSEvents/inotify time to register the watcher (CI-safe). */
+const waitForWatcherReady = () => new Promise((r) => setTimeout(r, 500));
+
 // ─── Test setup ───
 
 let tmpDir: string;
@@ -121,7 +124,7 @@ describe("file watcher — detects new JSON files", () => {
   it("calls driveSystem.writeEvent when a valid JSON file appears", { timeout: 10000 }, async () => {
     const eventsDir = path.join(tmpDir, "events");
     server.startFileWatcher();
-    await new Promise((r) => setTimeout(r, 100)); // give FSEvents time to register
+    await waitForWatcherReady();
 
     writeEventFile(eventsDir, "event_001.json", validEvent);
 
@@ -136,7 +139,7 @@ describe("file watcher — detects new JSON files", () => {
   it("processes multiple event files sequentially", { timeout: 15000 }, async () => {
     const eventsDir = path.join(tmpDir, "events");
     server.startFileWatcher();
-    await new Promise((r) => setTimeout(r, 100)); // give FSEvents time to register
+    await waitForWatcherReady();
 
     for (let i = 0; i < 3; i++) {
       writeEventFile(eventsDir, `event_00${i}.json`, { ...validEvent, data: { index: i } });
@@ -151,7 +154,7 @@ describe("file watcher — detects new JSON files", () => {
   it("calls driveSystem.writeEvent with correctly parsed event fields", { timeout: 10000 }, async () => {
     const eventsDir = path.join(tmpDir, "events");
     server.startFileWatcher();
-    await new Promise((r) => setTimeout(r, 100)); // give FSEvents time to register
+    await waitForWatcherReady();
 
     const event: PulSeedEvent = {
       type: "internal",
@@ -176,7 +179,7 @@ describe("file watcher — processed files are moved to processed/", () => {
   it("moves processed file to events/processed/ directory", { timeout: 15000 }, async () => {
     const eventsDir = path.join(tmpDir, "events");
     server.startFileWatcher();
-    await new Promise((r) => setTimeout(r, 100)); // give FSEvents time to register
+    await waitForWatcherReady();
 
     const filename = "event_to_move.json";
     writeEventFile(eventsDir, filename, validEvent);
@@ -192,7 +195,7 @@ describe("file watcher — processed files are moved to processed/", () => {
   it("original event file is removed from events/ after processing", { timeout: 10000 }, async () => {
     const eventsDir = path.join(tmpDir, "events");
     server.startFileWatcher();
-    await new Promise((r) => setTimeout(r, 100)); // give FSEvents time to register
+    await waitForWatcherReady();
 
     const filename = "event_remove_original.json";
     const originalPath = writeEventFile(eventsDir, filename, validEvent);
@@ -206,7 +209,7 @@ describe("file watcher — processed files are moved to processed/", () => {
   it("creates events/processed/ directory if missing", { timeout: 10000 }, async () => {
     const eventsDir = path.join(tmpDir, "events");
     server.startFileWatcher();
-    await new Promise((r) => setTimeout(r, 100)); // give FSEvents time to register
+    await waitForWatcherReady();
 
     expect(fs.existsSync(path.join(eventsDir, "processed"))).toBe(false);
 
