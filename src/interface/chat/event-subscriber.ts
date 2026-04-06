@@ -35,6 +35,7 @@ export class EventSubscriber extends EventEmitter {
 
   /** Start listening to SSE stream from daemon EventServer */
   async subscribe(): Promise<void> {
+    this.abortController?.abort();
     this.abortController = new AbortController();
     await this.connect(false);
   }
@@ -101,7 +102,8 @@ export class EventSubscriber extends EventEmitter {
       if (line.startsWith("event: ")) {
         eventType = line.slice(7).trim();
       } else if (line.startsWith("data: ")) {
-        data += line.slice(6);
+        data += (data ? "
+" : "") + line.slice(6);
       }
     }
 
