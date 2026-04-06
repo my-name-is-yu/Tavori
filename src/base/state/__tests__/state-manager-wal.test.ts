@@ -138,4 +138,45 @@ describe("StateManager WAL integration", () => {
     const loaded = await sm.loadGoal("g-compat");
     expect(loaded).not.toBeNull();
   });
+
+  it("replay is idempotent on second init", async () => {
+    // Step 1: create goal dir and write an intent without commit
+    const goalId = "g-idempotent";
+    const goalDir = path.join(tmpDir, "goals", goalId);
+    fs.mkdirSync(goalDir, { recursive: true });
+
+    const goal = makeGoal({ id: goalId, description: "original" });
+    await appendWALRecord(goalId, tmpDir, {
+      op: "save_goal",
+      data: goal,
+      ts: "2026-01-01T00:00:00.000Z",
+    });
+
+    // Step 2: first init replays the uncommitted intent
+    const sm1 = new StateManager(tmpDir, undefined, { walEnabled: true });
+    await sm1.init();
+
+    const loaded1 = await sm1.loadGoal(goalId);
+    expect(loaded1).not.toBeNull();
+    expect(loaded1!.id).toBe(goalId);
+
+    // WAL should now contain a commit record (H2 fix)
+    const recordsAfterFirst = await readWAL(goalId, tmpDir);
+    const commits = recordsAfterFirst.filter((r) => r.op === "commit");
+    expect(commits.length).toBeGreaterThanOrEqual(1);
+
+    // Step 3: second init should NOT replay (commit record exists)
+    const sm2 = new StateManager(tmpDir, undefined, { walEnabled: true });
+    await sm2.init();
+
+    const loaded2 = await sm2.loadGoal(goalId);
+    expect(loaded2).not.toBeNull();
+    expect(loaded2!.id).toBe(goalId);
+    expect(loaded2!.description).toBe("original");
+
+    // WAL should still have same number of commits (no extra replay)
+    const recordsAfterSecond = await readWAL(goalId, tmpDir);
+    const commitsAfterSecond = recordsAfterSecond.filter((r) => r.op === "commit");
+    expect(commitsAfterSecond.length).toBe(commits.length);
+  });
 });
