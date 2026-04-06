@@ -541,7 +541,7 @@ export async function runSetupWizard(): Promise<number> {
     } catch {
       p.log.warn("Could not save daemon port to daemon.json");
     }
-    p.log.info(`Daemon port ${daemonPort} saved. Run `pulseed` to start.`);
+    p.log.info("Daemon port " + daemonPort + " saved. Run pulseed to start.");
   }
 
   p.outro("\ud83c\udf31 Seeds planted. Time to grow.");
