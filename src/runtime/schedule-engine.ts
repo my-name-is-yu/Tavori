@@ -11,10 +11,10 @@ import {
   type ScheduleEntry,
   type ScheduleResult,
 } from "./types/schedule.js";
+import { executeCron, executeGoalTrigger, executeProbe } from "./schedule-engine-layers.js";
 import type { IDataSourceAdapter } from "../platform/observation/data-source-adapter.js";
 import type { DataSourceRegistry } from "../platform/observation/data-source-adapter.js";
 import type { ILLMClient } from "../base/llm/llm-client.js";
-import { detectChange } from "./change-detector.js";
 
 const SCHEDULES_FILE = "schedules.json";
 
@@ -31,7 +31,9 @@ interface ScheduleEngineDeps {
   // the full Report pipeline (which requires Report schema fields like id, goal_id, generated_at).
   // Using Record<string,unknown> here allows ScheduleEngine to dispatch without constructing
   // a full Report object. Full Report integration deferred to Phase 4.
-  notificationDispatcher?: { dispatch(report: Record<string, unknown>): Promise<void> };
+  notificationDispatcher?: { dispatch(report: Record<string, unknown>): Promise<any> };
+  coreLoop?: { run(goalId: string, options?: { maxIterations?: number }): Promise<any> };
+  stateManager?: { loadGoal(goalId: string): Promise<any> };
 }
 
 const noopLogger = {
@@ -46,7 +48,9 @@ export class ScheduleEngine {
   private logger: NonNullable<ScheduleEngineDeps["logger"]>;
   private dataSourceRegistry?: Map<string, IDataSourceAdapter> | DataSourceRegistry;
   private llmClient?: ILLMClient;
-  private notificationDispatcher?: { dispatch(report: Record<string, unknown>): Promise<void> };
+  private notificationDispatcher?: { dispatch(report: Record<string, unknown>): Promise<any> };
+  private coreLoop?: { run(goalId: string, options?: { maxIterations?: number }): Promise<any> };
+  private stateManager?: { loadGoal(goalId: string): Promise<any> };
 
   constructor(deps: ScheduleEngineDeps) {
     this.schedulesPath = path.join(deps.baseDir, SCHEDULES_FILE);
@@ -54,6 +58,8 @@ export class ScheduleEngine {
     this.dataSourceRegistry = deps.dataSourceRegistry;
     this.llmClient = deps.llmClient;
     this.notificationDispatcher = deps.notificationDispatcher;
+    this.coreLoop = deps.coreLoop;
+    this.stateManager = deps.stateManager;
   }
 
   // ─── Persistence ───
@@ -92,6 +98,9 @@ export class ScheduleEngine {
       | "baseline_results"
       | "total_executions"
       | "total_tokens_used"
+      | "max_tokens_per_day"
+      | "tokens_used_today"
+      | "budget_reset_at"
     >
   ): Promise<ScheduleEntry> {
     const now = new Date().toISOString();
@@ -131,6 +140,19 @@ export class ScheduleEngine {
   }
 
   async tick(): Promise<ScheduleResult[]> {
+    // Reset daily budget for entries whose budget_reset_at is null or in the past
+    const nowMs = Date.now();
+    for (let i = 0; i < this.entries.length; i++) {
+      const e = this.entries[i]!;
+      if (!e.budget_reset_at || new Date(e.budget_reset_at).getTime() <= nowMs) {
+        this.entries[i] = {
+          ...e,
+          tokens_used_today: 0,
+          budget_reset_at: new Date(nowMs + 24 * 60 * 60 * 1000).toISOString(),
+        };
+      }
+    }
+
     const due = await this.getDueEntries();
     const results: ScheduleResult[] = [];
 
@@ -141,6 +163,10 @@ export class ScheduleEngine {
         result = await this.executeHeartbeat(entry);
       } else if (entry.layer === "probe") {
         result = await this.executeProbe(entry);
+      } else if (entry.layer === "cron") {
+        result = await this.executeCron(entry);
+      } else if (entry.layer === "goal_trigger") {
+        result = await this.executeGoalTrigger(entry);
       } else {
         result = ScheduleResultSchema.parse({
           entry_id: entry.id,
@@ -148,7 +174,7 @@ export class ScheduleEngine {
           duration_ms: 0,
           fired_at: new Date().toISOString(),
         });
-        this.logger.info(`Skipping non-heartbeat/probe entry: ${entry.name} (layer=${entry.layer})`);
+        this.logger.info(`Skipping unknown layer entry: ${entry.name} (layer=${entry.layer})`);
       }
 
       // Update entry state
@@ -167,6 +193,7 @@ export class ScheduleEngine {
           updated_at: new Date().toISOString(),
           total_executions: e.total_executions + 1,
           total_tokens_used: e.total_tokens_used + (result.tokens_used ?? 0),
+          tokens_used_today: (e.tokens_used_today ?? 0) + (result.tokens_used ?? 0),
           consecutive_failures: newFailures,
         };
 
@@ -214,131 +241,45 @@ export class ScheduleEngine {
   // ─── Probe execution (Phase 2) ───
 
   async executeProbe(entry: ScheduleEntry): Promise<ScheduleResult> {
-    const firedAt = new Date().toISOString();
-    const start = Date.now();
-    const cfg = entry.probe;
-
-    if (!cfg) {
-      return ScheduleResultSchema.parse({
-        entry_id: entry.id,
-        status: "error",
-        duration_ms: 0,
-        error_message: "No probe config",
-        fired_at: firedAt,
-      });
-    }
-
-    // Look up data source adapter
-    let adapter: IDataSourceAdapter | undefined;
-    if (this.dataSourceRegistry) {
-      if (this.dataSourceRegistry instanceof Map) {
-        adapter = this.dataSourceRegistry.get(cfg.data_source_id);
-      } else {
-        try {
-          adapter = (this.dataSourceRegistry as DataSourceRegistry).getSource(cfg.data_source_id);
-        } catch {
-          adapter = undefined;
+    return executeProbe(entry, {
+      ...this.layerDeps(),
+      updateBaseline: (entryId, value, windowSize) => {
+        const idx = this.entries.findIndex((e) => e.id === entryId);
+        if (idx !== -1) {
+          const updated = [...this.entries[idx].baseline_results, value];
+          this.entries[idx] = {
+            ...this.entries[idx],
+            baseline_results: updated.slice(-windowSize),
+          };
         }
-      }
-    }
-    if (!adapter) {
-      return ScheduleResultSchema.parse({
-        entry_id: entry.id,
-        status: "error",
-        duration_ms: 0,
-        error_message: `Data source not found: ${cfg.data_source_id}`,
-        fired_at: firedAt,
-      });
-    }
-
-    try {
-      // Execute probe query
-      // dimension_name comes AFTER query_params spread so it is authoritative and cannot be
-      // accidentally overridden by user-supplied query_params.
-      const queryResult = await adapter.query({
-        timeout_ms: 10000,
-        ...cfg.query_params,
-        dimension_name: cfg.data_source_id,
-      } as Parameters<typeof adapter.query>[0]);
-
-      const currentValue = queryResult.value ?? queryResult.raw;
-
-      // Detect change
-      const { changed, details } = detectChange(
-        cfg.change_detector.mode,
-        currentValue,
-        entry.baseline_results,
-        cfg.change_detector.threshold_value
-      );
-
-      this.logger.info(`Probe "${entry.name}": ${details}`);
-
-      let tokensUsed = 0;
-      let outputSummary: string | undefined;
-
-      // Optional LLM analysis on change
-      if (changed && cfg.llm_on_change && this.llmClient) {
-        const prompt = cfg.llm_prompt_template
-          ? cfg.llm_prompt_template.replace("{{result}}", JSON.stringify(currentValue))
-          : `A scheduled probe detected a change. Current result: ${JSON.stringify(currentValue)}. Previous baselines: ${JSON.stringify(entry.baseline_results.slice(-3))}. Is this change significant? Respond concisely.`;
-
-        try {
-          const llmResponse = await this.llmClient.sendMessage(
-            [{ role: "user", content: prompt }],
-            { model_tier: "light" }
-          );
-          tokensUsed = (llmResponse.usage?.input_tokens ?? 0) + (llmResponse.usage?.output_tokens ?? 0);
-          outputSummary = llmResponse.content;
-        } catch (err) {
-          this.logger.warn(`Probe "${entry.name}" LLM analysis failed: ${err instanceof Error ? err.message : String(err)}`);
-        }
-      }
-
-      // Update baseline_results
-      const windowSize = cfg.change_detector.baseline_window;
-      const idx = this.entries.findIndex((e) => e.id === entry.id);
-      if (idx !== -1) {
-        const updated = [...this.entries[idx].baseline_results, currentValue];
-        this.entries[idx] = {
-          ...this.entries[idx],
-          baseline_results: updated.slice(-windowSize),
-        };
-      }
-
-      // Dispatch change notification
-      if (changed) {
-        await this.dispatchNotification({
-          report_type: "schedule_change",
-          entry_id: entry.id,
-          entry_name: entry.name,
-          details,
-          output_summary: outputSummary,
-        });
-      }
-
-      return ScheduleResultSchema.parse({
-        entry_id: entry.id,
-        status: "ok",
-        duration_ms: Date.now() - start,
-        fired_at: firedAt,
-        tokens_used: tokensUsed,
-        change_detected: changed,
-        output_summary: outputSummary,
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`Probe "${entry.name}" failed: ${msg}`);
-      return ScheduleResultSchema.parse({
-        entry_id: entry.id,
-        status: "error",
-        duration_ms: Date.now() - start,
-        error_message: msg,
-        fired_at: firedAt,
-      });
-    }
+      },
+    });
   }
 
-  // ─── Escalation logic ───
+  // ─── Cron execution (Phase 3) ───
+
+  async executeCron(entry: ScheduleEntry): Promise<ScheduleResult> {
+    return executeCron(entry, this.layerDeps());
+  }
+
+  // ─── GoalTrigger execution (Phase 3) ───
+
+  async executeGoalTrigger(entry: ScheduleEntry): Promise<ScheduleResult> {
+    return executeGoalTrigger(entry, this.layerDeps());
+  }
+
+  private layerDeps() {
+    return {
+      dataSourceRegistry: this.dataSourceRegistry,
+      llmClient: this.llmClient,
+      notificationDispatcher: this.notificationDispatcher,
+      coreLoop: this.coreLoop,
+      stateManager: this.stateManager,
+      logger: this.logger,
+    };
+  }
+
+    // ─── Escalation logic ───
 
   private async checkEscalation(
     entry: ScheduleEntry,

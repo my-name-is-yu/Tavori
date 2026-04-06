@@ -239,7 +239,7 @@ describe("Heartbeat execution", () => {
     expect(updated.consecutive_failures).toBe(0);
   });
 
-  it("tick skips non-heartbeat layers in Phase 1", async () => {
+  it("tick routes cron entry without config to error (Phase 3)", async () => {
     const entry = await engine.addEntry({
       name: "cron-entry",
       layer: "cron",
@@ -256,7 +256,9 @@ describe("Heartbeat execution", () => {
     const results = await engine.tick();
     const result = results.find((r) => r.entry_id === entry.id);
     expect(result).toBeDefined();
-    expect(result!.status).toBe("skipped");
+    // Phase 3: cron entries are now executed — without a cron config they return error
+    expect(result!.status).toBe("error");
+    expect(result!.error_message).toContain("No cron config");
   });
 });
 
@@ -942,5 +944,538 @@ describe('Probe execution edge cases', () => {
     expect(updatedTarget.enabled).toBe(true);
     // next_fire_at should have been set to a time <= now (i.e., immediate firing)
     expect(new Date(updatedTarget.next_fire_at).getTime()).toBeLessThanOrEqual(beforeTick + 5000);
+  });
+});
+
+// ─── Phase 3: Cron execution ───
+
+function makeCronEntry(overrides: Partial<ScheduleEntry> = {}): Omit<
+  ScheduleEntry,
+  "id" | "created_at" | "updated_at" | "last_fired_at" | "next_fire_at" |
+  "consecutive_failures" | "last_escalation_at" | "baseline_results" |
+  "total_executions" | "total_tokens_used" | "max_tokens_per_day" | "tokens_used_today" | "budget_reset_at"
+> {
+  return {
+    name: "test-cron",
+    layer: "cron",
+    trigger: { type: "interval", seconds: 3600 },
+    enabled: true,
+    cron: {
+      prompt_template: "Summarize current status: {{test-source}}",
+      context_sources: ["test-source"],
+      output_format: "notification",
+      max_tokens: 1000,
+    },
+    ...overrides,
+  };
+}
+
+function makeGoalTriggerEntry(overrides: Partial<ScheduleEntry> = {}): Omit<
+  ScheduleEntry,
+  "id" | "created_at" | "updated_at" | "last_fired_at" | "next_fire_at" |
+  "consecutive_failures" | "last_escalation_at" | "baseline_results" |
+  "total_executions" | "total_tokens_used" | "max_tokens_per_day" | "tokens_used_today" | "budget_reset_at"
+> {
+  return {
+    name: "test-goal-trigger",
+    layer: "goal_trigger",
+    trigger: { type: "interval", seconds: 3600 },
+    enabled: true,
+    goal_trigger: {
+      goal_id: "test-goal-id",
+      max_iterations: 5,
+      skip_if_active: true,
+    },
+    ...overrides,
+  };
+}
+
+describe("Cron execution (Phase 3)", () => {
+  it("executeCron gathers context and calls LLM", async () => {
+    const adapter = makeMockAdapter("status: ok");
+    const registry = new Map([["test-source", adapter]]);
+    const mockLlm = {
+      sendMessage: vi.fn().mockResolvedValue({
+        content: "All systems operational.",
+        usage: { input_tokens: 50, output_tokens: 30 },
+      }),
+      parseJSON: vi.fn(),
+    };
+
+    const eng = new ScheduleEngine({
+      baseDir: tempDir,
+      dataSourceRegistry: registry,
+      llmClient: mockLlm as unknown as import("../../base/llm/llm-client.js").ILLMClient,
+    });
+
+    const entry = await eng.addEntry(makeCronEntry());
+    const result = await (eng as any).executeCron(entry);
+
+    expect(result.status).toBe("ok");
+    expect(mockLlm.sendMessage).toHaveBeenCalledOnce();
+    expect(result.tokens_used).toBeGreaterThan(0);
+  });
+
+  it("executeCron interpolates prompt template with context", async () => {
+    const adapter = makeMockAdapter("my-data");
+    const registry = new Map([["test-source", adapter]]);
+    let capturedPrompt = "";
+    const mockLlm = {
+      sendMessage: vi.fn().mockImplementation(async (messages: any[]) => {
+        capturedPrompt = messages[0].content;
+        return { content: "done", usage: { input_tokens: 10, output_tokens: 5 } };
+      }),
+      parseJSON: vi.fn(),
+    };
+
+    const eng = new ScheduleEngine({
+      baseDir: tempDir,
+      dataSourceRegistry: registry,
+      llmClient: mockLlm as unknown as import("../../base/llm/llm-client.js").ILLMClient,
+    });
+
+    const entry = await eng.addEntry(makeCronEntry());
+    await (eng as any).executeCron(entry);
+
+    expect(capturedPrompt).toContain("my-data");
+    expect(capturedPrompt).not.toContain("{{test-source}}");
+  });
+
+  it("executeCron skips when daily budget exceeded", async () => {
+    const eng = new ScheduleEngine({ baseDir: tempDir });
+
+    const entry = await eng.addEntry(makeCronEntry());
+
+    // Set tokens_used_today to exceed budget
+    const entries = eng.getEntries();
+    entries[0]!.tokens_used_today = 100001;
+    entries[0]!.max_tokens_per_day = 100000;
+
+    const result = await (eng as any).executeCron(eng.getEntries()[0]);
+    expect(result.status).toBe("skipped");
+    expect(result.error_message).toContain("daily budget exceeded");
+  });
+
+  it("executeCron dispatches notification on output_format notification", async () => {
+    const adapter = makeMockAdapter("data");
+    const registry = new Map([["test-source", adapter]]);
+    const notifications: Record<string, unknown>[] = [];
+    const mockLlm = {
+      sendMessage: vi.fn().mockResolvedValue({
+        content: "summary",
+        usage: { input_tokens: 10, output_tokens: 5 },
+      }),
+      parseJSON: vi.fn(),
+    };
+
+    const eng = new ScheduleEngine({
+      baseDir: tempDir,
+      dataSourceRegistry: registry,
+      llmClient: mockLlm as unknown as import("../../base/llm/llm-client.js").ILLMClient,
+      notificationDispatcher: { dispatch: async (r) => { notifications.push(r); } },
+    });
+
+    const entry = await eng.addEntry(makeCronEntry());
+    await (eng as any).executeCron(entry);
+
+    expect(notifications.some((n) => n["report_type"] === "schedule_report_ready")).toBe(true);
+  });
+
+  it("executeCron returns output_summary", async () => {
+    const adapter = makeMockAdapter("val");
+    const registry = new Map([["test-source", adapter]]);
+    const mockLlm = {
+      sendMessage: vi.fn().mockResolvedValue({
+        content: "The summary text.",
+        usage: { input_tokens: 10, output_tokens: 8 },
+      }),
+      parseJSON: vi.fn(),
+    };
+
+    const eng = new ScheduleEngine({
+      baseDir: tempDir,
+      dataSourceRegistry: registry,
+      llmClient: mockLlm as unknown as import("../../base/llm/llm-client.js").ILLMClient,
+    });
+
+    const entry = await eng.addEntry(makeCronEntry());
+    const result = await (eng as any).executeCron(entry);
+
+    expect(result.output_summary).toBe("The summary text.");
+  });
+
+  it("executeCron handles missing context source gracefully", async () => {
+    // No registry — source will not be found
+    const mockLlm = {
+      sendMessage: vi.fn().mockResolvedValue({
+        content: "summary without context",
+        usage: { input_tokens: 10, output_tokens: 5 },
+      }),
+      parseJSON: vi.fn(),
+    };
+
+    const eng = new ScheduleEngine({
+      baseDir: tempDir,
+      llmClient: mockLlm as unknown as import("../../base/llm/llm-client.js").ILLMClient,
+    });
+
+    const entry = await eng.addEntry(makeCronEntry());
+    const result = await (eng as any).executeCron(entry);
+
+    // Should still complete — missing source just results in empty string interpolation
+    expect(result.status).toBe("ok");
+    expect(mockLlm.sendMessage).toHaveBeenCalledOnce();
+  });
+
+  it("executeCron returns error when no cron config", async () => {
+    const eng = new ScheduleEngine({ baseDir: tempDir });
+    const entry = await eng.addEntry(makeCronEntry());
+    const result = await (eng as any).executeCron({ ...entry, cron: undefined });
+    expect(result.status).toBe("error");
+    expect(result.error_message).toContain("No cron config");
+  });
+});
+
+// ─── Phase 3: GoalTrigger execution ───
+
+describe("GoalTrigger execution (Phase 3)", () => {
+  it("executeGoalTrigger calls coreLoop.run with correct args", async () => {
+    const mockCoreLoop = {
+      run: vi.fn().mockResolvedValue({ finalStatus: "completed", totalIterations: 3 }),
+    };
+
+    const eng = new ScheduleEngine({
+      baseDir: tempDir,
+      coreLoop: mockCoreLoop,
+    });
+
+    const entry = await eng.addEntry(makeGoalTriggerEntry());
+    const result = await (eng as any).executeGoalTrigger(entry);
+
+    expect(result.status).toBe("ok");
+    expect(mockCoreLoop.run).toHaveBeenCalledWith("test-goal-id", { maxIterations: 5 });
+  });
+
+  it("executeGoalTrigger skips when goal is active and skip_if_active is true", async () => {
+    const mockCoreLoop = {
+      run: vi.fn().mockResolvedValue({ finalStatus: "completed", totalIterations: 1 }),
+    };
+    const mockStateManager = {
+      loadGoal: vi.fn().mockResolvedValue({ status: "active" }),
+    };
+
+    const eng = new ScheduleEngine({
+      baseDir: tempDir,
+      coreLoop: mockCoreLoop,
+      stateManager: mockStateManager,
+    });
+
+    const entry = await eng.addEntry(makeGoalTriggerEntry());
+    const result = await (eng as any).executeGoalTrigger(entry);
+
+    expect(result.status).toBe("skipped");
+    expect(result.error_message).toContain("already active");
+    expect(mockCoreLoop.run).not.toHaveBeenCalled();
+  });
+
+  it("executeGoalTrigger runs when skip_if_active is false even if goal is active", async () => {
+    const mockCoreLoop = {
+      run: vi.fn().mockResolvedValue({ finalStatus: "completed", totalIterations: 1 }),
+    };
+    const mockStateManager = {
+      loadGoal: vi.fn().mockResolvedValue({ status: "active" }),
+    };
+
+    const eng = new ScheduleEngine({
+      baseDir: tempDir,
+      coreLoop: mockCoreLoop,
+      stateManager: mockStateManager,
+    });
+
+    const entry = await eng.addEntry(makeGoalTriggerEntry({
+      goal_trigger: { goal_id: "test-goal-id", max_iterations: 5, skip_if_active: false },
+    }));
+    const result = await (eng as any).executeGoalTrigger(entry);
+
+    expect(result.status).toBe("ok");
+    expect(mockCoreLoop.run).toHaveBeenCalledOnce();
+  });
+
+  it("executeGoalTrigger skips when daily budget exceeded", async () => {
+    const mockCoreLoop = {
+      run: vi.fn().mockResolvedValue({ finalStatus: "completed", totalIterations: 1 }),
+    };
+
+    const eng = new ScheduleEngine({ baseDir: tempDir, coreLoop: mockCoreLoop });
+    const entry = await eng.addEntry(makeGoalTriggerEntry());
+
+    const entries = eng.getEntries();
+    entries[0]!.tokens_used_today = 100001;
+    entries[0]!.max_tokens_per_day = 100000;
+
+    const result = await (eng as any).executeGoalTrigger(eng.getEntries()[0]);
+    expect(result.status).toBe("skipped");
+    expect(mockCoreLoop.run).not.toHaveBeenCalled();
+  });
+
+  it("executeGoalTrigger handles coreLoop error gracefully", async () => {
+    const mockCoreLoop = {
+      run: vi.fn().mockRejectedValue(new Error("loop failed")),
+    };
+
+    const eng = new ScheduleEngine({ baseDir: tempDir, coreLoop: mockCoreLoop });
+    const entry = await eng.addEntry(makeGoalTriggerEntry());
+    const result = await (eng as any).executeGoalTrigger(entry);
+
+    expect(result.status).toBe("error");
+    expect(result.error_message).toContain("loop failed");
+  });
+
+  it("executeGoalTrigger returns error when no coreLoop provided", async () => {
+    const eng = new ScheduleEngine({ baseDir: tempDir });
+    const entry = await eng.addEntry(makeGoalTriggerEntry());
+    const result = await (eng as any).executeGoalTrigger(entry);
+    expect(result.status).toBe("error");
+    expect(result.error_message).toContain("No coreLoop");
+  });
+});
+
+// ─── Phase 3: tick() routing ───
+
+describe("tick() routing (Phase 3)", () => {
+  it("tick routes cron entries to executeCron", async () => {
+    const adapter = makeMockAdapter("data");
+    const registry = new Map([["test-source", adapter]]);
+    const mockLlm = {
+      sendMessage: vi.fn().mockResolvedValue({
+        content: "done",
+        usage: { input_tokens: 5, output_tokens: 5 },
+      }),
+      parseJSON: vi.fn(),
+    };
+
+    const eng = new ScheduleEngine({
+      baseDir: tempDir,
+      dataSourceRegistry: registry,
+      llmClient: mockLlm as unknown as import("../../base/llm/llm-client.js").ILLMClient,
+    });
+
+    const entry = await eng.addEntry(makeCronEntry());
+    const entries = eng.getEntries();
+    entries[0]!.next_fire_at = new Date(Date.now() - 1000).toISOString();
+    await eng.saveEntries();
+    await eng.loadEntries();
+
+    const results = await eng.tick();
+    const result = results.find((r) => r.entry_id === entry.id);
+    expect(result).toBeDefined();
+    // executeCron calls LLM, so this won't be "skipped"
+    expect(result!.status).toBe("ok");
+    expect(mockLlm.sendMessage).toHaveBeenCalledOnce();
+  });
+
+  it("tick routes goal_trigger entries to executeGoalTrigger", async () => {
+    const mockCoreLoop = {
+      run: vi.fn().mockResolvedValue({ finalStatus: "completed", totalIterations: 1 }),
+    };
+
+    const eng = new ScheduleEngine({ baseDir: tempDir, coreLoop: mockCoreLoop });
+
+    const entry = await eng.addEntry(makeGoalTriggerEntry({
+      goal_trigger: { goal_id: "test-goal-id", max_iterations: 5, skip_if_active: false },
+    }));
+    const entries = eng.getEntries();
+    entries[0]!.next_fire_at = new Date(Date.now() - 1000).toISOString();
+    await eng.saveEntries();
+    await eng.loadEntries();
+
+    const results = await eng.tick();
+    const result = results.find((r) => r.entry_id === entry.id);
+    expect(result).toBeDefined();
+    expect(result!.status).toBe("ok");
+    expect(mockCoreLoop.run).toHaveBeenCalledOnce();
+  });
+});
+
+// ─── Phase 3: Budget management ───
+
+describe("Budget management (Phase 3)", () => {
+  it("budget resets after 24 hours", async () => {
+    const eng = new ScheduleEngine({ baseDir: tempDir });
+
+    const entry = await eng.addEntry(makeCronEntry());
+
+    // Set budget_reset_at to the past and tokens_used_today to a high value
+    const entries = eng.getEntries();
+    entries[0]!.tokens_used_today = 50000;
+    entries[0]!.budget_reset_at = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString(); // 25h ago
+    entries[0]!.next_fire_at = new Date(Date.now() - 1000).toISOString();
+    await eng.saveEntries();
+    await eng.loadEntries();
+
+    // tick() should reset the budget first
+    // We don't need it to fully execute — just check budget was reset
+    // Set up a minimal scenario that passes (no llmClient, so cron won't call LLM)
+    await eng.tick();
+
+    // After tick, tokens_used_today should have been reset (then incremented by 0 since no LLM)
+    const updated = eng.getEntries().find((e) => e.id === entry.id)!;
+    // Budget was reset to 0 then possibly incremented by 0 tokens
+    expect(updated.tokens_used_today).toBe(0);
+  });
+
+  it("budget accumulated across multiple ticks", async () => {
+    const adapter = makeMockAdapter("data");
+    const registry = new Map([["test-source", adapter]]);
+    const mockLlm = {
+      sendMessage: vi.fn().mockResolvedValue({
+        content: "summary",
+        usage: { input_tokens: 100, output_tokens: 50 },
+      }),
+      parseJSON: vi.fn(),
+    };
+
+    const eng = new ScheduleEngine({
+      baseDir: tempDir,
+      dataSourceRegistry: registry,
+      llmClient: mockLlm as unknown as import("../../base/llm/llm-client.js").ILLMClient,
+    });
+
+    const entry = await eng.addEntry(makeCronEntry());
+
+    // Set budget_reset_at to far future so it doesn't reset
+    const entries = eng.getEntries();
+    entries[0]!.budget_reset_at = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
+    const setDue = async () => {
+      const es = eng.getEntries();
+      const idx = es.findIndex((e) => e.id === entry.id);
+      if (idx !== -1) es[idx]!.next_fire_at = new Date(Date.now() - 1000).toISOString();
+      await eng.saveEntries();
+      await eng.loadEntries();
+    };
+
+    await setDue();
+    await eng.tick();
+
+    const after1 = eng.getEntries().find((e) => e.id === entry.id)!;
+    expect(after1.tokens_used_today).toBe(150); // 100 + 50
+
+    await setDue();
+    await eng.tick();
+
+    const after2 = eng.getEntries().find((e) => e.id === entry.id)!;
+    expect(after2.tokens_used_today).toBe(300); // 150 + 150
+  });
+});
+
+// ─── Phase 3: Additional reviewer-required tests ───
+
+describe("Cron execution — output_format both and report (Phase 3)", () => {
+  it("executeCron with output_format 'both' dispatches notification and includes output_summary", async () => {
+    const adapter = makeMockAdapter("data-both");
+    const registry = new Map([["test-source", adapter]]);
+    const notifications: Record<string, unknown>[] = [];
+    const mockLlm = {
+      sendMessage: vi.fn().mockResolvedValue({
+        content: "summary for both",
+        usage: { input_tokens: 10, output_tokens: 5 },
+      }),
+      parseJSON: vi.fn(),
+    };
+
+    const eng = new ScheduleEngine({
+      baseDir: tempDir,
+      dataSourceRegistry: registry,
+      llmClient: mockLlm as unknown as import("../../base/llm/llm-client.js").ILLMClient,
+      notificationDispatcher: { dispatch: async (r) => { notifications.push(r); } },
+    });
+
+    const entry = await eng.addEntry(makeCronEntry({
+      cron: {
+        prompt_template: "Summarize: {{test-source}}",
+        context_sources: ["test-source"],
+        output_format: "both",
+        max_tokens: 1000,
+      },
+    }));
+    const result = await (eng as any).executeCron(entry);
+
+    expect(result.status).toBe("ok");
+    expect(result.output_summary).toBe("summary for both");
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]!["report_type"]).toBe("schedule_report_ready");
+    expect(notifications[0]!["output_summary"]).toBe("summary for both");
+  });
+
+  it("executeCron with output_format 'report' logs warning about unimplemented report path", async () => {
+    const adapter = makeMockAdapter("data-report");
+    const registry = new Map([["test-source", adapter]]);
+    const warnMessages: string[] = [];
+    const mockLlm = {
+      sendMessage: vi.fn().mockResolvedValue({
+        content: "report summary",
+        usage: { input_tokens: 10, output_tokens: 5 },
+      }),
+      parseJSON: vi.fn(),
+    };
+    const mockLogger = {
+      info: vi.fn(),
+      warn: vi.fn().mockImplementation((msg: string) => { warnMessages.push(msg); }),
+      error: vi.fn(),
+    };
+
+    const eng = new ScheduleEngine({
+      baseDir: tempDir,
+      dataSourceRegistry: registry,
+      llmClient: mockLlm as unknown as import("../../base/llm/llm-client.js").ILLMClient,
+      logger: mockLogger,
+    });
+
+    const entry = await eng.addEntry(makeCronEntry({
+      cron: {
+        prompt_template: "Summarize: {{test-source}}",
+        context_sources: ["test-source"],
+        output_format: "report",
+        max_tokens: 1000,
+      },
+    }));
+    await (eng as any).executeCron(entry);
+
+    const reportWarn = warnMessages.find((m) => m.includes("not yet implemented"));
+    expect(reportWarn).toBeDefined();
+    expect(reportWarn).toContain("Phase 4");
+  });
+});
+
+describe("GoalTrigger execution — token accumulation (Phase 3)", () => {
+  it("executeGoalTrigger accumulates tokens from coreLoop result — defaults to 0 (TODO Phase 4)", async () => {
+    // LoopResult does not currently expose token usage. tokensUsed defaults to 0.
+    // When CoreLoop adds a tokensUsed field this test should be updated.
+    const mockCoreLoop = {
+      run: vi.fn().mockResolvedValue({
+        finalStatus: "completed",
+        totalIterations: 3,
+        goalId: "test-goal-id",
+        iterations: [],
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+      }),
+    };
+
+    const eng = new ScheduleEngine({
+      baseDir: tempDir,
+      coreLoop: mockCoreLoop,
+    });
+
+    const entry = await eng.addEntry(makeGoalTriggerEntry({
+      goal_trigger: { goal_id: "test-goal-id", max_iterations: 3, skip_if_active: false },
+    }));
+    const result = await (eng as any).executeGoalTrigger(entry);
+
+    expect(result.status).toBe("ok");
+    // tokens_used is 0 until LoopResult exposes token usage (Phase 4 TODO)
+    expect(result.tokens_used).toBe(0);
+    expect(mockCoreLoop.run).toHaveBeenCalledWith("test-goal-id", { maxIterations: 3 });
   });
 });
