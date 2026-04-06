@@ -52,6 +52,7 @@ export const DriveConfigSchema = z.object({
   deadline_horizon_hours: z.number().default(168),
   urgency_steepness: z.number().default(3.0),
   urgency_override_threshold: z.number().default(10.0),
+  pacing_urgency_weight: z.number().default(0.5),
   // Opportunity drive
   half_life_hours: z.number().default(12),
 });
@@ -76,6 +77,10 @@ export const DriveContextSchema = z.object({
     value: z.number(),
     detected_at: z.string(),
   })),
+  pacing: z.record(z.string(), z.object({
+    pacingRatio: z.number().nullable(),
+    pacingStatus: z.enum(["ahead", "on_track", "behind", "critical", "no_deadline"]),
+  })).default({}),
 });
 export type DriveContext = z.infer<typeof DriveContextSchema>;
 
