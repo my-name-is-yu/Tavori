@@ -74,6 +74,11 @@ export async function replayWAL(
       const intent = r as WALIntent;
       if (!committed.has(intent.ts)) {
         await applyFn(intent);
+        await appendWALRecord(goalId, baseDir, {
+          op: "commit",
+          ref_ts: intent.ts,
+          ts: new Date().toISOString(),
+        });
         count++;
       }
     }
