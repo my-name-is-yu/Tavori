@@ -106,6 +106,8 @@ export class DaemonRunner {
   private eventBus: EventBus | undefined;
   private commandBus: CommandBus | undefined;
   private supervisor: LoopSupervisor | null = null;
+  private cronScheduleInterval: ReturnType<typeof setInterval> | null = null;
+  private shutdownResolve: (() => void) | null = null;
   private readonly deps: DaemonDeps;
 
   constructor(deps: DaemonDeps) {
@@ -328,7 +330,25 @@ export class DaemonRunner {
     //    tests that provide eventBus without a supervisor)
     try {
       if (this.supervisor && this.eventBus) {
+        // Supervisor handles goal execution; cron/schedule must also run in this mode.
         await this.supervisor.start(mergedGoalIds);
+
+        // Run cron/schedule processing once immediately, then on a periodic interval.
+        const cronIntervalMs = this.config.base_interval_ms ?? this.config.check_interval_ms;
+        await this.processCronTasks();
+        await this.processScheduleEntries();
+        this.cronScheduleInterval = setInterval(async () => {
+          if (this.shuttingDown) return;
+          await this.processCronTasks();
+          await this.processScheduleEntries();
+        }, cronIntervalMs);
+
+        // Block until stop() is called.
+        await new Promise<void>((resolve) => {
+          this.shutdownResolve = resolve;
+          // If already stopped before we get here, resolve immediately.
+          if (!this.running) resolve();
+        });
       } else {
         // Fallback: sequential mode
         await this.runLoop(mergedGoalIds);
@@ -347,6 +367,10 @@ export class DaemonRunner {
       }
       // Stop file watcher and EventServer
       clearInterval(heartbeatInterval);
+      if (this.cronScheduleInterval !== null) {
+        clearInterval(this.cronScheduleInterval);
+        this.cronScheduleInterval = null;
+      }
       await this.supervisor?.shutdown();
       this.driveSystem.stopWatcher();
       if (this.gateway) {
@@ -380,6 +404,7 @@ export class DaemonRunner {
    */
   stop(): void {
     this.running = false;
+    this.shutdownResolve?.();
     this.sleepAbortController?.abort();
     this.state.status = "stopping";
     // Save current active_goals as interrupted_goals for state restoration
