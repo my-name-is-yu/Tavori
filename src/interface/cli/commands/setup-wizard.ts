@@ -85,7 +85,7 @@ async function stepUserName(): Promise<string> {
       message: "What should we call you?",
       placeholder: "Your name",
       validate: (v) => {
-        if (!v.trim()) return "Name cannot be empty.";
+        if (!v || !v.trim()) return "Name cannot be empty.";
         return undefined;
       },
     })
@@ -169,7 +169,7 @@ async function stepModel(provider: Provider): Promise<string> {
       await p.text({
         message: "Enter model name:",
         validate: (v) => {
-          if (!v.trim()) return "Model name cannot be empty.";
+          if (!v || !v.trim()) return "Model name cannot be empty.";
           return undefined;
         },
       })
