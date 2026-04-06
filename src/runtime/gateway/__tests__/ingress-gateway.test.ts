@@ -1,17 +1,19 @@
 import { describe, it, expect, vi } from "vitest";
 import { IngressGateway } from "../ingress-gateway.js";
-import type { ChannelAdapter, EnvelopeHandler } from "../channel-adapter.js";
+import type { ChannelAdapter, EnvelopeHandler, ReplyChannel } from "../channel-adapter.js";
 import type { Envelope } from "../../types/envelope.js";
 import { createEnvelope } from "../../types/envelope.js";
 
-function createMockAdapter(name: string): ChannelAdapter & { emitEnvelope: (e: Envelope) => void } {
+function createMockAdapter(name: string): ChannelAdapter & {
+  emitEnvelope: (e: Envelope, reply?: ReplyChannel) => void;
+} {
   let handler: EnvelopeHandler | null = null;
   return {
     name,
     start: vi.fn().mockResolvedValue(undefined),
     stop: vi.fn().mockResolvedValue(undefined),
     onEnvelope(h: EnvelopeHandler) { handler = h; },
-    emitEnvelope(e: Envelope) { handler?.(e); },
+    emitEnvelope(e: Envelope, reply?: ReplyChannel) { handler?.(e, reply); },
   };
 }
 
@@ -26,7 +28,7 @@ describe("IngressGateway", () => {
   it("throws on duplicate adapter name", () => {
     const gw = new IngressGateway();
     gw.registerAdapter(createMockAdapter("http"));
-    expect(() => gw.registerAdapter(createMockAdapter("http"))).toThrow('already registered');
+    expect(() => gw.registerAdapter(createMockAdapter("http"))).toThrow("already registered");
   });
 
   it("starts all adapters", async () => {
@@ -62,14 +64,13 @@ describe("IngressGateway", () => {
       payload: { foo: "bar" },
     });
     adapter.emitEnvelope(envelope);
-    expect(handler).toHaveBeenCalledWith(envelope);
+    expect(handler).toHaveBeenCalledWith(envelope, undefined);
   });
 
   it("drops envelopes when no handler registered", () => {
     const gw = new IngressGateway();
     const adapter = createMockAdapter("test");
     gw.registerAdapter(adapter);
-    // No handler set — should not throw
     const envelope = createEnvelope({
       type: "event",
       name: "test_event",
@@ -91,7 +92,6 @@ describe("IngressGateway", () => {
       source: "test",
       payload: {},
     });
-    // Should not throw — error is caught internally
     expect(() => adapter.emitEnvelope(envelope)).not.toThrow();
   });
 
@@ -101,5 +101,24 @@ describe("IngressGateway", () => {
     gw.registerAdapter(adapter);
     expect(gw.getAdapter("http")).toBe(adapter);
     expect(gw.getAdapter("unknown")).toBeUndefined();
+  });
+
+  it("forwards reply argument to handler", () => {
+    const gw = new IngressGateway();
+    const adapter = createMockAdapter("test");
+    const handler = vi.fn();
+    gw.registerAdapter(adapter);
+    gw.onEnvelope(handler);
+
+    const envelope = createEnvelope({
+      type: "command",
+      name: "ping",
+      source: "test",
+      payload: {},
+    });
+    const reply: ReplyChannel = { send: vi.fn(), close: vi.fn() };
+    adapter.emitEnvelope(envelope, reply);
+
+    expect(handler).toHaveBeenCalledWith(envelope, reply);
   });
 });

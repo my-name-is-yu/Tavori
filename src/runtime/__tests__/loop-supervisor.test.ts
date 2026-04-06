@@ -193,4 +193,79 @@ describe("LoopSupervisor", () => {
     await sv.shutdown();
     expect(max).toBeLessThanOrEqual(2);
   });
+
+  // ─── 8. Non-goal events are re-enqueued, not dropped ───
+
+  it('non-goal events are re-enqueued after pollAndAssign', async () => {
+    const { supervisor, eventBus } = makeSupervisor();
+    // Do not start the supervisor (no poll timer), just call start then immediately push
+    // a non-goal event and let the poll cycle run once via the timer
+    await supervisor.start([]);
+
+    // Push a non-goal event
+    const nonGoalEnvelope = createEnvelope({
+      type: 'event',
+      name: 'cron_task_due',
+      source: 'test',
+      goal_id: undefined,
+      payload: { taskId: 'task-1' },
+      priority: 'normal',
+    });
+    eventBus.push(nonGoalEnvelope);
+
+    // Wait for at least one poll cycle (pollIntervalMs=20)
+    await new Promise((r) => setTimeout(r, 60));
+    await supervisor.shutdown();
+
+    // The non-goal event should still be in the bus (re-enqueued)
+    const remaining = eventBus.pull();
+    expect(remaining).toBeDefined();
+    expect(remaining?.name).toBe('cron_task_due');
+  });
+
+  it('non-goal events do not consume idle worker slots', async () => {
+    let goalRunCount = 0;
+    const { supervisor, eventBus } = makeSupervisor(async (goalId: string) => {
+      goalRunCount++;
+      return makeLoopResult({ goalId });
+    });
+
+    await supervisor.start([]);
+
+    // Push a mix: non-goal event first, then a goal event
+    eventBus.push(createEnvelope({
+      type: 'event',
+      name: 'schedule_activated',
+      source: 'test',
+      goal_id: undefined,
+      payload: {},
+      priority: 'normal',
+    }));
+    eventBus.push(createEnvelope({
+      type: 'event',
+      name: 'goal_activated',
+      source: 'test',
+      goal_id: 'g-mix',
+      payload: {},
+      priority: 'normal',
+    }));
+
+    // Wait for processing
+    await new Promise((r) => setTimeout(r, 150));
+    await supervisor.shutdown();
+
+    // The goal should have been executed
+    expect(goalRunCount).toBeGreaterThanOrEqual(1);
+
+    // The schedule_activated event should have been re-enqueued and remain in the bus
+    // (no consumer for it in this test, so it stays)
+    // Drain bus to check
+    const remaining: string[] = [];
+    let env;
+    while ((env = eventBus.pull()) !== undefined) {
+      remaining.push(env.name);
+    }
+    // schedule_activated should appear among remaining events
+    expect(remaining).toContain('schedule_activated');
+  });
 });

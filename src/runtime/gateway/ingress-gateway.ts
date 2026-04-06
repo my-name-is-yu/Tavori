@@ -1,4 +1,4 @@
-import type { ChannelAdapter, EnvelopeHandler } from "./channel-adapter.js";
+import type { ChannelAdapter, EnvelopeHandler, ReplyChannel } from "./channel-adapter.js";
 import type { Envelope } from "../types/envelope.js";
 import type { Logger } from "../logger.js";
 
@@ -22,7 +22,7 @@ export class IngressGateway {
       throw new Error(`ChannelAdapter "${adapter.name}" already registered`);
     }
     this.adapters.set(adapter.name, adapter);
-    adapter.onEnvelope((envelope: Envelope) => this.routeEnvelope(envelope));
+    adapter.onEnvelope((envelope: Envelope, reply?: ReplyChannel) => this.routeEnvelope(envelope, reply));
     this.logger?.info(`Gateway: registered adapter "${adapter.name}"`);
   }
 
@@ -57,7 +57,7 @@ export class IngressGateway {
     return Array.from(this.adapters.keys());
   }
 
-  private routeEnvelope(envelope: Envelope): void {
+  private routeEnvelope(envelope: Envelope, reply?: ReplyChannel): void {
     if (!this.handler) {
       this.logger?.warn("Gateway: no handler registered, dropping envelope", {
         id: envelope.id,
@@ -66,7 +66,7 @@ export class IngressGateway {
       return;
     }
     try {
-      const result = this.handler(envelope);
+      const result = this.handler(envelope, reply);
       if (result instanceof Promise) {
         result.catch((err: unknown) => {
           this.logger?.error("Gateway: handler error", {

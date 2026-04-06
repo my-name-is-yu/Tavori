@@ -5,7 +5,7 @@ export interface ReplyChannel {
   close(): void;
 }
 
-export type EnvelopeHandler = (envelope: Envelope) => void | Promise<void>;
+export type EnvelopeHandler = (envelope: Envelope, reply?: ReplyChannel) => void | Promise<void>;
 
 /**
  * A ChannelAdapter receives protocol-specific input and emits Envelopes.

@@ -120,11 +120,15 @@ export class LoopSupervisor {
     if (!this.running) return;
 
     const idleWorkers = this.workers.filter(w => w.isIdle());
+    const requeue: Envelope[] = [];
     for (const worker of idleWorkers) {
       const envelope: Envelope | undefined = this.deps.eventBus.pull();
       if (envelope === undefined) break;
 
-      if (envelope.name !== 'goal_activated') continue;
+      if (envelope.name !== 'goal_activated') {
+        requeue.push(envelope);
+        continue;
+      }
 
       const goalId = envelope.goal_id;
       if (!goalId) continue;
@@ -143,6 +147,10 @@ export class LoopSupervisor {
         const idx = this.runningExecutions.indexOf(execution);
         if (idx !== -1) this.runningExecutions.splice(idx, 1);
       });
+    }
+
+    for (const env of requeue) {
+      this.deps.eventBus.push(env);
     }
   }
 
