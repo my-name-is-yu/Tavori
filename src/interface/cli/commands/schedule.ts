@@ -34,8 +34,8 @@ async function scheduleList(engine: ScheduleEngine): Promise<void> {
   }
   for (const e of entries) {
     const status = e.enabled ? "enabled" : "disabled";
-    const layer = e.config.layer;
-    const schedule = e.schedule.type === "cron" ? e.schedule.expression : `every ${e.schedule.seconds}s`;
+    const layer = e.layer;
+    const schedule = e.trigger.type === "cron" ? e.trigger.expression : `every ${e.trigger.seconds}s`;
     const lastFired = e.last_fired_at ?? "never";
     console.log(`  ${e.id.slice(0, 8)}  [${layer}] ${e.name}  (${schedule})  ${status}  last: ${lastFired}`);
   }
@@ -74,21 +74,21 @@ async function scheduleAdd(engine: ScheduleEngine, argv: string[]): Promise<void
   if (values.path) checkConfig.path = values.path;
   if (values.command) checkConfig.command = values.command;
 
-  const schedule = values.cron
+  const trigger = values.cron
     ? { type: "cron" as const, expression: values.cron as string }
     : { type: "interval" as const, seconds: parseInt(values.interval as string || "60", 10) };
 
   const entry = await engine.addEntry({
     name: values.name as string,
+    layer: "heartbeat",
+    trigger,
     enabled: true,
-    schedule,
-    config: {
-      layer: "heartbeat",
+    heartbeat: {
       check_type: checkType,
       check_config: checkConfig,
       failure_threshold: parseInt(values.threshold as string, 10),
+      timeout_ms: 5000,
     },
-    tags: [],
   });
 
   console.log(`Added schedule entry: ${entry.id} (${entry.name})`);
