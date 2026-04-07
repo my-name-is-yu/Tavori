@@ -13,6 +13,7 @@ import { StateManager } from "../../base/state/state-manager.js";
 import { loadProviderConfig } from "../../base/llm/provider-config.js";
 import { getPulseedDirPath } from "../../base/utils/paths.js";
 import { App, type ApprovalRequest } from "./app.js";
+import { isSafeBashCommand } from "./bash-mode.js";
 import { getCliLogger } from "../cli/cli-logger.js";
 import { ensureProviderConfig } from "../cli/ensure-api-key.js";
 import type { Task } from "../../base/types/task.js";
@@ -90,6 +91,7 @@ async function buildDeps() {
   const { MemoryLifecycleManager, DriveScoreAdapter } = await import("../../platform/knowledge/memory/memory-lifecycle.js");
   const { CharacterConfigManager } = await import("../../platform/traits/character-config.js");
   const { ChatRunner } = await import("../../interface/chat/chat-runner.js");
+  const { ToolRegistry, ToolExecutor, ToolPermissionManager, ConcurrencyController, createBuiltinTools } = await import("../../tools/index.js");
   const { ActionHandler } = await import("./actions.js");
   const { IntentRecognizer } = await import("./intent-recognizer.js");
   const GapCalculator = await import("../../platform/drive/gap-calculator.js");
@@ -101,6 +103,10 @@ async function buildDeps() {
   const llmClient = await buildLLMClient();
   const trustManager = new TrustManager(stateManager);
   const driveSystem = new DriveSystem(stateManager);
+  const toolRegistry = new ToolRegistry();
+  for (const tool of createBuiltinTools({ stateManager, trustManager })) {
+    toolRegistry.register(tool);
+  }
 
   const contextProvider = createWorkspaceContextProvider(
     { workDir: process.cwd() },
@@ -141,6 +147,25 @@ async function buildDeps() {
   const sessionManager = new SessionManager(stateManager, goalDependencyGraph);
   const strategyManager = new StrategyManager(stateManager, llmClient);
   const adapterRegistry = await buildAdapterRegistry(llmClient);
+  const permissionManager = new ToolPermissionManager({
+    trustManager,
+    allowRules: [
+      {
+        toolName: "shell",
+        inputMatcher: (input) =>
+          typeof input === "object" &&
+          input !== null &&
+          typeof (input as Record<string, unknown>)["command"] === "string" &&
+          isSafeBashCommand((input as Record<string, unknown>)["command"] as string),
+        reason: "safe shell command",
+      },
+    ],
+  });
+  const toolExecutor = new ToolExecutor({
+    registry: toolRegistry,
+    permissionManager,
+    concurrency: new ConcurrencyController(),
+  });
 
   // TUI approval: routed through ApprovalOverlay in the Ink render loop.
   let requestApproval: ((req: ApprovalRequest) => void) | null = null;
@@ -252,7 +277,7 @@ async function buildDeps() {
     const provConfig = await loadProviderConfig();
     const adapterType = provConfig.adapter ?? "claude_code_cli";
     const adapter = adapterRegistry.getAdapter(adapterType);
-    chatRunner = new ChatRunner({ stateManager, adapter, llmClient, trustManager });
+    chatRunner = new ChatRunner({ stateManager, adapter, llmClient, trustManager, registry: toolRegistry, toolExecutor });
   } catch (err) {
     getCliLogger().warn(`[pulseed] ChatRunner init failed — free-form chat disabled: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -264,7 +289,7 @@ async function buildDeps() {
   });
   const intentRecognizer = new IntentRecognizer(llmClient);
 
-  return { stateManager, llmClient, trustManager, coreLoop, goalNegotiator, reportingEngine, setRequestApproval, chatRunner, actionHandler, intentRecognizer };
+  return { stateManager, llmClient, trustManager, coreLoop, goalNegotiator, reportingEngine, setRequestApproval, chatRunner, actionHandler, intentRecognizer, toolExecutor };
 }
 
 // ─── Standalone mode ───
@@ -362,6 +387,32 @@ async function startTUIDaemonMode(): Promise<void> {
 
   const stateManager = new StateManager(baseDir);
   await stateManager.init();
+  const { TrustManager } = await import("../../platform/traits/trust-manager.js");
+  const { ToolRegistry, ToolExecutor, ToolPermissionManager, ConcurrencyController, createBuiltinTools } = await import("../../tools/index.js");
+  const trustManager = new TrustManager(stateManager);
+  const toolRegistry = new ToolRegistry();
+  for (const tool of createBuiltinTools({ stateManager, trustManager })) {
+    toolRegistry.register(tool);
+  }
+  const permissionManager = new ToolPermissionManager({
+    trustManager,
+    allowRules: [
+      {
+        toolName: "shell",
+        inputMatcher: (input) =>
+          typeof input === "object" &&
+          input !== null &&
+          typeof (input as Record<string, unknown>)["command"] === "string" &&
+          isSafeBashCommand((input as Record<string, unknown>)["command"] as string),
+        reason: "safe shell command",
+      },
+    ],
+  });
+  const toolExecutor = new ToolExecutor({
+    registry: toolRegistry,
+    permissionManager,
+    concurrency: new ConcurrencyController(),
+  });
 
   const providerConfig = await loadProviderConfig();
   const cwd = getCwd();

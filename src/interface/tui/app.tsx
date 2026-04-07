@@ -21,6 +21,7 @@ import { ApprovalOverlay } from "./approval-overlay.js";
 import { ReportView } from "./report-view.js";
 import { SEEDY_PIXEL } from "./seedy-art.js";
 import { FlickerOverlay } from "./flicker-overlay.js";
+import { extractBashCommand, formatShellOutput } from "./bash-mode.js";
 import type { Report } from "../../base/types/report.js";
 import { useLoop } from "./use-loop.js";
 import type { LoopState } from "./use-loop.js";
@@ -32,6 +33,7 @@ import type { TrustManager } from "../../platform/traits/trust-manager.js";
 import type { Task } from "../../base/types/task.js";
 import type { ChatRunner } from "../../interface/chat/chat-runner.js";
 import type { DaemonClient } from "../../runtime/daemon-client.js";
+import { ShellTool } from "../../tools/system/ShellTool/ShellTool.js";
 
 const MAX_MESSAGES = 200;
 
@@ -207,14 +209,16 @@ export function App({
   const [ctrlCPending, setCtrlCPending] = useState(false);
 
   // Expose setApprovalRequest to entry.ts via callback prop (standalone mode)
+  const showApprovalRequest = useCallback((req: ApprovalRequest) => {
+    approvalRequestRef.current = req;
+    setApprovalRequest(req);
+  }, []);
+
   useEffect(() => {
     if (onApprovalReady) {
-      onApprovalReady((req: ApprovalRequest) => {
-        approvalRequestRef.current = req;
-        setApprovalRequest(req);
-      });
+      onApprovalReady(showApprovalRequest);
     }
-  }, [onApprovalReady]);
+  }, [onApprovalReady, showApprovalRequest]);
 
   // Start ChatRunner session on mount (standalone mode)
   useEffect(() => {
@@ -298,6 +302,48 @@ export function App({
         const trimmedInput = input.trim().toLowerCase();
         if (trimmedInput === "/flicker") {
           setShowFlicker(true);
+          return;
+        }
+
+        const bashCommand = extractBashCommand(input);
+        if (bashCommand !== null) {
+          if (!bashCommand) {
+            setMessages((prev) => [...prev, {
+              id: randomUUID(),
+              role: "pulseed" as const,
+              text: "Shell command required after !",
+              timestamp: new Date(),
+              messageType: "warning" as const,
+            }].slice(-MAX_MESSAGES));
+            return;
+          }
+
+          const shellInput = { command: bashCommand, cwd: process.cwd(), timeoutMs: 120_000 };
+          const shellTool = new ShellTool();
+          const result = await shellTool.call(shellInput, {
+            cwd: process.cwd(),
+            goalId: "shell-mode",
+            trustBalance: 0,
+            preApproved: true,
+            approvalFn: async () => true,
+            trusted: true,
+          });
+          const shellOutput = result.data as { stdout?: string; stderr?: string; exitCode?: number } | null;
+          const text = shellOutput
+            ? formatShellOutput(bashCommand, {
+                stdout: shellOutput.stdout ?? "",
+                stderr: shellOutput.stderr ?? "",
+                exitCode: shellOutput.exitCode ?? (result.success ? 0 : 1),
+              })
+            : (result.error ? `Error: ${result.error}` : "Shell command completed.");
+
+          setMessages((prev) => [...prev, {
+            id: randomUUID(),
+            role: "pulseed" as const,
+            text,
+            timestamp: new Date(),
+            messageType: result.success ? ("info" as const) : ("error" as const),
+          }].slice(-MAX_MESSAGES));
           return;
         }
 

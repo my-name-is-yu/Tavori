@@ -27,6 +27,111 @@ export interface MarkdownLine {
   language?: string;
 }
 
+const WORD_SEGMENTER =
+  typeof Intl !== "undefined" && "Segmenter" in Intl
+    ? new Intl.Segmenter("en", { granularity: "word" })
+    : null;
+
+/**
+ * Wrap plain text to terminal rows at the given width.
+ * This is intentionally lightweight and shared by the TUI viewport logic.
+ */
+export function wrapTextToRows(text: string, width: number): string[] {
+  const safeWidth = Math.max(1, Math.floor(width));
+  const paragraphs = text.split("\n");
+  const rows: string[] = [];
+
+  for (const paragraph of paragraphs) {
+    if (paragraph === "") {
+      rows.push("");
+      continue;
+    }
+
+    const pieces = WORD_SEGMENTER
+      ? Array.from(WORD_SEGMENTER.segment(paragraph), (segment) => segment.segment)
+      : paragraph.match(/\S+\s*|\s+/g) ?? [paragraph];
+
+    let current = "";
+
+    for (const piece of pieces) {
+      if (!piece) continue;
+
+      if (piece.length > safeWidth) {
+        if (current) {
+          rows.push(current);
+          current = "";
+        }
+        for (let i = 0; i < piece.length; i += safeWidth) {
+          rows.push(piece.slice(i, i + safeWidth));
+        }
+        continue;
+      }
+
+      if (current.length + piece.length <= safeWidth) {
+        current += piece;
+        continue;
+      }
+
+      if (current) {
+        rows.push(current);
+      }
+      current = piece.trimStart();
+    }
+
+    if (current) {
+      rows.push(current);
+    }
+  }
+
+  return rows.length > 0 ? rows : [""];
+}
+
+/**
+ * Estimate how many terminal rows a plain text line will occupy at the given width.
+ * This is intentionally approximate but good enough for TUI window sizing.
+ */
+export function estimateWrappedLineCount(text: string, width: number): number {
+  return wrapTextToRows(text, width).length;
+}
+
+/**
+ * Expand a rendered markdown line into terminal rows at the given width.
+ * Line-level style is preserved, but inline segment styling is flattened on wrapped rows.
+ */
+export function splitMarkdownLineToRows(line: MarkdownLine, width: number): MarkdownLine[] {
+  return wrapTextToRows(line.text, width).map((text) => ({
+    text,
+    bold: line.bold,
+    dim: line.dim,
+    italic: line.italic,
+  }));
+}
+
+/**
+ * Estimate how many terminal rows a rendered markdown block will occupy.
+ */
+export function estimateMarkdownHeight(text: string, width: number): number {
+  const lines = renderMarkdownLines(text);
+  return lines.reduce((total, line) => total + splitMarkdownLineToRows(line, width).length, 0);
+}
+
+/**
+ * Clamp rendered markdown lines to a maximum number of rows.
+ * If the content overflows, the tail is replaced with a truncation note.
+ */
+export function clampMarkdownLines(lines: MarkdownLine[], maxLines: number): MarkdownLine[] {
+  if (maxLines <= 0 || lines.length <= maxLines) {
+    return lines;
+  }
+
+  const keptCount = Math.max(1, maxLines - 1);
+  const truncatedCount = lines.length - keptCount;
+  return [
+    ...lines.slice(0, keptCount),
+    { text: `... ${truncatedCount} more line${truncatedCount === 1 ? "" : "s"}`, dim: true },
+  ];
+}
+
 /**
  * Convert markdown text to an array of MarkdownLine objects.
  * Each line represents a visual line in the output.
@@ -251,4 +356,3 @@ export function highlightCodeLine(line: string, language: string): MarkdownSegme
 
   return segments;
 }
-

@@ -53,7 +53,7 @@
     "test:changed": "vitest run --changed",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "tui": "node dist/tui/entry.js",
+    "tui": "node dist/interface/tui/entry.js",
     "test:remote": "bash scripts/test-remote.sh",
     "test:remote:coverage": "bash scripts/test-remote.sh --coverage",
     "lint:boundaries": "eslint -c eslint.config.mjs 'src/**/*.ts'"

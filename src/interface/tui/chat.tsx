@@ -4,14 +4,14 @@
 // Renders visible messages based on terminal height, with scroll indicator,
 // styled user/AI distinction, spinner, timestamps, and color-coded message types.
 
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import { Box, Text, useInput, useStdout } from "ink";
 import TextInput from "ink-text-input";
 import Spinner from "ink-spinner";
 import {
   renderMarkdownLines,
-  type MarkdownLine,
-  type MarkdownSegment,
+  splitMarkdownLineToRows,
+  wrapTextToRows,
 } from "./markdown-renderer.js";
 import { fuzzyMatch, fuzzyFilter } from "./fuzzy.js";
 import { getClipboardContent } from "./clipboard.js";
@@ -19,6 +19,7 @@ import { theme, getMessageTypeColor } from "./theme.js";
 import { pickSpinnerVerb } from "./spinner-verbs.js";
 import { ShimmerText } from "./shimmer-text.js";
 import { positionCursorInFrame, buildCursorEscape } from "./cursor-tracker.js";
+import { isBashModeInput } from "./bash-mode.js";
 
 export interface ChatMessage {
   id: string;
@@ -37,113 +38,163 @@ interface ChatProps {
   noFlicker?: boolean;
 }
 
-function formatTime(date: Date): string {
-  return date.toLocaleTimeString("en-US", {
-    hour12: false,
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+const CHAT_UI_RESERVED_ROWS = 8;
+const DEFAULT_MESSAGE_WIDTH_PADDING = 4;
+const MESSAGE_INNER_PADDING = 2;
+const MIN_MESSAGE_WIDTH = 10;
+const SCROLL_LINE_STEP = 3;
 
-/** Render a single inline segment with its formatting */
-function SegmentComponent({
-  seg,
-  baseColor,
-}: {
-  seg: MarkdownSegment;
-  baseColor?: string;
-}) {
-  if (seg.bold && seg.italic) {
-    return (
-      <Text bold italic color={seg.color ?? baseColor}>
-        {seg.text}
-      </Text>
-    );
-  }
-  if (seg.bold) {
-    return (
-      <Text bold color={seg.color ?? baseColor}>
-        {seg.text}
-      </Text>
-    );
-  }
-  if (seg.italic) {
-    return (
-      <Text italic color={seg.color ?? baseColor}>
-        {seg.text}
-      </Text>
-    );
-  }
-  if (seg.code) {
-    return <Text color={theme.codeInline}>{seg.text}</Text>;
-  }
-  if (seg.color) {
-    return <Text color={seg.color}>{seg.text}</Text>;
-  }
-  return <Text color={baseColor}>{seg.text}</Text>;
-}
-
-/** Render a single MarkdownLine with appropriate styling */
-function MarkdownLineComponent({
-  line,
-  color,
-}: {
-  line: MarkdownLine;
+interface ChatDisplayRow {
+  key: string;
+  kind: "user" | "pulseed" | "spacer";
+  text: string;
   color?: string;
-}) {
-  // Empty line -> render as blank space
-  if (line.text === "") {
-    return <Text> </Text>;
-  }
-
-  // Lines with inline segments (formatted text or syntax-highlighted code)
-  if (line.segments && line.segments.length > 0) {
-    return (
-      <Box flexDirection="row" flexWrap="wrap">
-        {line.segments.map((seg, i) => (
-          <SegmentComponent key={i} seg={seg} baseColor={color} />
-        ))}
-      </Box>
-    );
-  }
-
-  const props: Record<string, unknown> = {};
-  if (line.bold) props.bold = true;
-  if (line.dim) props.dimColor = true;
-  if (color) props.color = color;
-
-  return <Text {...props}>{line.text}</Text>;
+  backgroundColor?: string;
+  bold?: boolean;
+  dim?: boolean;
+  italic?: boolean;
+  marginLeft?: number;
+  paddingX?: number;
 }
 
-/** Memoized message row — prevents spinner re-renders from flickering messages */
-const MessageRow = React.memo(function MessageRow({
-  msg,
-}: {
-  msg: ChatMessage;
-}) {
+export interface ChatViewport {
+  rows: ChatDisplayRow[];
+  hiddenAboveRows: number;
+  hiddenBelowRows: number;
+  totalRows: number;
+  maxVisibleRows: number;
+}
+
+export interface ScrollRequest {
+  direction: "up" | "down";
+  kind: "page" | "line";
+}
+
+function getRowWidth(termCols: number): number {
+  return Math.max(MIN_MESSAGE_WIDTH, termCols - DEFAULT_MESSAGE_WIDTH_PADDING - MESSAGE_INNER_PADDING);
+}
+
+function wrapUserMessageRows(text: string, width: number): string[] {
+  const wrapped = wrapTextToRows(text, width);
+  return wrapped.map((line, index) => (index === 0 ? `◉ ${line}` : `  ${line}`));
+}
+
+function buildMessageRows(msg: ChatMessage, width: number): ChatDisplayRow[] {
   if (msg.role === "user") {
-    return (
-      <Box marginBottom={1}>
-        <Box paddingX={1}>
-          <Text color="#1A1A1A" backgroundColor="#D9D9D9">
-            ◉ {msg.text}
-          </Text>
-        </Box>
-      </Box>
-    );
+    const rows = wrapUserMessageRows(msg.text, width);
+    return rows.map((text, index) => ({
+      key: `${msg.id}:user:${index}`,
+      kind: "user",
+      text,
+      backgroundColor: "#D9D9D9",
+      color: "#1A1A1A",
+      paddingX: 1,
+    }));
   }
+
   const typeColor = getMessageTypeColor(msg.messageType);
-  const mdLines = renderMarkdownLines(msg.text);
-  return (
-    <Box flexDirection="column" marginBottom={1} marginLeft={2}>
-      <Box flexDirection="column">
-        {mdLines.map((line, j) => (
-          <MarkdownLineComponent key={j} line={line} color={typeColor} />
-        ))}
-      </Box>
-    </Box>
-  );
-});
+  const rendered = renderMarkdownLines(msg.text);
+  const rows: ChatDisplayRow[] = [];
+
+  rendered.forEach((line, lineIndex) => {
+    const wrappedLines = splitMarkdownLineToRows(line, width);
+      wrappedLines.forEach((wrappedLine, rowIndex) => {
+        rows.push({
+          key: `${msg.id}:pulseed:${lineIndex}:${rowIndex}`,
+          kind: "pulseed",
+          text: wrappedLine.text,
+        color: typeColor,
+          bold: wrappedLine.bold,
+          dim: wrappedLine.dim,
+          italic: wrappedLine.italic,
+          marginLeft: 2,
+        });
+    });
+  });
+
+  if (rows.length === 0) {
+    rows.push({
+      key: `${msg.id}:pulseed:empty`,
+      kind: "pulseed",
+      text: "",
+      color: typeColor,
+      marginLeft: 2,
+    });
+  }
+
+  return rows;
+}
+
+export function buildChatViewport(
+  messages: ChatMessage[],
+  termCols: number,
+  termRows: number,
+  scrollOffsetRows: number,
+): ChatViewport {
+  const maxVisibleRows = Math.max(1, termRows - CHAT_UI_RESERVED_ROWS);
+  const rowWidth = getRowWidth(termCols);
+  const flatRows: ChatDisplayRow[] = [];
+
+  for (const msg of messages) {
+    flatRows.push(...buildMessageRows(msg, rowWidth));
+    flatRows.push({
+      key: `${msg.id}:spacer`,
+      kind: "spacer",
+      text: "",
+    });
+  }
+
+  const totalRows = flatRows.length;
+  const visibleEndIdx = Math.max(0, totalRows - scrollOffsetRows);
+  const visibleStartIdx = Math.max(0, visibleEndIdx - maxVisibleRows);
+
+  return {
+    rows: flatRows.slice(visibleStartIdx, visibleEndIdx),
+    hiddenAboveRows: visibleStartIdx,
+    hiddenBelowRows: totalRows - visibleEndIdx,
+    totalRows,
+    maxVisibleRows,
+  };
+}
+
+export function getScrollRequest(
+  inputChar: string,
+  key: {
+    upArrow?: boolean;
+    downArrow?: boolean;
+    shift?: boolean;
+    meta?: boolean;
+    ctrl?: boolean;
+    pageUp?: boolean;
+    pageDown?: boolean;
+  }
+): ScrollRequest | null {
+  if (key.pageUp || inputChar === "[5~") {
+    return { direction: "up", kind: "page" };
+  }
+  if (key.pageDown || inputChar === "[6~") {
+    return { direction: "down", kind: "page" };
+  }
+  if (key.ctrl && (inputChar === "u" || inputChar === "U")) {
+    return { direction: "up", kind: "page" };
+  }
+  if (key.ctrl && (inputChar === "d" || inputChar === "D")) {
+    return { direction: "down", kind: "page" };
+  }
+  if (key.meta && key.upArrow) {
+    return { direction: "up", kind: "line" };
+  }
+  if (key.meta && key.downArrow) {
+    return { direction: "down", kind: "line" };
+  }
+  if (key.shift && key.upArrow) {
+    return { direction: "up", kind: "line" };
+  }
+  if (key.shift && key.downArrow) {
+    return { direction: "down", kind: "line" };
+  }
+  return null;
+}
 
 type Suggestion = {
   name: string;
@@ -312,7 +363,6 @@ export function Chat({
 
   // ── Scroll offset for chat scroll ──
   const [scrollOffset, setScrollOffset] = React.useState(0);
-  const prevMsgCount = React.useRef(messages.length);
 
   // ── Clipboard change detection — poll every 500ms ──
   React.useEffect(() => {
@@ -356,54 +406,28 @@ export function Chat({
     ? []
     : getMatchingSuggestions(input, goalNames);
   const hasMatches = matches.length > 0;
+  const bashMode = isBashModeInput(input);
 
   // Scroll-slicing: clip messages to visible terminal height
   const { stdout } = useStdout();
   const termRows = stdout?.rows ?? 24;
   const termCols = stdout?.columns ?? 80;
-  const maxVisible = Math.max(1, termRows - 8); // reserve rows for header, input, status bar
+  const viewport = buildChatViewport(messages, termCols, termRows, scrollOffset);
 
-  // Auto-scroll to bottom when new messages arrive and we're at the bottom
-  React.useEffect(() => {
-    if (messages.length > prevMsgCount.current && scrollOffset === 0) {
-      // Already at bottom — nothing to do
-    } else if (messages.length > prevMsgCount.current && scrollOffset > 0) {
-      // New message arrived while scrolled up — keep position but user can see indicator
-    }
-    prevMsgCount.current = messages.length;
-  }, [messages.length, scrollOffset]);
-
-  const endIdx = messages.length - scrollOffset;
-  const startIdx = Math.max(0, endIdx - maxVisible);
-  const visibleMessages = messages.slice(
-    startIdx,
-    endIdx > 0 ? endIdx : undefined,
-  );
-  const hiddenAbove = startIdx;
-  const hiddenBelow = scrollOffset;
+  const applyScroll = useCallback((direction: "up" | "down", kind: "page" | "line") => {
+    setScrollOffset((prev) => {
+      const maxOffset = Math.max(0, viewport.totalRows - 1);
+      const amount = kind === "page" ? viewport.maxVisibleRows : SCROLL_LINE_STEP;
+      const delta = direction === "up" ? amount : -amount;
+      return Math.max(0, Math.min(maxOffset, prev + delta));
+    });
+  }, [viewport.maxVisibleRows, viewport.totalRows]);
 
   useInput(
     (inputChar, key) => {
-      // ── Scroll: Shift+↑/↓ or PageUp/PageDown ──
-      if (key.upArrow && key.shift) {
-        setScrollOffset((prev) =>
-          Math.min(prev + 3, Math.max(0, messages.length - 1)),
-        );
-        return;
-      }
-      if (key.downArrow && key.shift) {
-        setScrollOffset((prev) => Math.max(0, prev - 3));
-        return;
-      }
-      // PageUp/PageDown via escape sequences
-      if (inputChar === "[5~") {
-        setScrollOffset((prev) =>
-          Math.min(prev + 5, Math.max(0, messages.length - 1)),
-        );
-        return;
-      }
-      if (inputChar === "[6~") {
-        setScrollOffset((prev) => Math.max(0, prev - 5));
+      const scrollRequest = getScrollRequest(inputChar, key);
+      if (scrollRequest) {
+        applyScroll(scrollRequest.direction, scrollRequest.kind);
         return;
       }
 
@@ -553,19 +577,44 @@ export function Chat({
   return (
     <Box flexDirection="column" flexGrow={1} overflow="hidden">
       {/* Scroll indicator for older messages */}
-      {hiddenAbove > 0 && (
+      {viewport.hiddenAboveRows > 0 && (
         <Text dimColor>
-          {"↑"} {hiddenAbove} earlier messages
+          {"↑"} {viewport.hiddenAboveRows} earlier lines
         </Text>
       )}
 
       {/* All visible messages rendered with memoized rows to prevent flicker */}
       <Box flexDirection="column" flexGrow={1} justifyContent="flex-end">
-        {visibleMessages.map((msg) => {
+        {viewport.rows.map((row) => {
+          if (row.kind === "spacer") {
+            return (
+              <Box key={row.key} height={1}>
+                <Text> </Text>
+              </Box>
+            );
+          }
+
+          const text = row.text;
+          const textProps: Record<string, unknown> = {};
+          if (row.color) textProps.color = row.color;
+          if (row.bold) textProps.bold = true;
+          if (row.dim) textProps.dimColor = true;
+          if (row.italic) textProps.italic = true;
+
+          if (row.kind === "user") {
+            return (
+              <Box key={row.key} paddingX={row.paddingX ?? 0}>
+                <Text {...textProps} backgroundColor={row.backgroundColor}>
+                  {text}
+                </Text>
+              </Box>
+            );
+          }
+
           return (
-            <React.Fragment key={msg.id}>
-              <MessageRow msg={msg} />
-            </React.Fragment>
+            <Box key={row.key} marginLeft={row.marginLeft ?? 0}>
+              <Text {...textProps}>{text}</Text>
+            </Box>
           );
         })}
 
@@ -578,9 +627,9 @@ export function Chat({
         )}
 
         {/* Scroll-down indicator */}
-        {hiddenBelow > 0 && (
+        {viewport.hiddenBelowRows > 0 && (
           <Text dimColor>
-            {"↓"} {hiddenBelow} newer messages
+            {"↓"} {viewport.hiddenBelowRows} newer lines
           </Text>
         )}
 
@@ -593,13 +642,13 @@ export function Chat({
         <Box flexDirection="column">
           <Box
             borderStyle="single"
-            borderColor={theme.border}
+            borderColor={bashMode ? theme.command : theme.border}
             borderBottom={false}
             borderLeft={false}
             borderRight={false}
           />
           <Box>
-            <Text color={theme.userPrompt} bold>
+            <Text color={bashMode ? theme.command : theme.userPrompt} bold>
               {"​◉ "}
             </Text>
             <TextInput
@@ -609,16 +658,17 @@ export function Chat({
                 setInput(val);
               }}
               onSubmit={handleSubmit}
-              placeholder="/ for commands"
+              placeholder={bashMode ? "! for bash mode" : "/ for commands"}
             />
           </Box>
           <Box
             borderStyle="single"
-            borderColor={theme.border}
+            borderColor={bashMode ? theme.command : theme.border}
             borderTop={false}
             borderLeft={false}
             borderRight={false}
           />
+          {bashMode && <Text color={theme.command}>! for bash mode</Text>}
           {emptyHint && (
             <Text dimColor> Type a message or /help for commands</Text>
           )}
