@@ -174,6 +174,38 @@ export const DreamLogConfigSchema = z.object({
     decisionHeuristics: z.boolean().default(false),
     graphTraversal: z.boolean().default(false),
   }).default({}),
+  consolidation: z.object({
+    memory: z.object({ enabled: z.boolean().default(true) }).default({}),
+    agentMemory: z.object({ enabled: z.boolean().default(true) }).default({}),
+    crossGoalTransfer: z.object({
+      enabled: z.boolean().default(true),
+      topKActiveGoals: z.number().int().positive().default(20),
+    }).default({}),
+    decisionHistory: z.object({
+      enabled: z.boolean().default(true),
+      retentionDays: z.number().int().positive().default(30),
+    }).default({}),
+    stallHistory: z.object({ enabled: z.boolean().default(true) }).default({}),
+    sessionData: z.object({
+      enabled: z.boolean().default(true),
+      archiveAfterDays: z.number().int().positive().default(30),
+    }).default({}),
+    iterationLogs: z.object({
+      enabled: z.boolean().default(true),
+      archiveAfterDays: z.number().int().positive().default(30),
+    }).default({}),
+    gapHistory: z.object({ enabled: z.boolean().default(true) }).default({}),
+    observationLogs: z.object({ enabled: z.boolean().default(true) }).default({}),
+    reports: z.object({ enabled: z.boolean().default(true) }).default({}),
+    trustScores: z.object({ enabled: z.boolean().default(true) }).default({}),
+    strategyHistory: z.object({ enabled: z.boolean().default(true) }).default({}),
+    verificationArtifacts: z.object({ enabled: z.boolean().default(true) }).default({}),
+    archive: z.object({ enabled: z.boolean().default(true) }).default({}),
+    knowledgeOptimization: z.object({
+      enabled: z.boolean().default(true),
+      redundancySimilarityThreshold: z.number().min(0).max(1).default(0.95),
+    }).default({}),
+  }).default({}),
 });
 
 export type DreamLogConfig = z.infer<typeof DreamLogConfigSchema>;
@@ -266,3 +298,23 @@ export const DreamRunReportSchema = z.object({
 });
 
 export type DreamRunReport = z.infer<typeof DreamRunReportSchema>;
+
+export const ConsolidationCategoryResultSchema = z.object({
+  category: z.string(),
+  status: z.enum(["completed", "skipped", "failed"]),
+  metrics: z.record(z.string(), z.number()).default({}),
+  warnings: z.array(z.string()).default([]),
+  errors: z.array(z.string()).default([]),
+});
+
+export type ConsolidationCategoryResult = z.infer<typeof ConsolidationCategoryResultSchema>;
+
+export const DreamReportSchema = z.object({
+  timestamp: z.string(),
+  tier: DreamTierSchema,
+  status: z.enum(["completed", "partial", "failed"]),
+  categories: z.array(ConsolidationCategoryResultSchema).default([]),
+  summary: z.string(),
+});
+
+export type DreamReport = z.infer<typeof DreamReportSchema>;
