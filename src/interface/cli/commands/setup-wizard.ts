@@ -63,6 +63,7 @@ export async function runSetupWizard(): Promise<number> {
     `Adapter:   ${adapter}`,
     `API Key:   ${maskKey(apiKey)}`,
     `Daemon:    ${startDaemon ? `yes (port ${daemonPort})` : "no"}`,
+    `Notify:    ${notificationConfig ? "yes" : "no"}`,
   ];
   if (notificationConfig) {
     const channels =
@@ -117,6 +118,16 @@ export async function runSetupWizard(): Promise<number> {
       p.log.warn("Could not save daemon port to daemon.json");
     }
     p.log.info("Daemon port " + daemonPort + " saved. Run pulseed to start.");
+  }
+
+  if (notificationConfig) {
+    const notifPath = path.join(dir, "notification.json");
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(notifPath, JSON.stringify(notificationConfig, null, 2));
+    } catch (err) {
+      p.log.warn(`Could not save notification config: ${err}`);
+    }
   }
 
   p.outro("\ud83c\udf31 Seeds planted. Time to grow.");

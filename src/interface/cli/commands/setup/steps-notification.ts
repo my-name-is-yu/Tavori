@@ -1,89 +1,69 @@
 import * as p from "@clack/prompts";
-import * as fs from "node:fs";
-import * as path from "node:path";
-import { getPulseedDirPath } from "../../../../base/utils/paths.js";
-import {
-  NotificationConfigSchema,
-  type NotificationChannel,
-} from "../../../../runtime/types/notification.js";
+import type { NotificationConfig } from "../../../../base/types/notification.js";
 import { guardCancel } from "./utils.js";
 
-function validateUrl(value: string | undefined): string | undefined {
-  if (!value) return "Enter a valid URL.";
+export function validateUrl(url: string | undefined): string | undefined {
+  if (!url) return "URL is required.";
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    return "URL must start with http:// or https://";
+  }
+
   try {
-    new URL(value);
+    new URL(url);
     return undefined;
   } catch {
     return "Enter a valid URL.";
   }
 }
 
-export async function stepNotification(): Promise<{ channels: NotificationChannel[] } | null> {
-  p.note(
-    "Tip: Run `seedpulse telegram setup` to add Telegram notifications later.",
-    "Notifications"
-  );
-
-  const choice = guardCancel(
-    await p.select({
-      message: "How would you like to receive notifications?",
-      options: [
-        { value: "console" as const, label: "Console only (default)" },
-        { value: "slack" as const, label: "Slack webhook" },
-        { value: "webhook" as const, label: "Generic webhook" },
-        { value: "skip" as const, label: "Skip for now" },
-      ],
+export async function stepNotification(): Promise<NotificationConfig | null> {
+  const enableNotifications = guardCancel(
+    await p.confirm({
+      message: "Configure notifications now?",
+      initialValue: false,
     })
   );
 
-  if (choice === "skip") {
-    const confirmed = guardCancel(
-      await p.confirm({
-        message: "Skip notification setup for now?",
-        initialValue: true,
-      })
-    );
-    return confirmed ? null : stepNotification();
+  if (!enableNotifications) {
+    return null;
   }
 
-  const channels: NotificationChannel[] = [];
+  const webhookUrl = guardCancel(
+    await p.text({
+      message: "Enter a notification webhook URL:",
+      placeholder: "https://example.com/webhook",
+      validate: validateUrl,
+    })
+  );
 
-  if (choice === "slack") {
-    const webhookUrl = guardCancel(
-      await p.text({
-        message: "Enter Slack webhook URL:",
-        placeholder: "https://hooks.slack.com/services/...",
-        validate: validateUrl,
-      })
-    );
-    channels.push({
-      type: "slack",
-      webhook_url: webhookUrl,
-      report_types: [],
-      format: "compact",
-    });
-  }
-
-  if (choice === "webhook") {
-    const url = guardCancel(
-      await p.text({
-        message: "Enter webhook URL:",
-        placeholder: "https://example.com/webhooks/pulseed",
-        validate: validateUrl,
-      })
-    );
-    channels.push({
-      type: "webhook",
-      url,
-      report_types: [],
-      format: "json",
-    });
-  }
-
-  const config = NotificationConfigSchema.parse({ channels });
-  const configPath = path.join(getPulseedDirPath(), "notification.json");
-  fs.mkdirSync(getPulseedDirPath(), { recursive: true });
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
-
-  return { channels: config.channels };
+  return {
+    channels: [
+      {
+        type: "webhook",
+        url: webhookUrl,
+        report_types: [],
+        format: "json",
+      },
+    ],
+    do_not_disturb: {
+      enabled: false,
+      start_hour: 22,
+      end_hour: 7,
+      exceptions: ["urgent_alert", "approval_request"],
+    },
+    cooldown: {
+      urgent_alert: 0,
+      approval_request: 0,
+      stall_escalation: 60,
+      strategy_change: 30,
+      goal_completion: 0,
+      capability_escalation: 60,
+    },
+    goal_overrides: [],
+    batching: {
+      enabled: false,
+      window_minutes: 30,
+      digest_format: "compact",
+    },
+  };
 }
