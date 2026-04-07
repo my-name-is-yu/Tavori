@@ -48,7 +48,8 @@ import { checkIrreversibleApproval as _checkIrreversibleApproval } from "./task-
 import { runPipelineTaskCycle as runPipelineTaskCycleFn } from "./task-pipeline-cycle.js";
 import type { KnowledgeTransfer } from "../../../platform/knowledge/transfer/knowledge-transfer.js";
 import type { KnowledgeManager } from "../../../platform/knowledge/knowledge-manager.js";
-import { generateReflection, saveReflectionAsKnowledge, getReflectionsForGoal, formatReflectionsForPrompt } from "../reflection-generator.js";
+import { getReflectionsForGoal, formatReflectionsForPrompt } from "../reflection-generator.js";
+import { persistTaskCycleSideEffects } from "./task-side-effects.js";
 import { GuardrailRunner } from "../../../platform/traits/guardrail-runner.js";
 import type { HookManager } from "../../../runtime/hook-manager.js";
 import type { ToolExecutor } from "../../../tools/executor.js";
@@ -430,46 +431,19 @@ export class TaskLifecycle {
     const verdictResult = await this.handleVerdict(taskForVerification, verificationResult);
     this.logger?.info(`[task] verdict: ${verdictResult.action}`, { taskId: task.id });
 
-    // Save checkpoint on task completion/interruption
-    const adapterType = adapter?.adapterType ?? 'unknown';
-    const contextSnapshot = [
-      `goal: ${goalId}`,
-      `dimension: ${targetDimension}`,
-      `strategy: ${task.strategy_id ?? 'none'}`,
-      `action: ${verdictResult.action}`,
-    ].join('\n');
-    const intermediateResults: string[] = [];
-    if (executionResult?.output) intermediateResults.push(typeof executionResult.output === 'string' ? executionResult.output.slice(0, 2000) : JSON.stringify(executionResult.output).slice(0, 2000));
-    const gapValue = gapVector?.gaps?.[0]?.normalized_gap;
-
-    await this.sessionManager.saveCheckpoint({
+    await persistTaskCycleSideEffects({
       goalId,
-      taskId: task.id,
-      agentId: typeof adapterType === 'string' ? adapterType : 'unknown',
-      sessionContextSnapshot: contextSnapshot,
-      intermediateResults,
-      metadata: { strategy_id: task.strategy_id, gap_value: gapValue },
-    }).catch(e => this.logger?.warn?.('checkpoint save failed', { error: String(e) }));
-
-    // Generate and save reflection (non-fatal, only when knowledgeManager is available)
-    if (this.knowledgeManager) {
-      try {
-        const reflection = await generateReflection({
-          task: verdictResult.task,
-          verificationResult,
-          goalId,
-          strategyId: verdictResult.task.strategy_id ?? undefined,
-          llmClient: this.llmClient,
-          logger: this.logger,
-        });
-        await saveReflectionAsKnowledge(
-          this.knowledgeManager, goalId, reflection,
-          verdictResult.task.work_description,
-        );
-      } catch (e) {
-        this.logger?.warn?.("Reflection generation failed (non-fatal)", { error: String(e) });
-      }
-    }
+      targetDimension,
+      task: verdictResult.task,
+      verificationResult,
+      executionResult,
+      adapter,
+      sessionManager: this.sessionManager,
+      llmClient: this.llmClient,
+      knowledgeManager: this.knowledgeManager,
+      logger: this.logger,
+      gapValue: gapVector?.gaps?.[0]?.normalized_gap,
+    });
 
     return {
       task: verdictResult.task,
