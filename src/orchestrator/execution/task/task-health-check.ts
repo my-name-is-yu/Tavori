@@ -9,7 +9,7 @@
 import type { ToolExecutor } from "../../../tools/executor.js";
 import type { ToolCallContext } from "../../../tools/types.js";
 
-type ShellCommandFn = (
+export type ShellCommandFn = (
   argv: string[],
   options: { timeout: number; cwd: string }
 ) => Promise<{ success: boolean; stdout: string; stderr: string }>;
