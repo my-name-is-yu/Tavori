@@ -212,16 +212,31 @@ const COMMANDS: Suggestion[] = [
 /** Commands that accept a goal name as argument */
 const GOAL_ARG_COMMANDS = ["/run ", "/start "];
 
-function getMatchingSuggestions(
+function isExactCommandMatch(input: string): boolean {
+  const normalized = input.trim().toLowerCase();
+  return COMMANDS.some((cmd) => {
+    if (cmd.name.toLowerCase() === normalized) return true;
+    return cmd.aliases.some((alias) => {
+      const normalizedAlias = alias.startsWith("/") ? alias : `/${alias}`;
+      return normalizedAlias.toLowerCase() === normalized;
+    });
+  });
+}
+
+export function getMatchingSuggestions(
   input: string,
   goalNames: string[],
 ): Suggestion[] {
   if (!input.startsWith("/")) return [];
+  if (isExactCommandMatch(input)) return [];
 
   // Check if user typed a command that expects a goal name argument
   for (const prefix of GOAL_ARG_COMMANDS) {
     if (input.startsWith(prefix)) {
       const goalQuery = input.slice(prefix.length);
+      if (goalNames.some((goal) => goal.toLowerCase() === goalQuery.toLowerCase())) {
+        return [];
+      }
       const matchedGoals = fuzzyFilter(goalQuery, goalNames, (g) => g, 6);
       return matchedGoals.map((g) => ({
         name: prefix.trimEnd(),
