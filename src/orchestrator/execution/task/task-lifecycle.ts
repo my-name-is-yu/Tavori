@@ -60,6 +60,44 @@ export type { TaskCycleResult } from "./task-execution-types.js";
 import type { TaskCycleResult } from "./task-execution-types.js";
 import { createSkippedTaskResult } from "./task-execution-types.js";
 
+export interface TaskLifecycleCoreDeps {
+  stateManager: StateManager;
+  llmClient: ILLMClient;
+  sessionManager: SessionManager;
+  trustManager: TrustManager;
+  strategyManager: StrategyManager;
+  stallDetector: StallDetector;
+}
+
+export interface TaskLifecycleOptions {
+  approvalFn?: (task: Task) => Promise<boolean>;
+  ethicsGate?: EthicsGate;
+  capabilityDetector?: CapabilityDetector;
+  logger?: Logger;
+  /** Optional adapter registry for L1 mechanical verification command execution */
+  adapterRegistry?: AdapterRegistry;
+  /** Enable post-execution build/test health check (disabled by default) */
+  healthCheckEnabled?: boolean;
+  /** Injectable execFileSync for testing (defaults to node:child_process execFileSync) */
+  execFileSyncFn?: (cmd: string, args: string[], opts: { cwd: string; encoding: "utf-8" }) => string;
+  /** Timeout + retry config for the completion judgment LLM call */
+  completionJudgerConfig?: CompletionJudgerConfig;
+  /** Optional KnowledgeTransfer for realtime candidate detection before task generation */
+  knowledgeTransfer?: KnowledgeTransfer;
+  /** Optional KnowledgeManager for reflection generation and retrieval */
+  knowledgeManager?: KnowledgeManager;
+  /** Optional guardrail runner for before_tool/after_tool hooks */
+  guardrailRunner?: GuardrailRunner;
+  /** Optional HookManager for lifecycle hook events */
+  hookManager?: HookManager;
+  /** Optional ToolExecutor for post-execution git diff verification (read-only) */
+  toolExecutor?: ToolExecutor;
+}
+
+export interface TaskLifecycleDeps extends TaskLifecycleCoreDeps {
+  options?: TaskLifecycleOptions;
+}
+
 // ─── TaskLifecycle ───
 
 /**
@@ -88,6 +126,7 @@ export class TaskLifecycle {
   private readonly toolExecutor?: ToolExecutor;
   private onTaskComplete?: (strategyId: string) => void;
 
+  constructor(deps: TaskLifecycleDeps);
   constructor(
     stateManager: StateManager,
     llmClient: ILLMClient,
@@ -95,50 +134,40 @@ export class TaskLifecycle {
     trustManager: TrustManager,
     strategyManager: StrategyManager,
     stallDetector: StallDetector,
-    options?: {
-      approvalFn?: (task: Task) => Promise<boolean>;
-      ethicsGate?: EthicsGate;
-      capabilityDetector?: CapabilityDetector;
-      logger?: Logger;
-      /** Optional adapter registry for L1 mechanical verification command execution */
-      adapterRegistry?: AdapterRegistry;
-      /** Enable post-execution build/test health check (disabled by default) */
-      healthCheckEnabled?: boolean;
-      /** Injectable execFileSync for testing (defaults to node:child_process execFileSync) */
-      execFileSyncFn?: (cmd: string, args: string[], opts: { cwd: string; encoding: "utf-8" }) => string;
-      /** Timeout + retry config for the completion judgment LLM call */
-      completionJudgerConfig?: CompletionJudgerConfig;
-      /** Optional KnowledgeTransfer for realtime candidate detection before task generation */
-      knowledgeTransfer?: KnowledgeTransfer;
-      /** Optional KnowledgeManager for reflection generation and retrieval */
-      knowledgeManager?: KnowledgeManager;
-      /** Optional guardrail runner for before_tool/after_tool hooks */
-      guardrailRunner?: GuardrailRunner;
-      /** Optional HookManager for lifecycle hook events */
-      hookManager?: HookManager;
-      /** Optional ToolExecutor for post-execution git diff verification (read-only) */
-      toolExecutor?: ToolExecutor;
-    }
+    options?: TaskLifecycleOptions
   ) {
-    this.stateManager = stateManager;
-    this.llmClient = llmClient;
-    this.sessionManager = sessionManager;
-    this.trustManager = trustManager;
-    this.strategyManager = strategyManager;
-    this.stallDetector = stallDetector;
-    this.approvalFn = options?.approvalFn ?? ((_task: Task) => Promise.resolve(false));
-    this.ethicsGate = options?.ethicsGate;
-    this.capabilityDetector = options?.capabilityDetector;
-    this.logger = options?.logger;
-    this.adapterRegistry = options?.adapterRegistry;
-    this.healthCheckEnabled = options?.healthCheckEnabled ?? true;
-    this.execFileSyncFn = options?.execFileSyncFn ?? _execFileSync;
-    this.completionJudgerConfig = options?.completionJudgerConfig;
-    this.knowledgeTransfer = options?.knowledgeTransfer;
-    this.knowledgeManager = options?.knowledgeManager;
-    this.guardrailRunner = options?.guardrailRunner;
-    this.hookManager = options?.hookManager;
-    this.toolExecutor = options?.toolExecutor;
+    const resolved = TaskLifecycle.isDepsObject(stateManager)
+      ? stateManager
+      : {
+          stateManager,
+          llmClient: llmClient!,
+          sessionManager: sessionManager!,
+          trustManager: trustManager!,
+          strategyManager: strategyManager!,
+          stallDetector: stallDetector!,
+          options,
+        };
+    const resolvedOptions = resolved.options;
+
+    this.stateManager = resolved.stateManager;
+    this.llmClient = resolved.llmClient;
+    this.sessionManager = resolved.sessionManager;
+    this.trustManager = resolved.trustManager;
+    this.strategyManager = resolved.strategyManager;
+    this.stallDetector = resolved.stallDetector;
+    this.approvalFn = resolvedOptions?.approvalFn ?? ((_task: Task) => Promise.resolve(false));
+    this.ethicsGate = resolvedOptions?.ethicsGate;
+    this.capabilityDetector = resolvedOptions?.capabilityDetector;
+    this.logger = resolvedOptions?.logger;
+    this.adapterRegistry = resolvedOptions?.adapterRegistry;
+    this.healthCheckEnabled = resolvedOptions?.healthCheckEnabled ?? true;
+    this.execFileSyncFn = resolvedOptions?.execFileSyncFn ?? _execFileSync;
+    this.completionJudgerConfig = resolvedOptions?.completionJudgerConfig;
+    this.knowledgeTransfer = resolvedOptions?.knowledgeTransfer;
+    this.knowledgeManager = resolvedOptions?.knowledgeManager;
+    this.guardrailRunner = resolvedOptions?.guardrailRunner;
+    this.hookManager = resolvedOptions?.hookManager;
+    this.toolExecutor = resolvedOptions?.toolExecutor;
   }
 
   /** Register a callback invoked when a task completes successfully (used by PortfolioManager). */
@@ -203,12 +232,7 @@ export class TaskLifecycle {
       task,
       adapter,
       workspaceContext,
-      guardrailRunner: this.guardrailRunner,
-      toolExecutor: this.toolExecutor,
-      stateManager: this.stateManager,
-      sessionManager: this.sessionManager,
-      logger: this.logger,
-      execFileSyncFn: this.execFileSyncFn,
+      ...this.executionDeps(),
     });
   }
 
@@ -260,9 +284,7 @@ export class TaskLifecycle {
     const enrichedKnowledgeContext = await buildEnrichedKnowledgeContext({
       goalId,
       knowledgeContext,
-      knowledgeTransfer: this.knowledgeTransfer,
-      knowledgeManager: this.knowledgeManager,
-      logger: this.logger,
+      ...this.enrichmentDeps(),
     });
 
     // 3. Generate task (optionally with injected knowledge context)
@@ -300,10 +322,7 @@ export class TaskLifecycle {
     await finalizeSuccessfulExecution({
       executionResult,
       goalId,
-      healthCheckEnabled: this.healthCheckEnabled,
-      runPostExecutionHealthCheck: () => this.runPostExecutionHealthCheck(),
-      verifyExecutionWithGitDiff,
-      toolExecutor: this.toolExecutor,
+      ...this.postExecutionDeps(),
       logger: this.logger,
     });
 
@@ -325,13 +344,11 @@ export class TaskLifecycle {
       goalId,
       targetDimension,
       task: verdictResult.task,
+      action: verdictResult.action,
       verificationResult,
       executionResult,
       adapter,
-      sessionManager: this.sessionManager,
-      llmClient: this.llmClient,
-      knowledgeManager: this.knowledgeManager,
-      logger: this.logger,
+      ...this.sideEffectDeps(),
       gapValue: gapVector?.gaps?.[0]?.normalized_gap,
     });
 
@@ -403,6 +420,47 @@ export class TaskLifecycle {
     };
   }
 
+  private executionDeps() {
+    return {
+      guardrailRunner: this.guardrailRunner,
+      toolExecutor: this.toolExecutor,
+      stateManager: this.stateManager,
+      sessionManager: this.sessionManager,
+      logger: this.logger,
+      execFileSyncFn: this.execFileSyncFn,
+    };
+  }
+
+  private enrichmentDeps() {
+    return {
+      knowledgeTransfer: this.knowledgeTransfer,
+      knowledgeManager: this.knowledgeManager,
+      logger: this.logger,
+    };
+  }
+
+  private postExecutionDeps() {
+    return {
+      healthCheck: {
+        enabled: this.healthCheckEnabled,
+        run: () => this.runPostExecutionHealthCheck(),
+      },
+      successVerification: {
+        toolExecutor: this.toolExecutor,
+        verifyWithGitDiff: verifyExecutionWithGitDiff,
+      },
+    };
+  }
+
+  private sideEffectDeps() {
+    return {
+      sessionManager: this.sessionManager,
+      llmClient: this.llmClient,
+      knowledgeManager: this.knowledgeManager,
+      logger: this.logger,
+    };
+  }
+
   /** Run build and test checks after successful task execution. Opt-in via healthCheckEnabled. */
   async runPostExecutionHealthCheck(): Promise<{ healthy: boolean; output: string }> {
     return _runPostExecutionHealthCheck(
@@ -417,5 +475,9 @@ export class TaskLifecycle {
     options: { timeout: number; cwd: string }
   ): Promise<{ success: boolean; stdout: string; stderr: string }> {
     return _runShellCommand(argv, options);
+  }
+
+  private static isDepsObject(value: StateManager | TaskLifecycleDeps): value is TaskLifecycleDeps {
+    return "stateManager" in value;
   }
 }

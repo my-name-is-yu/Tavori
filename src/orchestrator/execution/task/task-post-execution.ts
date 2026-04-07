@@ -2,13 +2,24 @@ import type { Logger } from "../../../runtime/logger.js";
 import type { AgentResult } from "../adapter-layer.js";
 import type { ToolExecutor } from "../../../tools/executor.js";
 
+interface HealthCheckHooks {
+  enabled: boolean;
+  run: () => Promise<{ healthy: boolean; output: string }>;
+}
+
+interface SuccessVerificationHooks {
+  toolExecutor?: ToolExecutor;
+  verifyWithGitDiff: (
+    toolExecutor: ToolExecutor | undefined,
+    goalId: string
+  ) => Promise<{ verified: boolean; diffSummary: string }>;
+}
+
 interface FinalizeSuccessfulExecutionParams {
   executionResult: AgentResult;
   goalId: string;
-  healthCheckEnabled: boolean;
-  runPostExecutionHealthCheck: () => Promise<{ healthy: boolean; output: string }>;
-  verifyExecutionWithGitDiff: (toolExecutor: ToolExecutor | undefined, goalId: string) => Promise<{ verified: boolean; diffSummary: string }>;
-  toolExecutor?: ToolExecutor;
+  healthCheck: HealthCheckHooks;
+  successVerification: SuccessVerificationHooks;
   logger?: Logger;
 }
 
@@ -18,28 +29,29 @@ export async function finalizeSuccessfulExecution(
   const {
     executionResult,
     goalId,
-    healthCheckEnabled,
-    runPostExecutionHealthCheck,
-    verifyExecutionWithGitDiff,
-    toolExecutor,
+    healthCheck,
+    successVerification,
     logger,
   } = params;
 
   if (!executionResult.success) return executionResult;
 
-  if (healthCheckEnabled) {
-    const healthCheck = await runPostExecutionHealthCheck();
-    if (!healthCheck.healthy) {
-      logger?.warn(`[TaskLifecycle] Post-execution health check FAILED: ${healthCheck.output}`);
+  if (healthCheck.enabled) {
+    const result = await healthCheck.run();
+    if (!result.healthy) {
+      logger?.warn(`[TaskLifecycle] Post-execution health check FAILED: ${result.output}`);
       executionResult.success = false;
       executionResult.output = (executionResult.output || "") +
-        `\n\n[Health Check Failed]\n${healthCheck.output}`;
+        `\n\n[Health Check Failed]\n${result.output}`;
       return executionResult;
     }
   }
 
-  if (toolExecutor) {
-    const diffCheck = await verifyExecutionWithGitDiff(toolExecutor, goalId);
+  if (successVerification.toolExecutor) {
+    const diffCheck = await successVerification.verifyWithGitDiff(
+      successVerification.toolExecutor,
+      goalId
+    );
     logger?.info(
       `[TaskLifecycle] Git diff verification: ${diffCheck.diffSummary || "no changes"}`,
       { verified: diffCheck.verified }

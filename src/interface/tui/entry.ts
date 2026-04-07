@@ -156,15 +156,15 @@ async function buildDeps() {
     });
   };
 
-  const taskLifecycle = new TaskLifecycle(
+  const taskLifecycle = new TaskLifecycle({
     stateManager,
     llmClient,
     sessionManager,
     trustManager,
     strategyManager,
     stallDetector,
-    { approvalFn }
-  );
+    options: { approvalFn },
+  });
 
   const reportingEngine = new ReportingEngine(stateManager, undefined, characterConfig);
 

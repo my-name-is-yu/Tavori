@@ -10,6 +10,7 @@ interface PersistTaskCycleSideEffectsParams {
   goalId: string;
   targetDimension: string;
   task: Task;
+  action: string;
   verificationResult: VerificationResult;
   executionResult: AgentResult;
   adapter: IAdapter;
@@ -27,6 +28,7 @@ export async function persistTaskCycleSideEffects(
     goalId,
     targetDimension,
     task,
+    action,
     verificationResult,
     executionResult,
     adapter,
@@ -42,7 +44,7 @@ export async function persistTaskCycleSideEffects(
     `goal: ${goalId}`,
     `dimension: ${targetDimension}`,
     `strategy: ${task.strategy_id ?? "none"}`,
-    `action: ${verificationResult.verdict}`,
+    `action: ${action}`,
   ].join("\n");
   const intermediateResults: string[] = [];
   if (executionResult?.output) {

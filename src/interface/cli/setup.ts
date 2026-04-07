@@ -147,15 +147,15 @@ export async function buildDeps(
   const strategyManager = new StrategyManager(stateManager, llmClient);
   const adapterRegistry = await buildAdapterRegistry(llmClient);
 
-  const taskLifecycle = new TaskLifecycle(
+  const taskLifecycle = new TaskLifecycle({
     stateManager,
     llmClient,
     sessionManager,
     trustManager,
     strategyManager,
     stallDetector,
-    { approvalFn, logger, hookManager }
-  );
+    options: { approvalFn, logger, hookManager },
+  });
 
   const reportingEngine = new ReportingEngine(stateManager, undefined, characterConfig);
 
