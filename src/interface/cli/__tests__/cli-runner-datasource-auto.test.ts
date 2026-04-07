@@ -25,7 +25,10 @@ vi.mock("../../../base/llm/provider-factory.js", () => ({
 
 vi.mock("../../../orchestrator/loop/core-loop.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../../orchestrator/loop/core-loop.js")>();
-  return { ...actual, CoreLoop: vi.fn() };
+  const MockCoreLoop = vi.fn().mockImplementation(function() {
+    return { run: vi.fn().mockResolvedValue(undefined), stop: vi.fn(), setTimeHorizonEngine: vi.fn() };
+  });
+  return { ...actual, CoreLoop: MockCoreLoop };
 });
 
 vi.mock("../../../orchestrator/goal/goal-negotiator.js", async (importOriginal) => {

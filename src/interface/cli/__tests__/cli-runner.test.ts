@@ -299,7 +299,7 @@ describe("run subcommand", async () => {
 
     const mockRun = vi.fn().mockResolvedValue(makeLoopResult({ goalId: "goal-abc" }));
     vi.mocked(CoreLoop).mockImplementation(
-      function() { return { run: mockRun, stop: vi.fn() } as unknown as CoreLoop; }
+      function() { return { run: mockRun, stop: vi.fn(), setTimeHorizonEngine: vi.fn() } as unknown as CoreLoop; }
     );
 
     await runCLI("run", "--goal", "goal-abc");
@@ -313,6 +313,7 @@ describe("run subcommand", async () => {
     vi.mocked(CoreLoop).mockImplementation(function() { return {
       run: vi.fn().mockResolvedValue(makeLoopResult({ finalStatus: "completed" })),
       stop: vi.fn(),
+      setTimeHorizonEngine: vi.fn(),
     } as unknown as CoreLoop; });
 
     const code = await runCLI("run", "--goal", "g-completed");
@@ -325,6 +326,7 @@ describe("run subcommand", async () => {
     vi.mocked(CoreLoop).mockImplementation(function() { return {
       run: vi.fn().mockResolvedValue(makeLoopResult({ finalStatus: "max_iterations" })),
       stop: vi.fn(),
+      setTimeHorizonEngine: vi.fn(),
     } as unknown as CoreLoop; });
 
     const code = await runCLI("run", "--goal", "g-max");
@@ -337,6 +339,7 @@ describe("run subcommand", async () => {
     vi.mocked(CoreLoop).mockImplementation(function() { return {
       run: vi.fn().mockResolvedValue(makeLoopResult({ finalStatus: "stopped" })),
       stop: vi.fn(),
+      setTimeHorizonEngine: vi.fn(),
     } as unknown as CoreLoop; });
 
     const code = await runCLI("run", "--goal", "g-stopped");
@@ -349,6 +352,7 @@ describe("run subcommand", async () => {
     vi.mocked(CoreLoop).mockImplementation(function() { return {
       run: vi.fn().mockResolvedValue(makeLoopResult({ finalStatus: "stalled" })),
       stop: vi.fn(),
+      setTimeHorizonEngine: vi.fn(),
     } as unknown as CoreLoop; });
 
     const code = await runCLI("run", "--goal", "g-stalled");
@@ -361,6 +365,7 @@ describe("run subcommand", async () => {
     vi.mocked(CoreLoop).mockImplementation(function() { return {
       run: vi.fn().mockResolvedValue(makeLoopResult({ finalStatus: "error" })),
       stop: vi.fn(),
+      setTimeHorizonEngine: vi.fn(),
     } as unknown as CoreLoop; });
 
     const code = await runCLI("run", "--goal", "g-error");
@@ -373,6 +378,7 @@ describe("run subcommand", async () => {
     vi.mocked(CoreLoop).mockImplementation(function() { return {
       run: vi.fn().mockRejectedValue(new Error("Unexpected LLM failure")),
       stop: vi.fn(),
+      setTimeHorizonEngine: vi.fn(),
     } as unknown as CoreLoop; });
 
     const code = await runCLI("run", "--goal", "g-throw");
@@ -395,6 +401,7 @@ describe("run subcommand", async () => {
     vi.mocked(CoreLoop).mockImplementation(function() { return {
       run: vi.fn().mockResolvedValue(makeLoopResult()),
       stop: vi.fn(),
+      setTimeHorizonEngine: vi.fn(),
     } as unknown as CoreLoop; });
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -413,6 +420,7 @@ describe("run subcommand", async () => {
           run: vi.fn().mockResolvedValue(makeLoopResult()),
           stop: vi.fn(),
           _capturedConfig: config,
+          setTimeHorizonEngine: vi.fn(),
         } as unknown as CoreLoop; }
     );
 
@@ -439,7 +447,7 @@ describe("--yes flag position independence", async () => {
 
     const mockRun = vi.fn().mockResolvedValue(makeLoopResult({ goalId: "g-yes-before" }));
     vi.mocked(CoreLoop).mockImplementation(
-      function() { return { run: mockRun, stop: vi.fn() } as unknown as CoreLoop; }
+      function() { return { run: mockRun, stop: vi.fn(), setTimeHorizonEngine: vi.fn() } as unknown as CoreLoop; }
     );
 
     // --yes appears BEFORE the subcommand — previously this was treated as an
@@ -455,7 +463,7 @@ describe("--yes flag position independence", async () => {
 
     const mockRun = vi.fn().mockResolvedValue(makeLoopResult({ goalId: "g-yes-after" }));
     vi.mocked(CoreLoop).mockImplementation(
-      function() { return { run: mockRun, stop: vi.fn() } as unknown as CoreLoop; }
+      function() { return { run: mockRun, stop: vi.fn(), setTimeHorizonEngine: vi.fn() } as unknown as CoreLoop; }
     );
 
     // --yes appears after the subcommand — the original behaviour must still work.
@@ -470,7 +478,7 @@ describe("--yes flag position independence", async () => {
 
     const mockRun = vi.fn().mockResolvedValue(makeLoopResult({ goalId: "g-y-before" }));
     vi.mocked(CoreLoop).mockImplementation(
-      function() { return { run: mockRun, stop: vi.fn() } as unknown as CoreLoop; }
+      function() { return { run: mockRun, stop: vi.fn(), setTimeHorizonEngine: vi.fn() } as unknown as CoreLoop; }
     );
 
     const code = await runCLI("-y", "run", "--goal", "g-y-before");
@@ -485,6 +493,7 @@ describe("--yes flag position independence", async () => {
     vi.mocked(CoreLoop).mockImplementation(function() { return {
       run: vi.fn().mockResolvedValue(makeLoopResult({ finalStatus: "stalled" })),
       stop: vi.fn(),
+      setTimeHorizonEngine: vi.fn(),
     } as unknown as CoreLoop; });
 
     const code = await runCLI("--yes", "run", "--goal", "g-yes-fail");

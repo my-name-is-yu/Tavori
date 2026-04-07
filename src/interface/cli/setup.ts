@@ -46,6 +46,7 @@ import type { GapCalculatorModule, DriveScorerModule, LoopConfig } from "../../o
 import type { Task } from "../../base/types/task.js";
 import type { ProgressEvent } from "../../orchestrator/loop/core-loop.js";
 import { Logger } from "../../runtime/logger.js";
+import { TimeHorizonEngine } from "../../platform/time/time-horizon-engine.js";
 import { HookManager } from "../../runtime/hook-manager.js";
 import { getCliLogger } from "./cli-logger.js";
 import { formatOperationError } from "./utils.js";
@@ -267,6 +268,8 @@ export async function buildDeps(
     onProgress,
     goalRefiner,
   }, config);
+
+  coreLoop.setTimeHorizonEngine(new TimeHorizonEngine());
 
   return { coreLoop, goalNegotiator, goalRefiner, reportingEngine, stateManager, driveSystem, llmClient };
 }

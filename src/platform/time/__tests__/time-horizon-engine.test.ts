@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { TimeHorizonEngine } from "../time-horizon-engine.js";
 import type { GapObservation } from "../../../base/types/time-horizon.js";
 
@@ -538,6 +538,13 @@ describe("isVelocityDeclining — historicalEma <= 0 returns true", () => {
 });
 
 describe("canAffordWait — critical threshold inclusive", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
   it("exactly at critical threshold returns true (<=, not <)", () => {
     // critical threshold default = 2.0
     // Set up: after wait, newPacingRatio == exactly 2.0 → should return true

@@ -129,13 +129,13 @@ describe("GoalNegotiator lightweight unit coverage", () => {
     const { goal } = await negotiateGoal({
       dimensions: [makeDimension({ name: "completion_rate", label: "Completion Rate", threshold_type: "min", threshold_value: 100 })],
       options: {
-        deadline: "2026-04-01",
+        deadline: "2026-04-01T00:00:00Z",
         constraints: ["No production downtime", "Stay within budget"],
       },
     });
 
     const saved = await stateManager.loadGoal(goal.id);
-    expect(saved?.deadline).toBe("2026-04-01");
+    expect(saved?.deadline).toBe("2026-04-01T00:00:00Z");
     expect(saved?.constraints).toEqual(["No production downtime", "Stay within budget"]);
   });
 

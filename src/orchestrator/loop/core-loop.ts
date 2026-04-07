@@ -311,11 +311,21 @@ export class CoreLoop {
 
       // Gap 4: derive a PacingResult from this iteration to feed adaptive delay.
       if (this.timeHorizonEngine) {
+        // Build velocity history from accumulated iterations
+        let elapsedMs = 0;
+        const startMs = new Date(startedAt).getTime();
+        const gapHistory = iterations.map((it) => {
+          elapsedMs += it.elapsedMs;
+          return {
+            timestamp: new Date(startMs + elapsedMs).toISOString(),
+            normalizedGap: it.gapAggregate,
+          };
+        });
         this.lastPacingResult = this.timeHorizonEngine.evaluatePacing(
           goalId,
           iterationResult.gapAggregate,
-          null,  // no deadline available at this scope; pacing classifies as no_deadline
-          []     // no history; velocity will be zero → critical if gap > 0
+          goal.deadline ?? null,
+          gapHistory
         );
       }
 

@@ -222,6 +222,7 @@ describe("improve subcommand — basic routing", () => {
     vi.mocked(CoreLoop).mockImplementation(function() { return {
       run: vi.fn().mockResolvedValue(makeLoopResult()),
       stop: vi.fn(),
+      setTimeHorizonEngine: vi.fn(),
     } as unknown as CoreLoop; });
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -255,6 +256,7 @@ describe("improve subcommand — suggestion flow", () => {
     vi.mocked(CoreLoop).mockImplementation(function() { return {
       run: vi.fn().mockResolvedValue(makeLoopResult()),
       stop: vi.fn(),
+      setTimeHorizonEngine: vi.fn(),
     } as unknown as CoreLoop; });
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -282,6 +284,7 @@ describe("improve subcommand — suggestion flow", () => {
     vi.mocked(CoreLoop).mockImplementation(function() { return {
       run: vi.fn(),
       stop: vi.fn(),
+      setTimeHorizonEngine: vi.fn(),
     } as unknown as CoreLoop; });
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -306,6 +309,7 @@ describe("improve subcommand — suggestion flow", () => {
     vi.mocked(CoreLoop).mockImplementation(function() { return {
       run: vi.fn().mockResolvedValue(makeLoopResult()),
       stop: vi.fn(),
+      setTimeHorizonEngine: vi.fn(),
     } as unknown as CoreLoop; });
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -334,6 +338,7 @@ describe("improve subcommand — negotiation", () => {
     vi.mocked(CoreLoop).mockImplementation(function() { return {
       run: vi.fn().mockResolvedValue(makeLoopResult()),
       stop: vi.fn(),
+      setTimeHorizonEngine: vi.fn(),
     } as unknown as CoreLoop; });
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -371,6 +376,7 @@ describe("improve subcommand — negotiation", () => {
     vi.mocked(CoreLoop).mockImplementation(function() { return {
       run: vi.fn().mockResolvedValue(makeLoopResult()),
       stop: vi.fn(),
+      setTimeHorizonEngine: vi.fn(),
     } as unknown as CoreLoop; });
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -412,6 +418,7 @@ describe("improve subcommand — negotiation", () => {
     vi.mocked(CoreLoop).mockImplementation(function() { return {
       run: vi.fn(),
       stop: vi.fn(),
+      setTimeHorizonEngine: vi.fn(),
     } as unknown as CoreLoop; });
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -437,6 +444,7 @@ describe("improve subcommand — loop execution", () => {
     vi.mocked(CoreLoop).mockImplementation(function() { return {
       run: mockRun,
       stop: vi.fn(),
+      setTimeHorizonEngine: vi.fn(),
     } as unknown as CoreLoop; });
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -459,6 +467,7 @@ describe("improve subcommand — loop execution", () => {
     vi.mocked(CoreLoop).mockImplementation(function() { return {
       run: vi.fn(),
       stop: vi.fn(),
+      setTimeHorizonEngine: vi.fn(),
     } as unknown as CoreLoop; });
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -484,6 +493,7 @@ describe("improve subcommand — loop execution", () => {
     vi.mocked(CoreLoop).mockImplementation(function() { return {
       run: mockRun,
       stop: vi.fn(),
+      setTimeHorizonEngine: vi.fn(),
     } as unknown as CoreLoop; });
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -508,6 +518,7 @@ describe("improve subcommand — loop execution", () => {
     vi.mocked(CoreLoop).mockImplementation(function() { return {
       run: mockRun,
       stop: vi.fn(),
+      setTimeHorizonEngine: vi.fn(),
     } as unknown as CoreLoop; });
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -532,6 +543,7 @@ describe("improve subcommand — loop execution", () => {
     vi.mocked(CoreLoop).mockImplementation(function() { return {
       run: mockRun,
       stop: vi.fn(),
+      setTimeHorizonEngine: vi.fn(),
     } as unknown as CoreLoop; });
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -561,6 +573,7 @@ describe("improve subcommand — loop execution", () => {
     vi.mocked(CoreLoop).mockImplementation(function() { return {
       run: vi.fn().mockResolvedValue(makeLoopResult({ goalId: "goal-loop-done" })),
       stop: vi.fn(),
+      setTimeHorizonEngine: vi.fn(),
     } as unknown as CoreLoop; });
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -589,6 +602,7 @@ describe("improve subcommand — gatherProjectContext", () => {
     vi.mocked(CoreLoop).mockImplementation(function() { return {
       run: vi.fn().mockResolvedValue(makeLoopResult()),
       stop: vi.fn(),
+      setTimeHorizonEngine: vi.fn(),
     } as unknown as CoreLoop; });
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -617,6 +631,7 @@ describe("improve subcommand — timeout and LLM failure handling", () => {
     vi.mocked(CoreLoop).mockImplementation(function() { return {
       run: vi.fn(),
       stop: vi.fn(),
+      setTimeHorizonEngine: vi.fn(),
     } as unknown as CoreLoop; });
 
     const logLines: string[] = [];
@@ -648,6 +663,7 @@ describe("improve subcommand — timeout and LLM failure handling", () => {
     vi.mocked(CoreLoop).mockImplementation(function() { return {
       run: vi.fn(),
       stop: vi.fn(),
+      setTimeHorizonEngine: vi.fn(),
     } as unknown as CoreLoop; });
 
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});

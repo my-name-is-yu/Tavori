@@ -153,7 +153,7 @@ export const GoalSchema = z.object({
   pace_snapshot: PaceSnapshotSchema.nullable().default(null),
 
   // Deadline & scheduling
-  deadline: z.string().nullable().default(null),
+  deadline: z.string().datetime().nullable().default(null),
 
   // Negotiation metadata
   confidence_flag: z.enum(["high", "medium", "low"]).nullable().default(null),
