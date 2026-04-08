@@ -17,6 +17,77 @@ export interface ApprovalView {
   decisionMode: ApprovalDecisionMode;
 }
 
+const APPROVE_ALIASES = new Set([
+  "approve",
+  "approved",
+  "yes",
+  "y",
+  "ok",
+  "okay",
+  "confirm",
+  "proceed",
+  "do it",
+  "go ahead",
+  "承認",
+  "はい",
+  "進めて",
+  "実行",
+  "実行して",
+]);
+
+const REJECT_ALIASES = new Set([
+  "reject",
+  "rejected",
+  "no",
+  "n",
+  "cancel",
+  "deny",
+  "stop",
+  "abort",
+  "don't",
+  "dont",
+  "拒否",
+  "却下",
+  "いいえ",
+  "やめて",
+  "中止",
+]);
+
+const CLARIFY_ALIASES = new Set([
+  "clarify",
+  "details",
+  "more details",
+  "more info",
+  "info",
+  "why",
+  "what",
+  "?",
+  "clarify?",
+  "詳細",
+  "詳しく",
+  "なぜ",
+  "何をする",
+  "何をするの",
+]);
+
+export function parseApprovalDecision(input: string): ApprovalDecision {
+  const normalized = input.trim().toLowerCase();
+
+  if (APPROVE_ALIASES.has(normalized)) {
+    return "approve";
+  }
+
+  if (REJECT_ALIASES.has(normalized)) {
+    return "reject";
+  }
+
+  if (CLARIFY_ALIASES.has(normalized) || normalized.startsWith("clarify ")) {
+    return "clarify";
+  }
+
+  return "clarify";
+}
+
 export function formatApprovalView(view: ApprovalView): string {
   const lines = [
     view.title,

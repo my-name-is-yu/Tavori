@@ -14,7 +14,7 @@ import { formatOperationError } from "../utils.js";
 import { getCliLogger } from "../cli-logger.js";
 import type { ChatRunner } from "../../chat/chat-runner.js";
 import { Chat, type ChatMessage } from "../../tui/chat.js";
-import { buildToolApprovalView, formatApprovalView, type ApprovalDecision, type ApprovalView } from "../../chat/approval-format.js";
+import { buildToolApprovalView, formatApprovalView, parseApprovalDecision, type ApprovalDecision, type ApprovalView } from "../../chat/approval-format.js";
 import { EthicsGate } from "../../../platform/traits/ethics-gate.js";
 import { ObservationEngine } from "../../../platform/observation/observation-engine.js";
 import { GoalNegotiator } from "../../../orchestrator/goal/goal-negotiator.js";
@@ -27,42 +27,6 @@ import { createBuiltinTools } from "../../../tools/builtin/index.js";
 import { applyChatEventToMessages } from "../../chat/chat-event-state.js";
 
 const logger = getCliLogger();
-
-function parseApprovalDecision(input: string): ApprovalDecision {
-  const normalized = input.trim().toLowerCase();
-
-  if (
-    normalized === "approve" ||
-    normalized === "approved" ||
-    normalized === "yes" ||
-    normalized === "y" ||
-    normalized === "ok" ||
-    normalized === "okay" ||
-    normalized === "confirm" ||
-    normalized === "proceed" ||
-    normalized === "do it" ||
-    normalized === "go ahead"
-  ) {
-    return "approve";
-  }
-
-  if (
-    normalized === "reject" ||
-    normalized === "rejected" ||
-    normalized === "no" ||
-    normalized === "n" ||
-    normalized === "cancel" ||
-    normalized === "deny" ||
-    normalized === "stop" ||
-    normalized === "abort" ||
-    normalized === "don't" ||
-    normalized === "dont"
-  ) {
-    return "reject";
-  }
-
-  return "clarify";
-}
 
 async function promptChatApproval(view: ApprovalView): Promise<ApprovalDecision> {
   if (!process.stdin.isTTY) return "reject";

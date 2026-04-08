@@ -25,7 +25,7 @@ import type { DaemonClient } from "../../runtime/daemon-client.js";
 import type { GoalNegotiator } from "../../orchestrator/goal/goal-negotiator.js";
 import type { ChatEvent, ChatEventContext } from "./chat-events.js";
 import type { ApprovalRequest as ToolApprovalRequest } from "../../tools/types.js";
-import { buildToolApprovalView, type ApprovalDecision } from "./approval-format.js";
+import { buildToolApprovalView, parseApprovalDecision, type ApprovalDecision } from "./approval-format.js";
 
 // ─── Types ───
 
@@ -79,6 +79,11 @@ interface AssistantBuffer {
   text: string;
 }
 
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+}
+
 interface PendingApprovalState {
   request: ApprovalRequest;
   toolCallId: string;
@@ -88,8 +93,7 @@ interface PendingApprovalState {
 
 interface ActiveTurnState {
   completion: Promise<ChatRunResult>;
-  approvalRequested: Promise<ApprovalRequest>;
-  approvalRequestedResolver: (request: ApprovalRequest) => void;
+  nextApproval: Deferred<ApprovalRequest>;
 }
 
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -114,6 +118,14 @@ function checkGitChanges(cwd: string): Promise<string | null> {
       resolve(err ? null : (stdout + stderr).trim());
     });
   });
+}
+
+function createDeferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
 }
 
 // ─── ChatRunner ───
@@ -348,19 +360,13 @@ export class ChatRunner {
   }
 
   private createActiveTurn(): ActiveTurnState {
-    let approvalRequestedResolver: (request: ApprovalRequest) => void = () => {};
-    const approvalRequested = new Promise<ApprovalRequest>((resolve) => {
-      approvalRequestedResolver = resolve;
-    });
-
     return {
       completion: Promise.resolve({
         success: false,
         output: "",
         elapsed_ms: 0,
       }),
-      approvalRequested,
-      approvalRequestedResolver,
+      nextApproval: createDeferred<ApprovalRequest>(),
     };
   }
 
@@ -381,71 +387,6 @@ export class ChatRunner {
       ...view.details.map((detail) => `${detail.label}: ${detail.value}`),
       "Reply approve to continue or reject to stop this tool call.",
     ].join("\n");
-  }
-
-  private parseApprovalDecision(input: string): ApprovalDecision {
-    const normalized = input.trim().toLowerCase();
-
-    if (
-      normalized === "approve" ||
-      normalized === "approved" ||
-      normalized === "yes" ||
-      normalized === "y" ||
-      normalized === "ok" ||
-      normalized === "okay" ||
-      normalized === "confirm" ||
-      normalized === "proceed" ||
-      normalized === "do it" ||
-      normalized === "go ahead" ||
-      normalized === "承認" ||
-      normalized === "はい" ||
-      normalized === "進めて" ||
-      normalized === "実行" ||
-      normalized === "実行して"
-    ) {
-      return "approve";
-    }
-
-    if (
-      normalized === "reject" ||
-      normalized === "rejected" ||
-      normalized === "no" ||
-      normalized === "n" ||
-      normalized === "cancel" ||
-      normalized === "deny" ||
-      normalized === "stop" ||
-      normalized === "abort" ||
-      normalized === "don't" ||
-      normalized === "dont" ||
-      normalized === "拒否" ||
-      normalized === "却下" ||
-      normalized === "いいえ" ||
-      normalized === "やめて" ||
-      normalized === "中止"
-    ) {
-      return "reject";
-    }
-
-    if (
-      normalized === "clarify" ||
-      normalized === "details" ||
-      normalized === "more details" ||
-      normalized === "more info" ||
-      normalized === "info" ||
-      normalized === "why" ||
-      normalized === "what" ||
-      normalized === "?" ||
-      normalized.startsWith("clarify ") ||
-      normalized === "clarify?" ||
-      normalized === "詳細" ||
-      normalized === "詳しく" ||
-      normalized === "なぜ" ||
-      normalized === "何をする"
-    ) {
-      return "clarify";
-    }
-
-    return "clarify";
   }
 
   private async requestApproval(
@@ -479,7 +420,10 @@ export class ChatRunner {
       ...this.eventBase(eventContext),
     });
 
-    this.activeTurn?.approvalRequestedResolver(request);
+    if (this.activeTurn) {
+      this.activeTurn.nextApproval.resolve(request);
+      this.activeTurn.nextApproval = createDeferred<ApprovalRequest>();
+    }
 
     return approvalPromise;
   }
@@ -514,7 +458,7 @@ export class ChatRunner {
       };
     }
 
-    const decision = this.parseApprovalDecision(input);
+    const decision = parseApprovalDecision(input);
     if (decision === "clarify") {
       const clarification = this.buildApprovalClarification(pending.request);
       this.emitEvent({
@@ -530,28 +474,36 @@ export class ChatRunner {
       };
     }
 
+    const currentTurn = this.activeTurn;
+    const nextApprovalPromise = currentTurn?.nextApproval.promise.then((request) => ({
+      kind: "approval" as const,
+      request,
+    }));
+    const completionPromise = currentTurn?.completion.then((result) => ({
+      kind: "completion" as const,
+      result,
+    }));
+
     this.resolvePendingApproval(decision);
-    if (decision === "reject") {
-      const currentTurn = this.activeTurn?.completion;
-      if (currentTurn) {
-        return await currentTurn;
-      }
+
+    if (!currentTurn || !nextApprovalPromise || !completionPromise) {
       return {
         success: true,
-        output: "Approval rejected.",
+        output: decision === "reject" ? "Approval rejected." : "Approval accepted.",
         elapsed_ms: Date.now() - start,
       };
     }
 
-    const currentTurn = this.activeTurn?.completion;
-    if (currentTurn) {
-      return await currentTurn;
+    const outcome = await Promise.race([nextApprovalPromise, completionPromise]);
+    if (outcome.kind === "approval") {
+      return {
+        success: true,
+        output: this.buildApprovalRequestMessage(outcome.request),
+        elapsed_ms: Date.now() - start,
+      };
     }
-    return {
-      success: true,
-      output: "Approval accepted.",
-      elapsed_ms: Date.now() - start,
-    };
+
+    return outcome.result;
   }
 
   private async executeTurn(
@@ -777,7 +729,7 @@ export class ChatRunner {
       });
     this.activeTurn.completion = turnPromise;
 
-    const pendingPromise = turnDeferred.approvalRequested.then(() => PENDING_APPROVAL_MARKER);
+    const pendingPromise = turnDeferred.nextApproval.promise.then(() => PENDING_APPROVAL_MARKER);
     const outcome = await Promise.race([turnPromise, pendingPromise]);
     if (outcome === PENDING_APPROVAL_MARKER) {
       const pending = this.pendingApproval as PendingApprovalState | null;

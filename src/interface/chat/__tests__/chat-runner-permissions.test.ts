@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { ChatRunner } from "../chat-runner.js";
 import type { ChatRunnerDeps } from "../chat-runner.js";
+import { parseApprovalDecision } from "../approval-format.js";
 import type { StateManager } from "../../../base/state/state-manager.js";
 import type { IAdapter } from "../../../orchestrator/execution/adapter-layer.js";
 import type { ITool, ToolCallContext, PermissionCheckResult, ToolResult } from "../../../tools/types.js";
@@ -113,12 +114,88 @@ function makeLLMClientWithToolCall(toolName: string) {
   };
 }
 
+function makeLLMClientWithTwoToolCalls(toolName: string) {
+  return {
+    supportsToolCalling: () => true,
+    sendMessage: vi.fn()
+      .mockResolvedValueOnce({
+        content: "",
+        tool_calls: [
+          {
+            id: "tc-1",
+            function: { name: toolName, arguments: "{}" },
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 10 },
+        stop_reason: "tool_use",
+      })
+      .mockResolvedValueOnce({
+        content: "",
+        tool_calls: [
+          {
+            id: "tc-2",
+            function: { name: toolName, arguments: "{}" },
+          },
+        ],
+        usage: { input_tokens: 10, output_tokens: 10 },
+        stop_reason: "tool_use",
+      })
+      .mockResolvedValueOnce({
+        content: "Final answer",
+        tool_calls: [],
+        usage: { input_tokens: 5, output_tokens: 5 },
+        stop_reason: "end_turn",
+      }),
+    parseJSON: vi.fn(),
+  };
+}
+
+function makeLLMClientWithToolCalls(toolNames: string[]) {
+  const sendMessage = vi.fn();
+
+  for (const toolName of toolNames) {
+    sendMessage.mockResolvedValueOnce({
+      content: "",
+      tool_calls: [
+        {
+          id: `tc-${toolName}`,
+          function: { name: toolName, arguments: "{}" },
+        },
+      ],
+      usage: { input_tokens: 10, output_tokens: 10 },
+      stop_reason: "tool_use",
+    });
+  }
+
+  sendMessage.mockResolvedValueOnce({
+    content: "Final answer",
+    tool_calls: [],
+    usage: { input_tokens: 5, output_tokens: 5 },
+    stop_reason: "end_turn",
+  });
+
+  return {
+    supportsToolCalling: () => true,
+    sendMessage,
+    parseJSON: vi.fn(),
+  };
+}
+
 function makeDeps(overrides: Partial<ChatRunnerDeps> = {}): ChatRunnerDeps {
   return {
     stateManager: makeMockStateManager(),
     adapter: makeMockAdapter(),
     ...overrides,
   };
+}
+
+async function withTimeout<T>(promise: Promise<T>, ms = 1000): Promise<T> {
+  return await Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error(`Timed out after ${ms}ms`)), ms);
+    }),
+  ]);
 }
 
 // ─── Tests ───
@@ -208,6 +285,57 @@ describe("ChatRunner — permission gate (Fix #505)", () => {
     });
   });
 
+  describe("needs_approval — multiple approvals in the same turn", () => {
+    it("re-prompts when the same turn needs approval again after the first approval", async () => {
+      const tool = makeMockTool("test-tool", { status: "needs_approval", reason: "requires confirmation" });
+      const registry = makeMockRegistry(tool);
+      const llmClient = makeLLMClientWithTwoToolCalls("test-tool");
+
+      const runner = new ChatRunner(makeDeps({ registry, llmClient: llmClient as never }));
+
+      const first = await runner.execute("do something", "/repo");
+      expect(first.output).toContain("Approval required for `test-tool`");
+
+      const second = await runner.execute("approve", "/repo");
+      expect(second.output).toContain("Approval required for `test-tool`");
+
+      const third = await runner.execute("approve", "/repo");
+      expect(third.output).toBe("Final answer");
+      expect(tool.call).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe("needs_approval — multiple approvals in one turn", () => {
+    it("returns a fresh pending request after the first approval is resolved", async () => {
+      const firstTool = makeMockTool("first-tool", { status: "needs_approval", reason: "first approval" });
+      const secondTool = makeMockTool("second-tool", { status: "needs_approval", reason: "second approval" });
+      const registry = {
+        get: vi.fn().mockImplementation((n: string) => {
+          if (n === firstTool.metadata.name) return firstTool;
+          if (n === secondTool.metadata.name) return secondTool;
+          return undefined;
+        }),
+        listAll: vi.fn().mockReturnValue([firstTool, secondTool]),
+        register: vi.fn(),
+      } as unknown as ToolRegistry;
+      const llmClient = makeLLMClientWithToolCalls(["first-tool", "second-tool"]);
+
+      const runner = new ChatRunner(makeDeps({ registry, llmClient: llmClient as never }));
+
+      const firstPending = await runner.execute("do something", "/repo");
+      expect(firstPending.output).toContain("Approval required for `first-tool`");
+
+      const secondPending = await withTimeout(runner.execute("approve", "/repo"));
+      expect(secondPending.output).toContain("Approval required for `second-tool`");
+      expect(firstTool.call).toHaveBeenCalledOnce();
+      expect(secondTool.call).not.toHaveBeenCalled();
+
+      const final = await withTimeout(runner.execute("approve", "/repo"));
+      expect(final.output).toBe("Final answer");
+      expect(secondTool.call).toHaveBeenCalledOnce();
+    });
+  });
+
   describe("allowed permission", () => {
     it("calls tool.call directly without invoking approvalFn", async () => {
       const tool = makeMockTool("test-tool", { status: "allowed" });
@@ -233,6 +361,16 @@ describe("ChatRunner — permission gate (Fix #505)", () => {
       expect(pending.output).toContain("Approval required for `test-tool`");
       expect(tool.call).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("approval decision parsing", () => {
+  it("accepts Japanese approve/reject/clarify phrases", () => {
+    expect(parseApprovalDecision("承認")).toBe("approve");
+    expect(parseApprovalDecision("進めて")).toBe("approve");
+    expect(parseApprovalDecision("拒否")).toBe("reject");
+    expect(parseApprovalDecision("やめて")).toBe("reject");
+    expect(parseApprovalDecision("詳細")).toBe("clarify");
   });
 });
 
