@@ -54,15 +54,15 @@ export class ChatHistory {
     await this.persist();
   }
 
-  /** Append an assistant message. Fire-and-forget persistence is acceptable here. */
-  appendAssistantMessage(content: string): void {
+  /** Append an assistant message and persist it as the committed assistant turn. */
+  async appendAssistantMessage(content: string): Promise<void> {
     this.session.messages.push({
       role: "assistant",
       content,
       timestamp: new Date().toISOString(),
       turnIndex: this.session.messages.length,
     });
-    void this.persist();
+    await this.persist();
   }
 
   /** Clear all messages and persist the empty state. */

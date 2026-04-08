@@ -62,6 +62,22 @@ export { PortfolioManager } from "./orchestrator/strategy/portfolio-manager.js";
 export { CoreLoop } from "./orchestrator/loop/core-loop.js";
 export type { CoreLoopDeps, LoopConfig, LoopResult } from "./orchestrator/loop/core-loop.js";
 export { CLIRunner } from "./interface/cli/cli-runner.js";
+export { ChatRunner } from "./interface/chat/chat-runner.js";
+export type { ChatRunnerDeps, ChatRunResult } from "./interface/chat/chat-runner.js";
+export type {
+  ChatEvent,
+  ChatEventHandler,
+  ChatEventBase,
+  ChatEventContext,
+  LifecycleStartEvent,
+  AssistantDeltaEvent,
+  AssistantFinalEvent,
+  ToolStartEvent,
+  ToolUpdateEvent,
+  ToolEndEvent,
+  LifecycleEndEvent,
+  LifecycleErrorEvent,
+} from "./interface/chat/chat-events.js";
 export { IntentRecognizer } from "./interface/tui/intent-recognizer.js";
 export type { IntentType, RecognizedIntent } from "./interface/tui/intent-recognizer.js";
 export { ActionHandler } from "./interface/tui/actions.js";
@@ -194,12 +210,6 @@ export { TrustStateTool } from "./tools/query/TrustStateTool/TrustStateTool.js";
 export { SessionHistoryTool } from "./tools/query/SessionHistoryTool/SessionHistoryTool.js";
 export { KnowledgeQueryTool } from "./tools/query/KnowledgeQueryTool/KnowledgeQueryTool.js";
 export { ProgressHistoryTool } from "./tools/query/ProgressHistoryTool/ProgressHistoryTool.js";
-export { TaskListTool } from "./tools/query/TaskListTool/TaskListTool.js";
-export { TaskGetTool } from "./tools/query/TaskGetTool/TaskGetTool.js";
-export { TaskCreateTool } from "./tools/mutation/TaskCreateTool/TaskCreateTool.js";
-export { TaskOutputTool } from "./tools/mutation/TaskOutputTool/TaskOutputTool.js";
-export { TaskStopTool } from "./tools/mutation/TaskStopTool/TaskStopTool.js";
-export { TaskUpdateTool } from "./tools/mutation/TaskUpdateTool/TaskUpdateTool.js";
 export { WebSearchTool, createWebSearchClient } from "./tools/network/WebSearchTool/WebSearchTool.js";
 export type { ISearchClient, SearchResult } from "./tools/network/WebSearchTool/WebSearchTool.js";
 export { ToolSearchTool } from "./tools/query/ToolSearchTool/ToolSearchTool.js";

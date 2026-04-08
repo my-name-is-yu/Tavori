@@ -7,6 +7,10 @@ export interface TelegramMessage {
   text?: string;
 }
 
+interface SendMessageResult {
+  message_id: number;
+}
+
 export interface Update {
   update_id: number;
   message?: TelegramMessage;
@@ -42,14 +46,45 @@ export class TelegramAPI {
   }
 
   async sendMessage(chatId: number, text: string): Promise<void> {
+    await this.sendMessageInternal(chatId, text, "Markdown");
+  }
+
+  async sendPlainMessage(chatId: number, text: string): Promise<number> {
+    return this.sendMessageInternal(chatId, text, null);
+  }
+
+  async editMessageText(chatId: number, messageId: number, text: string): Promise<void> {
     const chunks = splitMessage(text, 4096);
-    for (const chunk of chunks) {
+    if (chunks.length === 0) return;
+
+    await this.call("editMessageText", {
+      chat_id: chatId,
+      message_id: messageId,
+      text: chunks[0]!,
+    });
+
+    for (const chunk of chunks.slice(1)) {
       await this.call("sendMessage", {
         chat_id: chatId,
         text: chunk,
-        parse_mode: "Markdown",
       });
     }
+  }
+
+  private async sendMessageInternal(chatId: number, text: string, parseMode: "Markdown" | null): Promise<number> {
+    const chunks = splitMessage(text, 4096);
+    let firstMessageId = -1;
+    for (const [index, chunk] of chunks.entries()) {
+      const result = await this.call<SendMessageResult>("sendMessage", {
+        chat_id: chatId,
+        text: chunk,
+        ...(parseMode ? { parse_mode: parseMode } : {}),
+      });
+      if (index === 0) {
+        firstMessageId = result.message_id;
+      }
+    }
+    return firstMessageId;
   }
 
   private async call<T>(method: string, params?: Record<string, unknown>): Promise<T> {

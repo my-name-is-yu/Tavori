@@ -3,6 +3,11 @@ import { TelegramAPI } from "./telegram-api.js";
 import { TelegramNotifier, type INotifier } from "./notifier.js";
 import { PollingLoop } from "./polling-loop.js";
 import { ChatBridge } from "./chat-bridge.js";
+import { TelegramChatEventAdapter } from "./telegram-chat-event-adapter.js";
+import { TelegramChatRunnerProcessor, type ProcessMessageFn } from "./telegram-chat-runner-processor.js";
+import type { ChatEventHandler } from "pulseed";
+
+type LegacyProcessMessageFn = (text: string, emit: ChatEventHandler) => Promise<string | void> | string | void;
 
 // ─── TelegramBotPlugin ───
 
@@ -12,6 +17,7 @@ export class TelegramBotPlugin {
   private notifier: TelegramNotifier | null = null;
   private polling: PollingLoop | null = null;
   private bridge: ChatBridge | null = null;
+  private processor: TelegramChatRunnerProcessor | null = null;
 
   constructor(pluginDir: string) {
     this.pluginDir = pluginDir;
@@ -28,10 +34,12 @@ export class TelegramBotPlugin {
 
     this.notifier = new TelegramNotifier(this.api, config.chat_id);
 
-    this.bridge = new ChatBridge(async (text) => {
-      // Default echo handler — replace by calling startPolling with a custom processor
-      return `echo: ${text}`;
-    });
+    this.processor = new TelegramChatRunnerProcessor(this.pluginDir);
+
+    this.bridge = new ChatBridge(
+      (text, chatId, emit) => this.processor!.processMessage(text, chatId, emit),
+      (chatId) => new TelegramChatEventAdapter(this.api!, chatId)
+    );
 
     const api = this.api;
     const bridge = this.bridge;
@@ -39,8 +47,7 @@ export class TelegramBotPlugin {
     this.polling = new PollingLoop(
       api,
       async (text, fromUserId, chatId) => {
-        const response = await bridge.handleMessage(text, fromUserId, chatId);
-        await api.sendMessage(chatId, response);
+        await bridge.handleMessage(text, fromUserId, chatId);
       },
       config.allowed_user_ids
     );
@@ -48,6 +55,18 @@ export class TelegramBotPlugin {
 
   getNotifier(): INotifier | null {
     return this.notifier;
+  }
+
+  setMessageProcessor(
+    processMessage: ProcessMessageFn | LegacyProcessMessageFn
+  ): void {
+    if (!this.bridge) return;
+    this.bridge.setProcessMessage((text, chatId, emit) => {
+      if (processMessage.length >= 3) {
+        return (processMessage as ProcessMessageFn)(text, chatId, emit);
+      }
+      return (processMessage as LegacyProcessMessageFn)(text, emit);
+    });
   }
 
   startPolling(): void {

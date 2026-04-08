@@ -144,4 +144,6 @@ export class OllamaLLMClient extends BaseLLMClient implements ILLMClient {
 
     throw lastError;
   }
+
+  supportsToolCalling(): boolean { return false; }
 }

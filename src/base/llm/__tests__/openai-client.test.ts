@@ -8,6 +8,8 @@ import { z } from "zod";
 // `mockCreate`.
 
 const mockCreate = vi.fn();
+const mockStream = vi.fn();
+const mockResponsesCreate = vi.fn();
 
 vi.mock("openai", () => {
   return {
@@ -15,7 +17,11 @@ vi.mock("openai", () => {
       chat: {
         completions: {
           create: mockCreate,
+          stream: mockStream,
         },
+      },
+      responses: {
+        create: mockResponsesCreate,
       },
     }; }),
   };
@@ -29,12 +35,13 @@ function makeCompletionResponse(
   content: string,
   finishReason = "stop",
   promptTokens = 10,
-  completionTokens = 5
+  completionTokens = 5,
+  toolCalls?: Array<{ id: string; function: { name: string; arguments: string } }>
 ) {
   return {
     choices: [
       {
-        message: { content },
+        message: { content, ...(toolCalls ? { tool_calls: toolCalls } : {}) },
         finish_reason: finishReason,
       },
     ],
@@ -50,6 +57,8 @@ function makeCompletionResponse(
 describe("OpenAILLMClient", () => {
   beforeEach(() => {
     mockCreate.mockReset();
+    mockStream.mockReset();
+    mockResponsesCreate.mockReset();
     // Ensure OPENAI_API_KEY is not set by default so constructor tests are
     // isolated. Individual tests that need a valid key set it explicitly.
     delete process.env["OPENAI_API_KEY"];
@@ -236,6 +245,37 @@ describe("OpenAILLMClient", () => {
       const callArgs = mockCreate.mock.calls[0][0];
       expect(callArgs.max_completion_tokens).toBe(128);
     });
+
+    it("passes tools through and maps returned tool calls", async () => {
+      const client = new OpenAILLMClient({ apiKey: "sk-test" });
+      mockCreate.mockResolvedValueOnce(makeCompletionResponse(
+        "",
+        "tool_calls",
+        10,
+        5,
+        [{ id: "call-1", function: { name: "read_file", arguments: "{\"path\":\"README.md\"}" } }]
+      ));
+
+      const result = await client.sendMessage([{ role: "user", content: "inspect the repo" }], {
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "read_file",
+              description: "Read a file",
+              parameters: { type: "object", properties: { path: { type: "string" } }, required: ["path"] },
+            },
+          },
+        ],
+      });
+
+      const callArgs = mockCreate.mock.calls[0][0];
+      expect(callArgs.tools).toHaveLength(1);
+      expect(result.tool_calls?.[0]).toMatchObject({
+        id: "call-1",
+        function: { name: "read_file", arguments: "{\"path\":\"README.md\"}" },
+      });
+    });
   });
 
   // ─── Retry logic ───
@@ -274,6 +314,32 @@ describe("OpenAILLMClient", () => {
       expect(result).toBeInstanceOf(Error);
       expect((result as Error).message).toBe("persistent error");
       expect(mockCreate).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe("sendMessageStream", () => {
+    it("falls back to the Responses API for non-chat models", async () => {
+      const client = new OpenAILLMClient({ apiKey: "sk-test", model: "codex-mini-latest" });
+      mockStream.mockImplementationOnce(() => {
+        throw new Error("This is not a chat model and not supported in the v1/chat/completions endpoint");
+      });
+      mockResponsesCreate.mockResolvedValueOnce({
+        output_text: "fallback output",
+        status: "completed",
+        usage: {
+          input_tokens: 12,
+          output_tokens: 7,
+        },
+      });
+
+      const result = await client.sendMessageStream(
+        [{ role: "user", content: "hello" }],
+        undefined,
+        { onTextDelta: vi.fn() }
+      );
+
+      expect(result.content).toBe("fallback output");
+      expect(mockResponsesCreate).toHaveBeenCalledOnce();
     });
   });
 

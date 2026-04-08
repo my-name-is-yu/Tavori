@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import type { Message } from "@anthropic-ai/sdk/resources/messages";
 import type { ZodSchema } from "zod";
 import { sleep } from "../utils/sleep.js";
 import { BaseLLMClient, DEFAULT_MAX_TOKENS, DEFAULT_LLM_TIMEOUT_MS, MAX_RETRY_ATTEMPTS, RETRY_DELAYS_MS, RATE_LIMIT_RETRY_DELAYS_MS, isRateLimitError, getRateLimitRetryDelay, extractJSON } from "./base-llm-client.js";
@@ -26,6 +27,7 @@ export interface ToolDefinition {
 
 export interface ToolCallResult {
   id: string;
+  type?: "function";
   function: {
     name: string;
     arguments: string; // JSON string
@@ -41,6 +43,10 @@ export interface LLMRequestOptions {
   model_tier?: ModelTier;
   /** Tool definitions for function calling (tool use). */
   tools?: ToolDefinition[];
+}
+
+export interface LLMStreamHandlers {
+  onTextDelta?: (delta: string) => void;
 }
 
 export interface LLMResponse {
@@ -60,6 +66,11 @@ export interface ILLMClient {
   sendMessage(
     messages: LLMMessage[],
     options?: LLMRequestOptions
+  ): Promise<LLMResponse>;
+  sendMessageStream?(
+    messages: LLMMessage[],
+    options: LLMRequestOptions | undefined,
+    handlers: LLMStreamHandlers
   ): Promise<LLMResponse>;
   parseJSON<T>(content: string, schema: ZodSchema<T>): T;
   parseJSON<T>(content: string, schema: ZodSchema<T>, options: ParseJSONOptions): Promise<T>;
@@ -93,17 +104,24 @@ export class LLMClient extends BaseLLMClient implements ILLMClient {
   private guardrailRunner?: GuardrailRunner;
   private readonly defaultModel: string;
 
-  constructor(apiKey: string, guardrailRunner?: GuardrailRunner, lightModel?: string, model?: string) {
+  constructor(apiKey?: string, guardrailRunner?: GuardrailRunner, lightModel?: string, model?: string) {
     super();
-    if (!apiKey) {
+    const resolvedApiKey = apiKey ?? process.env["ANTHROPIC_API_KEY"];
+    if (!resolvedApiKey) {
       throw new LLMError(
         "LLMClient: no API key provided. Pass apiKey to constructor."
       );
     }
-    this.client = new Anthropic({ apiKey });
+    this.client = new Anthropic({ apiKey: resolvedApiKey });
     this.guardrailRunner = guardrailRunner;
     this.lightModel = lightModel;
     this.defaultModel = model ?? DEFAULT_MODEL;
+  }
+
+  override parseJSON<T>(content: string, schema: ZodSchema<T>): T;
+  override parseJSON<T>(content: string, schema: ZodSchema<T>, options: ParseJSONOptions): Promise<T>;
+  override parseJSON<T>(content: string, schema: ZodSchema<T>, options?: ParseJSONOptions): T | Promise<T> {
+    return super.parseJSON(content, schema, options);
   }
 
   /**
@@ -250,6 +268,69 @@ export class LLMClient extends BaseLLMClient implements ILLMClient {
     return result;
   }
 
+  async sendMessageStream(
+    messages: LLMMessage[],
+    options: LLMRequestOptions | undefined,
+    handlers: LLMStreamHandlers
+  ): Promise<LLMResponse> {
+    if (this.guardrailRunner) {
+      const response = await this.sendMessage(messages, options);
+      if (response.content) {
+        handlers.onTextDelta?.(response.content);
+      }
+      return response;
+    }
+
+    const model = this.resolveEffectiveModel(options?.model ?? this.defaultModel, options?.model_tier);
+    const max_tokens = options?.max_tokens ?? DEFAULT_MAX_TOKENS;
+    const temperature = options?.temperature ?? DEFAULT_TEMPERATURE;
+    const system = options?.system;
+    const anthropicTools = options?.tools?.map((t) => ({
+      name: t.function.name,
+      description: t.function.description,
+      input_schema: {
+        type: "object" as const,
+        ...t.function.parameters,
+      },
+    }));
+
+    const stream = this.client.messages.stream(
+      {
+        model,
+        max_tokens,
+        temperature,
+        ...(system ? { system } : {}),
+        ...(anthropicTools?.length ? { tools: anthropicTools } : {}),
+        messages: messages.map((m) => ({
+          role: m.role,
+          content: m.content,
+        })),
+      },
+      { timeout: DEFAULT_LLM_TIMEOUT_MS }
+    );
+
+    stream.on("text", (delta: string) => {
+      handlers.onTextDelta?.(delta);
+    });
+
+    const finalMessage = await stream.finalMessage();
+    const content = finalMessage.content
+      .filter((block) => block.type === "text")
+      .map((block) => block.text)
+      .join("");
+    const tool_calls = extractAnthropicToolCalls(finalMessage);
+
+    return {
+      content,
+      usage: {
+        input_tokens: finalMessage.usage.input_tokens,
+        output_tokens: finalMessage.usage.output_tokens,
+      },
+      stop_reason: finalMessage.stop_reason ?? "unknown",
+      ...(tool_calls.length > 0 ? { tool_calls } : {}),
+    };
+  }
+
   /**
    * Low-level LLM call used by parseJSON retry logic.
    * Sends messages and returns the raw response text.
@@ -316,4 +397,35 @@ export class MockLLMClient extends BaseLLMClient implements ILLMClient {
     const response = await this.sendMessage([]);
     return response.content;
   }
+
+  async sendMessageStream(
+    messages: LLMMessage[],
+    options: LLMRequestOptions | undefined,
+    handlers: LLMStreamHandlers
+  ): Promise<LLMResponse> {
+    const response = await this.sendMessage(messages, options);
+    if (response.content) {
+      handlers.onTextDelta?.(response.content);
+    }
+    return response;
+  }
+
+  override parseJSON<T>(content: string, schema: ZodSchema<T>): T;
+  override parseJSON<T>(content: string, schema: ZodSchema<T>, options: ParseJSONOptions): Promise<T>;
+  override parseJSON<T>(content: string, schema: ZodSchema<T>, options?: ParseJSONOptions): T | Promise<T> {
+    return super.parseJSON(content, schema, options);
+  }
+}
+
+function extractAnthropicToolCalls(message: Message): ToolCallResult[] {
+  return message.content
+    .filter((block) => block.type === "tool_use")
+    .map((block) => ({
+      id: block.id,
+      type: "function" as const,
+      function: {
+        name: block.name,
+        arguments: JSON.stringify(block.input),
+      },
+    }));
 }

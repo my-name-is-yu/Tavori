@@ -35,6 +35,7 @@ import type { ChatRunner } from "../../interface/chat/chat-runner.js";
 import type { DaemonClient } from "../../runtime/daemon-client.js";
 import { ShellTool } from "../../tools/system/ShellTool/ShellTool.js";
 import { getPulseedVersion } from "../../base/utils/pulseed-meta.js";
+import { applyChatEventToMessages } from "../chat/chat-event-state.js";
 
 const MAX_MESSAGES = 200;
 const PULSEED_VERSION = getPulseedVersion(import.meta.url);
@@ -226,6 +227,9 @@ export function App({
   useEffect(() => {
     if (chatRunner) {
       chatRunner.startSession(process.cwd());
+      chatRunner.onEvent = (event) => {
+        setMessages((prev) => applyChatEventToMessages(prev, event, MAX_MESSAGES) as ChatMessage[]);
+      };
     }
   }, [chatRunner]);
 
@@ -446,18 +450,7 @@ export function App({
           }
         } else if (chatRunner) {
           // Standalone mode: free-form text goes through ChatRunner
-          const result = await chatRunner.execute(input, process.cwd());
-
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: randomUUID(),
-              role: "pulseed" as const,
-              text: result.output || "(no response)",
-              timestamp: new Date(),
-              messageType: result.success ? ("info" as const) : ("error" as const),
-            },
-          ].slice(-MAX_MESSAGES));
+          await chatRunner.execute(input, process.cwd());
         } else {
           // Fallback: no chat capability
           setMessages((prev) => [...prev, {

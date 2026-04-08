@@ -14,6 +14,7 @@ import {
 import { TelegramNotifier } from "../src/notifier.js";
 import { PollingLoop } from "../src/polling-loop.js";
 import { ChatBridge } from "../src/chat-bridge.js";
+import { TelegramChatEventAdapter } from "../src/telegram-chat-event-adapter.js";
 import { TelegramBotPlugin } from "../src/index.js";
 
 // ─── Helpers ───
@@ -453,30 +454,216 @@ describe("PollingLoop", () => {
 // ─── chat-bridge.ts ───
 
 describe("ChatBridge", () => {
-  it("handleMessage calls processMessage with text and returns result", async () => {
-    const processor = vi.fn().mockResolvedValue("pong");
-    const bridge = new ChatBridge(processor);
+  it("handleMessage calls processMessage with text and event handler", async () => {
+    const processor = vi.fn().mockResolvedValue(undefined);
+    const sendPlainMessage = vi.fn().mockResolvedValue(101);
+    const adapterFactory = vi.fn().mockReturnValue({
+      handle: vi.fn(),
+      sendFinalFallback: vi.fn(),
+      renderedAssistantOutput: false,
+    });
+    const bridge = new ChatBridge(processor, adapterFactory);
 
-    const result = await bridge.handleMessage("ping", 1, 100);
+    await bridge.handleMessage("ping", 1, 100);
 
-    expect(processor).toHaveBeenCalledWith("ping");
-    expect(result).toBe("pong");
+    expect(processor).toHaveBeenCalledTimes(1);
+    expect(processor.mock.calls[0]![0]).toBe("ping");
+    expect(processor.mock.calls[0]![1]).toBe(100);
+    expect(typeof processor.mock.calls[0]![2]).toBe("function");
+    expect(adapterFactory).toHaveBeenCalledWith(100);
+    void sendPlainMessage;
   });
 
-  it("handleMessage ignores fromUserId and chatId for processing", async () => {
+  it("falls back to the returned string when no events were emitted", async () => {
     const processor = vi.fn().mockResolvedValue("ok");
-    const bridge = new ChatBridge(processor);
+    const sendFinalFallback = vi.fn().mockResolvedValue(undefined);
+    const bridge = new ChatBridge(
+      processor,
+      () => ({
+        handle: vi.fn(),
+        sendFinalFallback,
+        renderedAssistantOutput: false,
+      } as unknown as TelegramChatEventAdapter)
+    );
 
     await bridge.handleMessage("hello", 42, 999);
 
-    expect(processor).toHaveBeenCalledWith("hello");
+    expect(processor).toHaveBeenCalledWith("hello", 999, expect.any(Function));
+    expect(sendFinalFallback).toHaveBeenCalledWith("ok");
   });
 
-  it("propagates errors from processMessage", async () => {
-    const processor = vi.fn().mockRejectedValue(new Error("process failed"));
-    const bridge = new ChatBridge(processor);
+  it("does not send a fallback when assistant events already rendered output", async () => {
+    const processor = vi.fn().mockImplementation(async (_text: string, emit: (event: { type: string; runId: string; turnId: string; createdAt: string }) => Promise<void>) => {
+      await emit({
+        type: "assistant_final",
+        runId: "run-1",
+        turnId: "turn-1",
+        createdAt: new Date().toISOString(),
+        text: "streamed",
+        persisted: true,
+      } as never);
+      return "streamed";
+    });
+    const sendFinalFallback = vi.fn().mockResolvedValue(undefined);
+    const bridge = new ChatBridge(
+      processor,
+      () => ({
+        handle: vi.fn(),
+        sendFinalFallback,
+        renderedAssistantOutput: true,
+      } as unknown as TelegramChatEventAdapter)
+    );
 
-    await expect(bridge.handleMessage("test", 1, 1)).rejects.toThrow("process failed");
+    await bridge.handleMessage("hello", 42, 999);
+
+    expect(sendFinalFallback).not.toHaveBeenCalled();
+  });
+
+  it("returns a fallback error when processMessage throws", async () => {
+    const processor = vi.fn().mockRejectedValue(new Error("process failed"));
+    const sendFinalFallback = vi.fn().mockResolvedValue(undefined);
+    const bridge = new ChatBridge(
+      processor,
+      () => ({ handle: vi.fn(), sendFinalFallback, renderedAssistantOutput: false } as unknown as TelegramChatEventAdapter)
+    );
+
+    await expect(bridge.handleMessage("test", 1, 1)).resolves.toBeUndefined();
+    expect(sendFinalFallback).toHaveBeenCalledWith("Error: process failed");
+  });
+
+  it("setProcessMessage replaces the processor", async () => {
+    const first = vi.fn().mockResolvedValue("first");
+    const second = vi.fn().mockResolvedValue("second");
+    const sendFinalFallback = vi.fn().mockResolvedValue(undefined);
+    const bridge = new ChatBridge(
+      first,
+      () => ({ handle: vi.fn(), sendFinalFallback, renderedAssistantOutput: false } as unknown as TelegramChatEventAdapter)
+    );
+
+    bridge.setProcessMessage(second);
+    await bridge.handleMessage("test", 1, 1);
+
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledOnce();
+    expect(sendFinalFallback).toHaveBeenCalledWith("second");
+  });
+});
+
+describe("TelegramChatEventAdapter", () => {
+  it("edits the same assistant message for assistant_delta and assistant_final", async () => {
+    const sendPlainMessage = vi.fn().mockResolvedValue(10);
+    const editMessageText = vi.fn().mockResolvedValue(undefined);
+    const api = {
+      sendPlainMessage,
+      editMessageText,
+    } as unknown as TelegramAPI;
+
+    const adapter = new TelegramChatEventAdapter(api, 777);
+
+    await adapter.handle({
+      type: "lifecycle_start",
+      runId: "run-1",
+      turnId: "turn-1",
+      createdAt: "2026-04-08T00:00:00.000Z",
+      input: "hello",
+    });
+    await adapter.handle({
+      type: "assistant_delta",
+      runId: "run-1",
+      turnId: "turn-1",
+      createdAt: "2026-04-08T00:00:01.000Z",
+      delta: "Hel",
+      text: "Hel",
+    });
+    await adapter.handle({
+      type: "assistant_delta",
+      runId: "run-1",
+      turnId: "turn-1",
+      createdAt: "2026-04-08T00:00:02.000Z",
+      delta: "lo",
+      text: "Hello",
+    });
+    await adapter.handle({
+      type: "assistant_final",
+      runId: "run-1",
+      turnId: "turn-1",
+      createdAt: "2026-04-08T00:00:03.000Z",
+      text: "Hello",
+      persisted: true,
+    });
+
+    expect(sendPlainMessage).toHaveBeenCalledOnce();
+    expect(editMessageText).toHaveBeenCalledTimes(2);
+    expect(editMessageText.mock.calls[0]![2]).toBe("Hello");
+    expect(editMessageText.mock.calls[1]![2]).toBe("Hello");
+  });
+
+  it("renders tool events as a separate Telegram message and updates it", async () => {
+    const sendPlainMessage = vi.fn().mockResolvedValue(11);
+    const editMessageText = vi.fn().mockResolvedValue(undefined);
+    const api = {
+      sendPlainMessage,
+      editMessageText,
+    } as unknown as TelegramAPI;
+
+    const adapter = new TelegramChatEventAdapter(api, 777);
+
+    await adapter.handle({
+      type: "tool_start",
+      runId: "run-1",
+      turnId: "turn-1",
+      createdAt: "2026-04-08T00:00:00.000Z",
+      toolCallId: "tool-1",
+      toolName: "shell",
+      args: { command: "ls" },
+    });
+    await adapter.handle({
+      type: "tool_end",
+      runId: "run-1",
+      turnId: "turn-1",
+      createdAt: "2026-04-08T00:00:01.000Z",
+      toolCallId: "tool-1",
+      toolName: "shell",
+      success: true,
+      summary: "done",
+      durationMs: 12,
+    });
+
+    expect(sendPlainMessage).toHaveBeenCalledTimes(1);
+    expect(editMessageText).toHaveBeenCalledTimes(1);
+    expect(editMessageText.mock.calls[0]![2]).toContain("done");
+  });
+
+  it("edits the assistant message to show lifecycle_error partial text", async () => {
+    const sendPlainMessage = vi.fn().mockResolvedValue(12);
+    const editMessageText = vi.fn().mockResolvedValue(undefined);
+    const api = {
+      sendPlainMessage,
+      editMessageText,
+    } as unknown as TelegramAPI;
+
+    const adapter = new TelegramChatEventAdapter(api, 777);
+
+    await adapter.handle({
+      type: "assistant_delta",
+      runId: "run-2",
+      turnId: "turn-2",
+      createdAt: "2026-04-08T00:00:00.000Z",
+      delta: "Partial",
+      text: "Partial",
+    });
+    await adapter.handle({
+      type: "lifecycle_error",
+      runId: "run-2",
+      turnId: "turn-2",
+      createdAt: "2026-04-08T00:00:01.000Z",
+      error: "boom",
+      partialText: "Partial",
+      persisted: false,
+    });
+
+    expect(sendPlainMessage).toHaveBeenCalledOnce();
+    expect(editMessageText).toHaveBeenLastCalledWith(777, 12, "Partial\n\n[interrupted: boom]");
   });
 });
 
@@ -536,5 +723,22 @@ describe("TelegramBotPlugin", () => {
     await plugin.init();
     expect(() => plugin.startPolling()).not.toThrow();
     expect(() => plugin.stopPolling()).not.toThrow();
+  });
+
+  it("setMessageProcessor updates the bridge handler after init", async () => {
+    writeTmpConfig(tmpDir, { bot_token: "tok123", chat_id: 42 });
+    const plugin = new TelegramBotPlugin(tmpDir);
+    await plugin.init();
+
+    expect(() => plugin.setMessageProcessor(async (text, chatId) => `handled: ${text} in ${chatId}`)).not.toThrow();
+  });
+
+  it("does not crash init when the PulSeed provider is not configured", async () => {
+    writeTmpConfig(tmpDir, { bot_token: "tok123", chat_id: 42 });
+    const plugin = new TelegramBotPlugin(tmpDir);
+    await plugin.init();
+
+    const bridge = (plugin as unknown as { bridge?: ChatBridge }).bridge;
+    expect(bridge).toBeDefined();
   });
 });

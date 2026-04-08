@@ -18,6 +18,7 @@ import { ObservationEngine } from "../../../platform/observation/observation-eng
 import { GoalNegotiator } from "../../../orchestrator/goal/goal-negotiator.js";
 import { EscalationHandler } from "../../chat/escalation.js";
 import { DaemonClient, isDaemonRunning } from "../../../runtime/daemon-client.js";
+import { applyChatEventToMessages } from "../../chat/chat-event-state.js";
 
 const logger = getCliLogger();
 
@@ -62,6 +63,9 @@ function ChatApp({ chatRunner, cwd, timeoutMs }: ChatAppProps) {
     chatRunner.startSession(cwd);
     // Wire notification callback so /tend daemon events appear in chat
     chatRunner.onNotification = pushNotification;
+    chatRunner.onEvent = (event) => {
+      setMessages((prev) => applyChatEventToMessages(prev, event, 200) as ChatMessage[]);
+    };
   }, []);
 
   const onSubmit = useCallback(
@@ -80,17 +84,7 @@ function ChatApp({ chatRunner, cwd, timeoutMs }: ChatAppProps) {
       setIsProcessing(true);
 
       try {
-        const result = await chatRunner.execute(input, cwd, timeoutMs);
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: randomUUID(),
-            role: "pulseed" as const,
-            text: result.output || "(no output)",
-            timestamp: new Date(),
-            messageType: result.success ? ("info" as const) : ("error" as const),
-          },
-        ]);
+        await chatRunner.execute(input, cwd, timeoutMs);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         setMessages((prev) => [

@@ -4,6 +4,7 @@ import type { ChatRunnerDeps } from "../chat-runner.js";
 import type { StateManager } from "../../../base/state/state-manager.js";
 import type { IAdapter, AgentResult } from "../../../orchestrator/execution/adapter-layer.js";
 import type { EscalationHandler, EscalationResult } from "../escalation.js";
+import type { ILLMClient } from "../../../base/llm/llm-client.js";
 
 // Mock context-provider so tests don't walk the real filesystem
 vi.mock("../../../platform/observation/context-provider.js", () => ({
@@ -228,6 +229,79 @@ describe("ChatRunner", () => {
       expect(userMsg).toBeDefined();
       // The prompt passed to adapter may include context prefix, so check the session content
       expect(userMsg?.content).toBe(userInput);
+    });
+
+    it("persists assistant message only after streaming completes", async () => {
+      const stateManager = makeMockStateManager();
+      const writes: Array<{ messages: Array<{ role: string; content: string }> }> = [];
+      (stateManager.writeRaw as ReturnType<typeof vi.fn>).mockImplementation(async (_path, data) => {
+        writes.push(JSON.parse(JSON.stringify(data)));
+      });
+      const events: string[] = [];
+      const llmClient = {
+        supportsToolCalling: () => true,
+        sendMessageStream: vi.fn().mockImplementation(async (_messages, _options, handlers) => {
+          handlers.onTextDelta?.("Hello");
+          handlers.onTextDelta?.(" world");
+          return {
+            content: "Hello world",
+            usage: { input_tokens: 1, output_tokens: 2 },
+            stop_reason: "end_turn",
+            tool_calls: [],
+          };
+        }),
+      } as unknown as ILLMClient;
+
+      const runner = new ChatRunner(makeDeps({
+        stateManager,
+        llmClient,
+        onEvent: (event) => { events.push(event.type); },
+      }));
+
+      await runner.execute("Stream this", "/repo");
+
+      const writeRawMock = stateManager.writeRaw as ReturnType<typeof vi.fn>;
+      expect(writeRawMock).toHaveBeenCalledTimes(2);
+      const firstWrite = writes[0]!;
+      const secondWrite = writes[1]!;
+      expect(firstWrite.messages).toHaveLength(1);
+      expect(secondWrite.messages).toHaveLength(2);
+      expect(secondWrite.messages[1]?.content).toBe("Hello world");
+      expect(events).toContain("assistant_delta");
+      expect(events).toContain("assistant_final");
+    });
+
+    it("does not persist a partial assistant message when streaming fails", async () => {
+      const stateManager = makeMockStateManager();
+      const capturedEvents: Array<{ type: string; partialText?: string }> = [];
+      const llmClient = {
+        supportsToolCalling: () => true,
+        sendMessageStream: vi.fn().mockImplementation(async (_messages, _options, handlers) => {
+          handlers.onTextDelta?.("Partial answer");
+          throw new Error("stream aborted");
+        }),
+      } as unknown as ILLMClient;
+
+      const runner = new ChatRunner(makeDeps({
+        stateManager,
+        llmClient,
+        onEvent: (event) => {
+          if (event.type === "lifecycle_error") {
+            capturedEvents.push({ type: event.type, partialText: event.partialText });
+            return;
+          }
+          capturedEvents.push({ type: event.type });
+        },
+      }));
+
+      const result = await runner.execute("Break the stream", "/repo");
+
+      expect(result.success).toBe(false);
+      const writeRawMock = stateManager.writeRaw as ReturnType<typeof vi.fn>;
+      expect(writeRawMock).toHaveBeenCalledTimes(1);
+      const onlyWrite = writeRawMock.mock.calls[0][1] as { messages: Array<{ role: string; content: string }> };
+      expect(onlyWrite.messages).toHaveLength(1);
+      expect(capturedEvents).toContainEqual({ type: "lifecycle_error", partialText: "Partial answer" });
     });
   });
 

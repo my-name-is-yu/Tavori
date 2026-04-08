@@ -17,12 +17,13 @@ import type { ToolRegistry } from "../../tools/registry.js";
 import { toToolDefinitionsFiltered } from "../../tools/tool-definition-adapter.js";
 import type { ToolCallContext } from "../../tools/types.js";
 import type { ToolExecutor } from "../../tools/executor.js";
-import type { LLMMessage, LLMResponse } from "../../base/llm/llm-client.js";
+import type { LLMMessage, LLMRequestOptions, LLMResponse } from "../../base/llm/llm-client.js";
 import { TendCommand } from "./tend-command.js";
 import type { TendDeps } from "./tend-command.js";
 import { EventSubscriber } from "./event-subscriber.js";
 import type { DaemonClient } from "../../runtime/daemon-client.js";
 import type { GoalNegotiator } from "../../orchestrator/goal/goal-negotiator.js";
+import type { ChatEvent, ChatEventContext } from "./chat-events.js";
 
 // ─── Types ───
 
@@ -59,12 +60,18 @@ export interface ChatRunnerDeps {
   onNotification?: (message: string) => void;
   /** Optional: daemon event server base URL (e.g. http://127.0.0.1:7823) for EventSubscriber. */
   daemonBaseUrl?: string;
+  /** Optional: channel-agnostic chat stream events. */
+  onEvent?: (event: ChatEvent) => void;
 }
 
 export interface ChatRunResult {
   success: boolean;
   output: string;
   elapsed_ms: number;
+}
+
+interface AssistantBuffer {
+  text: string;
 }
 
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -111,6 +118,7 @@ export class ChatRunner {
    * Can be set after construction (e.g. from a React component via useEffect).
    */
   onNotification: ((message: string) => void) | undefined = undefined;
+  onEvent: ((event: ChatEvent) => void) | undefined = undefined;
 
   constructor(deps: ChatRunnerDeps) {
     this.deps = deps;
@@ -322,18 +330,44 @@ export class ChatRunner {
    *  4. Persist user message BEFORE calling adapter (crash-safe)
    *  5. Execute via adapter
    *  6. Verify changes (git diff + tests); retry up to MAX_VERIFY_RETRIES if tests fail
-   *  7. Persist assistant response (fire-and-forget)
+   *  7. Persist assistant response only after the final assistant text is complete
    */
   async execute(input: string, cwd: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<ChatRunResult> {
+    const eventContext = this.createEventContext();
+
     // Intercept commands before any adapter call
     const commandResult = await this.handleCommand(input);
     if (commandResult !== null) {
+      if (commandResult.output) {
+        this.emitEvent({
+          type: "assistant_final",
+          text: commandResult.output,
+          persisted: false,
+          ...this.eventBase(eventContext),
+        });
+      }
+      this.emitLifecycleEndEvent(commandResult.success ? "completed" : "error", commandResult.elapsed_ms, eventContext, false);
       return commandResult;
     }
 
     // Intercept plain Y/n responses (and any other input) when a /tend confirmation is pending
     if (this.pendingTend !== null) {
-      return this.handleTendConfirmation(input.trim(), Date.now());
+      const confirmationResult = await this.handleTendConfirmation(input.trim(), Date.now());
+      if (confirmationResult.output) {
+        this.emitEvent({
+          type: "assistant_final",
+          text: confirmationResult.output,
+          persisted: false,
+          ...this.eventBase(eventContext),
+        });
+      }
+      this.emitLifecycleEndEvent(
+        confirmationResult.success ? "completed" : "error",
+        confirmationResult.elapsed_ms,
+        eventContext,
+        false
+      );
+      return confirmationResult;
     }
 
     // Reuse session (interactive mode) or create a fresh one per call (1-shot mode)
@@ -349,6 +383,11 @@ export class ChatRunner {
 
     // Persist-before-execute: user message written to disk first
     await history.appendUserMessage(input);
+    this.emitEvent({
+      type: "lifecycle_start",
+      input,
+      ...this.eventBase(eventContext),
+    });
 
     // Build static grounding once per session; dynamic context is rebuilt each turn.
     if (this.cachedStaticSystemPrompt === null) {
@@ -387,14 +426,35 @@ export class ChatRunner {
     const prompt = historyBlock ? `${historyBlock}${basePrompt}` : basePrompt;
 
     const start = Date.now();
+    const assistantBuffer: AssistantBuffer = { text: "" };
 
     // Use llmClient with self-knowledge tools when available (function calling path)
     // Skip executeWithTools for clients that don't support tool calling (e.g. CodexLLMClient)
     if (this.deps.llmClient && this.deps.llmClient.supportsToolCalling?.() !== false) {
-      const toolResult = await this.executeWithTools(prompt, systemPrompt || undefined);
-      const elapsed_ms = Date.now() - start;
-      await history.appendAssistantMessage(toolResult);
-      return { success: true, output: toolResult, elapsed_ms };
+      try {
+        const toolResult = await this.executeWithTools(prompt, eventContext, assistantBuffer, systemPrompt || undefined);
+        const elapsed_ms = Date.now() - start;
+        await history.appendAssistantMessage(toolResult);
+        this.emitEvent({
+          type: "assistant_final",
+          text: toolResult,
+          persisted: true,
+          ...this.eventBase(eventContext),
+        });
+        this.emitLifecycleEndEvent("completed", elapsed_ms, eventContext, true);
+        return { success: true, output: toolResult, elapsed_ms };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.emitLifecycleErrorEvent(message, assistantBuffer.text, eventContext);
+        this.emitLifecycleEndEvent("error", Date.now() - start, eventContext, false);
+        return {
+          success: false,
+          output: assistantBuffer.text
+            ? `${assistantBuffer.text}\n\n[interrupted: ${message}]`
+            : `Error: ${message}`,
+          elapsed_ms: Date.now() - start,
+        };
+      }
     }
 
     const task: AgentTask = {
@@ -415,6 +475,9 @@ export class ChatRunner {
       result = { ...result, output: `Error: ${result.error}` };
     }
     const elapsed_ms = Date.now() - start;
+    if (result.output) {
+      this.pushAssistantDelta(result.output, assistantBuffer, eventContext);
+    }
 
     // Verification loop: check if git has uncommitted changes; if so, run tests
     const gitChanges = await checkGitChanges(gitRoot);
@@ -437,18 +500,34 @@ export class ChatRunner {
       }
 
       if (!verification.passed) {
-        // Fire-and-forget: persist assistant response
-        history.appendAssistantMessage(result.output);
+        this.emitLifecycleErrorEvent(
+          `Changes applied but tests are still failing after ${MAX_VERIFY_RETRIES} retries.`,
+          assistantBuffer.text,
+          eventContext
+        );
+        this.emitLifecycleEndEvent("error", Date.now() - start, eventContext, false);
         return {
           success: false,
-          output: `Changes applied but tests are still failing after ${MAX_VERIFY_RETRIES} retries. Please intervene manually.\n\nTest output:\n${verification.testOutput ?? verification.errors.join("\n")}`,
+          output: `${assistantBuffer.text}\n\n[interrupted: tests are still failing after ${MAX_VERIFY_RETRIES} retries]\n\nTest output:\n${verification.testOutput ?? verification.errors.join("\n")}`.trim(),
           elapsed_ms: Date.now() - start,
         };
       }
     }
 
-    // Fire-and-forget: persist assistant response after completion
-    history.appendAssistantMessage(result.output);
+    if (result.success) {
+      await history.appendAssistantMessage(result.output);
+      this.emitEvent({
+        type: "assistant_final",
+        text: result.output,
+        persisted: true,
+        ...this.eventBase(eventContext),
+      });
+      this.emitLifecycleEndEvent("completed", elapsed_ms, eventContext, true);
+    } else {
+      const partialText = assistantBuffer.text !== result.output ? assistantBuffer.text : "";
+      this.emitLifecycleErrorEvent(result.output || result.error || "Unknown error", partialText, eventContext);
+      this.emitLifecycleEndEvent("error", elapsed_ms, eventContext, false);
+    }
 
     return {
       success: result.success,
@@ -461,7 +540,12 @@ export class ChatRunner {
    * Execute a chat turn using llmClient with self-knowledge tools (function calling).
    * Loops up to MAX_TOOL_LOOPS times to resolve tool calls, then returns final text.
    */
-  private async executeWithTools(prompt: string, systemPrompt?: string): Promise<string> {
+  private async executeWithTools(
+    prompt: string,
+    eventContext: ChatEventContext,
+    assistantBuffer: AssistantBuffer,
+    systemPrompt?: string
+  ): Promise<string> {
     const llmClient = this.deps.llmClient!;
     const messages: LLMMessage[] = [{ role: "user", content: prompt }];
     const toolCallContext = this.buildToolCallContext();
@@ -473,19 +557,19 @@ export class ChatRunner {
         : [];
       let response: LLMResponse;
       try {
-        response = await llmClient.sendMessage(messages, {
+        response = await this.sendLLMMessage(llmClient, messages, {
           tools,
           ...(systemPrompt ? { system: systemPrompt } : {}),
-        });
+        }, assistantBuffer, eventContext);
       } catch (err) {
         console.error("[chat-runner] executeWithTools error:", err);
         const hint = err instanceof Error ? `: ${err.message}` : "";
-        return `Sorry, I encountered an error processing your request${hint}.`;
+        throw new Error(`Sorry, I encountered an error processing your request${hint}.`);
       }
 
       // No tool calls — return the text content
       if (!response.tool_calls || response.tool_calls.length === 0) {
-        return response.content || "(no response)";
+        return assistantBuffer.text || response.content || "(no response)";
       }
 
       // Append assistant message, then process tool calls
@@ -498,7 +582,13 @@ export class ChatRunner {
         } catch {
           // ignore parse errors, use empty args
         }
-        const toolResult = await this.dispatchToolCall(tc.function.name, args, toolCallContext);
+        const toolResult = await this.dispatchToolCall(
+          tc.id,
+          tc.function.name,
+          args,
+          toolCallContext,
+          eventContext
+        );
         // When ToolSearch returns results, activate deferred tools for subsequent turns
         if (tc.function.name === "tool_search") {
           this.activateToolSearchResults(toolResult);
@@ -534,9 +624,11 @@ export class ChatRunner {
 
   /** Dispatch a tool call through the registry. */
   private async dispatchToolCall(
+    toolCallId: string,
     name: string,
     args: Record<string, unknown>,
     context: ToolCallContext,
+    eventContext: ChatEventContext,
   ): Promise<string> {
     if (!this.deps.registry) {
       return JSON.stringify({ error: `No tool registry configured` });
@@ -549,15 +641,49 @@ export class ChatRunner {
     try {
       const parsed = tool.inputSchema.safeParse(args);
       if (!parsed.success) {
+        this.emitEvent({
+          type: "tool_end",
+          toolCallId,
+          toolName: name,
+          success: false,
+          summary: `Invalid input: ${parsed.error.message}`,
+          durationMs: Date.now() - startTime,
+          ...this.eventBase(eventContext),
+        });
         return JSON.stringify({ error: `Invalid input: ${parsed.error.message}` });
       }
+
+      this.emitEvent({
+        type: "tool_start",
+        toolCallId,
+        toolName: name,
+        args,
+        ...this.eventBase(eventContext),
+      });
 
       // Gate: check permissions before execution
       const permResult = await tool.checkPermissions(parsed.data, context);
       if (permResult.status === "denied") {
+        this.emitEvent({
+          type: "tool_end",
+          toolCallId,
+          toolName: name,
+          success: false,
+          summary: permResult.reason,
+          durationMs: Date.now() - startTime,
+          ...this.eventBase(eventContext),
+        });
         return `Tool ${name} denied: ${permResult.reason}`;
       }
       if (permResult.status === "needs_approval") {
+        this.emitEvent({
+          type: "tool_update",
+          toolCallId,
+          toolName: name,
+          status: "awaiting_approval",
+          message: permResult.reason,
+          ...this.eventBase(eventContext),
+        });
         const approved = await context.approvalFn({
           toolName: name,
           input: parsed.data,
@@ -567,21 +693,153 @@ export class ChatRunner {
           reversibility: "unknown",
         });
         if (!approved) {
+          this.emitEvent({
+            type: "tool_end",
+            toolCallId,
+            toolName: name,
+            success: false,
+            summary: `Not approved: ${permResult.reason}`,
+            durationMs: Date.now() - startTime,
+            ...this.eventBase(eventContext),
+          });
           return `Tool ${name} not approved: ${permResult.reason}`;
         }
       }
 
+      this.emitEvent({
+        type: "tool_update",
+        toolCallId,
+        toolName: name,
+        status: "running",
+        message: "running",
+        ...this.eventBase(eventContext),
+      });
       this.deps.onToolStart?.(name, args);
       const result = await tool.call(parsed.data, context);
       const durationMs = Date.now() - startTime;
       this.deps.onToolEnd?.(name, { success: result.success, summary: result.summary || '...', durationMs });
+      this.emitEvent({
+        type: "tool_update",
+        toolCallId,
+        toolName: name,
+        status: "result",
+        message: result.summary || "...",
+        ...this.eventBase(eventContext),
+      });
+      this.emitEvent({
+        type: "tool_end",
+        toolCallId,
+        toolName: name,
+        success: result.success,
+        summary: result.summary || "...",
+        durationMs,
+        ...this.eventBase(eventContext),
+      });
       // Prefer structured data (JSON) over plain summary so the LLM gets actionable content
       return result.data != null ? JSON.stringify(result.data) : (result.summary ?? "(no result)");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      this.deps.onToolEnd?.(name, { success: false, summary: message, durationMs: Date.now() - startTime });
+      const durationMs = Date.now() - startTime;
+      this.deps.onToolEnd?.(name, { success: false, summary: message, durationMs });
+      this.emitEvent({
+        type: "tool_end",
+        toolCallId,
+        toolName: name,
+        success: false,
+        summary: message,
+        durationMs,
+        ...this.eventBase(eventContext),
+      });
       return JSON.stringify({ error: `Tool ${name} failed: ${message}` });
     }
+  }
+
+  private async sendLLMMessage(
+    llmClient: ILLMClient,
+    messages: LLMMessage[],
+    options: LLMRequestOptions | undefined,
+    assistantBuffer: AssistantBuffer,
+    eventContext: ChatEventContext
+  ): Promise<LLMResponse> {
+    let streamed = false;
+    if (llmClient.sendMessageStream) {
+      const response = await llmClient.sendMessageStream(messages, options, {
+        onTextDelta: (delta) => {
+          streamed = true;
+          this.pushAssistantDelta(delta, assistantBuffer, eventContext);
+        },
+      });
+      if (!streamed && response.content) {
+        this.pushAssistantDelta(response.content, assistantBuffer, eventContext);
+      }
+      return response;
+    }
+
+    const response = await llmClient.sendMessage(messages, options);
+    if (response.content) {
+      this.pushAssistantDelta(response.content, assistantBuffer, eventContext);
+    }
+    return response;
+  }
+
+  private createEventContext(): ChatEventContext {
+    return {
+      runId: crypto.randomUUID(),
+      turnId: crypto.randomUUID(),
+    };
+  }
+
+  private eventBase(context: ChatEventContext): ChatEventContext & { createdAt: string } {
+    return { ...context, createdAt: new Date().toISOString() };
+  }
+
+  private emitEvent(event: ChatEvent): void {
+    const handler = this.onEvent ?? this.deps.onEvent;
+    handler?.(event);
+  }
+
+  private pushAssistantDelta(
+    delta: string,
+    assistantBuffer: AssistantBuffer,
+    eventContext: ChatEventContext
+  ): void {
+    if (!delta) return;
+    assistantBuffer.text += delta;
+    this.emitEvent({
+      type: "assistant_delta",
+      delta,
+      text: assistantBuffer.text,
+      ...this.eventBase(eventContext),
+    });
+  }
+
+  private emitLifecycleEndEvent(
+    status: "completed" | "error",
+    elapsedMs: number,
+    eventContext: ChatEventContext,
+    persisted: boolean
+  ): void {
+    this.emitEvent({
+      type: "lifecycle_end",
+      status,
+      elapsedMs,
+      persisted,
+      ...this.eventBase(eventContext),
+    });
+  }
+
+  private emitLifecycleErrorEvent(
+    error: string,
+    partialText: string,
+    eventContext: ChatEventContext
+  ): void {
+    this.emitEvent({
+      type: "lifecycle_error",
+      error,
+      partialText,
+      persisted: false,
+      ...this.eventBase(eventContext),
+    });
   }
 
   /** Build a ToolCallContext from ChatRunnerDeps for tool dispatch. */
