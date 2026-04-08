@@ -8,6 +8,11 @@ import {
   ScheduleEntrySchema,
   ScheduleEntryListSchema,
   ScheduleResultSchema,
+  type CronConfig,
+  type EscalationConfig,
+  type GoalTriggerConfig,
+  type HeartbeatConfig,
+  type ProbeConfig,
   type ScheduleEntry,
   type ScheduleEntryInput,
   type ScheduleResult,
@@ -44,6 +49,17 @@ const noopLogger = {
   warn: (_msg: string, _ctx?: Record<string, unknown>) => {},
   error: (_msg: string, _ctx?: Record<string, unknown>) => {},
 };
+
+export type ScheduleEntryUpdateInput = Partial<{
+  name: string;
+  enabled: boolean;
+  trigger: ScheduleTriggerInput;
+  heartbeat: HeartbeatConfig;
+  probe: ProbeConfig;
+  cron: CronConfig;
+  goal_trigger: GoalTriggerConfig;
+  escalation: EscalationConfig | null;
+}>;
 
 export class ScheduleEngine {
   private entries: ScheduleEntry[] = [];
@@ -134,6 +150,82 @@ export class ScheduleEngine {
     if (this.entries.length === before) return false;
     await this.saveEntries();
     return true;
+  }
+
+  async updateEntry(
+    id: string,
+    patch: ScheduleEntryUpdateInput
+  ): Promise<ScheduleEntry | null> {
+    const idx = this.entries.findIndex((entry) => entry.id === id);
+    if (idx === -1) return null;
+
+    const hasUpdatableFields =
+      patch.name !== undefined ||
+      patch.enabled !== undefined ||
+      patch.trigger !== undefined ||
+      patch.heartbeat !== undefined ||
+      patch.probe !== undefined ||
+      patch.cron !== undefined ||
+      patch.goal_trigger !== undefined ||
+      patch.escalation !== undefined;
+
+    if (!hasUpdatableFields) {
+      throw new Error("No updatable fields provided");
+    }
+
+    const current = this.entries[idx]!;
+    const layerConfigFields = [
+      ["heartbeat", patch.heartbeat],
+      ["probe", patch.probe],
+      ["cron", patch.cron],
+      ["goal_trigger", patch.goal_trigger],
+    ] as const;
+
+    for (const [field, value] of layerConfigFields) {
+      if (value === undefined) continue;
+      if (current.layer !== field) {
+        throw new Error(`Cannot update ${field} config for ${current.layer} entry`);
+      }
+    }
+
+    const nextEntry: ScheduleEntryInput = { ...current };
+
+    if (patch.name !== undefined) nextEntry.name = patch.name;
+    if (patch.enabled !== undefined) nextEntry.enabled = patch.enabled;
+    if (patch.trigger !== undefined) nextEntry.trigger = patch.trigger;
+    if (patch.heartbeat !== undefined) nextEntry.heartbeat = patch.heartbeat;
+    if (patch.probe !== undefined) nextEntry.probe = patch.probe;
+    if (patch.cron !== undefined) nextEntry.cron = patch.cron;
+    if (patch.goal_trigger !== undefined) nextEntry.goal_trigger = patch.goal_trigger;
+
+    if (patch.escalation !== undefined) {
+      if (patch.escalation === null) {
+        delete nextEntry.escalation;
+      } else {
+        nextEntry.escalation = patch.escalation;
+      }
+    }
+
+    if (patch.trigger !== undefined || (current.enabled === false && patch.enabled === true)) {
+      nextEntry.next_fire_at = this.computeNextFireAt(nextEntry.trigger);
+    }
+
+    nextEntry.updated_at = new Date().toISOString();
+
+    const parsedEntry = ScheduleEntrySchema.parse(nextEntry);
+    const previousEntries = this.entries;
+    const nextEntries = [...this.entries];
+    nextEntries[idx] = parsedEntry;
+    this.entries = nextEntries;
+
+    try {
+      await this.saveEntries();
+    } catch (error) {
+      this.entries = previousEntries;
+      throw error;
+    }
+
+    return parsedEntry;
   }
 
   // ─── Scheduling ───

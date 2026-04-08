@@ -4,6 +4,7 @@ import React, { useState, useCallback, useEffect } from "react";
 import { render, useApp } from "ink";
 import { parseArgs } from "node:util";
 import { randomUUID } from "node:crypto";
+import { createInterface } from "node:readline";
 
 import { StateManager } from "../../../base/state/state-manager.js";
 import { ensureProviderConfig } from "../ensure-api-key.js";
@@ -18,9 +19,36 @@ import { ObservationEngine } from "../../../platform/observation/observation-eng
 import { GoalNegotiator } from "../../../orchestrator/goal/goal-negotiator.js";
 import { EscalationHandler } from "../../chat/escalation.js";
 import { DaemonClient, isDaemonRunning } from "../../../runtime/daemon-client.js";
+import { ScheduleEngine } from "../../../runtime/schedule-engine.js";
+import { TrustManager } from "../../../platform/traits/trust-manager.js";
+import { ToolRegistry } from "../../../tools/registry.js";
+import { createBuiltinTools } from "../../../tools/builtin/index.js";
 import { applyChatEventToMessages } from "../../chat/chat-event-state.js";
 
 const logger = getCliLogger();
+
+async function promptChatApproval(reason: string): Promise<boolean> {
+  if (!process.stdin.isTTY) return false;
+
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (approved: boolean) => {
+      if (settled) return;
+      settled = true;
+      resolve(approved);
+    };
+
+    rl.question(`\n⚠ Approval required: ${reason}\nProceed? [y/N] `, (answer) => {
+      const normalized = answer.trim().toLowerCase();
+      finish(normalized === "y" || normalized === "yes");
+      rl.close();
+    });
+
+    rl.once("close", () => finish(false));
+  });
+}
 
 // ─── Interactive REPL component ───
 
@@ -157,6 +185,19 @@ export async function cmdChat(
     const llmClient = await buildLLMClient();
     const adapterRegistry = await buildAdapterRegistry(llmClient);
     const adapter = adapterRegistry.getAdapter(adapterType);
+    const pulseedDir = stateManager.getBaseDir();
+    const trustManager = new TrustManager(stateManager);
+    const scheduleEngine = new ScheduleEngine({ baseDir: pulseedDir });
+    await scheduleEngine.loadEntries();
+    const registry = new ToolRegistry();
+    for (const tool of createBuiltinTools({
+      stateManager,
+      trustManager,
+      registry,
+      scheduleEngine,
+    })) {
+      registry.register(tool);
+    }
 
     // Build escalation + tend deps (optional — /track and /tend work only when LLM is available)
     let escalationHandler: EscalationHandler | undefined;
@@ -176,7 +217,6 @@ export async function cmdChat(
     let daemonClient: DaemonClient | undefined;
     let daemonBaseUrl: string | undefined;
     try {
-      const pulseedDir = process.env["PULSEED_DIR"] ?? `${process.env["HOME"] ?? "~"}/.pulseed`;
       const daemonInfo = await isDaemonRunning(pulseedDir);
       if (daemonInfo.running) {
         daemonClient = new DaemonClient({ host: "127.0.0.1", port: daemonInfo.port });
@@ -195,6 +235,8 @@ export async function cmdChat(
       goalNegotiator: goalNegotiatorForTend,
       daemonClient,
       daemonBaseUrl,
+      registry,
+      approvalFn: promptChatApproval,
     });
 
     // Non-interactive: single turn
