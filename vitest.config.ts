@@ -1,4 +1,6 @@
 import { existsSync } from 'node:fs';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 const include = [
@@ -14,6 +16,8 @@ if (existsSync('web/src/app')) {
   include.push('tests/web/**/*.test.ts');
 }
 
+const dirname = path.dirname(fileURLToPath(import.meta.url));
+
 export default defineConfig({
   test: {
     globals: true,
@@ -25,6 +29,11 @@ export default defineConfig({
       exclude: ['src/types/**', 'src/tui/**'],
       reporter: ['text', 'text-summary', 'json', 'html'],
       reportsDirectory: 'coverage',
+    },
+  },
+  resolve: {
+    alias: {
+      pulseed: path.resolve(dirname, 'src/index.ts'),
     },
   },
 });
