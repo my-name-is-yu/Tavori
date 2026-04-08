@@ -43,6 +43,7 @@ import type { IAdapter, AgentResult } from "../../../orchestrator/execution/adap
 import type { StateManager } from "../../../base/state/state-manager.js";
 import type { ILLMClient } from "../../../base/llm/llm-client.js";
 import { spawnWithTimeout } from "../../../adapters/spawn-helper.js";
+import { clearIdentityCache } from "../../../base/config/identity-loader.js";
 
 // ─── Shared helpers ───
 
@@ -86,13 +87,23 @@ function makeDeps(overrides: Partial<ChatRunnerDeps> = {}): ChatRunnerDeps {
 
 describe("buildSystemPrompt (grounding.ts)", () => {
   let tmpDir: string;
+  let originalPulseedHome: string | undefined;
 
   beforeEach(async () => {
     tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "pulseed-grounding-test-"));
+    originalPulseedHome = process.env["PULSEED_HOME"];
+    process.env["PULSEED_HOME"] = tmpDir;
+    clearIdentityCache();
   });
 
   afterEach(async () => {
     await fsp.rm(tmpDir, { recursive: true, force: true });
+    if (originalPulseedHome === undefined) {
+      delete process.env["PULSEED_HOME"];
+    } else {
+      process.env["PULSEED_HOME"] = originalPulseedHome;
+    }
+    clearIdentityCache();
   });
 
   it("includes Seedy identity text", async () => {
@@ -100,15 +111,39 @@ describe("buildSystemPrompt (grounding.ts)", () => {
     const prompt = await buildSystemPrompt({ stateManager: sm, homeDir: tmpDir });
 
     expect(prompt).toContain("Seedy");
-    expect(prompt).toContain("goals");
+    expect(prompt).toContain("You run PulSeed");
   });
 
-  it("includes identity system content", async () => {
+  it("includes fixed policy sections", async () => {
     const sm = makeMockStateManager();
     const prompt = await buildSystemPrompt({ stateManager: sm, homeDir: tmpDir });
 
-    expect(prompt).toContain("Seedy");
+    expect(prompt).toContain("## Identity");
+    expect(prompt).toContain("## Execution Bias");
+    expect(prompt).toContain("## Tooling Policy");
+    expect(prompt).toContain("## Communication Policy");
+    expect(prompt).toContain("## Safety And Approval");
+    expect(prompt).toContain("## Dynamic Context");
+    expect(prompt).toContain("Platform operating policy overrides persona and customization text if they conflict.");
     expect(prompt.length).toBeGreaterThan(0);
+  });
+
+  it("aligns default identity text with direct tool execution", async () => {
+    const sm = makeMockStateManager();
+    const prompt = await buildSystemPrompt({ stateManager: sm, homeDir: tmpDir });
+
+    expect(prompt).toContain("I use available tools directly when that moves the goal forward safely");
+    expect(prompt).not.toContain("I orchestrate, I don't execute tasks directly");
+    expect(prompt).not.toContain("I always delegate to agents and observe results");
+  });
+
+  it("limits explicit approval guidance to high-impact actions", async () => {
+    const sm = makeMockStateManager();
+    const prompt = await buildSystemPrompt({ stateManager: sm, homeDir: tmpDir });
+
+    expect(prompt).toContain("Proceed without asking first for routine reads, searches, tests, diffs, and ordinary local code edits.");
+    expect(prompt).toContain("Before high-impact configuration changes");
+    expect(prompt).not.toContain("Require explicit user approval before applying configuration changes.");
   });
 
   it("shows goals from stateManager", async () => {
@@ -125,6 +160,7 @@ describe("buildSystemPrompt (grounding.ts)", () => {
     expect(prompt).toContain("goal-1");
     expect(prompt).toContain("Fix prod bug");
     expect(prompt).toContain("goal-2");
+    expect(prompt).toContain("### Current Goals");
   });
 
   it("shows 'No goals configured yet' when no goals", async () => {
@@ -155,6 +191,7 @@ describe("buildSystemPrompt (grounding.ts)", () => {
 
     expect(prompt).toContain("slack-notifier");
     expect(prompt).toContain("github-issues");
+    expect(prompt).toContain("### Installed Plugins");
   });
 
   it("shows 'none' when plugins directory is absent", async () => {
@@ -177,6 +214,7 @@ describe("buildSystemPrompt (grounding.ts)", () => {
 
     expect(prompt).toContain("claude-sonnet-4");
     expect(prompt).toContain("claude_api");
+    expect(prompt).toContain("### Provider");
   });
 
   it("shows 'not configured' when provider.json is absent", async () => {
@@ -408,19 +446,35 @@ describe("ChatRunner — grounding integration", () => {
     expect(task.system_prompt.length).toBeGreaterThan(0);
   });
 
-  it("caches system_prompt across turns — buildSystemPrompt called once per session", async () => {
+  it("rebuilds dynamic context across turns while reusing static prompt", async () => {
     const adapter = makeMockAdapter();
-    const stateManager = makeMockStateManager();
+    let currentIds = ["goal-1"];
+    const goals: Record<string, { title: string; status: string; loop_status: string }> = {
+      "goal-1": { title: "First goal", status: "active", loop_status: "running" },
+      "goal-2": { title: "Second goal", status: "pending", loop_status: "idle" },
+    };
+    const stateManager = {
+      listGoalIds: vi.fn().mockImplementation(async () => currentIds),
+      loadGoal: vi.fn().mockImplementation(async (id: string) => goals[id] ?? null),
+      writeRaw: vi.fn().mockResolvedValue(undefined),
+      readRaw: vi.fn().mockResolvedValue(null),
+    } as unknown as StateManager;
     const runner = new ChatRunner(makeDeps({ adapter, stateManager }));
 
     runner.startSession("/repo");
     await runner.execute("Turn 1", "/repo");
+    currentIds = ["goal-2"];
     await runner.execute("Turn 2", "/repo");
-    await runner.execute("Turn 3", "/repo");
 
-    // listGoalIds is called by buildSystemPrompt; should only be called once (caching)
+    const firstTask = (adapter.execute as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    const secondTask = (adapter.execute as ReturnType<typeof vi.fn>).mock.calls[1][0];
     const listGoalIdsMock = stateManager.listGoalIds as ReturnType<typeof vi.fn>;
-    expect(listGoalIdsMock).toHaveBeenCalledTimes(1);
+    expect(listGoalIdsMock).toHaveBeenCalledTimes(2);
+    expect(firstTask.system_prompt).toContain("## Identity");
+    expect(secondTask.system_prompt).toContain("## Identity");
+    expect(firstTask.system_prompt).toContain("First goal");
+    expect(secondTask.system_prompt).toContain("Second goal");
+    expect(secondTask.system_prompt).not.toContain("First goal");
   });
 
   it("includes conversation history in prompt for subsequent turns", async () => {
@@ -468,8 +522,7 @@ describe("ChatRunner — grounding integration", () => {
     expect(exactMsg1).toBeUndefined();
   });
 
-  it("does not set system_prompt on AgentTask when buildSystemPrompt fails", async () => {
-    // stateManager that makes buildSystemPrompt throw → cachedSystemPrompt = ""
+  it("falls back to static system_prompt when dynamic context build fails", async () => {
     const sm = {
       listGoalIds: vi.fn().mockRejectedValue(new Error("fail")),
       loadGoal: vi.fn(),
@@ -483,7 +536,8 @@ describe("ChatRunner — grounding integration", () => {
     await runner.execute("Hello", "/repo");
 
     const task = (adapter.execute as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    // When buildSystemPrompt throws, cachedSystemPrompt = "" → no system_prompt key on task
-    expect(task.system_prompt).toBeUndefined();
+    expect(task.system_prompt).toBeDefined();
+    expect(task.system_prompt).toContain("## Identity");
+    expect(task.system_prompt).not.toContain("## Dynamic Context");
   });
 });

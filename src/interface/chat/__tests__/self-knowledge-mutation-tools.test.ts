@@ -221,29 +221,38 @@ describe("handleMutationToolCall — archive_goal", () => {
 // ─── delete_goal ───
 
 describe("handleMutationToolCall — delete_goal", () => {
-  it("deletes a goal without requiring approvalFn (LLM conversational confirmation)", async () => {
+  it("returns error when no approvalFn is configured", async () => {
     const sm = makeStateManager({ deleteGoal: vi.fn().mockResolvedValue(true) });
-    // No approvalFn provided — should succeed because approvalLevel is "none"
     const deps = makeDeps({ stateManager: sm });
     const result = await handleMutationToolCall("delete_goal", { goal_id: "g1" }, deps);
-    const parsed = JSON.parse(result) as { success: boolean };
-    expect(parsed.success).toBe(true);
-    expect(sm.deleteGoal).toHaveBeenCalledWith("g1");
+    const parsed = JSON.parse(result) as { error: string };
+    expect(parsed.error).toContain("approval");
+    expect(sm.deleteGoal).not.toHaveBeenCalled();
   });
 
-  it("does not call approvalFn even when one is provided", async () => {
+  it("deletes a goal when approval is granted", async () => {
     const sm = makeStateManager({ deleteGoal: vi.fn().mockResolvedValue(true) });
     const approvalFn = vi.fn().mockResolvedValue(true);
     const deps = makeDeps({ stateManager: sm, approvalFn });
     const result = await handleMutationToolCall("delete_goal", { goal_id: "g1" }, deps);
     const parsed = JSON.parse(result) as { success: boolean };
     expect(parsed.success).toBe(true);
-    expect(approvalFn).not.toHaveBeenCalled();
+    expect(approvalFn).toHaveBeenCalled();
+  });
+
+  it("returns error when user denies approval", async () => {
+    const sm = makeStateManager({ deleteGoal: vi.fn().mockResolvedValue(true) });
+    const approvalFn = vi.fn().mockResolvedValue(false);
+    const deps = makeDeps({ stateManager: sm, approvalFn });
+    const result = await handleMutationToolCall("delete_goal", { goal_id: "g1" }, deps);
+    const parsed = JSON.parse(result) as { error: string };
+    expect(parsed.error).toContain("denied");
+    expect(sm.deleteGoal).not.toHaveBeenCalled();
   });
 
   it("returns error when goal is not found", async () => {
     const sm = makeStateManager({ deleteGoal: vi.fn().mockResolvedValue(false) });
-    const deps = makeDeps({ stateManager: sm });
+    const deps = makeDeps({ stateManager: sm, approvalFn: vi.fn().mockResolvedValue(true) });
     const result = await handleMutationToolCall("delete_goal", { goal_id: "nonexistent" }, deps);
     const parsed = JSON.parse(result) as { error: string };
     expect(parsed.error).toContain("not found");
@@ -336,13 +345,38 @@ describe("handleMutationToolCall — update_config", () => {
   });
 
   it("succeeds and reports updated key/value (daemon_mode)", async () => {
-    const deps = makeDeps();
+    const deps = makeDeps({ approvalFn: vi.fn().mockResolvedValue(true) });
     const result = await handleMutationToolCall("update_config", { key: "daemon_mode", value: true }, deps);
     const parsed = JSON.parse(result) as { success: boolean; key: string; value: unknown; message: string };
     expect(parsed.success).toBe(true);
     expect(parsed.key).toBe("daemon_mode");
     expect(parsed.value).toBe(true);
     expect(parsed.message).toContain("daemon_mode");
+  });
+
+  it("returns error when no approvalFn is configured for a valid change", async () => {
+    const deps = makeDeps();
+    const result = await handleMutationToolCall("update_config", { key: "daemon_mode", value: true }, deps);
+    const parsed = JSON.parse(result) as { error: string };
+    expect(parsed.error).toContain("approval");
+  });
+
+  it("returns error when user denies approval for a valid change", async () => {
+    const deps = makeDeps({ approvalFn: vi.fn().mockResolvedValue(false) });
+    const result = await handleMutationToolCall("update_config", { key: "daemon_mode", value: true }, deps);
+    const parsed = JSON.parse(result) as { error: string };
+    expect(parsed.error).toContain("denied");
+  });
+
+  it("allows routine config changes without approval", async () => {
+    const approvalFn = vi.fn().mockResolvedValue(true);
+    const deps = makeDeps({ approvalFn });
+    const result = await handleMutationToolCall("update_config", { key: "no_flicker", value: true }, deps);
+    const parsed = JSON.parse(result) as { success: boolean; key: string; value: boolean };
+    expect(parsed.success).toBe(true);
+    expect(parsed.key).toBe("no_flicker");
+    expect(parsed.value).toBe(true);
+    expect(approvalFn).not.toHaveBeenCalled();
   });
 });
 
@@ -452,10 +486,23 @@ describe("handleMutationToolCall — approval config override", () => {
     expect(approvalFn).toHaveBeenCalled();
   });
 
-  it("delete_goal does not require approvalFn by default (approval level none)", async () => {
+  it("delete_goal requires approvalFn by default", async () => {
     const sm = makeStateManager({ deleteGoal: vi.fn().mockResolvedValue(true) });
     const approvalFn = vi.fn().mockResolvedValue(true);
     const deps = makeDeps({ stateManager: sm, approvalFn });
+    await handleMutationToolCall("delete_goal", { goal_id: "g1" }, deps);
+    expect(approvalFn).toHaveBeenCalled();
+    expect(sm.deleteGoal).toHaveBeenCalledWith("g1");
+  });
+
+  it("can override delete_goal to skip approval via approvalConfig", async () => {
+    const sm = makeStateManager({ deleteGoal: vi.fn().mockResolvedValue(true) });
+    const approvalFn = vi.fn().mockResolvedValue(true);
+    const deps = makeDeps({
+      stateManager: sm,
+      approvalFn,
+      approvalConfig: { delete_goal: "none" },
+    });
     await handleMutationToolCall("delete_goal", { goal_id: "g1" }, deps);
     expect(approvalFn).not.toHaveBeenCalled();
     expect(sm.deleteGoal).toHaveBeenCalledWith("g1");

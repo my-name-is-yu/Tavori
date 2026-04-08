@@ -10,7 +10,7 @@ export const DEFAULT_APPROVAL: Record<string, ApprovalLevel> = {
   set_goal: "none",
   update_goal: "none",
   archive_goal: "required",
-  delete_goal: "none",
+  delete_goal: "required",
   toggle_plugin: "required",
   update_config: "none",
   reset_trust: "required",

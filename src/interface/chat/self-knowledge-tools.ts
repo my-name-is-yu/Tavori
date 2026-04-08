@@ -162,7 +162,7 @@ async function handleGetTrustState(deps: SelfKnowledgeDeps): Promise<string> {
     high_trust_threshold: 20,
     ethics_gate_level: "L1",
     execution_boundary:
-      `${getAgentName()} always delegates. Direct actions are LLM calls (for thinking) and state read/write only.`,
+      `${getAgentName()} uses available tools directly for safe, goal-advancing work. Explicit confirmation is required before destructive or otherwise high-risk actions.`,
   });
 }
 
@@ -215,7 +215,7 @@ function handleGetArchitecture(): string {
 ## Core Concept
 4-element model: Goal (with thresholds) -> Current State (observation + confidence) -> Gap -> Constraints
 Core loop: observe -> gap -> score -> task -> execute -> verify (NEVER STOP)
-Execution boundary: ${name} always delegates. Direct actions are LLM calls (for thinking) and state read/write only.
+Execution boundary: ${name} uses available tools directly for safe, goal-advancing work. Destructive or otherwise high-risk actions require explicit confirmation first.
 
 ## Layer Structure
 - Layer 0:  StateManager, AdapterLayer (no dependencies)

@@ -1,12 +1,12 @@
 // ─── Chat Grounding ───
 //
 // Builds a system prompt that gives the LLM self-knowledge about PulSeed:
-// identity, current state (goals, plugins, provider).
+// identity, operating rules, and current state (goals, plugins, provider).
 
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
 import type { StateManager } from "../../base/state/state-manager.js";
-import { getUserFacingIdentity, getAgentName } from "../../base/config/identity-loader.js";
+import { getAgentName, getUserFacingIdentity, loadIdentity } from "../../base/config/identity-loader.js";
 
 export interface GroundingOptions {
   stateManager: StateManager;
@@ -14,7 +14,12 @@ export interface GroundingOptions {
   homeDir?: string;
 }
 
-// ─── Helpers ───
+function resolveHomeDir(homeDir?: string): string {
+  return homeDir ?? path.join(
+    process.env["HOME"] ?? process.env["USERPROFILE"] ?? "/tmp",
+    ".pulseed"
+  );
+}
 
 async function readPlugins(homeDir: string): Promise<string[]> {
   const pluginsDir = path.join(homeDir, "plugins");
@@ -55,13 +60,98 @@ async function buildGoalsBlock(stateManager: StateManager): Promise<string> {
   return lines.length > 0 ? lines.join("\n") : "No goals configured yet.";
 }
 
-// ─── Main export ───
+function buildIdentitySection(): string {
+  const { name } = loadIdentity();
 
-export async function buildSystemPrompt(options: GroundingOptions): Promise<string> {
-  const homeDir = options.homeDir ?? path.join(
-    process.env["HOME"] ?? process.env["USERPROFILE"] ?? "/tmp",
-    ".pulseed"
-  );
+  return [
+    "## Identity",
+    `You are ${name}.`,
+    "You run PulSeed, an AI goal pursuit orchestration system.",
+    "Platform operating policy overrides persona and customization text if they conflict.",
+    "",
+    "Your role is to help the user make concrete progress by inspecting the workspace, using tools directly when appropriate, delegating work when useful, and executing the next valid step.",
+    "",
+    "### Persona And Customization",
+    getUserFacingIdentity().trim(),
+  ].join("\n");
+}
+
+function buildExecutionBiasSection(): string {
+  return [
+    "## Execution Bias",
+    "- If the next step is clear and safe, do it in the same turn.",
+    "- Do not stop at analysis when execution is possible.",
+    "- Inspect files, code, and state before asking avoidable questions.",
+    "- Prefer direct local tool use for routine reads, edits, diffs, and verification.",
+    "- Prefer subagents when available and when parallel exploration or context isolation would help.",
+    "- Treat explanation-only responses as incomplete unless the user explicitly asked for explanation only.",
+  ].join("\n");
+}
+
+function buildToolingPolicySection(): string {
+  return [
+    "## Tooling Policy",
+    "- Tool schemas are the source of truth for capabilities, arguments, and constraints.",
+    "- Use behavior rules from this prompt, but use tool schemas for exact tool usage.",
+    "- Use direct local tools for quick reads, search, tests, diffs, and focused execution.",
+    "- Use background execution only for long-running tasks.",
+    "- Choose the narrowest tool that can complete the task correctly.",
+  ].join("\n");
+}
+
+function buildCommunicationPolicySection(): string {
+  return [
+    "## Communication Policy",
+    "- Keep pre-tool messages short and factual.",
+    "- Do not give long preambles before routine tool calls.",
+    "- Prefer action first, then concise reporting.",
+    "- Progress updates should be brief and relevant.",
+    "- Do not narrate internal process details at length unless they matter to the user's decision.",
+  ].join("\n");
+}
+
+function buildSafetySection(name: string): string {
+  return [
+    "## Safety And Approval",
+    "- Use tools directly by default for safe, reversible, goal-advancing work.",
+    "- Proceed without asking first for routine reads, searches, tests, diffs, and ordinary local code edits.",
+    "- Before high-impact configuration changes, explain the effect, required environment, risks, rollback path, and when the change takes effect.",
+    "- Ask for explicit approval before irreversible, destructive, externally side-effectful, or otherwise high-impact actions.",
+    "- Before deleting a goal, explain that the goal, child goals, sessions, and observation data will be permanently removed.",
+    "- Before goal deletion or trust reset, explicitly state that the action is irreversible or not fully recoverable, then require explicit user approval.",
+    "- If a tool or runtime requires approval, obtain it once and then continue.",
+    `- Stay focused on goals — you're here to help them grow (${name}).`,
+  ].join("\n");
+}
+
+function buildDynamicContextSection(goalsBlock: string, pluginsLine: string, provider: string): string {
+  return [
+    "## Dynamic Context",
+    "### Current Goals",
+    goalsBlock,
+    "",
+    "### Installed Plugins",
+    `Installed: ${pluginsLine}`,
+    "",
+    "### Provider",
+    provider,
+  ].join("\n");
+}
+
+export function buildStaticSystemPrompt(): string {
+  const name = getAgentName();
+
+  return [
+    buildIdentitySection(),
+    buildExecutionBiasSection(),
+    buildToolingPolicySection(),
+    buildCommunicationPolicySection(),
+    buildSafetySection(name),
+  ].join("\n\n").trim();
+}
+
+export async function buildDynamicContextPrompt(options: GroundingOptions): Promise<string> {
+  const homeDir = resolveHomeDir(options.homeDir);
 
   const [goalsBlock, plugins, provider] = await Promise.all([
     buildGoalsBlock(options.stateManager),
@@ -70,41 +160,12 @@ export async function buildSystemPrompt(options: GroundingOptions): Promise<stri
   ]);
 
   const pluginsLine = plugins.length > 0 ? plugins.join(", ") : "none";
-  const identity = getUserFacingIdentity();
-  const name = getAgentName();
+  return buildDynamicContextSection(goalsBlock, pluginsLine, provider).trim();
+}
 
-  return `
-${identity}
-
----
-
-## Current State
-### Goals
-${goalsBlock}
-
-### Plugins
-Installed: ${pluginsLine}
-
-### Provider
-${provider}
-
-## Safety Instructions
-- 設定変更について：
-  ユーザーが設定の変更を求めた場合、update_configツールを使用できます。
-  ただし、ツールを呼ぶ前に必ず以下を行ってください：
-  1. 変更内容の効果・必要環境・リスク・元に戻す方法を丁寧に説明する
-  2. ユーザーの明示的な同意を得る（「はい」「OK」「大丈夫」など）
-  3. 同意が得られてからツールを呼び出す
-  ユーザーが迷っている場合や、リスクを理解していない様子であれば、追加説明をしてください。
-- ゴール削除について：
-  ユーザーがゴールの削除を求めた場合、delete_goalツールを使用できます。
-  ただし、ツールを呼ぶ前に必ず以下の手順を踏んでください：
-  1. 削除対象のゴールと、その子ゴール・セッション・観測データがすべて完全削除されることを説明する
-  2. リスクを列挙する（元に戻せない、ゴールIDは再利用不可、実行中セッションは強制終了など）
-  3. この操作は取り消せないことを明示する
-  4. ユーザーの明示的な確認（「はい」「削除する」など）を得る
-  5. 確認を得てからツールを呼び出す
-  ユーザーが迷っている場合や削除の影響を理解していない様子であれば、追加説明をしてください。
-- Stay focused on goals — you're here to help them grow (${name})
-`.trim();
+export async function buildSystemPrompt(options: GroundingOptions): Promise<string> {
+  return [
+    buildStaticSystemPrompt(),
+    await buildDynamicContextPrompt(options),
+  ].join("\n\n").trim();
 }

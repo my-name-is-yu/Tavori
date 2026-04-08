@@ -233,4 +233,12 @@ I prefer concise answers.`;
     expect(result).toContain(DEFAULT_ROOT.trim());
     expect(result.length).toBeGreaterThan(0);
   });
+
+  it("default root text prefers direct tool execution over delegate-only behavior", () => {
+    noFiles();
+    const result = getUserFacingIdentity();
+    expect(result).toContain("I use available tools directly when that moves the goal forward safely");
+    expect(result).not.toContain("I orchestrate, I don't execute tasks directly");
+    expect(result).not.toContain("I always delegate to agents and observe results");
+  });
 });

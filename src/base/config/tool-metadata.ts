@@ -14,6 +14,7 @@ export interface ConfigKeyMeta {
   risks: string[];
   revert: string;
   appliesAt: "next_session" | "immediate";
+  requiresExplicitApproval?: boolean;
 }
 
 export const CONFIG_METADATA: Record<string, ConfigKeyMeta> = {
@@ -39,8 +40,31 @@ export const CONFIG_METADATA: Record<string, ConfigKeyMeta> = {
     ],
     revert: "pulseed config set daemon_mode false、または TUI内で /settings からOFFに切り替え",
     appliesAt: "next_session",
+    requiresExplicitApproval: true,
+  },
+  no_flicker: {
+    label: "No Flicker UI",
+    description: "TUIの描画更新を抑えて端末のちらつきを減らす表示設定",
+    type: "boolean",
+    effects: [
+      "TUIの描画挙動が変わる",
+      "端末によってはちらつきが減る",
+    ],
+    requirements: [
+      "TUIセッションで使用すること",
+    ],
+    risks: [
+      "端末によっては体感差がない場合がある",
+    ],
+    revert: "pulseed config set no_flicker false、または TUI内で設定を戻す",
+    appliesAt: "immediate",
+    requiresExplicitApproval: false,
   },
 };
+
+export function configChangeRequiresApproval(key: string): boolean {
+  return CONFIG_METADATA[key]?.requiresExplicitApproval ?? false;
+}
 
 /** Build a rich description string for a single config key. */
 export function buildConfigKeyDescription(key: string): string {
@@ -48,20 +72,22 @@ export function buildConfigKeyDescription(key: string): string {
   if (!m) return `Unknown config key: ${key}`;
   const bullet = (arr: string[]) => arr.map(s => `- ${s}`).join("\n");
   const timing = m.appliesAt === "next_session" ? "次のセッション（再起動後）から適用" : "即座に適用";
+  const approval = m.requiresExplicitApproval ? "明示的なユーザー確認が必要" : "通常は即時変更してよい";
   return [`## ${m.label} (${key})`, m.description, "", "### 効果", bullet(m.effects), "",
     "### 必要な環境", bullet(m.requirements), "", "### リスク", bullet(m.risks), "",
-    "### 元に戻す方法", m.revert, "", "### 適用タイミング", timing].join("\n");
+    "### 元に戻す方法", m.revert, "", "### 適用タイミング", timing, "",
+    "### 承認要件", approval].join("\n");
 }
 
 /** Build the full tool description with all config keys' metadata injected. */
 export function buildConfigToolDescription(): string {
   const descs = Object.keys(CONFIG_METADATA).map(k => buildConfigKeyDescription(k)).join("\n\n---\n\n");
   return ["PulSeedの設定を変更する。", "",
-    "【重要ルール】このツールを呼ぶ前に、必ず以下の手順を踏むこと：",
-    "1. 変更する設定の『効果』『必要な環境』『リスク』『元に戻す方法』『適用タイミング』をすべてユーザーに説明する",
-    "2. ユーザーの明示的な同意（『はい』『OK』『大丈夫』等）を得る",
-    "3. 同意を得てからこのツールを呼び出す",
-    "4. 同意が得られない場合は呼び出さない", "",
+    "【重要ルール】このツールを呼ぶ前に、以下を守ること：",
+    "1. 変更する設定の『効果』『必要な環境』『リスク』『元に戻す方法』『適用タイミング』を説明する",
+    "2. 承認要件が『明示的なユーザー確認が必要』の設定では、同意を得てから呼び出す",
+    "3. 低リスク設定は簡潔に説明したうえで、そのまま実行してよい",
+    "4. ランタイムが追加の承認を要求した場合はそれに従う", "",
     "【利用可能な設定キー】", "", descs].join("\n");
 }
 

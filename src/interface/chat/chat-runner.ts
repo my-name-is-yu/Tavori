@@ -10,7 +10,7 @@ import type { ILLMClient } from "../../base/llm/llm-client.js";
 import { ChatHistory } from "./chat-history.js";
 import { buildChatContext, resolveGitRoot } from "../../platform/observation/context-provider.js";
 import type { EscalationHandler } from "./escalation.js";
-import { buildSystemPrompt } from "./grounding.js";
+import { buildDynamicContextPrompt, buildStaticSystemPrompt } from "./grounding.js";
 import { verifyChatAction } from "./chat-verifier.js";
 import type { ApprovalLevel } from "./self-knowledge-mutation-tools.js";
 import type { ToolRegistry } from "../../tools/registry.js";
@@ -100,8 +100,8 @@ export class ChatRunner {
   private sessionActive = false;
   /** Deferred tools activated by ToolSearch results — included in tool definitions for subsequent turns. */
   private activatedTools: Set<string> = new Set();
-  /** Cached system prompt — built once per session, reused across turns. */
-  private cachedSystemPrompt: string | null = null;
+  /** Cached static system prompt — reused across turns; dynamic context is rebuilt each turn. */
+  private cachedStaticSystemPrompt: string | null = null;
   /** Pending /tend state awaiting user confirmation (Y/n). */
   private pendingTend: { goalId: string; maxIterations?: number } | null = null;
   /** Active EventSubscriber instances keyed by goalId. */
@@ -350,14 +350,26 @@ export class ChatRunner {
     // Persist-before-execute: user message written to disk first
     await history.appendUserMessage(input);
 
-    // Build grounding system prompt on first turn, cache for session
-    if (this.cachedSystemPrompt === null) {
+    // Build static grounding once per session; dynamic context is rebuilt each turn.
+    if (this.cachedStaticSystemPrompt === null) {
       try {
-        this.cachedSystemPrompt = await buildSystemPrompt({ stateManager: this.deps.stateManager });
+        this.cachedStaticSystemPrompt = buildStaticSystemPrompt();
       } catch {
-        this.cachedSystemPrompt = "";
+        this.cachedStaticSystemPrompt = "";
       }
     }
+
+    let dynamicSystemPrompt = "";
+    try {
+      dynamicSystemPrompt = await buildDynamicContextPrompt({ stateManager: this.deps.stateManager });
+    } catch {
+      dynamicSystemPrompt = "";
+    }
+
+    const systemPrompt = [this.cachedStaticSystemPrompt, dynamicSystemPrompt]
+      .filter((section) => section && section.trim().length > 0)
+      .join("\n\n")
+      .trim();
 
     // Build conversation history from prior turns (last 10)
     const messages = history.getMessages();
@@ -379,7 +391,7 @@ export class ChatRunner {
     // Use llmClient with self-knowledge tools when available (function calling path)
     // Skip executeWithTools for clients that don't support tool calling (e.g. CodexLLMClient)
     if (this.deps.llmClient && this.deps.llmClient.supportsToolCalling?.() !== false) {
-      const toolResult = await this.executeWithTools(prompt, this.cachedSystemPrompt ?? undefined);
+      const toolResult = await this.executeWithTools(prompt, systemPrompt || undefined);
       const elapsed_ms = Date.now() - start;
       await history.appendAssistantMessage(toolResult);
       return { success: true, output: toolResult, elapsed_ms };
@@ -390,7 +402,7 @@ export class ChatRunner {
       timeout_ms: timeoutMs,
       adapter_type: this.deps.adapter.adapterType,
       cwd,
-      ...(this.cachedSystemPrompt ? { system_prompt: this.cachedSystemPrompt } : {}),
+      ...(systemPrompt ? { system_prompt: systemPrompt } : {}),
     };
     const resolvedTimeoutMs = task.timeout_ms ?? DEFAULT_TIMEOUT_MS;
     const adapterPromise = this.deps.adapter.execute(task);

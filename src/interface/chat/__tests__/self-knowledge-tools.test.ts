@@ -143,6 +143,8 @@ describe("handleSelfKnowledgeToolCall — get_trust_state", () => {
     expect(parsed.high_trust_threshold).toBe(20);
     expect(parsed.ethics_gate_level).toBe("L1");
     expect(parsed.execution_boundary).toBeDefined();
+    expect(parsed.execution_boundary).toContain("uses available tools directly");
+    expect(parsed.execution_boundary).toContain("Explicit confirmation is required");
     expect(parsed.trust_balance_range).toEqual([-100, 100]);
   });
 });
@@ -269,6 +271,8 @@ describe("handleSelfKnowledgeToolCall — get_architecture", () => {
     const result = await handleSelfKnowledgeToolCall("get_architecture", {}, deps);
     const parsed = JSON.parse(result) as { architecture: string };
     expect(parsed.architecture.toLowerCase()).toContain("execution boundary");
+    expect(parsed.architecture).toContain("uses available tools directly");
+    expect(parsed.architecture).toContain("require explicit confirmation");
   });
 });
 

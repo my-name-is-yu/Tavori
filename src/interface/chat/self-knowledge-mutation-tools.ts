@@ -1,3 +1,4 @@
+import { configChangeRequiresApproval } from "../../base/config/config-metadata.js";
 import { getConfigKeys, updateGlobalConfig } from "../../base/config/global-config.js";
 
 export type { ApprovalLevel, MutationToolDeps } from "./mutation-tool-defs.js";
@@ -148,7 +149,14 @@ async function handleDeleteGoal(
     return JSON.stringify({ error: "goal_id is required" });
   }
 
-  // No checkApproval — LLM handles confirmation conversationally (approvalLevel: "none")
+  const approval = await checkApproval(
+    "delete_goal",
+    `Delete goal permanently: ${goalId}`,
+    deps
+  );
+  if (!approval.approved) {
+    return JSON.stringify({ error: approval.error });
+  }
 
   try {
     const deleted = await deps.stateManager.deleteGoal(goalId);
@@ -192,7 +200,7 @@ async function handleTogglePlugin(
 
 async function handleUpdateConfig(
   args: Record<string, unknown>,
-  _deps: MutationToolDeps
+  deps: MutationToolDeps
 ): Promise<string> {
   const key = args.key;
   const value = args.value;
@@ -212,7 +220,23 @@ async function handleUpdateConfig(
     });
   }
 
-  // Apply the change (no checkApproval — LLM handled confirmation conversationally)
+  if (configChangeRequiresApproval(key)) {
+    const level = deps.approvalConfig?.["update_config"] ?? "required";
+    if (level === "required") {
+      if (!deps.approvalFn) {
+        return JSON.stringify({
+          error: "This operation requires approval but no approval handler is configured",
+        });
+      }
+      const approved = await deps.approvalFn(
+        `Update high-impact config "${key}" to ${JSON.stringify(value)}`
+      );
+      if (!approved) {
+        return JSON.stringify({ error: "User denied the operation" });
+      }
+    }
+  }
+
   try {
     const updated = await updateGlobalConfig({ [key]: value });
     const newValue = (updated as Record<string, unknown>)[key];

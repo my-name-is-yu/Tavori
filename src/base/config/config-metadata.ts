@@ -5,6 +5,7 @@ export {
   CONFIG_METADATA,
   buildConfigKeyDescription,
   buildConfigToolDescription,
+  configChangeRequiresApproval,
   MutationToolMeta,
   MUTATION_TOOL_METADATA,
   buildMutationToolDescription,

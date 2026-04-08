@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ITool, ToolResult, ToolCallContext, PermissionCheckResult, ToolMetadata, ToolDescriptionContext } from "../../types.js";
+import { configChangeRequiresApproval } from "../../../base/config/config-metadata.js";
 import { getConfigKeys, updateGlobalConfig } from "../../../base/config/global-config.js";
 import { TAGS, CATEGORY as _CATEGORY, READ_ONLY, PERMISSION_LEVEL } from "./constants.js";
 
@@ -67,7 +68,14 @@ export class UpdateConfigTool implements ITool<UpdateConfigInput, unknown> {
     }
   }
 
-  async checkPermissions(): Promise<PermissionCheckResult> {
+  async checkPermissions(input: UpdateConfigInput, context: ToolCallContext): Promise<PermissionCheckResult> {
+    if (context.preApproved) return { status: "allowed" };
+    if (configChangeRequiresApproval(input.key)) {
+      return {
+        status: "needs_approval",
+        reason: "This configuration change is high impact and requires user confirmation",
+      };
+    }
     return { status: "allowed" };
   }
 

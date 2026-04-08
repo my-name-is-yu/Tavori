@@ -172,6 +172,12 @@ describe("ROOT_PRESETS", () => {
     // Content should start with a markdown heading
     expect(preset.content.trimStart()).toMatch(/^#/);
   });
+
+  it.each(PRESET_KEYS)("preset %s avoids delegate-only wording", (key) => {
+    const preset = ROOT_PRESETS[key];
+    expect(preset.content.toLowerCase()).not.toContain("always delegate");
+    expect(preset.content.toLowerCase()).not.toContain("delegate always");
+  });
 });
 
 // ─── Constants sanity checks ───
