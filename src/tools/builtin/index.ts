@@ -52,6 +52,13 @@ export { WritePulseedFileTool } from "../fs/WritePulseedFileTool/WritePulseedFil
 export { AskHumanTool } from "../interaction/AskHumanTool/AskHumanTool.js";
 export { CreatePlanTool } from "../interaction/CreatePlanTool/CreatePlanTool.js";
 export { ReadPlanTool } from "../interaction/ReadPlanTool/ReadPlanTool.js";
+export { CreateScheduleTool } from "../schedule/CreateScheduleTool/CreateScheduleTool.js";
+export { GetScheduleTool } from "../schedule/GetScheduleTool/GetScheduleTool.js";
+export { ListSchedulesTool } from "../schedule/ListSchedulesTool/ListSchedulesTool.js";
+export { PauseScheduleTool } from "../schedule/PauseScheduleTool/PauseScheduleTool.js";
+export { RemoveScheduleTool } from "../schedule/RemoveScheduleTool/RemoveScheduleTool.js";
+export { ResumeScheduleTool } from "../schedule/ResumeScheduleTool/ResumeScheduleTool.js";
+export { UpdateScheduleTool } from "../schedule/UpdateScheduleTool/UpdateScheduleTool.js";
 
 import { GlobTool } from "../fs/GlobTool/GlobTool.js";
 import { GrepTool } from "../fs/GrepTool/GrepTool.js";
@@ -105,6 +112,13 @@ import { WritePulseedFileTool } from "../fs/WritePulseedFileTool/WritePulseedFil
 import { AskHumanTool } from "../interaction/AskHumanTool/AskHumanTool.js";
 import { CreatePlanTool } from "../interaction/CreatePlanTool/CreatePlanTool.js";
 import { ReadPlanTool } from "../interaction/ReadPlanTool/ReadPlanTool.js";
+import { CreateScheduleTool } from "../schedule/CreateScheduleTool/CreateScheduleTool.js";
+import { GetScheduleTool } from "../schedule/GetScheduleTool/GetScheduleTool.js";
+import { ListSchedulesTool } from "../schedule/ListSchedulesTool/ListSchedulesTool.js";
+import { PauseScheduleTool } from "../schedule/PauseScheduleTool/PauseScheduleTool.js";
+import { RemoveScheduleTool } from "../schedule/RemoveScheduleTool/RemoveScheduleTool.js";
+import { ResumeScheduleTool } from "../schedule/ResumeScheduleTool/ResumeScheduleTool.js";
+import { UpdateScheduleTool } from "../schedule/UpdateScheduleTool/UpdateScheduleTool.js";
 import type { AdapterRegistry } from "../../orchestrator/execution/adapter-layer.js";
 import type { SessionManager } from "../../orchestrator/execution/session-manager.js";
 import type { ObservationEngine } from "../../platform/observation/observation-engine.js";
@@ -113,6 +127,7 @@ import type { StateManager } from "../../base/state/state-manager.js";
 import type { KnowledgeManager } from "../../platform/knowledge/knowledge-manager.js";
 import type { ToolRegistry } from "../registry.js";
 import type { PluginLoader } from "../../runtime/plugin-loader.js";
+import type { ScheduleEngine } from "../../runtime/schedule-engine.js";
 import type { TrustManager } from "../../platform/traits/trust-manager.js";
 
 export interface BuiltinToolDeps {
@@ -125,6 +140,7 @@ export interface BuiltinToolDeps {
   sessionManager?: SessionManager;
   observationEngine?: ObservationEngine;
   llmCall?: (prompt: string) => Promise<string>;
+  scheduleEngine?: ScheduleEngine;
 }
 
 /** All built-in tools, sorted alphabetically by name. */
@@ -218,6 +234,18 @@ export function createBuiltinTools(deps?: BuiltinToolDeps): ITool[] {
   if (deps?.observationEngine) {
     tools.push(new QueryDataSourceTool(deps.observationEngine));
     tools.push(new ObserveGoalTool(deps.observationEngine));
+  }
+
+  if (deps?.scheduleEngine) {
+    tools.push(
+      new ListSchedulesTool(deps.scheduleEngine),
+      new GetScheduleTool(deps.scheduleEngine),
+      new CreateScheduleTool(deps.scheduleEngine),
+      new UpdateScheduleTool(deps.scheduleEngine),
+      new RemoveScheduleTool(deps.scheduleEngine),
+      new PauseScheduleTool(deps.scheduleEngine),
+      new ResumeScheduleTool(deps.scheduleEngine),
+    );
   }
 
   // File and interaction tools (no deps)

@@ -14,6 +14,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
   cleanupTempDir(tempDir);
 });
 
@@ -75,6 +77,232 @@ describe("ScheduleEngine", () => {
     const engine2 = new ScheduleEngine({ baseDir: tempDir });
     const loaded = await engine2.loadEntries();
     expect(loaded).toHaveLength(0);
+  });
+
+  it("updateEntry returns null when entry is not found", async () => {
+    const updated = await engine.updateEntry("missing-id", {
+      name: "updated-name",
+    });
+
+    expect(updated).toBeNull();
+  });
+
+  it("updateEntry throws on empty patch", async () => {
+    const entry = await engine.addEntry({
+      name: "empty-patch-check",
+      layer: "heartbeat",
+      trigger: { type: "interval", seconds: 60, jitter_factor: 0 },
+      enabled: true,
+      heartbeat: {
+        check_type: "custom",
+        check_config: { command: "echo ok" },
+        failure_threshold: 3,
+        timeout_ms: 5000,
+      },
+    });
+
+    await expect(engine.updateEntry(entry.id, {})).rejects.toThrow("No updatable fields provided");
+  });
+
+  it("updateEntry updates allowed fields, clears escalation, and persists", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-08T00:00:00.000Z"));
+
+    const entry = await engine.addEntry({
+      name: "updatable-check",
+      layer: "heartbeat",
+      trigger: { type: "interval", seconds: 60, jitter_factor: 0 },
+      enabled: true,
+      heartbeat: {
+        check_type: "custom",
+        check_config: { command: "echo ok" },
+        failure_threshold: 3,
+        timeout_ms: 5000,
+      },
+      escalation: {
+        enabled: true,
+        target_layer: "cron",
+        cooldown_minutes: 10,
+        max_per_hour: 3,
+        circuit_breaker_threshold: 5,
+      },
+    });
+
+    vi.setSystemTime(new Date("2026-04-08T01:02:03.000Z"));
+
+    const updated = await engine.updateEntry(entry.id, {
+      name: "updated-check",
+      heartbeat: {
+        check_type: "custom",
+        check_config: { command: "echo changed" },
+        failure_threshold: 5,
+        timeout_ms: 9000,
+      },
+      escalation: null,
+    });
+
+    expect(updated).not.toBeNull();
+    expect(updated!.name).toBe("updated-check");
+    expect(updated!.heartbeat).toEqual({
+      check_type: "custom",
+      check_config: { command: "echo changed" },
+      failure_threshold: 5,
+      timeout_ms: 9000,
+    });
+    expect(updated!.escalation).toBeUndefined();
+    expect(updated!.updated_at).toBe("2026-04-08T01:02:03.000Z");
+    expect(updated!.created_at).toBe(entry.created_at);
+
+    const engine2 = new ScheduleEngine({ baseDir: tempDir });
+    const loaded = await engine2.loadEntries();
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0]!.name).toBe("updated-check");
+    expect(loaded[0]!.heartbeat).toEqual({
+      check_type: "custom",
+      check_config: { command: "echo changed" },
+      failure_threshold: 5,
+      timeout_ms: 9000,
+    });
+    expect(loaded[0]!.escalation).toBeUndefined();
+  });
+
+  it("updateEntry recomputes next_fire_at when trigger changes", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-08T00:00:00.000Z"));
+
+    const entry = await engine.addEntry({
+      name: "trigger-update-check",
+      layer: "heartbeat",
+      trigger: { type: "interval", seconds: 60, jitter_factor: 0 },
+      enabled: true,
+      heartbeat: {
+        check_type: "custom",
+        check_config: { command: "echo ok" },
+        failure_threshold: 3,
+        timeout_ms: 5000,
+      },
+    });
+
+    vi.setSystemTime(new Date("2026-04-08T00:10:00.000Z"));
+
+    const updated = await engine.updateEntry(entry.id, {
+      trigger: { type: "interval", seconds: 3600, jitter_factor: 0 },
+    });
+
+    expect(updated).not.toBeNull();
+    expect(updated!.trigger).toEqual({ type: "interval", seconds: 3600, jitter_factor: 0 });
+    expect(updated!.next_fire_at).toBe("2026-04-08T01:10:00.000Z");
+    expect(updated!.next_fire_at).not.toBe(entry.next_fire_at);
+  });
+
+  it("updateEntry recomputes next_fire_at when re-enabling an entry", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-04-08T02:00:00.000Z"));
+
+    const entry = await engine.addEntry({
+      name: "resume-check",
+      layer: "heartbeat",
+      trigger: { type: "interval", seconds: 60, jitter_factor: 0 },
+      enabled: false,
+      heartbeat: {
+        check_type: "custom",
+        check_config: { command: "echo ok" },
+        failure_threshold: 3,
+        timeout_ms: 5000,
+      },
+    });
+
+    const entries = engine.getEntries();
+    entries[0]!.next_fire_at = "2026-04-07T00:00:00.000Z";
+    await engine.saveEntries();
+
+    const updated = await engine.updateEntry(entry.id, { enabled: true });
+
+    expect(updated).not.toBeNull();
+    expect(updated!.enabled).toBe(true);
+    expect(updated!.next_fire_at).toBe("2026-04-08T02:01:00.000Z");
+    expect(updated!.next_fire_at).not.toBe("2026-04-07T00:00:00.000Z");
+  });
+
+  it("updateEntry rejects layer config updates that do not match the entry layer", async () => {
+    const entry = await engine.addEntry({
+      name: "layer-mismatch-check",
+      layer: "heartbeat",
+      trigger: { type: "interval", seconds: 60, jitter_factor: 0 },
+      enabled: true,
+      heartbeat: {
+        check_type: "custom",
+        check_config: { command: "echo ok" },
+        failure_threshold: 3,
+        timeout_ms: 5000,
+      },
+    });
+
+    await expect(engine.updateEntry(entry.id, {
+      probe: {
+        data_source_id: "source-1",
+        query_params: {},
+        change_detector: { mode: "diff", baseline_window: 5 },
+        llm_on_change: false,
+      },
+    })).rejects.toThrow("Cannot update probe config for heartbeat entry");
+  });
+
+  it("updateEntry revalidates the merged entry", async () => {
+    const entry = await engine.addEntry({
+      name: "validation-check",
+      layer: "heartbeat",
+      trigger: { type: "interval", seconds: 60, jitter_factor: 0 },
+      enabled: true,
+      heartbeat: {
+        check_type: "custom",
+        check_config: { command: "echo ok" },
+        failure_threshold: 3,
+        timeout_ms: 5000,
+      },
+    });
+
+    await expect(engine.updateEntry(entry.id, {
+      heartbeat: {
+        check_type: "custom",
+        check_config: { command: "echo bad" },
+        failure_threshold: 0,
+        timeout_ms: 5000,
+      },
+    })).rejects.toThrow();
+
+    expect(engine.getEntries().find((candidate) => candidate.id === entry.id)!.heartbeat).toEqual(
+      entry.heartbeat
+    );
+  });
+
+  it("updateEntry restores in-memory entries when save fails", async () => {
+    const entry = await engine.addEntry({
+      name: "save-rollback-check",
+      layer: "heartbeat",
+      trigger: { type: "interval", seconds: 60, jitter_factor: 0 },
+      enabled: true,
+      heartbeat: {
+        check_type: "custom",
+        check_config: { command: "echo ok" },
+        failure_threshold: 3,
+        timeout_ms: 5000,
+      },
+    });
+
+    vi.spyOn(engine, "saveEntries").mockRejectedValueOnce(new Error("save failed"));
+
+    await expect(engine.updateEntry(entry.id, {
+      name: "should-not-stick",
+    })).rejects.toThrow("save failed");
+
+    expect(engine.getEntries().find((candidate) => candidate.id === entry.id)!.name).toBe(
+      "save-rollback-check"
+    );
+
+    const engine2 = new ScheduleEngine({ baseDir: tempDir });
+    const loaded = await engine2.loadEntries();
+    expect(loaded.find((candidate) => candidate.id === entry.id)!.name).toBe("save-rollback-check");
   });
 
   it("getDueEntries returns entries past their next_fire_at", async () => {

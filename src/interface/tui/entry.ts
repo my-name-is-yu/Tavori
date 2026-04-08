@@ -8,6 +8,7 @@
 import os from "os";
 import path from "path";
 import { execFileSync } from "child_process";
+import { randomUUID } from "node:crypto";
 
 import { StateManager } from "../../base/state/state-manager.js";
 import { loadProviderConfig } from "../../base/llm/provider-config.js";
@@ -89,6 +90,7 @@ async function buildDeps() {
   const { StateAggregator } = await import("../../orchestrator/goal/state-aggregator.js");
   const { GoalDependencyGraph } = await import("../../orchestrator/goal/goal-dependency-graph.js");
   const { TreeLoopOrchestrator } = await import("../../orchestrator/goal/tree-loop-orchestrator.js");
+  const { ScheduleEngine } = await import("../../runtime/schedule-engine.js");
   const { MemoryLifecycleManager, DriveScoreAdapter } = await import("../../platform/knowledge/memory/memory-lifecycle.js");
   const { CharacterConfigManager } = await import("../../platform/traits/character-config.js");
   const { ChatRunner } = await import("../../interface/chat/chat-runner.js");
@@ -104,8 +106,10 @@ async function buildDeps() {
   const llmClient = await buildLLMClient();
   const trustManager = new TrustManager(stateManager);
   const driveSystem = new DriveSystem(stateManager);
+  const scheduleEngine = new ScheduleEngine({ baseDir: stateManager.getBaseDir() });
+  await scheduleEngine.loadEntries();
   const toolRegistry = new ToolRegistry();
-  for (const tool of createBuiltinTools({ stateManager, trustManager })) {
+  for (const tool of createBuiltinTools({ stateManager, trustManager, registry: toolRegistry, scheduleEngine })) {
     toolRegistry.register(tool);
   }
 
@@ -172,13 +176,47 @@ async function buildDeps() {
   let requestApproval: ((req: ApprovalRequest) => void) | null = null;
   const pendingApprovals: ApprovalRequest[] = [];
 
-  const approvalFn = (task: Task): Promise<boolean> => {
+  const enqueueApproval = (task: Task): Promise<boolean> => {
     return new Promise((resolve) => {
+      const request = { task, resolve };
       if (requestApproval) {
-        requestApproval({ task, resolve });
+        requestApproval(request);
       } else {
-        pendingApprovals.push({ task, resolve });
+        pendingApprovals.push(request);
       }
+    });
+  };
+
+  const approvalFn = (task: Task): Promise<boolean> => enqueueApproval(task);
+
+  const chatToolApprovalFn = async (description: string): Promise<boolean> => {
+    return enqueueApproval({
+      id: randomUUID(),
+      goal_id: "chat-tool-approval",
+      strategy_id: null,
+      target_dimensions: ["approval"],
+      primary_dimension: "approval",
+      work_description: description,
+      rationale: "Requested by chat tool execution",
+      approach: "Wait for explicit approval before continuing the chat tool call.",
+      success_criteria: [],
+      scope_boundary: {
+        in_scope: ["Approve or reject the pending chat tool action."],
+        out_of_scope: ["Execute any work beyond the requested chat tool action."],
+        blast_radius: "Limited to whether the pending chat tool call proceeds.",
+      },
+      constraints: [],
+      plateau_until: null,
+      estimated_duration: null,
+      consecutive_failure_count: 0,
+      reversibility: "unknown",
+      task_category: "normal",
+      status: "pending",
+      started_at: null,
+      completed_at: null,
+      timeout_at: null,
+      heartbeat_at: null,
+      created_at: new Date().toISOString(),
     });
   };
 
@@ -278,7 +316,15 @@ async function buildDeps() {
     const provConfig = await loadProviderConfig();
     const adapterType = provConfig.adapter ?? "claude_code_cli";
     const adapter = adapterRegistry.getAdapter(adapterType);
-    chatRunner = new ChatRunner({ stateManager, adapter, llmClient, trustManager, registry: toolRegistry, toolExecutor });
+    chatRunner = new ChatRunner({
+      stateManager,
+      adapter,
+      llmClient,
+      trustManager,
+      registry: toolRegistry,
+      toolExecutor,
+      approvalFn: chatToolApprovalFn,
+    });
   } catch (err) {
     getCliLogger().warn(`[pulseed] ChatRunner init failed — free-form chat disabled: ${err instanceof Error ? err.message : String(err)}`);
   }
