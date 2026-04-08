@@ -29,13 +29,11 @@ function formatError(message: string): string {
 }
 
 export class TelegramChatRunnerProcessor {
-  private readonly pluginDir: string;
   private readonly workspaceRoot: string;
   private bootstrapPromise: Promise<BootstrapResult> | null = null;
   private readonly sessions = new Map<number, ChatRunnerLike>();
 
-  constructor(pluginDir: string, workspaceRoot = path.resolve(pluginDir, "../..")) {
-    this.pluginDir = pluginDir;
+  constructor(_pluginDir: string, workspaceRoot = process.cwd()) {
     this.workspaceRoot = workspaceRoot;
   }
 

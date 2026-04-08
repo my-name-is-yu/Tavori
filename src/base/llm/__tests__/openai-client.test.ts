@@ -8,6 +8,8 @@ import { z } from "zod";
 // `mockCreate`.
 
 const mockCreate = vi.fn();
+const mockStream = vi.fn();
+const mockResponsesCreate = vi.fn();
 
 vi.mock("openai", () => {
   return {
@@ -15,7 +17,11 @@ vi.mock("openai", () => {
       chat: {
         completions: {
           create: mockCreate,
+          stream: mockStream,
         },
+      },
+      responses: {
+        create: mockResponsesCreate,
       },
     }; }),
   };
@@ -51,6 +57,8 @@ function makeCompletionResponse(
 describe("OpenAILLMClient", () => {
   beforeEach(() => {
     mockCreate.mockReset();
+    mockStream.mockReset();
+    mockResponsesCreate.mockReset();
     // Ensure OPENAI_API_KEY is not set by default so constructor tests are
     // isolated. Individual tests that need a valid key set it explicitly.
     delete process.env["OPENAI_API_KEY"];
@@ -306,6 +314,32 @@ describe("OpenAILLMClient", () => {
       expect(result).toBeInstanceOf(Error);
       expect((result as Error).message).toBe("persistent error");
       expect(mockCreate).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe("sendMessageStream", () => {
+    it("falls back to the Responses API for non-chat models", async () => {
+      const client = new OpenAILLMClient({ apiKey: "sk-test", model: "codex-mini-latest" });
+      mockStream.mockImplementationOnce(() => {
+        throw new Error("This is not a chat model and not supported in the v1/chat/completions endpoint");
+      });
+      mockResponsesCreate.mockResolvedValueOnce({
+        output_text: "fallback output",
+        status: "completed",
+        usage: {
+          input_tokens: 12,
+          output_tokens: 7,
+        },
+      });
+
+      const result = await client.sendMessageStream(
+        [{ role: "user", content: "hello" }],
+        undefined,
+        { onTextDelta: vi.fn() }
+      );
+
+      expect(result.content).toBe("fallback output");
+      expect(mockResponsesCreate).toHaveBeenCalledOnce();
     });
   });
 

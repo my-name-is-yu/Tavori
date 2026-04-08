@@ -16,6 +16,15 @@ function isReasoningModel(model: string): boolean {
   return REASONING_MODEL_PREFIXES.some((prefix) => model.startsWith(prefix));
 }
 
+function shouldFallbackToResponses(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    msg.includes("not a chat model") ||
+    msg.includes("v1/chat/completions") ||
+    msg.includes("Did you mean to use v1/completions")
+  );
+}
+
 // ─── OpenAILLMClient ───
 
 export interface OpenAIClientConfig {
@@ -130,57 +139,8 @@ export class OpenAILLMClient extends BaseLLMClient implements ILLMClient {
         } catch (err) {
           // Some models (notably Codex-style) are not compatible with the
           // chat completions endpoint. In that case, fall back to Responses API.
-          const msg = err instanceof Error ? err.message : String(err);
-          const shouldFallback =
-            msg.includes("not a chat model") ||
-            msg.includes("v1/chat/completions") ||
-            msg.includes("Did you mean to use v1/completions");
-
-          if (!shouldFallback) throw err;
-
-          const input = [
-            system ? `SYSTEM:\n${system}` : null,
-            ...messages.map((m) => `${m.role.toUpperCase()}:\n${m.content}`),
-          ]
-            .filter(Boolean)
-            .join("\n\n");
-
-          // Use Responses API (SDK supports this as of openai v4+).
-          // The TypeScript types for the Responses API are not yet in the openai
-          // package typings, so we cast through unknown to access this endpoint.
-          const responsesApi = (this.client as unknown as { responses: { create: (params: Record<string, unknown>) => Promise<unknown> } }).responses;
-          let timer: ReturnType<typeof setTimeout>;
-          const timeout = new Promise<never>((_, reject) => {
-            timer = setTimeout(
-              () => reject(new LLMError(`OpenAILLMClient: Responses API timed out after ${DEFAULT_LLM_TIMEOUT_MS}ms`)),
-              DEFAULT_LLM_TIMEOUT_MS
-            );
-          });
-          const resp = await Promise.race([
-            responsesApi.create({
-              model,
-              input,
-              max_output_tokens: max_tokens,
-              ...(isReasoningModel(model) ? {} : { temperature }),
-            }),
-            timeout,
-          ]) as Record<string, unknown>;
-          clearTimeout(timer!);
-
-          const content =
-            typeof resp["output_text"] === "string"
-              ? resp["output_text"]
-              : "";
-
-          const usage = resp["usage"] as Record<string, unknown> | undefined;
-          return {
-            content,
-            usage: {
-              input_tokens: typeof usage?.["input_tokens"] === "number" ? usage["input_tokens"] : 0,
-              output_tokens: typeof usage?.["output_tokens"] === "number" ? usage["output_tokens"] : 0,
-            },
-            stop_reason: typeof resp["status"] === "string" ? resp["status"] : "unknown",
-          };
+          if (!shouldFallbackToResponses(err)) throw err;
+          return this.sendViaResponsesApi(model, messages, { max_tokens, temperature, system });
         }
       } catch (err) {
         lastError = err;
@@ -246,26 +206,81 @@ export class OpenAILLMClient extends BaseLLMClient implements ILLMClient {
       ...(isReasoningModel(model) ? {} : { temperature }),
     };
 
-    const stream = this.client.chat.completions.stream(createParams, { timeout: DEFAULT_LLM_TIMEOUT_MS });
-    stream.on("content", (delta: string) => {
-      handlers.onTextDelta?.(delta);
+    try {
+      const stream = this.client.chat.completions.stream(createParams, { timeout: DEFAULT_LLM_TIMEOUT_MS });
+      stream.on("content", (delta: string) => {
+        handlers.onTextDelta?.(delta);
+      });
+
+      const [completion, message] = await Promise.all([
+        stream.finalChatCompletion(),
+        stream.finalMessage(),
+      ]);
+
+      const tool_calls = mapOpenAIToolCalls(message.tool_calls);
+
+      return {
+        content: message.content ?? "",
+        usage: {
+          input_tokens: completion.usage?.prompt_tokens ?? 0,
+          output_tokens: completion.usage?.completion_tokens ?? 0,
+        },
+        stop_reason: completion.choices[0]?.finish_reason ?? "unknown",
+        ...(tool_calls.length > 0 ? { tool_calls } : {}),
+      };
+    } catch (err) {
+      if (!shouldFallbackToResponses(err)) throw err;
+      return this.sendViaResponsesApi(model, messages, { max_tokens, temperature, system });
+    }
+  }
+
+  private async sendViaResponsesApi(
+    model: string,
+    messages: LLMMessage[],
+    options: { max_tokens: number; temperature: number; system?: string }
+  ): Promise<LLMResponse> {
+    const input = [
+      options.system ? `SYSTEM:\n${options.system}` : null,
+      ...messages.map((m) => `${m.role.toUpperCase()}:\n${m.content}`),
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+
+    // Use Responses API (SDK supports this as of openai v4+).
+    // The TypeScript types for the Responses API are not yet in the openai
+    // package typings, so we cast through unknown to access this endpoint.
+    const responsesApi = (this.client as unknown as { responses: { create: (params: Record<string, unknown>) => Promise<unknown> } }).responses;
+    let timer: ReturnType<typeof setTimeout>;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new LLMError(`OpenAILLMClient: Responses API timed out after ${DEFAULT_LLM_TIMEOUT_MS}ms`)),
+        DEFAULT_LLM_TIMEOUT_MS
+      );
     });
+    const resp = await Promise.race([
+      responsesApi.create({
+        model,
+        input,
+        max_output_tokens: options.max_tokens,
+        ...(isReasoningModel(model) ? {} : { temperature: options.temperature }),
+      }),
+      timeout,
+    ]) as Record<string, unknown>;
+    clearTimeout(timer!);
 
-    const [completion, message] = await Promise.all([
-      stream.finalChatCompletion(),
-      stream.finalMessage(),
-    ]);
+    const content =
+      typeof resp["output_text"] === "string"
+        ? resp["output_text"]
+        : "";
 
-    const tool_calls = mapOpenAIToolCalls(message.tool_calls);
-
+    const usage = resp["usage"] as Record<string, unknown> | undefined;
     return {
-      content: message.content ?? "",
+      content,
       usage: {
-        input_tokens: completion.usage?.prompt_tokens ?? 0,
-        output_tokens: completion.usage?.completion_tokens ?? 0,
+        input_tokens: typeof usage?.["input_tokens"] === "number" ? usage["input_tokens"] : 0,
+        output_tokens: typeof usage?.["output_tokens"] === "number" ? usage["output_tokens"] : 0,
       },
-      stop_reason: completion.choices[0]?.finish_reason ?? "unknown",
-      ...(tool_calls.length > 0 ? { tool_calls } : {}),
+      stop_reason: typeof resp["status"] === "string" ? resp["status"] : "unknown",
     };
   }
 }

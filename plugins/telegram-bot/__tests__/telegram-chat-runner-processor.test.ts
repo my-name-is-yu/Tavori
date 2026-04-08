@@ -73,6 +73,17 @@ describe("TelegramChatRunnerProcessor", () => {
     expect(mockCreatedRunners[1]!.execute).toHaveBeenCalledTimes(1);
   });
 
+  it("defaults the runner workspace to process.cwd()", async () => {
+    const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue("/workspace");
+    const processor = new TelegramChatRunnerProcessor("/tmp/plugins/telegram-bot");
+
+    await expect(processor.processMessage("first", 101, vi.fn())).resolves.toBe("runner-output");
+
+    expect(mockCreatedRunners[0]!.startSession).toHaveBeenCalledWith("/workspace");
+    expect(mockCreatedRunners[0]!.execute).toHaveBeenCalledWith("first", "/workspace");
+    cwdSpy.mockRestore();
+  });
+
   it("returns a plain error string when bootstrap fails", async () => {
     mockBuildLLMClient.mockRejectedValueOnce(new Error("missing provider config"));
     const processor = new TelegramChatRunnerProcessor("/tmp/plugins/telegram-bot");
