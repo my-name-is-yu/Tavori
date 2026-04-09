@@ -48,9 +48,78 @@ export interface AssembledContext {
   totalTokensUsed: number;
 }
 
+export interface ContextAssemblerGoalState {
+  title?: string;
+  description?: string;
+  dimensions?: GoalDimensionState[];
+  active_strategy?: {
+    hypothesis?: string;
+  };
+}
+
+interface GoalDimensionState {
+  name: string;
+  current_value: string | number | boolean | null;
+  threshold?: GoalThreshold;
+  gap?: number;
+  history?: GoalDimensionHistoryEntry[];
+}
+
+interface GoalDimensionHistoryEntry {
+  timestamp: string;
+  value: string | number | boolean | null;
+}
+
+type GoalThreshold =
+  | Dimension["threshold"]
+  | {
+      value: string | number | boolean;
+    };
+
+interface WorkingMemorySelection {
+  shortTerm: unknown[];
+  lessons: LessonEntry[];
+}
+
+interface LessonEntry {
+  lesson?: string;
+  content?: string;
+  relevance_tags?: string[];
+  last_accessed?: string;
+  access_count?: number;
+}
+
+interface KnowledgeEntry {
+  question?: string;
+  answer?: string;
+  content?: string;
+  confidence?: number;
+}
+
+interface ReflectionEntry {
+  why_it_worked_or_failed?: string;
+  what_to_do_differently?: string;
+  what_was_attempted?: string;
+}
+
+interface StrategyTemplateEntry {
+  hypothesis_pattern: string;
+  effectiveness_score: number;
+  similarity?: number;
+  score?: number;
+  created_at?: string;
+  createdAt?: string;
+}
+
+interface TaskResultEntry {
+  task_description: string;
+  outcome: string;
+  success: boolean;
+}
+
 export interface ContextAssemblerDeps {
   stateManager?: {
-    loadGoalState(goalId: string): Promise<any | null>;
+    loadGoalState(goalId: string): Promise<ContextAssemblerGoalState | null>;
   };
   memoryLifecycle?: {
     selectForWorkingMemory(
@@ -58,18 +127,18 @@ export interface ContextAssemblerDeps {
       dims: string[],
       tags: string[],
       max?: number
-    ): Promise<{ shortTerm: any[]; lessons: any[] }>;
+    ): Promise<WorkingMemorySelection>;
     selectForWorkingMemorySemantic?(
       goalId: string,
       query: string,
       dims: string[],
       tags: string[],
       max?: number
-    ): Promise<{ shortTerm: any[]; lessons: any[] }>;
+    ): Promise<WorkingMemorySelection>;
   };
   knowledgeManager?: {
-    getRelevantKnowledge?(goalId: string): Promise<any[]>;
-    loadKnowledge?(goalId: string, tags?: string[]): Promise<any[]>;
+    getRelevantKnowledge?(goalId: string): Promise<KnowledgeEntry[]>;
+    loadKnowledge?(goalId: string, tags?: string[]): Promise<KnowledgeEntry[]>;
   };
   contextProvider?: {
     buildWorkspaceContextItems?(
@@ -77,8 +146,8 @@ export interface ContextAssemblerDeps {
       dimensionName: string
     ): Promise<Array<{ label: string; content: string }>>;
   };
-  reflectionGetter?: (goalId: string, limit?: number) => Promise<any[]>;
-  strategyTemplateSearch?: (query: string, topK?: number) => Promise<any[]>;
+  reflectionGetter?: (goalId: string, limit?: number) => Promise<ReflectionEntry[]>;
+  strategyTemplateSearch?: (query: string, topK?: number) => Promise<StrategyTemplateEntry[]>;
   vectorIndex?: {
     search(
       query: string,
@@ -185,7 +254,7 @@ export class ContextAssembler {
   private async assembleSlot(
     slot: ContextSlot,
     goalId: string | undefined,
-    goalState: any,
+    goalState: ContextAssemblerGoalState | null,
     dims: string[],
     additionalContext?: Record<string, string>
   ): Promise<string> {
@@ -235,7 +304,7 @@ export class ContextAssembler {
 
   // ─── Individual slot builders ────────────────────────────────────────────────
 
-  private buildGoalDefinition(goalState: any): string {
+  private buildGoalDefinition(goalState: ContextAssemblerGoalState | null): string {
     if (!goalState) return "";
     return formatGoalContext(
       { title: goalState.title, description: goalState.description },
@@ -243,16 +312,20 @@ export class ContextAssembler {
     );
   }
 
-  private buildCurrentState(goalState: any): string {
+  private buildCurrentState(goalState: ContextAssemblerGoalState | null): string {
     if (!goalState?.dimensions?.length) return "";
-    const getThresholdTarget = (t: Dimension["threshold"]): string | number | undefined => {
+    const getThresholdTarget = (t?: GoalThreshold): string | number | undefined => {
       if (!t) return undefined;
+      if (!("type" in t)) {
+        const value = t.value;
+        return typeof value === "boolean" ? String(value) : value;
+      }
       if (t.type === "range") return `${t.low}–${t.high}`;
       if (t.type === "present") return "present";
       const v = t.value;
       return typeof v === "boolean" ? String(v) : v;
     };
-    const dims = (goalState.dimensions as Array<Dimension & { gap?: number }>).map((d) => ({
+    const dims = goalState.dimensions.map((d) => ({
       name: d.name,
       current: d.current_value,
       target: getThresholdTarget(d.threshold),
@@ -261,11 +334,11 @@ export class ContextAssembler {
     return formatCurrentState(dims);
   }
 
-  private buildDimensionHistory(goalState: any): string {
+  private buildDimensionHistory(goalState: ContextAssemblerGoalState | null): string {
     if (!goalState?.dimensions?.length) return "";
 
     const allHistory: Array<{ timestamp: string; score: number }> = [];
-    for (const dim of ((goalState.dimensions as Dimension[]) ?? [])) {
+    for (const dim of goalState.dimensions) {
       if (dim.history?.length) {
         for (const h of dim.history) {
           allHistory.push({ timestamp: h.timestamp, score: typeof h.value === "number" ? h.value : 0 });
@@ -280,8 +353,8 @@ export class ContextAssembler {
     if (!raw) return "";
 
     try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
+      const parsed: unknown = JSON.parse(raw);
+      if (isTaskResultEntryArray(parsed)) {
         return formatTaskResults(parsed);
       }
     } catch {
@@ -296,7 +369,7 @@ export class ContextAssembler {
     const reflections = await this.deps.reflectionGetter(goalId, 5);
     if (!reflections?.length) return "";
     return formatReflections(
-      reflections.map((r: any) => ({
+      reflections.map((r) => ({
         what_failed: r.why_it_worked_or_failed,
         suggestion: r.what_to_do_differently,
         content: r.what_was_attempted,
@@ -316,7 +389,7 @@ export class ContextAssembler {
     if (lessons.length > budgetedMax) {
       const cutoffMs = CONTEXT_FRESHNESS_DAYS * 24 * 60 * 60 * 1000;
       const now = Date.now();
-      const fresh = lessons.filter((l: any) => {
+      const fresh = lessons.filter((l) => {
         const lastAccessed = l.last_accessed ? new Date(l.last_accessed).getTime() : 0;
         const accessCount = l.access_count ?? 0;
         const isStale = (now - lastAccessed) > cutoffMs && accessCount < 2;
@@ -329,7 +402,7 @@ export class ContextAssembler {
     }
 
     return formatLessons(
-      lessons.map((l: any) => ({
+      lessons.map((l) => ({
         importance: l.relevance_tags?.includes("HIGH")
           ? "HIGH"
           : l.relevance_tags?.includes("LOW")
@@ -343,7 +416,7 @@ export class ContextAssembler {
   private async buildKnowledge(goalId: string): Promise<string> {
     if (!this.deps.knowledgeManager && !this.deps.vectorIndex) return "";
 
-    let entries: any[] = [];
+    let entries: KnowledgeEntry[] = [];
 
     if (this.deps.knowledgeManager?.getRelevantKnowledge) {
       entries = await this.deps.knowledgeManager.getRelevantKnowledge(goalId);
@@ -358,7 +431,7 @@ export class ContextAssembler {
     return formatKnowledge(entries);
   }
 
-  private async buildStrategyTemplates(goalState: any): Promise<string> {
+  private async buildStrategyTemplates(goalState: ContextAssemblerGoalState | null): Promise<string> {
     if (!this.deps.strategyTemplateSearch) return "";
     const query = goalState?.active_strategy?.hypothesis ?? goalState?.title ?? "";
     if (!query) return "";
@@ -367,7 +440,7 @@ export class ContextAssembler {
 
     if (this.deps.vectorIndex) {
       // Vector search: apply cosine similarity threshold
-      templates = templates.filter((t: any) => {
+      templates = templates.filter((t) => {
         const sim = t.similarity ?? t.score ?? 1;
         return sim >= KNOWLEDGE_SIMILARITY_THRESHOLD;
       });
@@ -375,7 +448,7 @@ export class ContextAssembler {
       // No vector search: deprioritize templates older than 30 days
       const cutoffMs = STRATEGY_TEMPLATE_FRESHNESS_DAYS * 24 * 60 * 60 * 1000;
       const now = Date.now();
-      const fresh = templates.filter((t: any) => {
+      const fresh = templates.filter((t) => {
         const created = t.created_at ?? t.createdAt;
         if (!created) return true; // no date means keep
         return (now - new Date(created).getTime()) <= cutoffMs;
@@ -406,7 +479,7 @@ export class ContextAssembler {
 
   // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-  private async loadGoalState(goalId: string | undefined): Promise<any | null> {
+  private async loadGoalState(goalId: string | undefined): Promise<ContextAssemblerGoalState | null> {
     if (!goalId || !this.deps.stateManager) return null;
     try {
       return await this.deps.stateManager.loadGoalState(goalId);
@@ -415,10 +488,10 @@ export class ContextAssembler {
     }
   }
 
-  private extractDimensionNames(goalState: any, dimensionName?: string): string[] {
+  private extractDimensionNames(goalState: ContextAssemblerGoalState | null, dimensionName?: string): string[] {
     if (dimensionName) return [dimensionName];
     if (!goalState?.dimensions?.length) return [];
-    return ((goalState.dimensions as Dimension[]) ?? []).map((d: Dimension) => d.name);
+    return goalState.dimensions.map((d) => d.name);
   }
 
   private enforceBudget(
@@ -478,4 +551,18 @@ export class ContextAssembler {
     // Restore original slot order (by priority ascending = natural order)
     return result.sort((a, b) => a.slotDef.priority - b.slotDef.priority);
   }
+}
+
+function isTaskResultEntryArray(value: unknown): value is TaskResultEntry[] {
+  return Array.isArray(value) && value.every(isTaskResultEntry);
+}
+
+function isTaskResultEntry(value: unknown): value is TaskResultEntry {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<TaskResultEntry>;
+  return (
+    typeof candidate.task_description === "string" &&
+    typeof candidate.outcome === "string" &&
+    typeof candidate.success === "boolean"
+  );
 }

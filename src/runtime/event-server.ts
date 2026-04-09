@@ -14,6 +14,8 @@ import { findAvailablePort, DEFAULT_PORT, MAX_PORT_ATTEMPTS } from "./port-utils
 import { createEnvelope, type Envelope } from "./types/envelope.js";
 import type { ApprovalBroker, ApprovalRequiredEvent } from "./approval-broker.js";
 import type { OutboxStore, OutboxRecord } from "./store/index.js";
+import { EventServerSnapshotReader } from "./event-server-snapshot-reader.js";
+import { EventServerSseManager } from "./event-server-sse.js";
 
 export interface EventServerConfig {
   host?: string; // default: "127.0.0.1" (localhost only!)
@@ -48,15 +50,14 @@ export class EventServer {
   private readonly logger?: Logger;
   private readonly stateManager?: StateManager;
   private readonly triggerMapper?: TriggerMapper;
+  private readonly snapshotReader: EventServerSnapshotReader;
+  private readonly sseManager: EventServerSseManager;
   private triggerMappingsCache: TriggerMappingsConfig | null = null;
-  private sseClients: Set<http.ServerResponse> = new Set();
-  private eventIdCounter = 0;
   private approvalQueue: Map<string, { resolve: (approved: boolean) => void; timer: ReturnType<typeof setTimeout> }> = new Map();
   private approvalBroker?: ApprovalBroker;
   private outboxStore?: OutboxStore;
   private envelopeHook?: (eventData: Record<string, unknown>) => void | Promise<void>;
   private commandEnvelopeHook?: (envelope: Envelope) => void | Promise<void>;
-  private broadcastChain: Promise<void> = Promise.resolve();
   private activeWorkersProvider?: ActiveWorkersProvider;
 
   constructor(driveSystem: DriveSystem, config?: EventServerConfig, logger?: Logger) {
@@ -70,6 +71,8 @@ export class EventServer {
     this.triggerMapper = config?.triggerMapper;
     this.approvalBroker = config?.approvalBroker;
     this.outboxStore = config?.outboxStore;
+    this.snapshotReader = new EventServerSnapshotReader(this.eventsDir);
+    this.sseManager = new EventServerSseManager(this.logger, this.approvalBroker, this.outboxStore);
   }
 
   /** Start HTTP server, auto-retrying on EADDRINUSE up to MAX_PORT_ATTEMPTS times */
@@ -120,11 +123,7 @@ export class EventServer {
   async stop(): Promise<void> {
     this.stopFileWatcher();
     await this.approvalBroker?.stop();
-    // Close all SSE connections
-    for (const client of this.sseClients) {
-      try { client.end(); } catch { /* ignore */ }
-    }
-    this.sseClients.clear();
+    this.sseManager.closeAllClients();
     return new Promise((resolve) => {
       if (!this.server) {
         resolve();
@@ -237,23 +236,7 @@ export class EventServer {
 
   /** Broadcast an SSE event to all connected clients */
   async broadcast(eventType: string, data: unknown): Promise<void> {
-    await this.enqueueBroadcast(async () => {
-      let outboxRecord: OutboxRecord | null = null;
-      if (this.outboxStore) {
-        outboxRecord = await this.outboxStore.append(this.toOutboxInput(eventType, data));
-      }
-
-      const id = outboxRecord ? String(outboxRecord.seq) : undefined;
-      for (const client of this.sseClients) {
-        try {
-          this.writeSseEvent(client, eventType, data, id);
-        } catch {
-          this.sseClients.delete(client);
-        }
-      }
-    }).catch((err) => {
-      this.logger?.error(`EventServer: broadcast failed for ${eventType}: ${String(err)}`);
-    });
+    await this.sseManager.broadcast(eventType, data);
   }
 
   /** Request human approval and wait for response (5 min timeout) */
@@ -300,10 +283,12 @@ export class EventServer {
 
   setApprovalBroker(broker: ApprovalBroker): void {
     this.approvalBroker = broker;
+    this.sseManager.setApprovalBroker(broker);
   }
 
   setOutboxStore(store: OutboxStore): void {
     this.outboxStore = store;
+    this.sseManager.setOutboxStore(store);
   }
 
   setActiveWorkersProvider(provider: ActiveWorkersProvider): void {
@@ -360,12 +345,11 @@ export class EventServer {
     // GET /daemon/status
     if (req.method === "GET" && urlPath === "/daemon/status") {
       void (async () => {
-        const statePath = path.join(this.eventsDir.replace("/events", ""), "daemon-state.json");
-        try {
-          const raw = await fsp.readFile(statePath, "utf-8");
+        const raw = await this.snapshotReader.readDaemonStateRaw();
+        if (raw !== null) {
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(raw);
-        } catch {
+        } else {
           res.writeHead(404, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: "daemon state not found" }));
         }
@@ -625,7 +609,7 @@ export class EventServer {
 
   private async handleGetGoals(res: http.ServerResponse): Promise<void> {
     try {
-      const goals = await this.readGoalSummaries();
+      const goals = await this.snapshotReader.readGoalSummaries();
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(goals));
     } catch (err) {
@@ -636,29 +620,14 @@ export class EventServer {
 
   private async handleGetGoalById(res: http.ServerResponse, goalId: string): Promise<void> {
     try {
-      const goalFile = path.join(path.dirname(this.eventsDir), "goals", goalId, "goal.json");
-      let goalRaw: Record<string, unknown>;
-      try {
-        const content = await fsp.readFile(goalFile, "utf-8");
-        goalRaw = JSON.parse(content) as Record<string, unknown>;
-      } catch {
+      const goal = await this.snapshotReader.readGoalDetail(goalId);
+      if (goal === null) {
         res.writeHead(404, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Goal not found" }));
         return;
       }
-
-      const gapFile = path.join(path.dirname(this.eventsDir), "goals", goalId, "gap-history.json");
-      let currentGap: unknown = null;
-      try {
-        const gapContent = await fsp.readFile(gapFile, "utf-8");
-        const gapHistory = JSON.parse(gapContent) as unknown[];
-        currentGap = gapHistory.at(-1) ?? null;
-      } catch {
-        // Gap file may not exist
-      }
-
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ ...goalRaw, current_gap: currentGap }));
+      res.end(JSON.stringify(goal));
     } catch (err) {
       res.writeHead(500, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: "Internal error", details: String(err) }));
@@ -703,49 +672,7 @@ export class EventServer {
     res: http.ServerResponse,
     requestUrl: URL
   ): Promise<void> {
-    const afterSeq = this.resolveReplayCursor(
-      requestUrl.searchParams.get("after"),
-      req.headers["last-event-id"]
-    );
-
-    res.writeHead(200, {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-      "Access-Control-Allow-Origin": "*",
-    });
-    res.write(`event: connected\ndata: ${JSON.stringify({ timestamp: new Date().toISOString() })}\n\n`);
-
-    await this.enqueueBroadcast(async () => {
-      const pendingApprovals = this.approvalBroker?.getPendingApprovalEvents() ?? [];
-      const pendingApprovalIds = new Set(pendingApprovals.map((pending) => pending.requestId));
-      const replayedApprovals = await this.replayOutbox(res, afterSeq, pendingApprovalIds);
-      for (const pending of pendingApprovals) {
-        if (replayedApprovals.has(pending.requestId)) continue;
-        this.writeSseEvent(res, "approval_required", pending);
-      }
-      this.sseClients.add(res);
-    }).catch((err) => {
-      this.logger?.error(`EventServer: stream replay failed: ${String(err)}`);
-      try {
-        res.end();
-      } catch {
-        // ignore
-      }
-    });
-
-    req.on("close", () => {
-      this.sseClients.delete(res);
-    });
-    const keepAlive = setInterval(() => {
-      try {
-        res.write(": keepalive\n\n");
-      } catch {
-        clearInterval(keepAlive);
-        this.sseClients.delete(res);
-      }
-    }, 30_000);
-    req.on("close", () => clearInterval(keepAlive));
+    await this.sseManager.handleStream(req, res, requestUrl);
   }
 
   private async dispatchCommandEnvelope(input: {
@@ -770,134 +697,12 @@ export class EventServer {
   }
 
   private async buildSnapshot(): Promise<EventServerSnapshot> {
-    const [daemon, goals, latestOutbox, activeWorkers] = await Promise.all([
-      this.readDaemonState(),
-      this.readGoalSummaries(),
-      this.outboxStore?.loadLatest() ?? Promise.resolve(null),
-      this.activeWorkersProvider?.() ?? Promise.resolve([]),
-    ]);
-
-    return {
-      daemon,
-      goals,
-      approvals: this.approvalBroker?.getPendingApprovalEvents() ?? [],
-      active_workers: activeWorkers,
-      last_outbox_seq: latestOutbox?.seq ?? 0,
-    };
+    return this.snapshotReader.buildSnapshot(
+      this.approvalBroker?.getPendingApprovalEvents() ?? [],
+      this.outboxStore,
+      this.activeWorkersProvider
+    );
   }
-
-  private async readDaemonState(): Promise<Record<string, unknown> | null> {
-    const statePath = path.join(this.eventsDir.replace("/events", ""), "daemon-state.json");
-    try {
-      const raw = await fsp.readFile(statePath, "utf-8");
-      return JSON.parse(raw) as Record<string, unknown>;
-    } catch {
-      return null;
-    }
-  }
-
-  private async readGoalSummaries(): Promise<Array<{ id: string; title: string; status: string; loop_status: string }>> {
-    const goalsDir = path.join(path.dirname(this.eventsDir), "goals");
-    let entries: string[];
-    try {
-      entries = await fsp.readdir(goalsDir);
-    } catch {
-      return [];
-    }
-
-    const goals: Array<{ id: string; title: string; status: string; loop_status: string }> = [];
-    for (const entry of entries) {
-      const goalFile = path.join(goalsDir, entry, "goal.json");
-      try {
-        const content = await fsp.readFile(goalFile, "utf-8");
-        const raw = JSON.parse(content) as Record<string, unknown>;
-        goals.push({
-          id: String(raw["id"] ?? entry),
-          title: String(raw["title"] ?? ""),
-          status: String(raw["status"] ?? "active"),
-          loop_status: String(raw["loop_status"] ?? "idle"),
-        });
-      } catch {
-        // Skip unreadable entries
-      }
-    }
-    return goals;
-  }
-
-  private resolveReplayCursor(
-    queryAfter: string | null,
-    lastEventIdHeader: string | string[] | undefined
-  ): number {
-    const headerValue = Array.isArray(lastEventIdHeader) ? lastEventIdHeader[0] : lastEventIdHeader;
-    return Math.max(this.parseReplayCursorValue(queryAfter), this.parseReplayCursorValue(headerValue));
-  }
-
-  private parseReplayCursorValue(value: string | null | undefined): number {
-    if (!value) return 0;
-    const parsed = Number.parseInt(value, 10);
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
-  }
-
-  private async replayOutbox(
-    res: http.ServerResponse,
-    afterSeq: number,
-    pendingApprovalIds: ReadonlySet<string>
-  ): Promise<Set<string>> {
-    const replayedApprovals = new Set<string>();
-    if (!this.outboxStore) return replayedApprovals;
-
-    const records = await this.outboxStore.list(afterSeq);
-    for (const record of records) {
-      if (record.event_type === "approval_required" && isRecord(record.payload)) {
-        const requestId = record.payload["requestId"];
-        if (typeof requestId === "string") {
-          if (pendingApprovalIds.has(requestId)) {
-            continue;
-          }
-          replayedApprovals.add(requestId);
-        }
-      }
-      this.writeSseEvent(res, record.event_type, record.payload, String(record.seq));
-    }
-    return replayedApprovals;
-  }
-
-  private toOutboxInput(eventType: string, data: unknown): Omit<OutboxRecord, "seq"> {
-    const record: Omit<OutboxRecord, "seq"> = {
-      event_type: eventType,
-      created_at: Date.now(),
-      payload: data,
-    };
-
-    if (isRecord(data)) {
-      const goalId = data["goalId"] ?? data["goal_id"];
-      const correlationId = data["correlationId"] ?? data["correlation_id"] ?? data["requestId"] ?? data["request_id"];
-      if (typeof goalId === "string") record.goal_id = goalId;
-      if (typeof correlationId === "string") record.correlation_id = correlationId;
-    }
-
-    return record;
-  }
-
-  private enqueueBroadcast<T>(operation: () => Promise<T>): Promise<T> {
-    const run = this.broadcastChain.then(operation, operation);
-    this.broadcastChain = run.then(() => undefined, () => undefined);
-    return run;
-  }
-
-  private writeSseEvent(
-    res: http.ServerResponse,
-    eventType: string,
-    data: unknown,
-    id?: string
-  ): void {
-    const eventId = id ?? String(++this.eventIdCounter);
-    res.write(`id: ${eventId}\nevent: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`);
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }
 
 /** Read the full request body as a string (max 1 MB). */

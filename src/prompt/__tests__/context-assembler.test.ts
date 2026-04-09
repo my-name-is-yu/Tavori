@@ -1,8 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { ContextAssembler } from "../context-assembler.js";
-import type { ContextAssemblerDeps } from "../context-assembler.js";
+import type { ContextAssemblerDeps, ContextAssemblerGoalState } from "../context-assembler.js";
 
-const makeGoalState = (overrides: Record<string, any> = {}) => ({
+type TestLesson = NonNullable<Awaited<ReturnType<NonNullable<ContextAssemblerDeps["memoryLifecycle"]>["selectForWorkingMemory"]>>["lessons"]>[number];
+
+const makeGoalState = (overrides: Partial<ContextAssemblerGoalState> = {}): ContextAssemblerGoalState & { id: string } => ({
   id: "goal-1",
   title: "Increase test coverage",
   description: "Get to 90% coverage",
@@ -226,7 +228,7 @@ describe("ContextAssembler", () => {
   });
 
   describe("context rot prevention — lesson stale filtering", () => {
-    const makeLesson = (overrides: Record<string, any> = {}) => ({
+    const makeLesson = (overrides: Partial<TestLesson> = {}): TestLesson => ({
       lesson: "Some lesson",
       relevance_tags: ["MEDIUM"],
       last_accessed: new Date().toISOString(),

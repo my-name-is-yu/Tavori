@@ -31,6 +31,14 @@ import { QueueClaimSweeper } from "./queue/queue-claim-sweeper.js";
 import { ApprovalBroker } from "./approval-broker.js";
 import { CommandDispatcher } from "./command-dispatcher.js";
 import { EventDispatcher } from "./event-dispatcher.js";
+import {
+  RuntimeOwnershipCoordinator,
+  type RuntimeHealthComponents,
+} from "./daemon-runtime-ownership.js";
+import {
+  ProcessShutdownCoordinator,
+  startDaemonStatusHeartbeat,
+} from "./daemon-runner-lifecycle.js";
 
 // Re-exports for callers that imported these from daemon-runner
 export { generateCronEntry } from "./daemon-signals.js";
@@ -104,7 +112,6 @@ export class DaemonRunner {
   private baseDir: string;
   private logDir: string;
   private logPath: string;
-  private shutdownHandler: (() => void) | null = null;
   private eventServer: EventServer | undefined;
   private approvalFn: ((task: Record<string, unknown>) => Promise<boolean>) | undefined;
   private sleepAbortController: AbortController | null = null;
@@ -127,6 +134,8 @@ export class DaemonRunner {
   private supervisor: LoopSupervisor | null = null;
   private cronScheduleInterval: ReturnType<typeof setInterval> | null = null;
   private shutdownResolve: (() => void) | null = null;
+  private shutdownCoordinator: ProcessShutdownCoordinator | null = null;
+  private stopStatusHeartbeat: (() => void) | null = null;
   private readonly deps: DaemonDeps;
   private runtimeRoot: string | null = null;
   private approvalStore: ApprovalStore | null = null;
@@ -139,17 +148,7 @@ export class DaemonRunner {
   private approvalBroker: ApprovalBroker | null = null;
   private commandDispatcher: CommandDispatcher | null = null;
   private eventDispatcher: EventDispatcher | null = null;
-  private leaderOwnerToken: string | null = null;
-  private leaderHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
-  private runtimeHealthPhase = "disabled";
-  private runtimeHealthComponents: {
-    gateway: "ok" | "degraded";
-    queue: "ok" | "degraded";
-    leases: "ok" | "degraded";
-    approval: "ok" | "degraded";
-    outbox: "ok" | "degraded";
-    supervisor: "ok" | "degraded";
-  } | null = null;
+  private runtimeOwnership: RuntimeOwnershipCoordinator;
 
   constructor(deps: DaemonDeps) {
     this.deps = deps;
@@ -193,6 +192,15 @@ export class DaemonRunner {
     });
     this.queueClaimSweeper = new QueueClaimSweeper({
       queue: this.journalQueue,
+    });
+    this.runtimeOwnership = new RuntimeOwnershipCoordinator({
+      runtimeRoot: this.runtimeRoot,
+      logger: this.logger,
+      approvalStore: this.approvalStore,
+      outboxStore: this.outboxStore,
+      runtimeHealthStore: this.runtimeHealthStore,
+      leaderLockManager: this.leaderLockManager,
+      onLeadershipLost: (reason) => this.failRuntimeLeadership(reason),
     });
 
     // Initialize daemon state
@@ -316,44 +324,29 @@ export class DaemonRunner {
         };
       }
 
-      // Start heartbeat (every 30s)
-      const heartbeatInterval = setInterval(() => {
-        if (this.eventServer && this.state.status === "running") {
-          void this.eventServer.broadcast?.("daemon_status", {
-            status: this.state.status,
-            activeGoals: this.state.active_goals,
-            loopCount: this.state.loop_count,
-            uptime: Date.now() - new Date(this.state.started_at).getTime(),
-          });
-        }
-      }, 30_000);
+      this.stopStatusHeartbeat = startDaemonStatusHeartbeat({
+        eventServer: this.eventServer,
+        getSnapshot: () => ({
+          status: this.state.status,
+          activeGoals: this.state.active_goals,
+          loopCount: this.state.loop_count,
+          startedAt: this.state.started_at,
+        }),
+      });
 
       this.driveSystem.startWatcher((event) => this.onEventReceived(event));
 
-      // 3. Set up signal handlers for graceful shutdown
       this.shuttingDown = false;
       const shutdownTimeout = this.config.crash_recovery.graceful_shutdown_timeout_ms ?? 30_000;
-      let forceStopTimer: ReturnType<typeof setTimeout> | null = null;
-
-      const shutdown = (): void => {
-        if (this.shuttingDown) return;
-        this.shuttingDown = true;
-        this.logger.info("Shutting down gracefully...");
-        this.running = false;
-        this.state.status = "stopping";
-        this.state.interrupted_goals = [...this.state.active_goals];
-        this.shutdownResolve?.();
-        this.sleepAbortController?.abort();
-        forceStopTimer = setTimeout(() => {
-          this.logger.warn(
-            `Graceful shutdown timeout (${shutdownTimeout}ms) exceeded, forcing stop`
-          );
+      this.shutdownCoordinator = new ProcessShutdownCoordinator({
+        logger: this.logger,
+        gracefulShutdownTimeoutMs: shutdownTimeout,
+        onShutdown: () => this.beginGracefulShutdown(),
+        onForceStop: () => {
           this.running = false;
-        }, shutdownTimeout);
-      };
-      this.shutdownHandler = shutdown;
-      process.on("SIGTERM", shutdown);
-      process.on("SIGINT", shutdown);
+        },
+      });
+      this.shutdownCoordinator.activate();
 
       // 4. Restore state from previous interrupted run
       const mergedGoalIds = await this.restoreState(goalIds);
@@ -486,20 +479,11 @@ export class DaemonRunner {
           cleanupHandled = true;
         }
       } finally {
-        // Cancel the force-stop timer if it's still pending
-        if (forceStopTimer !== null) {
-          clearTimeout(forceStopTimer);
-          forceStopTimer = null;
-        }
         this.queueClaimSweeper?.stop();
-        // Remove signal handlers
-        if (this.shutdownHandler) {
-          process.removeListener("SIGTERM", this.shutdownHandler);
-          process.removeListener("SIGINT", this.shutdownHandler);
-          this.shutdownHandler = null;
-        }
-        // Stop file watcher and EventServer
-        clearInterval(heartbeatInterval);
+        this.shutdownCoordinator?.dispose();
+        this.shutdownCoordinator = null;
+        this.stopStatusHeartbeat?.();
+        this.stopStatusHeartbeat = null;
         if (this.cronScheduleInterval !== null) {
           clearInterval(this.cronScheduleInterval);
           this.cronScheduleInterval = null;
@@ -529,128 +513,21 @@ export class DaemonRunner {
   }
 
   private async initializeRuntimeFoundation(): Promise<void> {
-    await Promise.all([
-      this.approvalStore?.ensureReady(),
-      this.outboxStore?.ensureReady(),
-      this.runtimeHealthStore?.ensureReady(),
-    ]);
-
-    await this.saveRuntimeHealthSnapshot("foundation_only", {
-      gateway: "degraded",
-      queue: "degraded",
-      leases: "ok",
-      approval: "ok",
-      outbox: "ok",
-      supervisor: "degraded",
-    });
-
-    this.logger.info("Runtime journal foundation initialized", {
-      runtime_root: this.runtimeRoot,
-      queue_path: this.runtimeRoot ? path.join(this.runtimeRoot, "queue.json") : undefined,
-    });
+    await this.runtimeOwnership.initializeFoundation();
   }
 
   private async saveRuntimeHealthSnapshot(
     phase: string,
-    components: {
-      gateway: "ok" | "degraded";
-      queue: "ok" | "degraded";
-      leases: "ok" | "degraded";
-      approval: "ok" | "degraded";
-      outbox: "ok" | "degraded";
-      supervisor: "ok" | "degraded";
-    }
+    components: RuntimeHealthComponents
   ): Promise<void> {
-    this.runtimeHealthPhase = phase;
-    this.runtimeHealthComponents = components;
-    const status = Object.values(components).every((value) => value === "ok") ? "ok" : "degraded";
-    await this.runtimeHealthStore?.saveSnapshot({
-      status,
-      leader: this.leaderOwnerToken !== null,
-      checked_at: Date.now(),
-      components,
-      details: {
-        pid: process.pid,
-        runtime_journal_v2: true,
-        runtime_root: this.runtimeRoot,
-        phase,
-      },
-    });
+    await this.runtimeOwnership.saveRuntimeHealthSnapshot(phase, components);
   }
 
   private async acquireRuntimeLeadership(): Promise<void> {
-    if (!this.leaderLockManager) {
-      return;
-    }
-
-    const acquired = await this.leaderLockManager.acquire({
-      leaseMs: RUNTIME_LEADER_LEASE_MS,
-    });
-    if (!acquired) {
-      const current = await this.leaderLockManager.read();
-      throw new Error(
-        `Runtime daemon leader already active (PID ${current?.pid ?? "unknown"})`
-      );
-    }
-
-    this.leaderOwnerToken = acquired.owner_token;
-    await this.writeRuntimeHeartbeat();
-    this.leaderHeartbeatTimer = setInterval(() => {
-      void this.renewRuntimeLeadership().catch((err) => {
-        this.logger.error("Failed to renew runtime leader lock", {
-          error: err instanceof Error ? err.message : String(err),
-        });
-        this.failRuntimeLeadership(
-          err instanceof Error ? err.message : String(err)
-        );
-      });
-    }, RUNTIME_LEADER_HEARTBEAT_MS);
-    this.leaderHeartbeatTimer.unref?.();
-  }
-
-  private async renewRuntimeLeadership(): Promise<void> {
-    if (!this.leaderLockManager || !this.leaderOwnerToken) {
-      return;
-    }
-
-    const renewed = await this.leaderLockManager.renew(this.leaderOwnerToken, {
-      leaseMs: RUNTIME_LEADER_LEASE_MS,
-    });
-    if (!renewed) {
-      this.failRuntimeLeadership("Runtime leader lock was lost");
-      return;
-    }
-
-    await this.writeRuntimeHeartbeat();
-  }
-
-  private async writeRuntimeHeartbeat(): Promise<void> {
-    if (!this.runtimeHealthStore) {
-      return;
-    }
-
-    const components =
-      this.runtimeHealthComponents ??
-      {
-        gateway: "degraded" as const,
-        queue: "degraded" as const,
-        leases: "degraded" as const,
-        approval: "degraded" as const,
-        outbox: "degraded" as const,
-        supervisor: "degraded" as const,
-      };
-    const status = Object.values(components).every((value) => value === "ok") ? "ok" : "degraded";
-    await this.runtimeHealthStore.saveDaemonHealth({
-      status,
-      leader: this.leaderOwnerToken !== null,
-      checked_at: Date.now(),
-      details: {
-        pid: process.pid,
-        runtime_journal_v2: true,
-        runtime_root: this.runtimeRoot,
-        phase: this.runtimeHealthPhase,
-      },
-    });
+    await this.runtimeOwnership.acquireLeadership(
+      RUNTIME_LEADER_LEASE_MS,
+      RUNTIME_LEADER_HEARTBEAT_MS
+    );
   }
 
   private failRuntimeLeadership(reason: string): void {
@@ -671,15 +548,7 @@ export class DaemonRunner {
   }
 
   private async releaseStartupOwnership(): Promise<void> {
-    if (this.leaderHeartbeatTimer !== null) {
-      clearInterval(this.leaderHeartbeatTimer);
-      this.leaderHeartbeatTimer = null;
-    }
-    const ownerToken = this.leaderOwnerToken;
-    this.leaderOwnerToken = null;
-    if (ownerToken) {
-      await this.leaderLockManager?.release(ownerToken);
-    }
+    await this.runtimeOwnership.releaseLeadership();
   }
 
   /** Expose approvalFn for callers (e.g. cmdStart) to wire into TaskLifecycle */
@@ -981,26 +850,8 @@ export class DaemonRunner {
       }
     }
     await this.saveDaemonState();
-    if (this.leaderHeartbeatTimer !== null) {
-      clearInterval(this.leaderHeartbeatTimer);
-      this.leaderHeartbeatTimer = null;
-    }
-    const ownerToken = this.leaderOwnerToken;
-    this.leaderOwnerToken = null;
-    if (ownerToken) {
-      await this.leaderLockManager?.release(ownerToken);
-    }
-    await this.runtimeHealthStore?.saveDaemonHealth({
-      status: wasCrashed ? "failed" : "degraded",
-      leader: false,
-      checked_at: Date.now(),
-      details: {
-        pid: process.pid,
-        runtime_journal_v2: true,
-        runtime_root: this.runtimeRoot,
-        phase: this.runtimeHealthPhase,
-      },
-    });
+    await this.runtimeOwnership.releaseLeadership();
+    await this.runtimeOwnership.saveFinalHealth(wasCrashed ? "failed" : "degraded");
 
     // Write clean shutdown marker (async, atomic)
     const markerPath = path.join(this.baseDir, "shutdown-state.json");
@@ -1023,6 +874,20 @@ export class DaemonRunner {
       loop_count: this.state.loop_count,
       crash_count: this.state.crash_count,
     });
+  }
+
+  private beginGracefulShutdown(): void {
+    if (this.shuttingDown) {
+      return;
+    }
+
+    this.shuttingDown = true;
+    this.logger.info("Shutting down gracefully...");
+    this.running = false;
+    this.state.status = "stopping";
+    this.state.interrupted_goals = [...this.state.active_goals];
+    this.shutdownResolve?.();
+    this.sleepAbortController?.abort();
   }
 
   // ─── Private: Cron Scheduler ───
