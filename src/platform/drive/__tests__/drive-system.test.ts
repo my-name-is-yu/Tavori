@@ -55,9 +55,12 @@ describe("DriveSystem", () => {
       expect(fs.existsSync(path.join(tmpDir, "schedule"))).toBe(true);
     });
 
-    it("uses stateManager baseDir when no baseDir option provided", () => {
+    it("uses stateManager baseDir when no baseDir option provided", async () => {
       const ds = new DriveSystem(stateManager);
+      await new Promise((resolve) => setTimeout(resolve, 50));
       expect(ds).toBeDefined();
+      expect(fs.existsSync(path.join(tmpDir, "events"))).toBe(true);
+      expect(fs.existsSync(path.join(tmpDir, "schedule"))).toBe(true);
     });
   });
 
