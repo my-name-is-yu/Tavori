@@ -25,6 +25,9 @@ import { EventBus } from "./queue/event-bus.js";
 import { CommandBus } from "./queue/command-bus.js";
 import { LoopSupervisor } from "./executor/index.js";
 import { PulSeedEventSchema } from "../base/types/drive.js";
+import { ApprovalStore } from "./store/approval-store.js";
+import { ApprovalBroker } from "./approval-broker.js";
+import { RuntimeJournal } from "./store/runtime-journal.js";
 
 // Re-exports for callers that imported these from daemon-runner
 export { generateCronEntry } from "./daemon-signals.js";
@@ -106,6 +109,9 @@ export class DaemonRunner {
   private eventBus: EventBus | undefined;
   private commandBus: CommandBus | undefined;
   private supervisor: LoopSupervisor | null = null;
+  private approvalBroker: ApprovalBroker | undefined;
+  private runtimeJournal: RuntimeJournal | undefined;
+  private lastShutdownMarker: ShutdownMarker | null = null;
   private cronScheduleInterval: ReturnType<typeof setInterval> | null = null;
   private shutdownResolve: (() => void) | null = null;
   private readonly deps: DaemonDeps;
@@ -172,6 +178,10 @@ export class DaemonRunner {
     // 2b. Rotate log if needed, then check for crash recovery marker
     await this.rotateLog();
     await this.checkCrashRecovery();
+    if (this.config.runtime_journal_v2) {
+      this.runtimeJournal = new RuntimeJournal(this.baseDir);
+      this.gateway ??= new IngressGateway(this.logger);
+    }
 
     // 2c. Start EventServer (always-on) and file watcher
     if (!this.eventServer) {
@@ -182,31 +192,19 @@ export class DaemonRunner {
       }, this.logger);
     }
 
+    if (this.config.runtime_journal_v2 && this.eventServer) {
+      this.eventServer.setApprovalBroker(this.getOrCreateApprovalBroker());
+      this.eventServer.setCommandHook(async (envelope) => {
+        await this.runtimeJournal?.accept(envelope);
+      });
+    }
+
     if (this.gateway) {
       // Phase A: Route through Gateway → Envelope → writeEvent
       const httpAdapter = new HttpChannelAdapter(this.eventServer);
       this.gateway.registerAdapter(httpAdapter);
       this.gateway.onEnvelope(async (envelope: Envelope) => {
-        // Route by envelope type when buses are configured
-        if (envelope.type === "command" && this.commandBus) {
-          this.commandBus.push(envelope);
-          return;
-        }
-        if (envelope.type === "event" && this.eventBus) {
-          this.eventBus.push(envelope);
-          return;
-        }
-        // Fallback: no bus configured — keep legacy driveSystem.writeEvent() behavior
-        const payload = envelope.payload as Record<string, unknown>;
-        try {
-          const event = PulSeedEventSchema.parse(payload);
-          await this.driveSystem.writeEvent(event);
-        } catch (err) {
-          this.logger.error("Gateway: failed to process envelope", {
-            id: envelope.id,
-            error: String(err),
-          });
-        }
+        await this.routeEnvelope(envelope);
       });
       // Wire onHighPriority to abort sleep — done via the abortSleep() public method.
       // Callers who construct buses should pass: onHighPriority: () => daemon.abortSleep()
@@ -290,6 +288,10 @@ export class DaemonRunner {
       last_error: null,
     });
     await this.saveDaemonState();
+
+    if (this.config.runtime_journal_v2) {
+      await this.replayPendingIngress();
+    }
 
     // 5b. Write "running" shutdown marker (crash detection on next startup)
     await this.writeShutdownMarker({
@@ -387,6 +389,70 @@ export class DaemonRunner {
   /** Expose approvalFn for callers (e.g. cmdStart) to wire into TaskLifecycle */
   getApprovalFn(): ((task: Record<string, unknown>) => Promise<boolean>) | undefined {
     return this.approvalFn;
+  }
+
+  private async routeEnvelope(
+    envelope: Envelope,
+    options?: { replayed?: boolean }
+  ): Promise<void> {
+    if (this.config.runtime_journal_v2 && !options?.replayed) {
+      const receipt = await this.runtimeJournal?.accept(envelope);
+      if (receipt && !receipt.accepted) {
+        this.logger.info("Runtime journal suppressed duplicate envelope", {
+          id: envelope.id,
+          duplicate_of: receipt.duplicateOf,
+          source: envelope.source,
+          name: envelope.name,
+        });
+        return;
+      }
+    }
+
+    // Route by envelope type when buses are configured
+    if (envelope.type === "command" && this.commandBus) {
+      this.commandBus.push(envelope);
+      return;
+    }
+    if (envelope.type === "event" && this.eventBus) {
+      this.eventBus.push(envelope);
+      return;
+    }
+
+    // Fallback: no bus configured — keep legacy driveSystem.writeEvent() behavior
+    const payload = envelope.payload as Record<string, unknown>;
+    try {
+      const event = PulSeedEventSchema.parse(payload);
+      await this.driveSystem.writeEvent(event);
+      if (this.config.runtime_journal_v2) {
+        await this.runtimeJournal?.markHandled(envelope.id);
+      }
+    } catch (err) {
+      this.logger.error("Gateway: failed to process envelope", {
+        id: envelope.id,
+        error: String(err),
+      });
+    }
+  }
+
+  private async replayPendingIngress(): Promise<void> {
+    if (!this.runtimeJournal) {
+      return;
+    }
+    if (this.lastShutdownMarker?.state === "clean_shutdown") {
+      return;
+    }
+
+    const pending = await this.runtimeJournal.replayPending("event");
+    if (pending.length === 0) {
+      return;
+    }
+
+    this.logger.warn("Replaying pending runtime journal envelopes after restart", {
+      count: pending.length,
+    });
+    for (const envelope of pending) {
+      await this.routeEnvelope(envelope, { replayed: true });
+    }
   }
 
   /**
@@ -680,6 +746,15 @@ export class DaemonRunner {
     if (!wasCrashed) {
       this.state.status = "stopped";
     }
+
+    if (!wasCrashed) {
+      await this.runtimeJournal?.clearReceipts().catch((err) => {
+        this.logger.warn("Failed to clear runtime journal receipts", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+    }
+
     await this.saveDaemonState();
     await this.pidManager.cleanup();
 
@@ -733,6 +808,15 @@ export class DaemonRunner {
             payload: task,
             dedupe_key: `cron-${task.id}`,
           });
+          if (this.config.runtime_journal_v2) {
+            const receipt = await this.runtimeJournal?.accept(envelope);
+            if (receipt && !receipt.accepted) {
+              this.logger.info(`Cron task duplicate receipt suppressed: ${task.id}`, {
+                duplicate_of: receipt.duplicateOf,
+              });
+              continue;
+            }
+          }
           this.eventBus.push(envelope);
           this.logger.info(`Cron task enqueued to eventBus: ${task.id}`);
         } else {
@@ -744,7 +828,34 @@ export class DaemonRunner {
               prompt: task.prompt,
             });
 
+            let receiptAccepted = true;
+            const envelope = this.config.runtime_journal_v2
+              ? createEnvelope({
+                type: "event",
+                name: "cron_task_due",
+                source: "cron-scheduler",
+                priority: "normal",
+                payload: task,
+                dedupe_key: `cron-${task.id}`,
+              })
+              : null;
+            if (envelope) {
+              const receipt = await this.runtimeJournal?.accept(envelope);
+              receiptAccepted = receipt?.accepted ?? true;
+              if (!receiptAccepted) {
+                this.logger.info(`Cron task duplicate receipt suppressed: ${task.id}`, {
+                  duplicate_of: receipt?.duplicateOf,
+                });
+              }
+            }
+            if (!receiptAccepted) {
+              continue;
+            }
+
             await this.cronScheduler.markFired(task.id);
+            if (envelope) {
+              await this.runtimeJournal?.markHandled(envelope.id);
+            }
             this.logger.info(`Cron task fired: ${task.id}`);
           } catch (err) {
             this.logger.warn(`Cron task ${task.id} failed`, {
@@ -788,6 +899,16 @@ export class DaemonRunner {
             payload: result,
             dedupe_key: result.entry_id,
           });
+          if (this.config.runtime_journal_v2) {
+            const receipt = await this.runtimeJournal?.accept(envelope);
+            if (receipt && !receipt.accepted) {
+              this.logger.info("Schedule activation duplicate receipt suppressed", {
+                entry_id: result.entry_id,
+                duplicate_of: receipt.duplicateOf,
+              });
+              continue;
+            }
+          }
           this.eventBus.push(envelope);
         }
       }
@@ -990,6 +1111,7 @@ export class DaemonRunner {
    */
   private async checkCrashRecovery(): Promise<void> {
     const marker = await this.readShutdownMarker();
+    this.lastShutdownMarker = marker;
     if (!marker) return;
 
     if (marker.state === "clean_shutdown") {
@@ -1035,5 +1157,18 @@ export class DaemonRunner {
    */
   static generateCronEntry(goalId: string, intervalMinutes: number = 60): string {
     return generateCronEntry(goalId, intervalMinutes);
+  }
+
+  private getOrCreateApprovalBroker(): ApprovalBroker {
+    if (!this.approvalBroker) {
+      this.approvalBroker = new ApprovalBroker({
+        store: new ApprovalStore(this.baseDir),
+        logger: this.logger,
+        broadcast: (eventType, data) => {
+          this.eventServer?.broadcast(eventType, data);
+        },
+      });
+    }
+    return this.approvalBroker;
   }
 }
