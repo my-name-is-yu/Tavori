@@ -357,6 +357,57 @@ describe("LoopSupervisor", () => {
     }
   });
 
+  it("applies crash backoff before retrying durable activations", async () => {
+    let runCount = 0;
+    const { supervisor, journalQueue, runtimeRoot } = makeDurableSupervisor(async () => {
+      runCount += 1;
+      if (runCount === 1) {
+        throw new Error("boom");
+      }
+      return makeLoopResult({ goalId: "g-backoff" });
+    });
+
+    try {
+      await supervisor.start(["g-backoff"]);
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      expect(runCount).toBe(1);
+      expect(journalQueue.snapshot().pending.normal).toHaveLength(0);
+
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+      await supervisor.shutdown();
+
+      expect(runCount).toBeGreaterThanOrEqual(2);
+    } finally {
+      fs.rmSync(runtimeRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("does not append a duplicate durable activation when startup finds a recovered pending goal", async () => {
+    const { supervisor, journalQueue, runtimeRoot } = makeDurableSupervisor();
+    journalQueue.accept(createEnvelope({
+      type: "event",
+      name: "goal_activated",
+      source: "recovered",
+      goal_id: "g-dedupe",
+      payload: {},
+      priority: "normal",
+      dedupe_key: "goal_activated:g-dedupe",
+    }));
+
+    try {
+      await supervisor.start(["g-dedupe"]);
+      await new Promise((resolve) => setTimeout(resolve, 120));
+      await supervisor.shutdown();
+
+      const snapshot = journalQueue.snapshot();
+      expect(snapshot.completed).toHaveLength(1);
+      expect(snapshot.pending.normal).toHaveLength(0);
+      expect(snapshot.inflight).toEqual({});
+    } finally {
+      fs.rmSync(runtimeRoot, { recursive: true, force: true });
+    }
+  });
+
   it("blocks state commits when durable execution ownership becomes stale", async () => {
     const runtimeRoot = fs.mkdtempSync(path.join(os.tmpdir(), "sv-fence-"));
     const stateDir = path.join(runtimeRoot, "state");

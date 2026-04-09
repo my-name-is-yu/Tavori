@@ -155,6 +155,7 @@ export class LoopSupervisor {
       goal_id: goalId,
       payload: {},
       priority: 'normal',
+      dedupe_key: `goal_activated:${goalId}`,
     });
 
     if (this.durableExecutionEnabled) {
@@ -346,25 +347,23 @@ export class LoopSupervisor {
             false,
             ownershipLost
           );
-        } else if (activation.mode === 'journal') {
-          await this.failClaim(
-            activation,
-            result.error ?? 'goal execution failed',
-            true,
-            ownershipLost
-          );
         } else {
-          const jitter = Math.random() * 0.3;
-          const backoffMs = Math.min(
-            this.config.crashBackoffBaseMs * Math.pow(2, count - 1) * (1 + jitter),
-            30_000
-          );
-          const timer = setTimeout(() => {
-            this.pendingTimers.delete(timer);
-            if (!this.running) return;
-            this.enqueueGoalActivation(goalId);
-          }, backoffMs);
-          this.pendingTimers.add(timer);
+          const backoffMs = this.calculateCrashBackoff(count);
+          if (activation.mode === 'journal') {
+            await this.deferDurableRetry(
+              activation,
+              result.error ?? 'goal execution failed',
+              backoffMs,
+              ownershipLost
+            );
+          } else {
+            const timer = setTimeout(() => {
+              this.pendingTimers.delete(timer);
+              if (!this.running) return;
+              this.enqueueGoalActivation(goalId);
+            }, backoffMs);
+            this.pendingTimers.add(timer);
+          }
         }
 
         return;
@@ -434,6 +433,38 @@ export class LoopSupervisor {
         error: err instanceof Error ? err.message : String(err),
       });
     }
+  }
+
+  private calculateCrashBackoff(crashCount: number): number {
+    const jitter = Math.random() * 0.3;
+    return Math.min(
+      this.config.crashBackoffBaseMs * Math.pow(2, crashCount - 1) * (1 + jitter),
+      30_000
+    );
+  }
+
+  private async deferDurableRetry(
+    activation: DurableGoalActivation,
+    reason: string,
+    backoffMs: number,
+    ownershipLost: boolean
+  ): Promise<void> {
+    if (ownershipLost) {
+      return;
+    }
+
+    const leaseMs = backoffMs + Math.max(this.config.pollIntervalMs, 100);
+    const renewedClaim = this.deps.journalQueue!.renew(activation.claim.claimToken, leaseMs);
+    if (!renewedClaim) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      this.pendingTimers.delete(timer);
+      if (!this.running) return;
+      void this.failClaim(activation, reason, true, false);
+    }, backoffMs);
+    this.pendingTimers.add(timer);
   }
 
   private installWriteFence(activation: GoalActivation): void {
