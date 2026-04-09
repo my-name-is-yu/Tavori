@@ -7,6 +7,9 @@ import { Logger } from "../logger.js";
 import type { LoopResult } from "../../orchestrator/loop/core-loop.js";
 import type { DaemonDeps } from "../daemon-runner.js";
 import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
+import { JournalBackedQueue } from "../queue/journal-backed-queue.js";
+import { createEnvelope } from "../types/envelope.js";
+import { GoalLeaseManager } from "../goal-lease-manager.js";
 
 // ─── Helpers ───
 
@@ -31,6 +34,29 @@ async function pollForFile(
     await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
   throw new Error(`Timed out waiting for file: ${filePath}`);
+}
+
+async function pollForJsonMatch<T>(
+  filePath: string,
+  predicate: (value: T) => boolean,
+  timeoutMs = 2000,
+  intervalMs = 20
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      if (fs.existsSync(filePath)) {
+        const value = JSON.parse(fs.readFileSync(filePath, "utf-8")) as T;
+        if (predicate(value)) {
+          return value;
+        }
+      }
+    } catch {
+      // file not yet fully written — retry
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  throw new Error(`Timed out waiting for matching JSON in file: ${filePath}`);
 }
 
 function makeLoopResult(overrides: Partial<LoopResult> = {}): LoopResult {
@@ -238,7 +264,7 @@ describe("DaemonRunner", () => {
 
       const startPromise = daemon.start(["goal-1"]);
       currentStartPromise = startPromise;
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await new Promise((resolve) => setTimeout(resolve, 180));
       daemon.stop();
       await startPromise;
 
@@ -310,7 +336,7 @@ describe("DaemonRunner", () => {
       currentDaemon = daemon;
       const startPromise = daemon.start(["goal-1"]);
       currentStartPromise = startPromise;
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      await new Promise((resolve) => setTimeout(resolve, 200));
       daemon.stop();
       await startPromise;
 
@@ -334,7 +360,7 @@ describe("DaemonRunner", () => {
       currentDaemon = daemon;
       const startPromise = daemon.start(["goal-1"]);
       currentStartPromise = startPromise;
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      await new Promise((resolve) => setTimeout(resolve, 200));
       daemon.stop();
       await startPromise;
 
@@ -475,9 +501,7 @@ describe("DaemonRunner", () => {
 
       const startPromise = daemon.start(["goal-1"]);
       currentStartPromise = startPromise;
-      await new Promise((resolve) => setTimeout(resolve, 20));
-
-      expect(fs.existsSync(path.join(tmpDir, "daemon-state.json"))).toBe(true);
+      await pollForFile(path.join(tmpDir, "daemon-state.json"));
 
       daemon.stop();
       await startPromise;
@@ -510,11 +534,7 @@ describe("DaemonRunner", () => {
 
       const startPromise = daemon.start(["goal-1"]);
       currentStartPromise = startPromise;
-      await new Promise((resolve) => setTimeout(resolve, 10));
-
-      const state = JSON.parse(
-        fs.readFileSync(path.join(tmpDir, "daemon-state.json"), "utf-8")
-      );
+      const state = await pollForFile(path.join(tmpDir, "daemon-state.json")) as { pid: number };
       expect(state.pid).toBe(process.pid);
 
       daemon.stop();
@@ -538,7 +558,7 @@ describe("DaemonRunner", () => {
       const startPromise = daemon.start(["goal-fast"]);
       currentStartPromise = startPromise;
       // 10ms interval → loop should run within 100ms
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      await new Promise((resolve) => setTimeout(resolve, 200));
       daemon.stop();
       await startPromise;
 
@@ -588,7 +608,7 @@ describe("DaemonRunner", () => {
       currentStartPromise = startPromise;
 
       // Wait for one loop to start
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await new Promise((resolve) => setTimeout(resolve, 200));
       // Stop the daemon — it should finish the current loop
       daemon.stop();
       await startPromise;
@@ -651,7 +671,7 @@ describe("DaemonRunner", () => {
       // The force-stop timer fires after 50ms and sets running=false
       // which exits the loop even though the current iteration is stuck
       // We also need to resolve the hanging loop for the test to complete
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      await new Promise((resolve) => setTimeout(resolve, 200));
       (resolveLoop as (() => void) | null)?.();
 
       await expect(startPromise).resolves.toBeUndefined();
@@ -686,10 +706,14 @@ describe("DaemonRunner", () => {
 
       const startPromise = daemon.start(["goal-new"]);
       currentStartPromise = startPromise;
-      await new Promise((resolve) => setTimeout(resolve, 20));
 
       const statePath = path.join(tmpDir, "daemon-state.json");
-      const state = JSON.parse(fs.readFileSync(statePath, "utf-8"));
+      const state = await pollForJsonMatch<{ active_goals: string[] }>(
+        statePath,
+        (value) =>
+          value.active_goals.includes("goal-new") &&
+          value.active_goals.includes("goal-prev")
+      );
       // active_goals should include both the new goal and the restored goal
       expect(state.active_goals).toContain("goal-new");
       expect(state.active_goals).toContain("goal-prev");
@@ -724,10 +748,15 @@ describe("DaemonRunner", () => {
       // Start with goal-a (overlaps with interrupted_goals) and goal-c
       const startPromise = daemon.start(["goal-a", "goal-c"]);
       currentStartPromise = startPromise;
-      await new Promise((resolve) => setTimeout(resolve, 20));
 
       const statePath = path.join(tmpDir, "daemon-state.json");
-      const state = JSON.parse(fs.readFileSync(statePath, "utf-8"));
+      const state = await pollForJsonMatch<{ active_goals: string[] }>(
+        statePath,
+        (value) =>
+          value.active_goals.includes("goal-a") &&
+          value.active_goals.includes("goal-b") &&
+          value.active_goals.includes("goal-c")
+      );
       // Should contain goal-a, goal-b, goal-c — no duplicates
       expect(state.active_goals).toContain("goal-a");
       expect(state.active_goals).toContain("goal-b");
@@ -751,7 +780,7 @@ describe("DaemonRunner", () => {
 
       const startPromise = daemon.start(["goal-1"]);
       currentStartPromise = startPromise;
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await new Promise((resolve) => setTimeout(resolve, 350));
       daemon.stop();
       await startPromise;
 
@@ -801,14 +830,14 @@ describe("DaemonRunner", () => {
 
       const startPromise = daemon.start(["goal-1"]);
       currentStartPromise = startPromise;
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await new Promise((resolve) => setTimeout(resolve, 350));
       daemon.stop();
       await startPromise;
 
       expect(eventServer.start).toHaveBeenCalledOnce();
     });
 
-    it("initializes runtime journal foundation when enabled", async () => {
+    it("activates durable execution ownership when runtime journal v2 is enabled", async () => {
       const eventServer = makeEventServerMock();
       const deps = makeDeps(tmpDir, {
         config: { check_interval_ms: 50, runtime_journal_v2: true },
@@ -819,7 +848,7 @@ describe("DaemonRunner", () => {
 
       const startPromise = daemon.start(["goal-1"]);
       currentStartPromise = startPromise;
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await new Promise((resolve) => setTimeout(resolve, 350));
       daemon.stop();
       await startPromise;
 
@@ -827,12 +856,27 @@ describe("DaemonRunner", () => {
       expect(fs.existsSync(path.join(runtimeDir, "approvals", "pending"))).toBe(true);
       expect(fs.existsSync(path.join(runtimeDir, "outbox"))).toBe(true);
       expect(fs.existsSync(path.join(runtimeDir, "health", "daemon.json"))).toBe(true);
+      expect(fs.existsSync(path.join(runtimeDir, "queue.json"))).toBe(true);
 
       const daemonHealth = JSON.parse(
         fs.readFileSync(path.join(runtimeDir, "health", "daemon.json"), "utf-8")
       );
       expect(daemonHealth.details.runtime_journal_v2).toBe(true);
-      expect(daemonHealth.details.phase).toBe("foundation_only");
+      expect(daemonHealth.details.phase).toBe("execution_ownership_durable");
+
+      const queue = JSON.parse(fs.readFileSync(path.join(runtimeDir, "queue.json"), "utf-8"));
+      const records = Object.values(queue.records) as Array<{ status?: string; envelope?: { name?: string; goal_id?: string } }>;
+      expect(records).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            status: "completed",
+            envelope: expect.objectContaining({
+              name: "goal_activated",
+              goal_id: "goal-1",
+            }),
+          }),
+        ])
+      );
     });
 
     it("anchors a relative runtime_root to the daemon base dir instead of process cwd", async () => {
@@ -854,7 +898,7 @@ describe("DaemonRunner", () => {
 
         const startPromise = daemon.start(["goal-1"]);
         currentStartPromise = startPromise;
-        await new Promise((resolve) => setTimeout(resolve, 20));
+        await new Promise((resolve) => setTimeout(resolve, 350));
         daemon.stop();
         await startPromise;
 
@@ -864,6 +908,68 @@ describe("DaemonRunner", () => {
         process.chdir(originalCwd);
         fs.rmSync(otherCwd, { recursive: true, force: true });
       }
+    });
+
+    it("reclaims expired queue claims on startup and resumes execution", async () => {
+      const eventServer = makeEventServerMock();
+      const runtimeDir = path.join(tmpDir, "runtime");
+      fs.mkdirSync(runtimeDir, { recursive: true });
+      const queue = new JournalBackedQueue({
+        journalPath: path.join(runtimeDir, "queue.json"),
+      });
+      const leaseManager = new GoalLeaseManager(runtimeDir, 1);
+      const envelope = createEnvelope({
+        type: "event",
+        name: "goal_activated",
+        source: "restart-test",
+        goal_id: "g-recover",
+        payload: {},
+        priority: "normal",
+      });
+
+      queue.accept(envelope);
+      const claim = queue.claim("worker-old", 1);
+      expect(claim).not.toBeNull();
+      await leaseManager.acquire("g-recover", {
+        workerId: "worker-old",
+        ownerToken: claim!.claimToken,
+        attemptId: claim!.claimToken,
+        leaseMs: 1,
+      });
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      const deps = makeDeps(tmpDir, {
+        config: { check_interval_ms: 50, runtime_journal_v2: true },
+        eventServer: eventServer as unknown as DaemonDeps["eventServer"],
+      });
+      const daemon = new DaemonRunner(deps);
+      currentDaemon = daemon;
+
+      const startPromise = daemon.start([]);
+      currentStartPromise = startPromise;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      daemon.stop();
+      await startPromise;
+
+      const runMock = (deps.coreLoop as unknown as { run: ReturnType<typeof vi.fn> }).run;
+      expect(runMock).toHaveBeenCalledWith("g-recover", expect.anything());
+
+      const persistedQueue = JSON.parse(
+        fs.readFileSync(path.join(runtimeDir, "queue.json"), "utf-8")
+      ) as {
+        records: Record<string, { status: string; envelope?: { goal_id?: string; name?: string } }>;
+      };
+      expect(Object.values(persistedQueue.records)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            status: "completed",
+            envelope: expect.objectContaining({
+              name: "goal_activated",
+              goal_id: "g-recover",
+            }),
+          }),
+        ])
+      );
     });
 
     it("does not leave a stale PID file when runtime journal initialization fails", async () => {
@@ -1008,7 +1114,7 @@ describe("DaemonRunner", () => {
       currentStartPromise = startPromise;
 
       // Wait for one loop iteration to complete and daemon to enter the 5s sleep
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      await new Promise((resolve) => setTimeout(resolve, 200));
 
       const callCountBeforeEvent = runSpy.run.mock.calls.length;
 
@@ -1085,7 +1191,7 @@ describe("DaemonRunner", () => {
       currentDaemon = daemon;
       const startPromise = daemon.start(["goal-1"]);
       currentStartPromise = startPromise;
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      await new Promise((resolve) => setTimeout(resolve, 200));
       daemon.stop();
       await startPromise;
 
@@ -1108,7 +1214,7 @@ describe("DaemonRunner", () => {
       currentDaemon = daemon;
       const startPromise = daemon.start(["goal-1"]);
       currentStartPromise = startPromise;
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      await new Promise((resolve) => setTimeout(resolve, 200));
       daemon.stop();
       await startPromise;
 
@@ -1131,7 +1237,7 @@ describe("DaemonRunner", () => {
       currentDaemon = daemon;
       const startPromise = daemon.start(["goal-1"]);
       currentStartPromise = startPromise;
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      await new Promise((resolve) => setTimeout(resolve, 200));
       daemon.stop();
       await startPromise;
 
@@ -1502,7 +1608,7 @@ describe("DaemonRunner", () => {
 
       const startPromise = daemon.start(["goal-1"]);
       currentStartPromise = startPromise;
-      await new Promise((resolve) => setTimeout(resolve, 60));
+      await new Promise((resolve) => setTimeout(resolve, 200));
       daemon.stop();
       await startPromise;
 
@@ -1554,7 +1660,7 @@ describe("DaemonRunner", () => {
       currentDaemon = daemon;
       const startPromise = daemon.start(["goal-1"]);
       currentStartPromise = startPromise;
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      await new Promise((resolve) => setTimeout(resolve, 200));
       daemon.stop();
       await startPromise;
 

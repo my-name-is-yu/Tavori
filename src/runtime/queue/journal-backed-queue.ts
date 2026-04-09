@@ -10,6 +10,8 @@ export interface JournalBackedQueueOptions {
   now?: () => number;
 }
 
+export type JournalBackedQueueClaimFilter = (envelope: Envelope) => boolean;
+
 export interface JournalBackedQueueAcceptResult {
   accepted: boolean;
   duplicate: boolean;
@@ -306,26 +308,41 @@ export class JournalBackedQueue {
     });
   }
 
-  claim(workerId: string, leaseMs = this.defaultLeaseMs): JournalBackedQueueClaim | null {
+  claim(
+    workerId: string,
+    leaseMs = this.defaultLeaseMs,
+    filter?: JournalBackedQueueClaimFilter
+  ): JournalBackedQueueClaim | null {
     return this.withLockedState((state) => {
       let dirty = false;
       for (const priority of PRIORITY_ORDER) {
         const bucket = state.pending[priority];
-        while (bucket.length > 0) {
-          const messageId = bucket.shift()!;
+        let index = 0;
+        while (index < bucket.length) {
+          const messageId = bucket[index];
           const record = state.records[messageId];
-          if (!record || record.status !== 'pending') continue;
+          if (!record || record.status !== 'pending') {
+            bucket.splice(index, 1);
+            dirty = true;
+            continue;
+          }
           if (isExpired(record.envelope, this.now())) {
+            bucket.splice(index, 1);
             record.status = 'deadletter';
             record.deadletterReason = 'expired before claim';
             record.updatedAt = this.now();
             dirty = true;
             continue;
           }
+          if (filter && !filter(record.envelope)) {
+            index += 1;
+            continue;
+          }
 
           const claimToken = randomUUID();
           const attempt = record.attempt + 1;
           const leaseUntil = this.now() + leaseMs;
+          bucket.splice(index, 1);
           record.status = 'inflight';
           record.attempt = attempt;
           record.workerId = workerId;

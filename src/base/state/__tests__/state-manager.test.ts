@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { StateManager } from "../state-manager.js";
+import { StateFenceError } from "../../utils/errors.js";
 import {
   getMilestones,
   getOverdueMilestones,
@@ -716,6 +717,31 @@ describe("StateManager", async () => {
       await expect(
         manager.writeRaw("../../outside.json", { evil: true })
       ).rejects.toThrow("Path traversal detected");
+    });
+
+    it("rejects goal-scoped writes when the write fence fails", async () => {
+      manager.setWriteFence("fenced-goal", () => {
+        throw new StateFenceError("stale owner");
+      });
+
+      await expect(
+        manager.saveGoal(makeGoal({ id: "fenced-goal" }))
+      ).rejects.toThrow(StateFenceError);
+
+      expect(await manager.loadGoal("fenced-goal")).toBeNull();
+    });
+
+    it("allows writes again after a write fence is cleared", async () => {
+      manager.setWriteFence("fenced-goal", () => {
+        throw new StateFenceError("stale owner");
+      });
+      manager.clearWriteFence("fenced-goal");
+
+      await expect(
+        manager.saveGoal(makeGoal({ id: "fenced-goal" }))
+      ).resolves.toBeUndefined();
+
+      expect(await manager.loadGoal("fenced-goal")).not.toBeNull();
     });
   });
 

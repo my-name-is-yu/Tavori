@@ -215,6 +215,24 @@ describe('JournalBackedQueue', () => {
     expect(reader.snapshot().inflight[claim.claimToken]?.messageId).toBe(envelope.id);
   });
 
+  it('claims the first pending item that matches a filter without disturbing earlier unmatched entries', () => {
+    const queue = new JournalBackedQueue({ journalPath, now: () => 1_000 });
+    const first = createEnvelope({ type: 'event', name: 'schedule_activated', source: 'test', payload: {}, priority: 'normal' });
+    const second = createEnvelope({ type: 'event', name: 'goal_activated', source: 'test', goal_id: 'g-1', payload: {}, priority: 'normal' });
+
+    queue.accept(first);
+    queue.accept(second);
+
+    const claim = queue.claim(
+      'worker-a',
+      5_000,
+      (envelope) => envelope.name === 'goal_activated'
+    );
+
+    expect(claim?.messageId).toBe(second.id);
+    expect(queue.snapshot().pending.normal).toEqual([first.id]);
+  });
+
   it('fences expired claims from renew/ack/nack before sweeper runs', () => {
     let now = 1_000;
     const queue = new JournalBackedQueue({ journalPath, now: () => now });

@@ -27,3 +27,10 @@ export class StateError extends Error {
     this.name = 'StateError';
   }
 }
+
+export class StateFenceError extends StateError {
+  constructor(message: string, public readonly cause?: unknown) {
+    super(message, cause);
+    this.name = 'StateFenceError';
+  }
+}

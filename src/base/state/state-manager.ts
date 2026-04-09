@@ -20,6 +20,14 @@ import { writeSnapshot } from "./state-snapshot.js";
 
 export { initDirs, atomicWrite, atomicRead };
 
+export interface StateWriteFenceContext {
+  goalId: string;
+  op: string;
+  data: unknown;
+}
+
+export type StateWriteFence = (context: StateWriteFenceContext) => Promise<void> | void;
+
 /**
  * StateManager handles persistence of goals, state vectors, observation logs,
  * and gap history under a base directory (default: ~/.pulseed/).
@@ -40,6 +48,7 @@ export class StateManager {
   private readonly logger?: Logger;
   private readonly walEnabled: boolean;
   private writeCount: Map<string, number> = new Map();
+  private readonly writeFences: Map<string, StateWriteFence> = new Map();
 
   constructor(baseDir?: string, logger?: Logger, options?: { walEnabled?: boolean }) {
     this.baseDir = baseDir ?? getPulseedDirPath();
@@ -147,6 +156,20 @@ export class StateManager {
     return this.baseDir;
   }
 
+  setWriteFence(goalId: string, fence: StateWriteFence): void {
+    this.writeFences.set(goalId, fence);
+  }
+
+  clearWriteFence(goalId: string): void {
+    this.writeFences.delete(goalId);
+  }
+
+  private async assertWriteFence(goalId: string, op: string, data: unknown): Promise<void> {
+    const fence = this.writeFences.get(goalId);
+    if (!fence) return;
+    await fence({ goalId, op, data });
+  }
+
   private async goalDir(goalId: string): Promise<string> {
     const dir = path.join(this.baseDir, "goals", goalId);
     try {
@@ -170,9 +193,14 @@ export class StateManager {
 
   /** Wrap a goal write with lock + WAL + snapshot cycle. */
   private async protectedWrite(goalId: string, op: string, data: unknown, writeFn: () => Promise<void>): Promise<void> {
-    if (!this.walEnabled) { await writeFn(); return; }
+    if (!this.walEnabled) {
+      await this.assertWriteFence(goalId, op, data);
+      await writeFn();
+      return;
+    }
     await acquireLock(goalId, this.baseDir);
     try {
+      await this.assertWriteFence(goalId, op, data);
       const ts = new Date().toISOString();
       await appendWALRecord(goalId, this.baseDir, { op, data, ts });
       await writeFn();

@@ -29,6 +29,7 @@ import { ApprovalStore, OutboxStore, RuntimeHealthStore, createRuntimeStorePaths
 import { LeaderLockManager } from "./leader-lock-manager.js";
 import { GoalLeaseManager } from "./goal-lease-manager.js";
 import { JournalBackedQueue, type JournalBackedQueueAcceptResult } from "./queue/journal-backed-queue.js";
+import { QueueClaimSweeper } from "./queue/queue-claim-sweeper.js";
 
 // Re-exports for callers that imported these from daemon-runner
 export { generateCronEntry } from "./daemon-signals.js";
@@ -134,6 +135,7 @@ export class DaemonRunner {
   private leaderLockManager: LeaderLockManager | null = null;
   private goalLeaseManager: GoalLeaseManager | null = null;
   private journalQueue: JournalBackedQueue | null = null;
+  private queueClaimSweeper: QueueClaimSweeper | null = null;
 
   constructor(deps: DaemonDeps) {
     this.deps = deps;
@@ -173,6 +175,9 @@ export class DaemonRunner {
       this.goalLeaseManager = new GoalLeaseManager(this.runtimeRoot);
       this.journalQueue = new JournalBackedQueue({
         journalPath: path.join(this.runtimeRoot, "queue.json"),
+      });
+      this.queueClaimSweeper = new QueueClaimSweeper({
+        queue: this.journalQueue,
       });
     }
 
@@ -358,13 +363,25 @@ export class DaemonRunner {
       check_interval_ms: this.config.check_interval_ms,
     });
 
-    // 7. Create supervisor if not already provided and eventBus is configured
-    if (!this.supervisor && this.eventBus) {
+    const sweepResult = this.queueClaimSweeper?.sweep();
+    if (sweepResult && (sweepResult.reclaimed > 0 || sweepResult.deadlettered > 0)) {
+      this.logger.info("Recovered stale runtime claims on startup", {
+        reclaimed: sweepResult.reclaimed,
+        deadlettered: sweepResult.deadlettered,
+        expiredClaimTokens: sweepResult.expiredClaimTokens,
+      });
+    }
+    this.queueClaimSweeper?.start();
+
+    // 7. Create supervisor if not already provided and runtime execution wiring is configured
+    if (!this.supervisor && (this.eventBus || (this.journalQueue && this.goalLeaseManager))) {
       const factory = this.deps.coreLoopFactory ?? (() => this.coreLoop);
       this.supervisor = new LoopSupervisor(
         {
           coreLoopFactory: factory,
           eventBus: this.eventBus,
+          journalQueue: this.journalQueue ?? undefined,
+          goalLeaseManager: this.goalLeaseManager ?? undefined,
           driveSystem: this.driveSystem,
           stateManager: this.stateManager,
           logger: this.logger,
@@ -376,11 +393,25 @@ export class DaemonRunner {
       );
     }
 
+    await this.saveRuntimeHealthSnapshot(
+      this.supervisor && this.journalQueue && this.goalLeaseManager
+        ? "execution_ownership_durable"
+        : "foundation_only",
+      {
+        gateway: this.gateway || this.eventServer ? "ok" : "degraded",
+        queue: this.journalQueue ? "ok" : "degraded",
+        leases: this.goalLeaseManager ? "ok" : "degraded",
+        approval: this.approvalStore ? "ok" : "degraded",
+        outbox: this.outboxStore ? "ok" : "degraded",
+        supervisor: this.supervisor && this.journalQueue && this.goalLeaseManager ? "ok" : "degraded",
+      }
+    );
+
     // 8. Run main loop — supervisor mode when supervisor is injected via deps,
     //    fallback to sequential runLoop otherwise (preserves backward compat for
     //    tests that provide eventBus without a supervisor)
     try {
-      if (this.supervisor && this.eventBus) {
+      if (this.supervisor) {
         // Supervisor handles goal execution; cron/schedule must also run in this mode.
         await this.supervisor.start(mergedGoalIds);
 
@@ -410,6 +441,7 @@ export class DaemonRunner {
         clearTimeout(forceStopTimer);
         forceStopTimer = null;
       }
+      this.queueClaimSweeper?.stop();
       // Remove signal handlers
       if (this.shutdownHandler) {
         process.removeListener("SIGTERM", this.shutdownHandler);
@@ -444,28 +476,45 @@ export class DaemonRunner {
       this.runtimeHealthStore?.ensureReady(),
     ]);
 
-    await this.runtimeHealthStore?.saveSnapshot({
-      status: "degraded",
-      leader: false,
-      checked_at: Date.now(),
-      components: {
-        gateway: "degraded",
-        queue: "degraded",
-        leases: "ok",
-        approval: "ok",
-        outbox: "ok",
-        supervisor: "degraded",
-      },
-      details: {
-        runtime_journal_v2: true,
-        runtime_root: this.runtimeRoot,
-        phase: "foundation_only",
-      },
+    await this.saveRuntimeHealthSnapshot("foundation_only", {
+      gateway: "degraded",
+      queue: "degraded",
+      leases: "ok",
+      approval: "ok",
+      outbox: "ok",
+      supervisor: "degraded",
     });
 
     this.logger.info("Runtime journal foundation initialized", {
       runtime_root: this.runtimeRoot,
       queue_path: this.runtimeRoot ? path.join(this.runtimeRoot, "queue.json") : undefined,
+    });
+  }
+
+  private async saveRuntimeHealthSnapshot(
+    phase: string,
+    components: {
+      gateway: "ok" | "degraded";
+      queue: "ok" | "degraded";
+      leases: "ok" | "degraded";
+      approval: "ok" | "degraded";
+      outbox: "ok" | "degraded";
+      supervisor: "ok" | "degraded";
+    }
+  ): Promise<void> {
+    if (!this.config.runtime_journal_v2) return;
+
+    const status = Object.values(components).every((value) => value === "ok") ? "ok" : "degraded";
+    await this.runtimeHealthStore?.saveSnapshot({
+      status,
+      leader: false,
+      checked_at: Date.now(),
+      components,
+      details: {
+        runtime_journal_v2: true,
+        runtime_root: this.runtimeRoot,
+        phase,
+      },
     });
   }
 
