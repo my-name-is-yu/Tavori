@@ -340,6 +340,14 @@ describe("DaemonRunner durable runtime", () => {
       const startPromise = daemon.start(["goal-1"]);
       currentStartPromise = startPromise;
       await waitFor(() => fs.existsSync(path.join(tmpDir, "runtime-v2", "health", "daemon.json")));
+      await waitFor(() => {
+        const statePath = path.join(tmpDir, "daemon-state.json");
+        if (!fs.existsSync(statePath)) {
+          return false;
+        }
+        const state = JSON.parse(fs.readFileSync(statePath, "utf-8")) as { status?: string };
+        return state.status === "running";
+      });
 
       daemon.stop();
       await startPromise;

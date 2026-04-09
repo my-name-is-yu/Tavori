@@ -218,6 +218,25 @@ describe("DaemonRunner durable runtime wiring", () => {
     await waitFor(() =>
       runMock.mock.calls.some((call: unknown[]) => call[0] === "g-start")
     );
+    await waitFor(() => {
+      const records = Object.values(readRuntimeQueue(tmpDir).records) as Array<{ status: string; envelope?: { type?: string; name?: string; goal_id?: string } }>;
+      return (
+        records.some(
+          (entry) =>
+            entry.status === "completed" &&
+            entry.envelope?.type === "command" &&
+            entry.envelope?.name === "goal_start" &&
+            entry.envelope?.goal_id === "g-start"
+        ) &&
+        records.some(
+          (entry) =>
+            entry.status === "completed" &&
+            entry.envelope?.type === "event" &&
+            entry.envelope?.name === "goal_activated" &&
+            entry.envelope?.goal_id === "g-start"
+        )
+      );
+    });
 
     const queue = readRuntimeQueue(tmpDir);
     expect(Object.values(queue.records)).toEqual(

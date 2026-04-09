@@ -29,6 +29,7 @@ export interface SupervisorDeps {
   driveSystem: DriveSystem;
   stateManager: StateManager;
   logger?: Logger;
+  onGoalComplete?: (goalId: string, result: WorkerResult) => Promise<void> | void;
   onEscalation?: (goalId: string, crashCount: number, lastError: string) => void;
 }
 
@@ -97,14 +98,9 @@ export class LoopSupervisor {
       this.enqueueGoalActivation(goalId);
     }
 
+    this.schedulePoll();
     this.pollTimer = setInterval(() => {
-      const poll = this.pollAndAssign();
-      this.currentPoll = poll;
-      void poll.finally(() => {
-        if (this.currentPoll === poll) {
-          this.currentPoll = null;
-        }
-      });
+      this.schedulePoll();
     }, this.config.pollIntervalMs);
   }
 
@@ -142,6 +138,16 @@ export class LoopSupervisor {
 
   deactivateGoal(goalId: string): void {
     this.stoppedGoals.add(goalId);
+  }
+
+  private schedulePoll(): void {
+    const poll = this.pollAndAssign();
+    this.currentPoll = poll;
+    void poll.finally(() => {
+      if (this.currentPoll === poll) {
+        this.currentPoll = null;
+      }
+    });
   }
 
   private enqueueGoalActivation(goalId: string): void {
@@ -327,6 +333,15 @@ export class LoopSupervisor {
         }
 
         return;
+      }
+
+      try {
+        await this.deps.onGoalComplete?.(goalId, result);
+      } catch (err) {
+        this.deps.logger?.warn('Goal completion callback failed', {
+          goalId,
+          error: err instanceof Error ? err.message : String(err),
+        });
       }
 
       await this.completeClaim(activation, ownershipLost);

@@ -70,6 +70,41 @@ function readMarker(tmpDir: string): ShutdownMarker | null {
   return JSON.parse(fs.readFileSync(p, "utf-8")) as ShutdownMarker;
 }
 
+async function waitForDaemonRunning(tmpDir: string, timeoutMs = 2_000): Promise<void> {
+  const statePath = path.join(tmpDir, "daemon-state.json");
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      if (fs.existsSync(statePath)) {
+        const state = JSON.parse(fs.readFileSync(statePath, "utf-8")) as { status?: string };
+        if (state.status === "running") {
+          return;
+        }
+      }
+    } catch {
+      // Retry until state file is stable.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error("Timed out waiting for daemon to enter running state");
+}
+
+async function waitForMarkerState(
+  tmpDir: string,
+  expectedState: ShutdownMarker["state"],
+  timeoutMs = 2_000
+): Promise<ShutdownMarker> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const marker = readMarker(tmpDir);
+    if (marker?.state === expectedState) {
+      return marker;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(`Timed out waiting for shutdown marker state: ${expectedState}`);
+}
+
 // ─── Test Suite ───
 
 describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
@@ -109,8 +144,7 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
 
       const startPromise = daemon.start(["goal-1"]);
       currentStartPromise = startPromise;
-      // Wait for daemon to be up and running
-      await new Promise((resolve) => setTimeout(resolve, 30));
+      await waitForDaemonRunning(tmpDir);
 
       // Emit SIGTERM — should set shuttingDown and exit the loop
       process.emit("SIGTERM");
@@ -125,7 +159,7 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
 
       const startPromise = daemon.start(["goal-1"]);
       currentStartPromise = startPromise;
-      await new Promise((resolve) => setTimeout(resolve, 30));
+      await waitForDaemonRunning(tmpDir);
       daemon.stop();
       await startPromise;
 
@@ -142,7 +176,7 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
 
       const startPromise = daemon.start(["goal-1"]);
       currentStartPromise = startPromise;
-      await new Promise((resolve) => setTimeout(resolve, 30));
+      await waitForDaemonRunning(tmpDir);
       process.emit("SIGTERM");
       await startPromise;
 
@@ -158,7 +192,7 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
 
       const startPromise = daemon.start(["goal-1"]);
       currentStartPromise = startPromise;
-      await new Promise((resolve) => setTimeout(resolve, 30));
+      await waitForDaemonRunning(tmpDir);
       process.emit("SIGINT");
       await startPromise;
 
@@ -174,7 +208,7 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
 
       const startPromise = daemon.start(["goal-alpha", "goal-beta"]);
       currentStartPromise = startPromise;
-      await new Promise((resolve) => setTimeout(resolve, 30));
+      await waitForDaemonRunning(tmpDir);
       daemon.stop();
       await startPromise;
 
@@ -191,7 +225,7 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
 
       const startPromise = daemon.start(["goal-1"]);
       currentStartPromise = startPromise;
-      await new Promise((resolve) => setTimeout(resolve, 30));
+      await waitForDaemonRunning(tmpDir);
       daemon.stop();
       await startPromise;
 
@@ -228,7 +262,7 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
       currentDaemon = daemon;
       const startPromise = daemon.start(["goal-1"]);
       currentStartPromise = startPromise;
-      await new Promise((resolve) => setTimeout(resolve, 30));
+      await waitForDaemonRunning(tmpDir);
       daemon.stop();
       await startPromise;
 
@@ -259,7 +293,7 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
       currentDaemon = daemon;
       const startPromise = daemon.start(["goal-1"]);
       currentStartPromise = startPromise;
-      await new Promise((resolve) => setTimeout(resolve, 30));
+      await waitForDaemonRunning(tmpDir);
       daemon.stop();
       await startPromise;
 
@@ -295,16 +329,12 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
       // After start() begins, the old marker should be deleted (a new "running" one is written)
       const startPromise = daemon.start(["goal-1"]);
       currentStartPromise = startPromise;
-      await new Promise((resolve) => setTimeout(resolve, 40));
+      await waitForDaemonRunning(tmpDir);
 
       // The new marker (state: "running") should exist, not the old "clean_shutdown" one
       const currentMarker = readMarker(tmpDir);
-      // Either no marker (deleted) or the new running marker
-      if (currentMarker !== null) {
-        // If a marker exists, it should be the new "running" one, not the old "clean_shutdown"
-        // (it could already be "clean_shutdown" if stop was called quickly)
-        expect(["running", "clean_shutdown"]).toContain(currentMarker.state);
-      }
+      expect(currentMarker).not.toBeNull();
+      expect(currentMarker!.state).toBe("running");
 
       daemon.stop();
       await startPromise;
@@ -319,13 +349,10 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
 
       const startPromise = daemon.start(["goal-1"]);
       currentStartPromise = startPromise;
-      // Wait for startup sequence to complete (marker is written after state init)
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await waitForDaemonRunning(tmpDir);
 
-      const marker = readMarker(tmpDir);
-      // At this point the daemon is still running, so the "running" marker should exist
-      // (or has been replaced by "clean_shutdown" if the first iteration completed very quickly)
-      expect(marker).not.toBeNull();
+      const marker = await waitForMarkerState(tmpDir, "running");
+      expect(marker.state).toBe("running");
 
       daemon.stop();
       await startPromise;
@@ -345,7 +372,7 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
       // Should start without errors even with no marker
       const startPromise = daemon.start(["goal-1"]);
       currentStartPromise = startPromise;
-      await new Promise((resolve) => setTimeout(resolve, 30));
+      await waitForDaemonRunning(tmpDir);
       daemon.stop();
 
       await expect(startPromise).resolves.toBeUndefined();

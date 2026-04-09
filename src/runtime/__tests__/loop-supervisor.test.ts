@@ -15,6 +15,21 @@ function makeLoopResult(o: Partial<LoopResult> = {}): LoopResult {
     startedAt: new Date().toISOString(), completedAt: new Date().toISOString(), ...o };
 }
 
+async function waitFor(
+  predicate: () => boolean,
+  timeoutMs = 2_000,
+  intervalMs = 20
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  throw new Error("Timed out waiting for condition");
+}
+
 function makeSupervisor(
   coreLoopImpl?: (...args: any[]) => Promise<LoopResult> | never,
   extra: Record<string, unknown> = {},
@@ -312,7 +327,14 @@ describe("LoopSupervisor", () => {
 
     try {
       await supervisor.start(["g-durable"]);
-      await new Promise((resolve) => setTimeout(resolve, 220));
+      await waitFor(() => {
+        const snapshot = journalQueue.snapshot();
+        return (
+          mockCoreLoop.run.mock.calls.some((call: unknown[]) => call[0] === "g-durable") &&
+          snapshot.completed.length >= 1 &&
+          journalQueue.inflightSize() === 0
+        );
+      });
       await supervisor.shutdown();
 
       expect(mockCoreLoop.run).toHaveBeenCalledWith("g-durable", expect.anything());

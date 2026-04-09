@@ -258,7 +258,7 @@ export class DaemonRunner {
       });
       if (this.approvalBroker) {
         this.approvalBroker.setBroadcast((eventType, data) => {
-          void this.eventServer?.broadcast(eventType, data);
+          void this.eventServer?.broadcast?.(eventType, data);
         });
         this.eventServer.setApprovalBroker?.(this.approvalBroker);
       }
@@ -319,7 +319,7 @@ export class DaemonRunner {
       // Start heartbeat (every 30s)
       const heartbeatInterval = setInterval(() => {
         if (this.eventServer && this.state.status === "running") {
-          this.eventServer.broadcast("daemon_status", {
+          void this.eventServer.broadcast?.("daemon_status", {
             status: this.state.status,
             activeGoals: this.state.active_goals,
             loopCount: this.state.loop_count,
@@ -339,9 +339,11 @@ export class DaemonRunner {
         if (this.shuttingDown) return;
         this.shuttingDown = true;
         this.logger.info("Shutting down gracefully...");
-        // Abort current sleep so the loop exits promptly
+        this.running = false;
+        this.state.status = "stopping";
+        this.state.interrupted_goals = [...this.state.active_goals];
+        this.shutdownResolve?.();
         this.sleepAbortController?.abort();
-        // Start a timeout to force-stop if graceful shutdown takes too long
         forceStopTimer = setTimeout(() => {
           this.logger.warn(
             `Graceful shutdown timeout (${shutdownTimeout}ms) exceeded, forcing stop`
@@ -409,6 +411,7 @@ export class DaemonRunner {
           driveSystem: this.driveSystem,
           stateManager: this.stateManager,
           logger: this.logger,
+          onGoalComplete: async (goalId, result) => this.handleGoalCompletion(goalId, result),
           onEscalation: (goalId, crashCount, lastError) => {
             this.logger.error(`Goal ${goalId} suspended after ${crashCount} crashes: ${lastError}`);
           },
@@ -464,15 +467,12 @@ export class DaemonRunner {
           // Supervisor handles goal execution; cron/schedule must also run in this mode.
           await this.supervisor.start(mergedGoalIds);
 
-          // Run cron/schedule processing once immediately, then on a periodic interval.
-          const cronIntervalMs = this.config.check_interval_ms;
-          await this.processCronTasks();
-          await this.processScheduleEntries();
+          const maintenanceIntervalMs = this.config.check_interval_ms;
+          await this.runSupervisorMaintenanceCycle();
           this.cronScheduleInterval = setInterval(async () => {
             if (this.shuttingDown) return;
-            await this.processCronTasks();
-            await this.processScheduleEntries();
-          }, cronIntervalMs);
+            await this.runSupervisorMaintenanceCycle();
+          }, maintenanceIntervalMs);
 
           // Block until stop() is called.
           await new Promise<void>((resolve) => {
@@ -746,7 +746,7 @@ export class DaemonRunner {
             });
             if (this.eventServer) {
               const goal = await this.stateManager.loadGoal(goalId).catch(() => null);
-              this.eventServer.broadcast("iteration_complete", {
+              void this.eventServer.broadcast?.("iteration_complete", {
                 goalId,
                 loopCount: this.state.loop_count,
                 status: goal?.status ?? "unknown",
@@ -763,7 +763,7 @@ export class DaemonRunner {
         // 3. Save state
         await this.saveDaemonState();
         if (this.eventServer) {
-          this.eventServer.broadcast("daemon_status", {
+          void this.eventServer.broadcast?.("daemon_status", {
             status: this.state.status,
             activeGoals: this.state.active_goals,
             loopCount: this.state.loop_count,
@@ -1189,6 +1189,50 @@ export class DaemonRunner {
     await this.saveDaemonState();
     this.supervisor?.deactivateGoal(goalId);
     this.abortSleep();
+  }
+
+  private async handleGoalCompletion(goalId: string, result: { status: string; totalIterations: number }): Promise<void> {
+    this.state.loop_count++;
+    this.currentLoopIndex = this.state.loop_count;
+    this.state.last_loop_at = new Date().toISOString();
+    await this.saveDaemonState();
+
+    if (this.eventServer) {
+      const goal = await this.stateManager.loadGoal(goalId).catch(() => null);
+      void this.eventServer.broadcast?.("iteration_complete", {
+        goalId,
+        loopCount: this.state.loop_count,
+        status: goal?.status ?? result.status,
+        iterations: result.totalIterations,
+      });
+      void this.eventServer.broadcast?.("daemon_status", {
+        status: this.state.status,
+        activeGoals: this.state.active_goals,
+        loopCount: this.state.loop_count,
+        lastLoopAt: this.state.last_loop_at,
+      });
+    }
+  }
+
+  private async runSupervisorMaintenanceCycle(): Promise<void> {
+    const activeGoals = await this.determineActiveGoals([...this.currentGoalIds]);
+    for (const goalId of activeGoals) {
+      this.supervisor?.activateGoal(goalId);
+    }
+
+    await this.processCronTasks();
+    await this.processScheduleEntries();
+    await this.proactiveTick();
+    await this.saveDaemonState();
+
+    if (this.eventServer) {
+      void this.eventServer.broadcast?.("daemon_status", {
+        status: this.state.status,
+        activeGoals: this.state.active_goals,
+        loopCount: this.state.loop_count,
+        lastLoopAt: this.state.last_loop_at,
+      });
+    }
   }
 
   private async handleChatMessageCommand(goalId: string, message: string): Promise<void> {

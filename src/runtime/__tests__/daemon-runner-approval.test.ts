@@ -200,8 +200,11 @@ describe("DaemonRunner durable approval restart", () => {
     });
 
     const pendingDir = paths.approvalsPendingDir;
-    await waitFor(() => fs.existsSync(pendingDir) && fs.readdirSync(pendingDir).length === 1);
-    const [pendingFile] = fs.readdirSync(pendingDir);
+    await waitFor(() =>
+      fs.existsSync(pendingDir) &&
+      fs.readdirSync(pendingDir).some((entry) => entry.endsWith(".json"))
+    );
+    const pendingFile = fs.readdirSync(pendingDir).find((entry) => entry.endsWith(".json"));
     const pendingPath = path.join(pendingDir, pendingFile!);
 
     daemon.stop();
