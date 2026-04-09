@@ -163,9 +163,10 @@ export async function searchKnowledge(
 
 export async function listKnowledgeTransfers(): Promise<KnowledgeTransferSnapshot> {
   const knowledgeTransfer = await getKnowledgeTransfer();
-  const transfers = knowledgeTransfer.getTransferCandidates();
-  const results = knowledgeTransfer.getTransferResults();
-  const effectivenessRecords = knowledgeTransfer.getEffectivenessRecords();
+  const snapshot = await knowledgeTransfer.listTransferSnapshot();
+  const transfers = snapshot.transfers;
+  const results = snapshot.results;
+  const effectivenessRecords = snapshot.effectiveness_records;
 
   const resultsByCandidateId = new Map(results.map((result) => [result.candidate_id, result]));
   const effectivenessByTransferId = new Map(

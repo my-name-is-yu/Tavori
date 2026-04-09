@@ -5,12 +5,19 @@ import type { VectorIndex } from "../vector-index.js";
 import type { LearningPipeline } from "../learning/learning-pipeline.js";
 import type { EthicsGate } from "../../traits/ethics-gate.js";
 import type { StateManager } from "../../../base/state/state-manager.js";
+import { z } from "zod";
 import type {
   TransferCandidate,
   TransferResult,
   TransferEffectivenessRecord,
 } from "../../../base/types/cross-portfolio.js";
+import {
+  TransferCandidateSchema,
+  TransferResultSchema,
+  TransferEffectivenessSchema,
+} from "../../../base/types/cross-portfolio.js";
 import type { CrossGoalPattern, StructuralFeedbackType } from "../../../base/types/learning.js";
+import { LearnedPatternSchema } from "../../../base/types/learning.js";
 import { TransferTrustManager } from "./transfer-trust.js";
 import type { TransferContext, PatternEffectivenessTracker } from "./knowledge-transfer-types.js";
 
@@ -50,9 +57,12 @@ import type { MetaDeps } from "./knowledge-transfer-meta.js";
  * - knowledge-transfer-evaluate.ts — effectiveness evaluation + trust update
  * - knowledge-transfer-meta.ts    — meta-pattern aggregation (batch + incremental)
  *
- * Stored in-memory (Map/array). No file persistence for MVP.
+ * State is kept in-memory and mirrored to a persisted snapshot so other
+ * processes can read transfer history without sharing process-local memory.
  */
 export class KnowledgeTransfer {
+  private static readonly SNAPSHOT_PATH = "knowledge-transfer/snapshot.json";
+
   private readonly detectDeps: DetectDeps;
   private readonly applyDeps: ApplyDeps;
   private readonly metaDeps: MetaDeps;
@@ -79,6 +89,9 @@ export class KnowledgeTransfer {
 
   /** Timestamp of last incremental meta-pattern aggregation (ISO string) */
   private lastAggregatedAt: string | null = null;
+
+  private snapshotLoaded = false;
+  private snapshotLoadPromise: Promise<void> | null = null;
 
   constructor(deps: {
     llmClient: ILLMClient;
@@ -123,27 +136,42 @@ export class KnowledgeTransfer {
   // ─── Detect ───
 
   async detectTransferOpportunities(goalId: string): Promise<TransferCandidate[]> {
-    return detectTransferOpportunities(goalId, this.detectDeps, this.candidates, this.patternTrackers);
+    await this.ensureSnapshotLoaded();
+    const result = await detectTransferOpportunities(goalId, this.detectDeps, this.candidates, this.patternTrackers);
+    await this.persistSnapshot();
+    return result;
   }
 
   // ─── Apply ───
 
   async applyTransfer(candidateId: string, targetGoalId: string): Promise<TransferResult> {
-    return applyTransfer(candidateId, targetGoalId, this.applyDeps, this.candidates, this.results, this.applyContexts);
+    await this.ensureSnapshotLoaded();
+    const result = await applyTransfer(candidateId, targetGoalId, this.applyDeps, this.candidates, this.results, this.applyContexts);
+    await this.persistSnapshot();
+    return result;
   }
 
   async autoApplyHighConfidenceTransfers(goalId: string): Promise<TransferCandidate[]> {
-    return autoApplyHighConfidenceTransfers(goalId, this.applyDeps, this.detectDeps, this.candidates, this.results, this.applyContexts, this.patternTrackers);
+    await this.ensureSnapshotLoaded();
+    const result = await autoApplyHighConfidenceTransfers(goalId, this.applyDeps, this.detectDeps, this.candidates, this.results, this.applyContexts, this.patternTrackers);
+    await this.persistSnapshot();
+    return result;
   }
 
   async detectCandidatesRealtime(goalId: string): Promise<{ candidates: TransferCandidate[]; contextSnippets: string[] }> {
-    return detectCandidatesRealtime(goalId, this.detectDeps, this.candidates, this.patternTrackers);
+    await this.ensureSnapshotLoaded();
+    const result = await detectCandidatesRealtime(goalId, this.detectDeps, this.candidates, this.patternTrackers);
+    await this.persistSnapshot();
+    return result;
   }
 
   // ─── Evaluate ───
 
   async evaluateTransferEffect(transferId: string): Promise<TransferEffectivenessRecord> {
-    return evaluateTransferEffect(transferId, this.applyDeps.stateManager, this.transferTrust, this.results, this.applyContexts, this.effectivenessRecords, this.candidates, this.patternTrackers);
+    await this.ensureSnapshotLoaded();
+    const result = await evaluateTransferEffect(transferId, this.applyDeps.stateManager, this.transferTrust, this.results, this.applyContexts, this.effectivenessRecords, this.candidates, this.patternTrackers);
+    await this.persistSnapshot();
+    return result;
   }
 
   // ─── Meta ───
@@ -187,6 +215,15 @@ export class KnowledgeTransfer {
     return getEffectivenessRecords(this.effectivenessRecords);
   }
 
+  async listTransferSnapshot(): Promise<{
+    transfers: TransferCandidate[];
+    results: TransferResult[];
+    effectiveness_records: TransferEffectivenessRecord[];
+  }> {
+    await this.ensureSnapshotLoaded();
+    return this.buildTransferSnapshot();
+  }
+
   getAppliedTransferCount(): number {
     return getAppliedTransferCount(this.candidates);
   }
@@ -196,6 +233,99 @@ export class KnowledgeTransfer {
   }
 
   // ─── Private Persistence Helpers ───
+
+  private static readonly SnapshotSchema = z.object({
+    transfers: z.array(TransferCandidateSchema).default([]),
+    results: z.array(TransferResultSchema).default([]),
+    effectiveness_records: z.array(TransferEffectivenessSchema).default([]),
+    apply_contexts: z.record(
+      z.string(),
+      z.object({
+        candidate: TransferCandidateSchema,
+        gap_at_apply: z.number(),
+        source_pattern: LearnedPatternSchema.nullable(),
+      })
+    ).default({}),
+    pattern_trackers: z.record(
+      z.string(),
+      z.object({
+        consecutive_non_positive: z.number().int().min(0),
+        invalidated: z.boolean(),
+      })
+    ).default({}),
+  });
+
+  private buildTransferSnapshot(): {
+    transfers: TransferCandidate[];
+    results: TransferResult[];
+    effectiveness_records: TransferEffectivenessRecord[];
+  } {
+    return {
+      transfers: Array.from(this.candidates.values()),
+      results: Array.from(this.results.values()),
+      effectiveness_records: getEffectivenessRecords(this.effectivenessRecords),
+    };
+  }
+
+  private async ensureSnapshotLoaded(): Promise<void> {
+    if (this.snapshotLoaded) {
+      return;
+    }
+    if (!this.snapshotLoadPromise) {
+      this.snapshotLoadPromise = this.loadSnapshot();
+    }
+    await this.snapshotLoadPromise;
+  }
+
+  private async loadSnapshot(): Promise<void> {
+    try {
+      const raw = await this.applyDeps.stateManager.readRaw(KnowledgeTransfer.SNAPSHOT_PATH);
+      if (raw && typeof raw === "object") {
+        const snapshot = KnowledgeTransfer.SnapshotSchema.parse(raw);
+        this.candidates.clear();
+        for (const candidate of snapshot.transfers) {
+          this.candidates.set(candidate.candidate_id, candidate);
+        }
+        this.results.clear();
+        for (const result of snapshot.results) {
+          this.results.set(result.transfer_id, result);
+        }
+        this.effectivenessRecords.clear();
+        for (const record of snapshot.effectiveness_records) {
+          this.effectivenessRecords.set(record.transfer_id, record);
+        }
+        this.applyContexts.clear();
+        for (const [transferId, context] of Object.entries(snapshot.apply_contexts)) {
+          this.applyContexts.set(transferId, context);
+        }
+        this.patternTrackers.clear();
+        for (const [patternId, tracker] of Object.entries(snapshot.pattern_trackers)) {
+          this.patternTrackers.set(patternId, tracker);
+        }
+      }
+    } catch {
+      // non-fatal: start from an empty snapshot
+    } finally {
+      this.snapshotLoaded = true;
+      this.snapshotLoadPromise = null;
+    }
+  }
+
+  private async persistSnapshot(): Promise<void> {
+    if (!this.snapshotLoaded) {
+      return;
+    }
+    const snapshot = {
+      ...this.buildTransferSnapshot(),
+      apply_contexts: Object.fromEntries(this.applyContexts.entries()),
+      pattern_trackers: Object.fromEntries(this.patternTrackers.entries()),
+    };
+    try {
+      await this.applyDeps.stateManager.writeRaw(KnowledgeTransfer.SNAPSHOT_PATH, snapshot);
+    } catch {
+      // non-fatal: in-memory state remains authoritative for this process
+    }
+  }
 
   private async _loadLastAggregatedAt(): Promise<string | null> {
     if (this.lastAggregatedAt !== null) return this.lastAggregatedAt;

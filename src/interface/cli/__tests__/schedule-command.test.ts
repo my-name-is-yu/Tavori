@@ -36,6 +36,33 @@ describe("cmdSchedule", () => {
     }
   });
 
+  it("passes probe_dimension through the goal_probe preset", async () => {
+    const tempDir = makeTempDir("schedule-command-goal-probe-");
+    try {
+      vi.spyOn(console, "log").mockImplementation(() => {});
+
+      await cmdSchedule(makeStateManager(tempDir), [
+        "add",
+        "--preset",
+        "goal_probe",
+        "--data-source-id",
+        "db-source",
+        "--probe-dimension",
+        "open_issue_count",
+      ]);
+
+      const engine = new ScheduleEngine({ baseDir: tempDir });
+      await engine.loadEntries();
+      expect(engine.getEntries()).toHaveLength(1);
+      expect(engine.getEntries()[0]?.probe).toEqual(expect.objectContaining({
+        data_source_id: "db-source",
+        probe_dimension: "open_issue_count",
+      }));
+    } finally {
+      cleanupTempDir(tempDir);
+    }
+  });
+
   it("applies a dream suggestion through the CLI flow", async () => {
     const tempDir = makeTempDir("schedule-command-suggestion-");
     try {

@@ -271,7 +271,7 @@ export async function cmdDatasourceAdd(
         : type === "github_issue"
           ? `github_issue:${id}`
           : type === "database"
-            ? `database:${values.dimension ?? id}`
+            ? `database:${values.dimension ?? "value"}`
           : `http_api:${values.url ?? id}`);
 
   const connection: Record<string, string> = {};
@@ -303,8 +303,9 @@ export async function cmdDatasourceAdd(
     }
     const dimensionName = values.dimension ?? "value";
     extraConfig = {
-      connection_string: values["connection-string"],
+      connection_string: connectionString,
       dimension_mapping: {
+        [id]: values.query,
         [dimensionName]: values.query,
       },
     };

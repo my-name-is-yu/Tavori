@@ -49,6 +49,7 @@ export const DreamConsolidationPresetInputSchema = SchedulePresetBaseSchema.exte
 export const GoalProbePresetInputSchema = SchedulePresetBaseSchema.extend({
   preset: z.literal("goal_probe"),
   data_source_id: z.string().min(1),
+  probe_dimension: z.string().optional(),
   query_params: RecordSchema.default({}),
   detector_mode: z.enum(["threshold", "diff", "presence"]).default("diff"),
   threshold_value: z.number().optional(),
@@ -197,6 +198,7 @@ export function buildSchedulePresetEntry(input: SchedulePresetInput): CreateSche
         layer: "probe",
         probe: {
           data_source_id: parsed.data_source_id,
+          probe_dimension: parsed.probe_dimension,
           query_params: parsed.query_params,
           change_detector: {
             mode: parsed.detector_mode,

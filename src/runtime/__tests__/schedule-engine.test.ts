@@ -720,6 +720,35 @@ describe("Probe execution", () => {
     expect(result!.change_detected).toBe(true);
   });
 
+  it("executeProbe uses probe_dimension when provided", async () => {
+    const adapter = makeMockAdapter(3);
+    const registry = new Map([["test-source", adapter]]);
+    const eng = new ScheduleEngine({ baseDir: tempDir, dataSourceRegistry: registry });
+
+    const entry = await eng.addEntry(makeProbeEntry({
+      probe: {
+        data_source_id: "test-source",
+        probe_dimension: "open_issue_count",
+        query_params: {},
+        change_detector: { mode: "diff", baseline_window: 5 },
+        llm_on_change: false,
+      },
+    }));
+
+    const entries = eng.getEntries();
+    entries[0]!.baseline_results = [1];
+    entries[0]!.next_fire_at = new Date(Date.now() - 1000).toISOString();
+    await eng.saveEntries();
+    await eng.loadEntries();
+
+    const results = await eng.tick();
+    const result = results.find((r) => r.entry_id === entry.id);
+    expect(result!.status).toBe("ok");
+    expect(adapter.query).toHaveBeenCalledWith(expect.objectContaining({
+      dimension_name: "open_issue_count",
+    }));
+  });
+
   it("executeProbe calls LLM on change when llm_on_change is true", async () => {
     const adapter = makeMockAdapter({ count: 5 });
     const registry = new Map([["test-source", adapter]]);
@@ -1390,9 +1419,18 @@ describe("Cron execution (Phase 3)", () => {
       parseJSON: vi.fn().mockImplementation((content: string, schema: { parse: (value: unknown) => unknown }) => schema.parse(JSON.parse(content))),
     };
     const stateManager = {
-      listGoalIds: vi.fn().mockResolvedValue([]),
-      loadGoal: vi.fn(),
-      loadGapHistory: vi.fn(),
+      listGoalIds: vi.fn().mockResolvedValue(["goal-1"]),
+      loadGoal: vi.fn().mockResolvedValue({
+        id: "goal-1",
+        title: "Refine planning",
+        status: "active",
+        dimensions: [{ id: "d-1" }],
+      }),
+      loadGapHistory: vi.fn().mockResolvedValue([
+        {
+          gap_vector: [{ normalized_weighted_gap: 0.4 }],
+        },
+      ]),
     };
 
     const eng = new ScheduleEngine({
@@ -1413,11 +1451,20 @@ describe("Cron execution (Phase 3)", () => {
       },
     }));
 
-    const result = await (eng as any).executeCron(entry);
+    const entries = eng.getEntries();
+    entries[0]!.next_fire_at = new Date(Date.now() - 1000).toISOString();
+    await eng.saveEntries();
+    await eng.loadEntries();
+
+    const results = await eng.tick();
+    const result = results.find((r) => r.entry_id === entry.id)!;
+    const updatedEntry = eng.getEntries().find((e) => e.id === entry.id)!;
 
     expect(result.status).toBe("ok");
     expect(result.output_summary).toContain("Morning planning completed");
-    expect(notificationDispatcher.dispatch).not.toHaveBeenCalled();
+    expect(result.tokens_used).toBe(15);
+    expect(updatedEntry.tokens_used_today).toBe(15);
+    expect(notificationDispatcher.dispatch).toHaveBeenCalledOnce();
     expect(fs.existsSync(path.join(tempDir, "reflections"))).toBe(true);
   });
 

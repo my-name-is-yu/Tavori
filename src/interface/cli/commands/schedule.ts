@@ -104,6 +104,9 @@ function buildPresetInput(values: Record<string, unknown>): SchedulePresetInput 
         ...common,
         preset: "goal_probe",
         data_source_id: values["data-source-id"] as string,
+        probe_dimension: typeof values["probe-dimension"] === "string"
+          ? values["probe-dimension"] as string
+          : undefined,
         query_params: {},
         detector_mode: (typeof values["detector-mode"] === "string"
           ? values["detector-mode"]
@@ -144,6 +147,7 @@ async function scheduleAdd(engine: ScheduleEngine, argv: string[]): Promise<void
       "detector-mode": { type: "string" },
       "threshold-value": { type: "string" },
       "baseline-window": { type: "string" },
+      "probe-dimension": { type: "string" },
       "llm-on-change": { type: "boolean", default: true },
       "llm-prompt-template": { type: "string" },
       "context-source": { type: "string", multiple: true },

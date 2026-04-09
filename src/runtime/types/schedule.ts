@@ -13,6 +13,7 @@ export type HeartbeatConfig = z.infer<typeof HeartbeatConfigSchema>;
 
 export const ProbeConfigSchema = z.object({
   data_source_id: z.string(),
+  probe_dimension: z.string().optional(),
   query_params: z.record(z.unknown()).default({}),
   change_detector: z.object({
     mode: z.enum(["threshold", "diff", "presence"]),

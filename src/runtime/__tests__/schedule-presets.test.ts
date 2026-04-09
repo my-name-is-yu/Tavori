@@ -40,6 +40,7 @@ describe("schedule-presets", () => {
     const entry = buildSchedulePresetEntry(SchedulePresetInputSchema.parse({
       preset: "goal_probe",
       data_source_id: "source-1",
+      probe_dimension: "open_issue_count",
       detector_mode: "threshold",
       threshold_value: 0.8,
       baseline_window: 7,
@@ -54,6 +55,7 @@ describe("schedule-presets", () => {
       }),
       probe: expect.objectContaining({
         data_source_id: "source-1",
+        probe_dimension: "open_issue_count",
         change_detector: expect.objectContaining({
           mode: "threshold",
           threshold_value: 0.8,

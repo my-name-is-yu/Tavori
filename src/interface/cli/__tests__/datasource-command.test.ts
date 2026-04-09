@@ -42,6 +42,7 @@ describe("cmdDatasourceAdd(database)", () => {
     const saved = JSON.parse(
       fs.readFileSync(path.join(datasourcesDir, filename!), "utf-8")
     ) as {
+      id: string;
       type: string;
       connection_string?: string;
       dimension_mapping?: Record<string, string>;
@@ -50,6 +51,7 @@ describe("cmdDatasourceAdd(database)", () => {
     expect(saved.type).toBe("database");
     expect(saved.connection_string).toBe("postgresql://localhost:5432/analytics");
     expect(saved.dimension_mapping).toEqual({
+      [saved.id!]: "SELECT count(*) FROM issues WHERE state = 'open'",
       open_issue_count: "SELECT count(*) FROM issues WHERE state = 'open'",
     });
   });

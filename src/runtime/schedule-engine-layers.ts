@@ -69,6 +69,36 @@ function summarizeReflection(kind: ReflectionJobKind, report: Record<string, unk
   }
 }
 
+function withTokenAccountingClient(
+  llmClient: ILLMClient,
+  recordTokens: (tokens: number) => void
+): ILLMClient {
+  return {
+    async sendMessage(messages, options) {
+      const response = await llmClient.sendMessage(messages, options);
+      recordTokens((response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0));
+      return response;
+    },
+    async sendMessageStream(messages, options, handlers) {
+      if (!llmClient.sendMessageStream) {
+        return llmClient.sendMessage(messages, options);
+      }
+      const response = await llmClient.sendMessageStream(messages, options, handlers);
+      recordTokens((response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0));
+      return response;
+    },
+    parseJSON: ((content: string, schema: unknown, options?: unknown) => {
+      if (options === undefined) {
+        return llmClient.parseJSON(content as never, schema as never);
+      }
+      return llmClient.parseJSON(content as never, schema as never, options as never);
+    }) as ILLMClient["parseJSON"],
+    supportsToolCalling() {
+      return llmClient.supportsToolCalling?.() ?? true;
+    },
+  };
+}
+
 async function executeReflectionCron(
   entry: ScheduleEntry,
   deps: LayerDeps,
@@ -88,13 +118,17 @@ async function executeReflectionCron(
 
   try {
     let report: Record<string, unknown>;
+    let tokensUsed = 0;
+    const recordTokens = (tokens: number) => {
+      tokensUsed += tokens;
+    };
 
     switch (kind) {
       case "morning_planning":
         if (!deps.llmClient) throw new Error("Reflection cron requires llmClient for morning_planning");
         report = await runMorningPlanning({
           stateManager: deps.stateManager,
-          llmClient: deps.llmClient,
+          llmClient: withTokenAccountingClient(deps.llmClient, recordTokens),
           baseDir: deps.baseDir,
           notificationDispatcher: deps.notificationDispatcher,
           hookManager: deps.hookManager,
@@ -104,7 +138,7 @@ async function executeReflectionCron(
         if (!deps.llmClient) throw new Error("Reflection cron requires llmClient for evening_catchup");
         report = await runEveningCatchup({
           stateManager: deps.stateManager,
-          llmClient: deps.llmClient,
+          llmClient: withTokenAccountingClient(deps.llmClient, recordTokens),
           baseDir: deps.baseDir,
           notificationDispatcher: deps.notificationDispatcher,
           hookManager: deps.hookManager,
@@ -114,7 +148,7 @@ async function executeReflectionCron(
         if (!deps.llmClient) throw new Error("Reflection cron requires llmClient for weekly_review");
         report = await runWeeklyReview({
           stateManager: deps.stateManager,
-          llmClient: deps.llmClient,
+          llmClient: withTokenAccountingClient(deps.llmClient, recordTokens),
           baseDir: deps.baseDir,
           notificationDispatcher: deps.notificationDispatcher,
         }) as unknown as Record<string, unknown>;
@@ -134,6 +168,7 @@ async function executeReflectionCron(
       status: "ok",
       duration_ms: Date.now() - start,
       fired_at: firedAt,
+      tokens_used: tokensUsed,
       output_summary: summarizeReflection(kind, report),
     });
   } catch (err) {
@@ -392,13 +427,15 @@ export async function executeProbe(entry: ScheduleEntry, deps: LayerDeps): Promi
   }
 
   try {
+    const dimensionName = cfg.probe_dimension
+      ?? (typeof cfg.query_params.dimension_name === "string" ? cfg.query_params.dimension_name : undefined)
+      ?? cfg.data_source_id;
+
     // Execute probe query
-    // dimension_name comes AFTER query_params spread so it is authoritative and cannot be
-    // accidentally overridden by user-supplied query_params.
     const queryResult = await adapter.query({
       timeout_ms: 10000,
       ...cfg.query_params,
-      dimension_name: cfg.data_source_id,
+      dimension_name: dimensionName,
     } as Parameters<typeof adapter.query>[0]);
 
     const currentValue = queryResult.value ?? queryResult.raw;
