@@ -371,7 +371,10 @@ describe("LoopSupervisor", () => {
       await supervisor.start(["g-backoff"]);
       await new Promise((resolve) => setTimeout(resolve, 80));
       expect(runCount).toBe(1);
-      expect(journalQueue.snapshot().pending.normal).toHaveLength(0);
+      const snapshotDuringBackoff = journalQueue.snapshot();
+      expect(
+        snapshotDuringBackoff.pending.normal.length + Object.keys(snapshotDuringBackoff.inflight).length
+      ).toBe(1);
 
       await new Promise((resolve) => setTimeout(resolve, 1200));
       await supervisor.shutdown();
