@@ -218,6 +218,16 @@ export async function getMaxGapScoreForGoals(
   return max;
 }
 
+function getPersistedDaemonStateSnapshot(state: DaemonState): string {
+  return JSON.stringify({
+    status: state.status,
+    active_goals: [...state.active_goals],
+    loop_count: state.loop_count,
+    last_loop_at: state.last_loop_at,
+    interrupted_goals: state.interrupted_goals ? [...state.interrupted_goals] : undefined,
+  });
+}
+
 export async function runSupervisorMaintenanceCycleForDaemon(params: {
   currentGoalIds: string[];
   driveSystem: DriveSystem;
@@ -233,6 +243,7 @@ export async function runSupervisorMaintenanceCycleForDaemon(params: {
     params.driveSystem,
     [...params.currentGoalIds],
   );
+  const stateBeforeMaintenance = getPersistedDaemonStateSnapshot(params.state);
   for (const goalId of activeGoals) {
     params.supervisor?.activateGoal(goalId);
   }
@@ -240,7 +251,9 @@ export async function runSupervisorMaintenanceCycleForDaemon(params: {
   await params.processCronTasks();
   await params.processScheduleEntries();
   await params.proactiveTick();
-  await params.saveDaemonState();
+  if (getPersistedDaemonStateSnapshot(params.state) !== stateBeforeMaintenance) {
+    await params.saveDaemonState();
+  }
 
   if (params.eventServer) {
     void params.eventServer.broadcast?.("daemon_status", {

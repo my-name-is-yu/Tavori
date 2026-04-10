@@ -10,6 +10,8 @@ import { makeTempDir } from "../../../tests/helpers/temp-dir.js";
 import { JournalBackedQueue } from "../queue/journal-backed-queue.js";
 import { GoalLeaseManager } from "../goal-lease-manager.js";
 import { createEnvelope } from "../types/envelope.js";
+import { runSupervisorMaintenanceCycleForDaemon } from "../daemon/maintenance.js";
+import type { DaemonState } from "../../base/types/daemon.js";
 
 async function pollForFile(
   filePath: string,
@@ -130,6 +132,21 @@ function makeEventServerMock() {
     stopFileWatcher: vi.fn(),
     broadcast: vi.fn(),
     requestApproval: vi.fn().mockResolvedValue(true),
+  };
+}
+
+function createPersistedStateFile(tmpDir: string, state: DaemonState): {
+  filePath: string;
+  saveDaemonState: () => Promise<void>;
+} {
+  const filePath = path.join(tmpDir, "daemon-state.json");
+  fs.writeFileSync(filePath, JSON.stringify(state));
+
+  return {
+    filePath,
+    saveDaemonState: async () => {
+      fs.writeFileSync(filePath, JSON.stringify(state));
+    },
   };
 }
 
@@ -444,5 +461,84 @@ describe("DaemonRunner durable runtime", () => {
   it("generates cron entries for daemon scheduling", () => {
     expect(DaemonRunner.generateCronEntry("goal-1", 15)).toContain("goal-1");
     expect(DaemonRunner.generateCronEntry("goal-1", 15)).toContain("*/15");
+  });
+
+  it("does not rewrite daemon-state.json during idle supervisor maintenance", async () => {
+    const state: DaemonState = {
+      pid: process.pid,
+      started_at: new Date().toISOString(),
+      last_loop_at: null,
+      loop_count: 0,
+      active_goals: ["goal-1"],
+      interrupted_goals: [],
+      status: "running",
+      crash_count: 0,
+      last_error: null,
+    };
+    const { filePath, saveDaemonState } = createPersistedStateFile(tmpDir, state);
+    const saveSpy = vi.fn(saveDaemonState);
+    const driveSystem = {
+      shouldActivate: vi.fn().mockResolvedValue(false),
+      getSchedule: vi.fn().mockResolvedValue(null),
+      prioritizeGoals: vi.fn().mockImplementation((ids: string[]) => ids),
+    };
+
+    const before = fs.statSync(filePath).mtimeMs;
+    await runSupervisorMaintenanceCycleForDaemon({
+      currentGoalIds: ["goal-1"],
+      driveSystem: driveSystem as never,
+      supervisor: null,
+      processCronTasks: vi.fn().mockResolvedValue(undefined),
+      processScheduleEntries: vi.fn().mockResolvedValue(undefined),
+      proactiveTick: vi.fn().mockResolvedValue(undefined),
+      saveDaemonState: saveSpy,
+      state,
+    });
+
+    expect(saveSpy).not.toHaveBeenCalled();
+    expect(fs.statSync(filePath).mtimeMs).toBe(before);
+  });
+
+  it("persists daemon-state.json when supervisor maintenance changes active goals", async () => {
+    const state: DaemonState = {
+      pid: process.pid,
+      started_at: new Date().toISOString(),
+      last_loop_at: null,
+      loop_count: 0,
+      active_goals: [],
+      interrupted_goals: [],
+      status: "running",
+      crash_count: 0,
+      last_error: null,
+    };
+    const { filePath, saveDaemonState } = createPersistedStateFile(tmpDir, state);
+    const saveSpy = vi.fn(saveDaemonState);
+    const driveSystem = {
+      shouldActivate: vi.fn().mockResolvedValue(true),
+      getSchedule: vi.fn().mockResolvedValue(null),
+      prioritizeGoals: vi.fn().mockImplementation((ids: string[]) => ids),
+    };
+    const supervisor = {
+      activateGoal: vi.fn((goalId: string) => {
+        state.active_goals = [goalId];
+      }),
+    };
+
+    await runSupervisorMaintenanceCycleForDaemon({
+      currentGoalIds: ["goal-2"],
+      driveSystem: driveSystem as never,
+      supervisor,
+      processCronTasks: vi.fn().mockResolvedValue(undefined),
+      processScheduleEntries: vi.fn().mockResolvedValue(undefined),
+      proactiveTick: vi.fn().mockResolvedValue(undefined),
+      saveDaemonState: saveSpy,
+      state,
+    });
+
+    expect(saveSpy).toHaveBeenCalledOnce();
+    expect(JSON.parse(fs.readFileSync(filePath, "utf-8"))).toMatchObject({
+      active_goals: ["goal-2"],
+      status: "running",
+    });
   });
 });
