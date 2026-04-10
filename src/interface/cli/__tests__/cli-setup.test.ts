@@ -14,6 +14,11 @@ import * as fs from "node:fs";
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
+import * as tty from "node:tty";
+
+vi.mock("node:tty", () => ({
+  isatty: vi.fn(() => false),
+}));
 
 // ─── Test helpers ───
 
@@ -26,6 +31,10 @@ function getConfigPath(): string {
 async function readConfig(): Promise<Record<string, unknown>> {
   const raw = await fsp.readFile(getConfigPath(), "utf-8");
   return JSON.parse(raw) as Record<string, unknown>;
+}
+
+async function writeConfig(raw: string): Promise<void> {
+  await fsp.writeFile(getConfigPath(), raw, "utf-8");
 }
 
 // ─── Setup / Teardown ───
@@ -239,18 +248,15 @@ describe("ensureProviderConfig", () => {
   it("loads config normally when provider.json exists", async () => {
     process.env["OPENAI_API_KEY"] = "sk-ensure-test-key";
     // Write config directly
-    const configPath = path.join(tmpDir, "provider.json");
-    await fsp.writeFile(configPath, JSON.stringify({
+    await writeConfig(JSON.stringify({
       provider: "openai",
       model: "gpt-5.4-mini",
       adapter: "openai_codex_cli",
     }));
 
-    // Mock loadProviderConfig to read from the correct tmpDir path,
-    // since the module-level PROVIDER_CONFIG_PATH may be stale from prior tests
     const providerConfigMod = await import("../../../base/llm/provider-config.js");
     const loadSpy = vi.spyOn(providerConfigMod, "loadProviderConfig").mockImplementation(async () => {
-      const raw = await fsp.readFile(configPath, "utf-8");
+      const raw = await fsp.readFile(getConfigPath(), "utf-8");
       const parsed = JSON.parse(raw) as Record<string, unknown>;
       return {
         provider: parsed.provider as "openai",
@@ -267,5 +273,122 @@ describe("ensureProviderConfig", () => {
     expect(config.model).toBe("gpt-5.4-mini");
 
     loadSpy.mockRestore();
+  });
+
+  it("starts the setup wizard when provider.json is missing and stdin is a TTY", async () => {
+    vi.mocked(tty.isatty).mockReturnValue(true);
+    const setupMod = await import("../commands/setup.js");
+    const setupSpy = vi.spyOn(setupMod, "cmdSetup").mockResolvedValue(0);
+    const providerConfigMod = await import("../../../base/llm/provider-config.js");
+    const loadSpy = vi.spyOn(providerConfigMod, "loadProviderConfig").mockResolvedValue({
+      provider: "openai",
+      model: "gpt-5.4-mini",
+      adapter: "openai_codex_cli",
+      api_key: "sk-from-wizard",
+    });
+
+    const { ensureProviderConfig } = await import("../ensure-api-key.js");
+    const config = await ensureProviderConfig();
+
+    expect(setupSpy).toHaveBeenCalledWith([]);
+    expect(config.provider).toBe("openai");
+    expect(loadSpy).toHaveBeenCalled();
+    setupSpy.mockRestore();
+    loadSpy.mockRestore();
+    vi.mocked(tty.isatty).mockReset();
+  });
+
+  it("throws a clear error when provider.json is missing and stdin is not a TTY", async () => {
+    vi.mocked(tty.isatty).mockReturnValue(false);
+    const { ensureProviderConfig } = await import("../ensure-api-key.js");
+    const providerConfigMod = await import("../../../base/llm/provider-config.js");
+    const loadSpy = vi.spyOn(providerConfigMod, "loadProviderConfig").mockResolvedValue({
+      provider: "openai",
+      model: "gpt-5.4-mini",
+      adapter: "openai_codex_cli",
+      api_key: "sk-default",
+    });
+
+    const config = await ensureProviderConfig();
+
+    expect(config.provider).toBe("openai");
+    expect(loadSpy).toHaveBeenCalled();
+
+    await expect(ensureProviderConfig({ requireInteractiveSetup: true })).rejects.toThrow(
+      /no provider configuration found/i
+    );
+    loadSpy.mockRestore();
+    vi.mocked(tty.isatty).mockReset();
+  });
+
+  it("falls back to loadProviderConfig when provider.json is invalid JSON and setup is not required", async () => {
+    await writeConfig("{not-json");
+
+    vi.mocked(tty.isatty).mockReturnValue(true);
+    const providerConfigMod = await import("../../../base/llm/provider-config.js");
+    const loadSpy = vi.spyOn(providerConfigMod, "loadProviderConfig").mockResolvedValue({
+      provider: "anthropic",
+      model: "claude-sonnet-4-6",
+      adapter: "claude_code_cli",
+      api_key: "sk-ant-from-wizard",
+    });
+
+    const { ensureProviderConfig } = await import("../ensure-api-key.js");
+    const config = await ensureProviderConfig();
+
+    expect(config.provider).toBe("anthropic");
+    expect(loadSpy).toHaveBeenCalled();
+    loadSpy.mockRestore();
+    vi.mocked(tty.isatty).mockReset();
+  });
+
+  it("throws a clear error when provider.json is invalid JSON and stdin is not a TTY", async () => {
+    await writeConfig("{not-json");
+
+    vi.mocked(tty.isatty).mockReturnValue(false);
+    const { ensureProviderConfig } = await import("../ensure-api-key.js");
+    const providerConfigMod = await import("../../../base/llm/provider-config.js");
+    const loadSpy = vi.spyOn(providerConfigMod, "loadProviderConfig").mockResolvedValue({
+      provider: "openai",
+      model: "gpt-5.4-mini",
+      adapter: "openai_codex_cli",
+      api_key: "sk-default",
+    });
+
+    const config = await ensureProviderConfig();
+
+    expect(config.provider).toBe("openai");
+    expect(loadSpy).toHaveBeenCalled();
+
+    await expect(
+      ensureProviderConfig({ requireInteractiveSetup: true })
+    ).rejects.toThrow(/invalid json/i);
+    loadSpy.mockRestore();
+    vi.mocked(tty.isatty).mockReset();
+  });
+
+  it("starts the setup wizard for invalid JSON when interactive setup is required", async () => {
+    await writeConfig("{not-json");
+
+    vi.mocked(tty.isatty).mockReturnValue(true);
+    const setupMod = await import("../commands/setup.js");
+    const setupSpy = vi.spyOn(setupMod, "cmdSetup").mockResolvedValue(0);
+    const providerConfigMod = await import("../../../base/llm/provider-config.js");
+    const loadSpy = vi.spyOn(providerConfigMod, "loadProviderConfig").mockResolvedValue({
+      provider: "anthropic",
+      model: "claude-sonnet-4-6",
+      adapter: "claude_code_cli",
+      api_key: "sk-ant-from-wizard",
+    });
+
+    const { ensureProviderConfig } = await import("../ensure-api-key.js");
+    const config = await ensureProviderConfig({ requireInteractiveSetup: true });
+
+    expect(setupSpy).toHaveBeenCalledWith([]);
+    expect(config.provider).toBe("anthropic");
+    expect(loadSpy).toHaveBeenCalled();
+    setupSpy.mockRestore();
+    loadSpy.mockRestore();
+    vi.mocked(tty.isatty).mockReset();
   });
 });

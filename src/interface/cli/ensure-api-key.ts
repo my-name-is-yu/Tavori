@@ -9,6 +9,60 @@ import * as tty from "node:tty";
 import { loadProviderConfig, type ProviderConfig } from "../../base/llm/provider-config.js";
 import { getPulseedDirPath } from "../../base/utils/paths.js";
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+async function inspectProviderConfig(configPath: string): Promise<
+  | { exists: false }
+  | { exists: true; validJson: true }
+  | { exists: true; validJson: false }
+> {
+  try {
+    await fsp.access(configPath);
+  } catch {
+    return { exists: false };
+  }
+
+  try {
+    const raw = await fsp.readFile(configPath, "utf-8");
+    const parsed = JSON.parse(raw) as unknown;
+    return { exists: true, validJson: isPlainObject(parsed) };
+  } catch {
+    return { exists: true, validJson: false };
+  }
+}
+
+function formatMissingConfigError(configPath: string): string {
+  return (
+    `Error: no provider configuration found at ${configPath}. ` +
+    "Run `pulseed setup` from an interactive terminal to create it."
+  );
+}
+
+function formatInvalidConfigError(configPath: string): string {
+  return (
+    `Error: provider configuration at ${configPath} is invalid JSON. ` +
+    "Run `pulseed setup` from an interactive terminal to regenerate it, " +
+    "or fix/remove the file."
+  );
+}
+
+async function runSetupWizardOrThrow(message: string): Promise<void> {
+  console.log(message);
+  const { cmdSetup } = await import("./commands/setup.js");
+  const result = await cmdSetup([]);
+  if (result !== 0) {
+    throw new Error(
+      "Setup wizard failed. Run `pulseed setup` manually to configure your provider."
+    );
+  }
+}
+
+export interface EnsureProviderConfigOptions {
+  requireInteractiveSetup?: boolean;
+}
+
 /**
  * Load provider config and verify that the required API key is present for
  * the configured provider. Throws if a required key is missing.
@@ -23,25 +77,28 @@ import { getPulseedDirPath } from "../../base/utils/paths.js";
  *
  * Returns the loaded ProviderConfig so callers don't need to load it again.
  */
-export async function ensureProviderConfig(): Promise<ProviderConfig> {
-  // Check if config file exists — if not and TTY, run setup wizard
+export async function ensureProviderConfig(
+  options: EnsureProviderConfigOptions = {}
+): Promise<ProviderConfig> {
   const configPath = path.join(getPulseedDirPath(), "provider.json");
-  let configExists = false;
-  try {
-    await fsp.access(configPath);
-    configExists = true;
-  } catch {
-    // File does not exist
-  }
+  const configState = await inspectProviderConfig(configPath);
+  const stdinIsTty = tty.isatty(0);
 
-  if (!configExists && tty.isatty(0)) {
-    console.log("No provider configuration found. Starting setup wizard...\n");
-    const { cmdSetup } = await import("./commands/setup.js");
-    const result = await cmdSetup([]);
-    if (result !== 0) {
-      throw new Error(
-        "Setup wizard failed. Run `pulseed setup` manually to configure your provider."
+  if (!configState.exists) {
+    if (stdinIsTty) {
+      await runSetupWizardOrThrow(
+        "No provider configuration found. Starting setup wizard...\n"
       );
+    } else if (options.requireInteractiveSetup) {
+      throw new Error(formatMissingConfigError(configPath));
+    }
+  } else if (!configState.validJson && options.requireInteractiveSetup) {
+    if (stdinIsTty) {
+      await runSetupWizardOrThrow(
+        "Provider configuration is invalid. Starting setup wizard...\n"
+      );
+    } else {
+      throw new Error(formatInvalidConfigError(configPath));
     }
   }
 

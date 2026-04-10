@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.2] - 2026-04-10
+
+### Fixed
+- Fixed the default `pulseed` startup path so first-run setup fails clearly in non-interactive terminals instead of silently skipping the setup wizard and falling through into the TUI
+- Preserved the existing env/default fallback behavior for non-TUI commands such as `run`, `suggest`, and `chat`, while still routing true first-run interactive TUI launches into setup
+
+### Changed
+- Bumped the npm package version to `0.4.2`
+
 ## [0.4.0] - 2026-04-09
 
 ### Features

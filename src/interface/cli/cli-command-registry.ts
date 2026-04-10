@@ -64,7 +64,7 @@ export async function dispatchCommand(
   activeCoreLoopRef: { value: CoreLoop | null },
 ): Promise<number> {
   if (argv.length === 0) {
-    await ensureProviderConfig();
+    await ensureProviderConfig({ requireInteractiveSetup: true });
     const { startTUI } = await import("../tui/entry.js");
     await startTUI();
     return 0;
