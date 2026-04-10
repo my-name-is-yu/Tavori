@@ -3,6 +3,7 @@ import type { Task } from "../../../base/types/task.js";
 import type { VerificationResult } from "../../../base/types/task.js";
 import type { AgentTask, AgentResult, IAdapter } from "../adapter-layer.js";
 import type { VerifierDeps } from "./task-verifier-types.js";
+import { syncTaskOutcomeSummary } from "./task-outcome-ledger.js";
 
 // ─── runMechanicalVerification ───
 
@@ -344,4 +345,5 @@ export async function appendTaskHistory(deps: VerifierDeps, goalId: string, task
     estimated_duration_ms,
   });
   await deps.stateManager.writeRaw(historyPath, history);
+  await syncTaskOutcomeSummary(deps.stateManager, task);
 }

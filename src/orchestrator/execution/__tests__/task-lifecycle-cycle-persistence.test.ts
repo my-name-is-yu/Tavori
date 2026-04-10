@@ -7,6 +7,8 @@ import { StrategyManager } from "../../strategy/strategy-manager.js";
 import { StallDetector } from "../../../platform/drive/stall-detector.js";
 import { TaskLifecycle } from "../task/task-lifecycle.js";
 import type { Task } from "../../../base/types/task.js";
+import type { GapVector } from "../../../base/types/gap.js";
+import type { DriveContext } from "../../../base/types/drive.js";
 import type {
   ILLMClient,
   LLMMessage,
@@ -100,6 +102,32 @@ function makeTask(overrides: Partial<Task> = {}): Task {
   };
 }
 
+function makeGapVector(goalId: string, dimensionName: string): GapVector {
+  return {
+    goal_id: goalId,
+    gaps: [
+      {
+        dimension_name: dimensionName,
+        raw_gap: 0.5,
+        normalized_gap: 0.5,
+        normalized_weighted_gap: 0.5,
+        confidence: 0.8,
+        uncertainty_weight: 1.0,
+      },
+    ],
+    timestamp: new Date().toISOString(),
+  };
+}
+
+function makeDriveContext(dimensionName: string): DriveContext {
+  return {
+    time_since_last_attempt: { [dimensionName]: 24 },
+    deadlines: { [dimensionName]: null },
+    opportunities: {},
+    pacing: {},
+  };
+}
+
 describe("TaskLifecycle — persistence", () => {
   let tmpDir: string;
   let stateManager: StateManager;
@@ -120,7 +148,10 @@ describe("TaskLifecycle — persistence", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
-  function createLifecycle(llmClient: ILLMClient): TaskLifecycle {
+  function createLifecycle(
+    llmClient: ILLMClient,
+    options?: Partial<import("../task/task-lifecycle.js").TaskLifecycleOptions>
+  ): TaskLifecycle {
     strategyManager = new StrategyManager(stateManager, llmClient);
     return new TaskLifecycle(
       stateManager,
@@ -129,7 +160,7 @@ describe("TaskLifecycle — persistence", () => {
       trustManager,
       strategyManager,
       stallDetector,
-      { healthCheckEnabled: false }
+      { healthCheckEnabled: false, execFileSyncFn: () => "some-file.ts", ...options }
     );
   }
 
@@ -250,5 +281,96 @@ describe("TaskLifecycle — persistence", () => {
     await lifecycle.executeTask(task, adapter);
 
     expect(statusDuringExecution).toBe("running");
+  });
+
+  it("runTaskCycle writes acked, started, and succeeded events to the ledger", async () => {
+    const llm = createMockLLMClient([VALID_TASK_RESPONSE, LLM_REVIEW_PASS]);
+    const lifecycle = createLifecycle(llm, { approvalFn: async () => true });
+    const adapter: import("../task/task-lifecycle.js").IAdapter = {
+      adapterType: "mock",
+      async execute() {
+        return {
+          success: true,
+          output: "implemented",
+          error: null,
+          exit_code: 0,
+          elapsed_ms: 25,
+          stopped_reason: "completed" as const,
+        };
+      },
+    };
+
+    const result = await lifecycle.runTaskCycle(
+      "goal-1",
+      makeGapVector("goal-1", "dim"),
+      makeDriveContext("dim"),
+      adapter
+    );
+
+    const ledger = await stateManager.readRaw(`tasks/goal-1/ledger/${result.task.id}.json`) as Record<string, unknown>;
+    const events = ledger.events as Array<Record<string, unknown>>;
+    const summary = ledger.summary as Record<string, unknown>;
+
+    expect(events.map((event) => event.type)).toEqual(["acked", "started", "succeeded"]);
+    expect(summary.latest_event_type).toBe("succeeded");
+    expect((summary.latencies as Record<string, unknown>).created_to_acked_ms).not.toBeNull();
+  });
+
+  it("handleFailure records failed and retried events for retryable failures", async () => {
+    const llm = createMockLLMClient([]);
+    const lifecycle = createLifecycle(llm);
+    const task = makeTask({
+      started_at: new Date(Date.now() - 1000).toISOString(),
+      completed_at: new Date().toISOString(),
+    });
+    const vr: import("../../../base/types/task.js").VerificationResult = {
+      task_id: task.id,
+      verdict: "partial",
+      confidence: 0.7,
+      evidence: [
+        { layer: "independent_review", description: "Direction correct", confidence: 0.7 },
+        { layer: "self_report", description: "Partial progress", confidence: 0.3 },
+      ],
+      dimension_updates: [],
+      timestamp: new Date().toISOString(),
+    };
+
+    await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+    await lifecycle.handleFailure(task, vr);
+
+    const ledger = await stateManager.readRaw(`tasks/${task.goal_id}/ledger/${task.id}.json`) as Record<string, unknown>;
+    const events = ledger.events as Array<Record<string, unknown>>;
+
+    expect(events.map((event) => event.type)).toEqual(["failed", "retried"]);
+    expect(events[1]!.action).toBe("keep");
+  });
+
+  it("runTaskCycle records abandoned events when pre-execution checks reject the task", async () => {
+    const llm = createMockLLMClient([VALID_TASK_RESPONSE]);
+    const lifecycle = createLifecycle(llm, {
+      ethicsGate: {
+        checkMeans: async () => ({ verdict: "reject", reasoning: "unsafe path" }),
+      } as unknown as import("../../../platform/traits/ethics-gate.js").EthicsGate,
+      approvalFn: async () => true,
+    });
+
+    const result = await lifecycle.runTaskCycle(
+      "goal-1",
+      makeGapVector("goal-1", "dim"),
+      makeDriveContext("dim"),
+      {
+        adapterType: "mock",
+        async execute() {
+          throw new Error("should not run");
+        },
+      }
+    );
+
+    const ledger = await stateManager.readRaw(`tasks/goal-1/ledger/${result.task.id}.json`) as Record<string, unknown>;
+    const events = ledger.events as Array<Record<string, unknown>>;
+
+    expect(result.action).toBe("discard");
+    expect(events.map((event) => event.type)).toEqual(["abandoned"]);
+    expect(events[0]!.action).toBe("discard");
   });
 });

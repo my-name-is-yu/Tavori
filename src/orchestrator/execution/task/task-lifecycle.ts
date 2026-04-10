@@ -71,6 +71,7 @@ export type {
 } from "./task-pipeline-types.js";
 import type { TaskCycleResult } from "./task-execution-types.js";
 import { createSkippedTaskResult } from "./task-execution-types.js";
+import { appendTaskOutcomeEvent } from "./task-outcome-ledger.js";
 
 export interface TaskLifecycleCoreDeps {
   stateManager: StateManager;
@@ -360,7 +361,23 @@ export class TaskLifecycle {
       },
       task
     );
-    if (preCheckResult !== null) return preCheckResult;
+    if (preCheckResult !== null) {
+      await appendTaskOutcomeEvent(this.stateManager, {
+        task,
+        type: "abandoned",
+        attempt: task.consecutive_failure_count + 1,
+        action: preCheckResult.action,
+        verificationResult: preCheckResult.verificationResult,
+        reason: preCheckResult.verificationResult.evidence[0]?.description,
+      });
+      return preCheckResult;
+    }
+
+    await appendTaskOutcomeEvent(this.stateManager, {
+      task,
+      type: "acked",
+      attempt: task.consecutive_failure_count + 1,
+    });
 
     // 4. Execute task
     this.logger?.debug(`[DEBUG-TL] Executing task ${task.id} via adapter ${adapter.adapterType}`);

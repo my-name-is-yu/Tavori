@@ -104,6 +104,11 @@ describe("RuntimeWatchdog", () => {
       status: "ok",
       leader: true,
       checked_at: Date.now(),
+      kpi: {
+        process_alive: { status: "ok", checked_at: Date.now(), last_ok_at: Date.now() },
+        command_acceptance: { status: "degraded", checked_at: Date.now(), last_degraded_at: Date.now() },
+        task_execution: { status: "degraded", checked_at: Date.now(), last_degraded_at: Date.now() },
+      },
       details: { pid: children[0]!.pid },
     });
 
@@ -115,6 +120,11 @@ describe("RuntimeWatchdog", () => {
       status: "ok",
       leader: true,
       checked_at: Date.now(),
+      kpi: {
+        process_alive: { status: "ok", checked_at: Date.now(), last_ok_at: Date.now() },
+        command_acceptance: { status: "ok", checked_at: Date.now(), last_ok_at: Date.now() },
+        task_execution: { status: "ok", checked_at: Date.now(), last_ok_at: Date.now() },
+      },
       details: { pid: children[1]!.pid },
     });
 
@@ -176,6 +186,11 @@ describe("RuntimeWatchdog", () => {
       status: "ok",
       leader: true,
       checked_at: Date.now(),
+      kpi: {
+        process_alive: { status: "ok", checked_at: Date.now(), last_ok_at: Date.now() },
+        command_acceptance: { status: "degraded", checked_at: Date.now(), last_degraded_at: Date.now() },
+        task_execution: { status: "degraded", checked_at: Date.now(), last_degraded_at: Date.now() },
+      },
       details: { pid: children[0]!.pid },
     });
 

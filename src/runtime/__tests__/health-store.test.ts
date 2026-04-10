@@ -3,7 +3,7 @@ import * as path from "node:path";
 import * as fs from "node:fs";
 import { RuntimeHealthStore } from "../store/health-store.js";
 import { makeTempDir, cleanupTempDir } from "../../../tests/helpers/temp-dir.js";
-import { RuntimeHealthSnapshotSchema } from "../store/runtime-schemas.js";
+import { RuntimeHealthSnapshotSchema, evolveRuntimeHealthKpi } from "../store/runtime-schemas.js";
 
 describe("RuntimeHealthStore", () => {
   let tmpDir: string;
@@ -27,6 +27,11 @@ describe("RuntimeHealthStore", () => {
         gateway: "ok",
         queue: "degraded",
       },
+      kpi: evolveRuntimeHealthKpi(null, {
+        process_alive: "ok",
+        command_acceptance: "degraded",
+        task_execution: "ok",
+      }, 123),
       details: { lag: 3 },
     });
 
@@ -38,7 +43,14 @@ describe("RuntimeHealthStore", () => {
     expect(fs.existsSync(componentsPath)).toBe(true);
 
     const loaded = await store.loadSnapshot();
-    expect(loaded).toMatchObject(snapshot);
+    expect(loaded).toMatchObject({
+      status: snapshot.status,
+      leader: snapshot.leader,
+      checked_at: snapshot.checked_at,
+      components: snapshot.components,
+      details: snapshot.details,
+    });
+    expect(loaded?.kpi?.command_acceptance.status).toBe("degraded");
   });
 
   it("returns null for a partial health state", async () => {
@@ -55,6 +67,11 @@ describe("RuntimeHealthStore", () => {
       status: "ok",
       leader: true,
       checked_at: 1,
+      kpi: evolveRuntimeHealthKpi(null, {
+        process_alive: "ok",
+        command_acceptance: "ok",
+        task_execution: "ok",
+      }, 1),
     });
     await store.saveComponentsHealth({
       checked_at: 2,
@@ -63,5 +80,22 @@ describe("RuntimeHealthStore", () => {
 
     expect(await store.loadDaemonHealth()).toMatchObject({ leader: true });
     expect(await store.loadComponentsHealth()).toMatchObject({ components: { gateway: "ok" } });
+  });
+
+  it("preserves KPI data when repairing a partial snapshot", async () => {
+    await store.saveDaemonHealth({
+      status: "degraded",
+      leader: true,
+      checked_at: 50,
+      kpi: evolveRuntimeHealthKpi(null, {
+        process_alive: "ok",
+        command_acceptance: "degraded",
+        task_execution: "ok",
+      }, 50),
+    });
+
+    const repaired = await store.reconcile(100);
+    expect(repaired.kpi).toBeDefined();
+    expect(repaired.kpi?.command_acceptance.status).toBe("degraded");
   });
 });

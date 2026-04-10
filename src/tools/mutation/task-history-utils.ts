@@ -1,6 +1,7 @@
 import type { StateManager } from "../../base/state/state-manager.js";
 import type { Task } from "../../base/types/task.js";
 import { durationToMs } from "../../orchestrator/execution/task/task-executor.js";
+import { recordTaskOutcomeMutation } from "../../orchestrator/execution/task/task-outcome-ledger.js";
 
 export async function upsertTaskHistory(stateManager: StateManager, task: Task): Promise<void> {
   const historyPath = `tasks/${task.goal_id}/task-history.json`;
@@ -37,4 +38,5 @@ export async function upsertTaskHistory(stateManager: StateManager, task: Task):
   }
 
   await stateManager.writeRaw(historyPath, history);
+  await recordTaskOutcomeMutation(stateManager, task);
 }

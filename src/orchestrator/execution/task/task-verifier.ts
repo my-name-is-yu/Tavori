@@ -52,6 +52,7 @@ import {
   appendTaskHistory,
 } from "./task-verifier-rules.js";
 import { runLLMReview } from "./task-verifier-llm.js";
+import { appendTaskOutcomeEvent } from "./task-outcome-ledger.js";
 
 // ─── verifyTask ───
 
@@ -469,6 +470,13 @@ export async function handleVerdict(
       }
 
       await appendTaskHistory(deps, task.goal_id, completedTask);
+      await appendTaskOutcomeEvent(deps.stateManager, {
+        task: completedTask,
+        type: "succeeded",
+        attempt: task.consecutive_failure_count + 1,
+        action: "completed",
+        verificationResult,
+      });
 
       if (deps.onTaskComplete && completedTask.strategy_id) {
         deps.onTaskComplete(completedTask.strategy_id);
@@ -541,6 +549,12 @@ export async function handleFailure(
     `tasks/${task.goal_id}/${task.id}.json`,
     updatedTask
   );
+  await appendTaskOutcomeEvent(deps.stateManager, {
+    task: updatedTask,
+    type: "failed",
+    attempt: updatedTask.consecutive_failure_count,
+    verificationResult,
+  });
 
   if (updatedTask.consecutive_failure_count >= 3) {
     deps.stallDetector.checkConsecutiveFailures(
@@ -549,6 +563,14 @@ export async function handleFailure(
       updatedTask.consecutive_failure_count
     );
     await appendTaskHistory(deps, task.goal_id, updatedTask);
+    await appendTaskOutcomeEvent(deps.stateManager, {
+      task: updatedTask,
+      type: "abandoned",
+      attempt: updatedTask.consecutive_failure_count,
+      action: "escalate",
+      verificationResult,
+      reason: "consecutive failure threshold reached",
+    });
     return { action: "escalate", task: updatedTask };
   }
 
@@ -556,6 +578,14 @@ export async function handleFailure(
 
   if (directionCorrect) {
     await appendTaskHistory(deps, task.goal_id, updatedTask);
+    await appendTaskOutcomeEvent(deps.stateManager, {
+      task: updatedTask,
+      type: "retried",
+      attempt: updatedTask.consecutive_failure_count,
+      action: "keep",
+      verificationResult,
+      reason: "failure kept for retry because direction remained correct",
+    });
     return { action: "keep", task: updatedTask };
   }
 
@@ -564,14 +594,38 @@ export async function handleFailure(
     deps.logger?.warn(`[task] revert attempted`, { taskId: task.id, success: revertSuccess });
     if (revertSuccess) {
       await appendTaskHistory(deps, task.goal_id, updatedTask);
+      await appendTaskOutcomeEvent(deps.stateManager, {
+        task: updatedTask,
+        type: "abandoned",
+        attempt: updatedTask.consecutive_failure_count,
+        action: "discard",
+        verificationResult,
+        reason: "task discarded after successful revert",
+      });
       return { action: "discard", task: updatedTask };
     }
     deps.logger?.error(`[task] revert FAILED`, { taskId: task.id });
     await setDimensionIntegrity(deps, task.goal_id, task.primary_dimension, "uncertain");
     await appendTaskHistory(deps, task.goal_id, updatedTask);
+    await appendTaskOutcomeEvent(deps.stateManager, {
+      task: updatedTask,
+      type: "abandoned",
+      attempt: updatedTask.consecutive_failure_count,
+      action: "escalate",
+      verificationResult,
+      reason: "revert failed after wrong-direction result",
+    });
     return { action: "escalate", task: updatedTask };
   }
 
   await appendTaskHistory(deps, task.goal_id, updatedTask);
+  await appendTaskOutcomeEvent(deps.stateManager, {
+    task: updatedTask,
+    type: "abandoned",
+    attempt: updatedTask.consecutive_failure_count,
+    action: "escalate",
+    verificationResult,
+    reason: "task cannot be safely retried or reverted",
+  });
   return { action: "escalate", task: updatedTask };
 }

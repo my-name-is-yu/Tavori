@@ -122,6 +122,105 @@ describe("cmdDaemonStatus", () => {
     expect(output).toContain("0/3 retries used");
   });
 
+  it("prints runtime KPI status when health snapshot exists", async () => {
+    const now = Date.now();
+    fs.mkdirSync(path.join(tmpDir, "runtime", "health"), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, "tasks", "goal-kpi", "ledger"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, "runtime", "health", "daemon.json"),
+      JSON.stringify({
+        status: "degraded",
+        leader: true,
+        checked_at: now,
+        kpi: {
+          process_alive: { status: "ok", checked_at: now, last_ok_at: now },
+          command_acceptance: {
+            status: "degraded",
+            checked_at: now,
+            last_degraded_at: now,
+            reason: "gateway or queue health degraded",
+          },
+          task_execution: { status: "ok", checked_at: now, last_ok_at: now },
+          degraded_at: now,
+        },
+        details: { pid: process.pid },
+      })
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, "runtime", "health", "components.json"),
+      JSON.stringify({
+        checked_at: now,
+        components: {
+          gateway: "degraded",
+          queue: "ok",
+          leases: "ok",
+          approval: "ok",
+          outbox: "ok",
+          supervisor: "ok",
+        },
+      })
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, "tasks", "goal-kpi", "ledger", "task-1.json"),
+      JSON.stringify({
+        task_id: "task-1",
+        goal_id: "goal-kpi",
+        events: [
+          { type: "acked", ts: new Date(now - 5_000).toISOString() },
+          { type: "started", ts: new Date(now - 4_000).toISOString() },
+          { type: "succeeded", ts: new Date(now - 1_000).toISOString() },
+        ],
+        summary: {
+          latest_event_type: "succeeded",
+          latencies: {
+            created_to_acked_ms: 1000,
+            acked_to_started_ms: 200,
+            started_to_completed_ms: 2500,
+            completed_to_verification_ms: 150,
+            created_to_completed_ms: 3700,
+          },
+        },
+      })
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, "daemon-state.json"),
+      JSON.stringify({
+        pid: process.pid,
+        started_at: new Date(now - 60_000).toISOString(),
+        last_loop_at: new Date(now).toISOString(),
+        loop_count: 2,
+        active_goals: ["goal-kpi"],
+        status: "running",
+        crash_count: 0,
+        last_error: null,
+      })
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, "pulseed.pid"),
+      JSON.stringify({
+        pid: process.pid,
+        runtime_pid: process.pid,
+        owner_pid: process.pid,
+        started_at: new Date(now).toISOString(),
+      })
+    );
+    const inspectSpy = mockPidInspectRunning(process.pid);
+
+    await cmdDaemonStatus([]);
+    inspectSpy.mockRestore();
+
+    const output = consoleSpy.mock.calls[0]?.[0] as string;
+    expect(output).toContain("Runtime health:");
+    expect(output).toContain("Process alive:");
+    expect(output).toContain("Accept command:");
+    expect(output).toContain("Execute task:");
+    expect(output).toContain("KPI snapshot:    process=up accept=down execute=up (degraded)");
+    expect(output).toContain("Degraded at:");
+    expect(output).toContain("Task KPIs:");
+    expect(output).toContain("Success rate:    1/1 (100.0%)");
+    expect(output).toContain("Ack latency:     p95 1.0s");
+  });
+
   it("shows idle status and watchdog PID when the daemon is running without goals", async () => {
     const runtimePid = process.pid;
     const watchdogPid = 424242;

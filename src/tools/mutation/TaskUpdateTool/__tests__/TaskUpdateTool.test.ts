@@ -158,6 +158,32 @@ describe("TaskUpdateTool", () => {
     expect(history[0]?.task_id).toBe("task-1");
   });
 
+  it("does not infer a succeeded ledger event for externally completed tasks without verification", async () => {
+    const tasksDir = path.join(tmpDir, "tasks", "goal-1");
+    fs.mkdirSync(tasksDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(tasksDir, "task-1.json"),
+      JSON.stringify(makeTaskJson("task-1", "goal-1", { status: "running", started_at: "2026-01-01T00:00:00.000Z" }))
+    );
+
+    const result = await tool.call(
+      {
+        goalId: "goal-1",
+        taskId: "task-1",
+        status: "completed",
+        completed_at: "2026-01-01T00:05:00.000Z",
+      },
+      makeContext()
+    );
+
+    expect(result.success).toBe(true);
+    const ledger = await fakeReadRaw(tmpDir, "tasks/goal-1/ledger/task-1.json") as Record<string, unknown>;
+    const events = ledger.events as Array<Record<string, unknown>>;
+    const summary = ledger.summary as Record<string, unknown>;
+    expect(events).toEqual([]);
+    expect(summary.latest_event_type).toBeNull();
+  });
+
   it("returns failure when task does not exist", async () => {
     const result = await tool.call({ goalId: "goal-1", taskId: "missing", status: "running" }, makeContext());
     expect(result.success).toBe(false);

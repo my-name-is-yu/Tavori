@@ -554,12 +554,14 @@ export class DaemonRunner {
       this.commandDispatcher = new CommandDispatcher({
         journalQueue: this.journalQueue!,
         logger: this.logger,
-        onGoalStart: async (goalId) => this.handleGoalStartCommand(goalId),
-        onGoalStop: async (goalId) => this.handleGoalStopCommand(goalId),
+        onGoalStart: async (goalId) =>
+          this.runCommandWithHealth("goal_start", () => this.handleGoalStartCommand(goalId)),
+        onGoalStop: async (goalId) =>
+          this.runCommandWithHealth("goal_stop", () => this.handleGoalStopCommand(goalId)),
         onChatMessage: async (goalId, message) =>
-          this.handleChatMessageCommand(goalId, message),
+          this.runCommandWithHealth("chat_message", () => this.handleChatMessageCommand(goalId, message)),
         onApprovalResponse: async (goalId, requestId, approved) =>
-          this.handleApprovalResponseCommand(goalId, requestId, approved),
+          this.runCommandWithHealth("approval_response", () => this.handleApprovalResponseCommand(goalId, requestId, approved)),
       });
     }
 
@@ -862,6 +864,10 @@ export class DaemonRunner {
   private handleLoopError(goalId: string, err: unknown): void {
     this.state.last_error = err instanceof Error ? err.message : String(err);
     this.state.crash_count++;
+    void this.runtimeOwnership.observeTaskExecution(
+      "failed",
+      `loop error for ${goalId}: ${this.state.last_error}`,
+    );
     this.logger.error(`Loop error for goal ${goalId}`, {
       error: this.state.last_error,
       crash_count: this.state.crash_count,
@@ -884,6 +890,7 @@ export class DaemonRunner {
   private async handleCriticalError(err: unknown): Promise<void> {
     const msg = err instanceof Error ? err.message : String(err);
     this.logger.error("Critical daemon error", { error: msg });
+    await this.runtimeOwnership.observeTaskExecution("failed", `critical daemon error: ${msg}`);
     this.state.status = "crashed";
     this.state.last_error = msg;
     await this.saveDaemonState();
@@ -1082,6 +1089,18 @@ export class DaemonRunner {
     this.currentLoopIndex = this.state.loop_count;
     this.state.last_loop_at = new Date().toISOString();
     await this.saveDaemonState();
+    await this.runtimeOwnership.observeTaskExecution(
+      result.status === "error"
+        ? "failed"
+        : result.status === "stalled"
+          ? "degraded"
+          : "ok",
+      result.status === "error"
+        ? `goal ${goalId} execution failed`
+        : result.status === "stalled"
+          ? `goal ${goalId} stalled`
+          : undefined,
+    );
 
     if (this.eventServer) {
       const goal = await this.stateManager.loadGoal(goalId).catch(() => null);
@@ -1519,6 +1538,21 @@ export class DaemonRunner {
     await writeChatMessageEvent(this.driveSystem, goalId, message);
     await this.broadcastChatResponse(goalId, message);
     this.abortSleep();
+  }
+
+  private async runCommandWithHealth<T>(commandName: string, fn: () => Promise<T>): Promise<T> {
+    try {
+      const result = await fn();
+      await this.runtimeOwnership.observeCommandAcceptance("ok");
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await this.runtimeOwnership.observeCommandAcceptance(
+        "failed",
+        `${commandName} failed: ${message}`,
+      );
+      throw error;
+    }
   }
 
   private async handleApprovalResponseCommand(

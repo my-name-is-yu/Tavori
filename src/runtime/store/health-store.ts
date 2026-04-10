@@ -3,6 +3,7 @@ import {
   RuntimeComponentsHealthSchema,
   RuntimeDaemonHealthSchema,
   RuntimeHealthSnapshotSchema,
+  evolveRuntimeHealthKpi,
   summarizeRuntimeHealthStatus,
   RuntimeHealthStatusSchema,
   type RuntimeComponentsHealth,
@@ -61,6 +62,7 @@ export class RuntimeHealthStore {
       leader: daemon.leader,
       checked_at: Math.max(daemon.checked_at, components.checked_at),
       components: components.components,
+      kpi: daemon.kpi,
       details: daemon.details,
     });
   }
@@ -72,6 +74,7 @@ export class RuntimeHealthStore {
         status: parsed.status,
         leader: parsed.leader,
         checked_at: parsed.checked_at,
+        kpi: parsed.kpi,
         details: parsed.details,
       }),
       this.saveComponentsHealth({
@@ -98,6 +101,7 @@ export class RuntimeHealthStore {
         leader: daemon.leader,
         checked_at: Math.max(daemon.checked_at, components.checked_at),
         components: components.components,
+        kpi: daemon.kpi,
         details: daemon.details,
       });
     }
@@ -120,6 +124,17 @@ export class RuntimeHealthStore {
         leader: daemon.leader,
         checked_at: now,
         components: degradedComponents.components,
+        kpi:
+          daemon.kpi ??
+          evolveRuntimeHealthKpi(null, {
+            process_alive: daemon.status === "failed" ? "failed" : "degraded",
+            command_acceptance: "degraded",
+            task_execution: "degraded",
+          }, now, {
+            process_alive: "repaired from missing components health",
+            command_acceptance: "repaired from missing components health",
+            task_execution: "repaired from missing components health",
+          }),
         details: {
           ...daemon.details,
           repaired: true,
@@ -133,6 +148,7 @@ export class RuntimeHealthStore {
           status: "degraded",
           leader: daemon.leader,
           checked_at: now,
+          kpi: degradedSnapshot.kpi,
           details: degradedSnapshot.details,
         }),
       ]);
@@ -145,6 +161,15 @@ export class RuntimeHealthStore {
         status,
         leader: false,
         checked_at: now,
+        kpi: evolveRuntimeHealthKpi(null, {
+          process_alive: "degraded",
+          command_acceptance: status,
+          task_execution: status,
+        }, now, {
+          process_alive: "repaired from missing daemon health",
+          command_acceptance: "repaired from missing daemon health",
+          task_execution: "repaired from missing daemon health",
+        }),
         details: {
           repaired: true,
           recovered_from: "missing_daemon_health",
@@ -156,6 +181,7 @@ export class RuntimeHealthStore {
         leader: repairedDaemon.leader,
         checked_at: Math.max(now, components.checked_at),
         components: components.components,
+        kpi: repairedDaemon.kpi,
         details: repairedDaemon.details,
       });
     }
@@ -165,6 +191,15 @@ export class RuntimeHealthStore {
       leader: false,
       checked_at: now,
       components: degradedComponents.components,
+      kpi: evolveRuntimeHealthKpi(null, {
+        process_alive: "degraded",
+        command_acceptance: "degraded",
+        task_execution: "degraded",
+      }, now, {
+        process_alive: "repaired from missing health snapshot",
+        command_acceptance: "repaired from missing health snapshot",
+        task_execution: "repaired from missing health snapshot",
+      }),
       details: {
         repaired: true,
         recovered_from: "missing_health_snapshot",

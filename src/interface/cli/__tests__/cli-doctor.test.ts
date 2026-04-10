@@ -265,7 +265,7 @@ describe("checkDaemon", () => {
     expect(result.detail).toContain("stale PID");
   });
 
-  it("passes when PID file references a running process (current process)", async () => {
+  it("warns when PID file references a running process but KPI telemetry is missing", async () => {
     fs.writeFileSync(path.join(tmpDir, "pulseed.pid"), String(process.pid));
     const inspectSpy = vi.spyOn(PIDManager.prototype, "inspect").mockResolvedValue({
       info: {
@@ -284,11 +284,12 @@ describe("checkDaemon", () => {
     });
     const result = await checkDaemon(tmpDir);
     inspectSpy.mockRestore();
-    expect(result.status).toBe("pass");
+    expect(result.status).toBe("warn");
     expect(result.detail).toContain("running");
+    expect(result.detail).toContain("KPI telemetry unavailable");
   });
 
-  it("passes when PID file is JSON format and references running process", async () => {
+  it("warns when PID file is JSON format and references running process without KPI telemetry", async () => {
     fs.writeFileSync(path.join(tmpDir, "pulseed.pid"), JSON.stringify({ pid: process.pid }));
     const inspectSpy = vi.spyOn(PIDManager.prototype, "inspect").mockResolvedValue({
       info: {
@@ -307,8 +308,9 @@ describe("checkDaemon", () => {
     });
     const result = await checkDaemon(tmpDir);
     inspectSpy.mockRestore();
-    expect(result.status).toBe("pass");
+    expect(result.status).toBe("warn");
     expect(result.detail).toContain("running");
+    expect(result.detail).toContain("KPI telemetry unavailable");
   });
 
   it("fails when the watchdog is alive but the runtime child is dead", async () => {
@@ -413,9 +415,105 @@ describe("checkDaemon", () => {
 
     const result = await checkDaemon(tmpDir);
     inspectSpy.mockRestore();
-    expect(result.status).toBe("pass");
+    expect(result.status).toBe("warn");
     expect(result.detail).toContain("idle daemon running");
     expect(result.detail).toContain(`PID: ${process.pid}`);
+    expect(result.detail).toContain("KPI telemetry unavailable");
+  });
+
+  it("warns when runtime KPI reports degraded command acceptance", async () => {
+    const now = Date.now();
+    fs.mkdirSync(path.join(tmpDir, "runtime", "health"), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, "tasks", "goal-1", "ledger"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, "runtime", "health", "daemon.json"),
+      JSON.stringify({
+        status: "degraded",
+        leader: true,
+        checked_at: now,
+        kpi: {
+          process_alive: { status: "ok", checked_at: now, last_ok_at: now },
+          command_acceptance: {
+            status: "degraded",
+            checked_at: now,
+            last_degraded_at: now,
+            reason: "gateway or queue health degraded",
+          },
+          task_execution: { status: "ok", checked_at: now, last_ok_at: now },
+          degraded_at: now,
+        },
+        details: { pid: process.pid },
+      })
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, "runtime", "health", "components.json"),
+      JSON.stringify({
+        checked_at: now,
+        components: {
+          gateway: "degraded",
+          queue: "ok",
+          leases: "ok",
+          approval: "ok",
+          outbox: "ok",
+          supervisor: "ok",
+        },
+      })
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, "tasks", "goal-1", "ledger", "task-1.json"),
+      JSON.stringify({
+        task_id: "task-1",
+        goal_id: "goal-1",
+        events: [
+          { type: "acked", ts: new Date(now - 6_000).toISOString() },
+          { type: "started", ts: new Date(now - 5_000).toISOString() },
+          { type: "succeeded", ts: new Date(now - 1_000).toISOString() },
+        ],
+        summary: {
+          latest_event_type: "succeeded",
+          latencies: {
+            created_to_acked_ms: 800,
+            acked_to_started_ms: 100,
+            started_to_completed_ms: 3200,
+            completed_to_verification_ms: 100,
+            created_to_completed_ms: 4100,
+          },
+        },
+      })
+    );
+    fs.writeFileSync(
+      path.join(tmpDir, "pulseed.pid"),
+      JSON.stringify({
+        pid: process.pid,
+        runtime_pid: process.pid,
+        owner_pid: process.pid,
+        started_at: new Date().toISOString(),
+      })
+    );
+    const inspectSpy = vi.spyOn(PIDManager.prototype, "inspect").mockResolvedValue({
+      info: {
+        pid: process.pid,
+        started_at: new Date().toISOString(),
+        owner_pid: process.pid,
+        runtime_pid: process.pid,
+      },
+      running: true,
+      runtimePid: process.pid,
+      ownerPid: process.pid,
+      alivePids: [process.pid],
+      stalePids: [],
+      verifiedPids: [process.pid],
+      unverifiedLegacyPids: [],
+    });
+
+    const result = await checkDaemon(tmpDir);
+    inspectSpy.mockRestore();
+
+    expect(result.status).toBe("warn");
+    expect(result.detail).toContain("KPI process=up accept=down execute=up (degraded)");
+    expect(result.detail).toContain("degraded");
+    expect(result.detail).toContain("task success=1/1 (100.0%)");
+    expect(result.detail).toContain("total p95=4.1s");
   });
 });
 

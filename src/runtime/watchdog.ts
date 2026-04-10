@@ -213,12 +213,18 @@ export class RuntimeWatchdog {
               typeof daemonHealth.details["pid"] === "number"
                 ? (daemonHealth.details["pid"] as number)
                 : undefined;
+            const processKpi = daemonHealth?.kpi?.process_alive;
+            const heartbeatCheckedAt = processKpi?.checked_at ?? daemonHealth?.checked_at ?? 0;
+            const processAliveHealthy =
+              daemonHealth !== null &&
+              (processKpi?.status === "ok" || processKpi === undefined);
 
             const heartbeatFresh =
               daemonHealth !== null &&
               daemonHealth.leader === true &&
               healthPid === expectedPid &&
-              now - daemonHealth.checked_at <= this.heartbeatTimeoutMs;
+              processAliveHealthy &&
+              now - heartbeatCheckedAt <= this.heartbeatTimeoutMs;
 
             const leaderFresh =
               leaderLock !== null &&

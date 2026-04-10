@@ -6,10 +6,19 @@ import { getPulseedDirPath, getLogsDir, getGoalsDir } from "../../../base/utils/
 import { execFileNoThrow } from "../../../base/utils/execFileNoThrow.js";
 import { getCliRunnerBuildPath } from "../../../base/utils/pulseed-meta.js";
 import { readJsonFileOrNull } from "../../../base/utils/json-io.js";
+import { DaemonConfigSchema } from "../../../base/types/daemon.js";
 import { PIDManager } from "../../../runtime/pid-manager.js";
-import { ApprovalStore, OutboxStore, RuntimeHealthStore, createRuntimeStorePaths } from "../../../runtime/store/index.js";
+import {
+  ApprovalStore,
+  OutboxStore,
+  RuntimeHealthStore,
+  compactRuntimeHealthKpi,
+  createRuntimeStorePaths,
+  type RuntimeHealthKpi,
+} from "../../../runtime/store/index.js";
 import { runRuntimeStoreMaintenanceCycle, type RuntimeMaintenanceLogger } from "../../../runtime/daemon/maintenance.js";
 import { DaemonStateSchema } from "../../../runtime/types/daemon.js";
+import { summarizeTaskOutcomeLedgers } from "../../../orchestrator/execution/task/task-outcome-ledger.js";
 
 // ─── Types ───
 
@@ -19,6 +28,51 @@ export interface CheckResult {
   name: string;
   status: CheckStatus;
   detail: string;
+}
+
+function resolveDaemonRuntimeRoot(baseDir: string, configuredRoot?: string): string {
+  if (!configuredRoot || configuredRoot.trim() === "") {
+    return path.join(baseDir, "runtime");
+  }
+  return path.isAbsolute(configuredRoot)
+    ? configuredRoot
+    : path.resolve(baseDir, configuredRoot);
+}
+
+async function loadDaemonConfig(baseDir: string) {
+  const configPath = path.join(baseDir, "daemon.json");
+  const legacyConfigPath = path.join(baseDir, "daemon-config.json");
+  const configRaw =
+    (await readJsonFileOrNull(configPath)) ??
+    (await readJsonFileOrNull(legacyConfigPath));
+  const parsed = configRaw !== null ? DaemonConfigSchema.safeParse(configRaw) : null;
+  return parsed?.success ? parsed.data : DaemonConfigSchema.parse({});
+}
+
+function formatRelativeTimestamp(timestamp: number): string {
+  const ms = Date.now() - timestamp;
+  if (ms < 60000) return `${Math.floor(ms / 1000)}s ago`;
+  if (ms < 3600000) return `${Math.floor(ms / 60000)}m ago`;
+  if (ms < 86400000) return `${Math.floor(ms / 3600000)}h ago`;
+  return `${Math.floor(ms / 86400000)}d ago`;
+}
+
+function formatCompactKpiDetail(kpi: RuntimeHealthKpi): string {
+  const compact = compactRuntimeHealthKpi(kpi);
+  if (!compact) {
+    return "KPI unavailable";
+  }
+  return `KPI process=${compact.process_alive ? "up" : "down"} accept=${compact.can_accept_command ? "up" : "down"} execute=${compact.can_execute_task ? "up" : "down"} (${compact.status})`;
+}
+
+function formatDurationMs(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${(ms / 60_000).toFixed(1)}m`;
+}
+
+function formatPercent(value: number | null): string {
+  return value === null ? "n/a" : `${(value * 100).toFixed(1)}%`;
 }
 
 // ─── Individual checks ───
@@ -150,6 +204,9 @@ export async function checkDaemon(baseDir?: string): Promise<CheckResult> {
   const pidManager = new PIDManager(dir);
   const pidFileExists = fs.existsSync(pidManager.getPath());
   const pidStatus = await pidManager.inspect();
+  const daemonConfig = await loadDaemonConfig(dir);
+  const runtimeRoot = resolveDaemonRuntimeRoot(dir, daemonConfig.runtime_root);
+  const runtimeHealth = await new RuntimeHealthStore(runtimeRoot).loadSnapshot();
   const daemonStateRaw = await readJsonFileOrNull(path.join(dir, "daemon-state.json"));
   const daemonState = daemonStateRaw !== null
     ? DaemonStateSchema.safeParse(daemonStateRaw)
@@ -169,6 +226,20 @@ export async function checkDaemon(baseDir?: string): Promise<CheckResult> {
   const runtimeAlive = typeof runtimePid === "number" && pidStatus.alivePids.includes(runtimePid);
   const watchdogAlive = typeof watchdogPid === "number" && pidStatus.alivePids.includes(watchdogPid);
   const runtimeState = daemonState?.success ? daemonState.data.status : null;
+  const runtimeKpi = runtimeHealth?.kpi;
+  const kpiSummary = runtimeKpi ? formatCompactKpiDetail(runtimeKpi) : null;
+  const healthStatus = runtimeKpi
+    ? compactRuntimeHealthKpi(runtimeKpi)?.status ?? "degraded"
+    : "degraded";
+  const taskKpis = await summarizeTaskOutcomeLedgers(dir);
+  const taskSummary =
+    taskKpis.total_tasks > 0
+      ? `task success=${taskKpis.succeeded}/${taskKpis.terminal_tasks} (${formatPercent(taskKpis.success_rate)}), retry=${taskKpis.retried}/${taskKpis.total_tasks} (${formatPercent(taskKpis.retry_rate)})${
+          taskKpis.p95_created_to_completed_ms !== null
+            ? `, total p95=${formatDurationMs(taskKpis.p95_created_to_completed_ms)}`
+            : ""
+        }`
+      : null;
 
   if (runtimeState === "crashed" || runtimeState === "stopping") {
     return {
@@ -176,8 +247,8 @@ export async function checkDaemon(baseDir?: string): Promise<CheckResult> {
       status: "fail",
       detail:
         runtimeState === "crashed"
-          ? "daemon state reports crashed"
-          : "daemon state reports stopping",
+          ? `daemon state reports crashed${kpiSummary ? `; ${kpiSummary}` : ""}`
+          : `daemon state reports stopping${kpiSummary ? `; ${kpiSummary}` : ""}`,
     };
   }
 
@@ -216,7 +287,20 @@ export async function checkDaemon(baseDir?: string): Promise<CheckResult> {
     watchdogPid && watchdogPid !== runtimePid
       ? `${detailPrefix}, watchdog PID: ${watchdogPid}`
       : detailPrefix;
-  return { name: "Daemon", status: "pass", detail };
+  const detailWithHealth = kpiSummary
+    ? `${detail}; ${kpiSummary}${
+        runtimeKpi?.degraded_at !== undefined
+          ? `; degraded ${formatRelativeTimestamp(runtimeKpi.degraded_at)}`
+          : runtimeKpi?.recovered_at !== undefined
+            ? `; recovered ${formatRelativeTimestamp(runtimeKpi.recovered_at)}`
+            : ""
+      }${taskSummary ? `; ${taskSummary}` : ""}`
+    : `${detail}; KPI telemetry unavailable${taskSummary ? `; ${taskSummary}` : ""}`;
+  return {
+    name: "Daemon",
+    status: healthStatus === "failed" ? "fail" : healthStatus === "degraded" ? "warn" : "pass",
+    detail: detailWithHealth,
+  };
 }
 
 export function checkNotifications(baseDir?: string): CheckResult {

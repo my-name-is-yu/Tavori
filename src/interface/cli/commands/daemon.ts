@@ -20,6 +20,7 @@ import { ScheduleEngine } from "../../../runtime/schedule/engine.js";
 import { RuntimeWatchdog } from "../../../runtime/watchdog.js";
 import { LeaderLockManager } from "../../../runtime/leader-lock-manager.js";
 import { RuntimeHealthStore } from "../../../runtime/store/index.js";
+import { compactRuntimeHealthKpi, type RuntimeHealthKpi } from "../../../runtime/store/index.js";
 import { PluginLoader } from "../../../runtime/plugin-loader.js";
 import { NotifierRegistry } from "../../../runtime/notifier-registry.js";
 import { NotificationDispatcher } from "../../../runtime/notification-dispatcher.js";
@@ -30,6 +31,7 @@ import { buildDeps } from "../setup.js";
 import { formatOperationError } from "../utils.js";
 import { getCliLogger } from "../cli-logger.js";
 import { getPulseedDirPath, getLogsDir } from "../../../base/utils/paths.js";
+import { summarizeTaskOutcomeLedgers } from "../../../orchestrator/execution/task/task-outcome-ledger.js";
 
 const WATCHDOG_CHILD_ENV = "PULSEED_WATCHDOG_CHILD";
 
@@ -318,6 +320,40 @@ function formatRelativeTime(isoDate: string): string {
   return `${Math.floor(ms / 86400000)}d ago`;
 }
 
+function formatRelativeTimestamp(timestamp: number): string {
+  return formatRelativeTime(new Date(timestamp).toISOString());
+}
+
+function formatDurationMs(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+  return `${(ms / 60_000).toFixed(1)}m`;
+}
+
+function formatPercent(value: number | null): string {
+  return value === null ? "n/a" : `${(value * 100).toFixed(1)}%`;
+}
+
+type RuntimeHealthCapabilityKey = "process_alive" | "command_acceptance" | "task_execution";
+
+function formatCapabilityLabel(
+  label: string,
+  kpi: RuntimeHealthKpi,
+  key: RuntimeHealthCapabilityKey
+): string {
+  const capability = kpi[key];
+  const reason = capability.reason ? `, ${capability.reason}` : "";
+  return `${label.padEnd(16)} ${capability.status} (${formatRelativeTimestamp(capability.checked_at)}${reason})`;
+}
+
+function formatKpiCompactLine(kpi: RuntimeHealthKpi): string {
+  const compact = compactRuntimeHealthKpi(kpi);
+  if (!compact) {
+    return "KPI snapshot:    unavailable";
+  }
+  return `KPI snapshot:    process=${compact.process_alive ? "up" : "down"} accept=${compact.can_accept_command ? "up" : "down"} execute=${compact.can_execute_task ? "up" : "down"} (${compact.status})`;
+}
+
 function isPidAlive(pidStatus: Awaited<ReturnType<PIDManager["inspect"]>>, pid?: number | null): boolean {
   return typeof pid === "number" && pidStatus.alivePids.includes(pid);
 }
@@ -365,6 +401,9 @@ export async function cmdDaemonStatus(_args: string[]): Promise<void> {
     (await readJsonFileOrNull(legacyConfigPath));
   const configParsed = configRaw !== null ? DaemonConfigSchema.safeParse(configRaw) : null;
   const cfg = configParsed?.success ? configParsed.data : DaemonConfigSchema.parse({});
+  const runtimeRoot = resolveDaemonRuntimeRoot(baseDir, cfg.runtime_root);
+  const runtimeHealth = await new RuntimeHealthStore(runtimeRoot).loadSnapshot();
+  const taskKpis = await summarizeTaskOutcomeLedgers(baseDir);
 
   const status =
     !resolvedRuntimeAlive
@@ -411,6 +450,48 @@ export async function cmdDaemonStatus(_args: string[]): Promise<void> {
     lines.push(`Resident note:   ${data.resident_activity.summary}`);
     if (data.resident_activity.goal_id) {
       lines.push(`Resident goal:   ${data.resident_activity.goal_id}`);
+    }
+  }
+
+  if (runtimeHealth?.kpi) {
+    lines.push("");
+    lines.push("Runtime health:");
+    lines.push(`  ${formatCapabilityLabel("Process alive:", runtimeHealth.kpi, "process_alive")}`);
+    lines.push(`  ${formatCapabilityLabel("Accept command:", runtimeHealth.kpi, "command_acceptance")}`);
+    lines.push(`  ${formatCapabilityLabel("Execute task:", runtimeHealth.kpi, "task_execution")}`);
+    lines.push(`  ${formatKpiCompactLine(runtimeHealth.kpi)}`);
+    if (runtimeHealth.kpi.degraded_at !== undefined) {
+      lines.push(
+        `  Degraded at:     ${new Date(runtimeHealth.kpi.degraded_at).toISOString()} (${formatRelativeTimestamp(runtimeHealth.kpi.degraded_at)})`
+      );
+    }
+    if (runtimeHealth.kpi.recovered_at !== undefined) {
+      lines.push(
+        `  Recovered at:    ${new Date(runtimeHealth.kpi.recovered_at).toISOString()} (${formatRelativeTimestamp(runtimeHealth.kpi.recovered_at)})`
+      );
+    }
+  }
+
+  if (taskKpis.total_tasks > 0) {
+    lines.push("");
+    lines.push("Task KPIs:");
+    lines.push(
+      `  Success rate:    ${taskKpis.succeeded}/${taskKpis.terminal_tasks} (${formatPercent(taskKpis.success_rate)})`
+    );
+    lines.push(
+      `  Retry rate:      ${taskKpis.retried}/${taskKpis.total_tasks} (${formatPercent(taskKpis.retry_rate)})`
+    );
+    lines.push(
+      `  Abandoned rate:  ${taskKpis.abandoned}/${taskKpis.terminal_tasks} (${formatPercent(taskKpis.abandoned_rate)})`
+    );
+    if (taskKpis.p95_created_to_acked_ms !== null) {
+      lines.push(`  Ack latency:     p95 ${formatDurationMs(taskKpis.p95_created_to_acked_ms)}`);
+    }
+    if (taskKpis.p95_started_to_completed_ms !== null) {
+      lines.push(`  Run latency:     p95 ${formatDurationMs(taskKpis.p95_started_to_completed_ms)}`);
+    }
+    if (taskKpis.p95_created_to_completed_ms !== null) {
+      lines.push(`  Total latency:   p95 ${formatDurationMs(taskKpis.p95_created_to_completed_ms)}`);
     }
   }
 

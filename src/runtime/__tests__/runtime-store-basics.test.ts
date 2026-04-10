@@ -18,7 +18,10 @@ import {
 import {
   RuntimeEnvelopeSchema,
   RuntimeQueueRecordSchema,
+  compactRuntimeHealthKpi,
+  evolveRuntimeHealthKpi,
   summarizeRuntimeHealthStatus,
+  summarizeRuntimeHealthKpi,
 } from "../store/runtime-schemas.js";
 
 describe("runtime store basics", () => {
@@ -138,5 +141,33 @@ describe("runtime store basics", () => {
     expect(summarizeRuntimeHealthStatus({ gateway: "ok", queue: "ok" })).toBe("ok");
     expect(summarizeRuntimeHealthStatus({ gateway: "ok", queue: "degraded" })).toBe("degraded");
     expect(summarizeRuntimeHealthStatus({ gateway: "ok", queue: "failed" })).toBe("failed");
+  });
+
+  it("tracks KPI degradation and recovery transitions", () => {
+    const degraded = evolveRuntimeHealthKpi(null, {
+      process_alive: "ok",
+      command_acceptance: "degraded",
+      task_execution: "ok",
+    }, 100, {
+      command_acceptance: "queue degraded",
+    });
+    expect(summarizeRuntimeHealthKpi(degraded)).toBe("degraded");
+    expect(degraded.degraded_at).toBe(100);
+    expect(degraded.command_acceptance.reason).toBe("queue degraded");
+
+    const recovered = evolveRuntimeHealthKpi(degraded, {
+      process_alive: "ok",
+      command_acceptance: "ok",
+      task_execution: "ok",
+    }, 250);
+    expect(summarizeRuntimeHealthKpi(recovered)).toBe("ok");
+    expect(recovered.degraded_at).toBe(100);
+    expect(recovered.recovered_at).toBe(250);
+    expect(compactRuntimeHealthKpi(recovered)).toMatchObject({
+      status: "ok",
+      process_alive: true,
+      can_accept_command: true,
+      can_execute_task: true,
+    });
   });
 });

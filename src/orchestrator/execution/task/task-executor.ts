@@ -5,6 +5,7 @@ import type { AgentTask, AgentResult, IAdapter } from "../adapter-layer.js";
 import type { Task } from "../../../base/types/task.js";
 import { TaskSchema } from "../../../base/types/task.js";
 import type { Strategy } from "../../../base/types/strategy.js";
+import { appendTaskOutcomeEvent } from "./task-outcome-ledger.js";
 const DEBUG = process.env.PULSEED_DEBUG === "true";
 
 // ─── Deps interface ───
@@ -124,6 +125,11 @@ export async function executeTask(
   // Update task status to running
   const runningTask = { ...task, status: "running" as const, started_at: new Date().toISOString() };
   await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, runningTask);
+  await appendTaskOutcomeEvent(stateManager, {
+    task: runningTask,
+    type: "started",
+    attempt: task.consecutive_failure_count + 1,
+  });
 
   // Execute
   let result: AgentResult;
