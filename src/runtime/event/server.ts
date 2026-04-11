@@ -26,6 +26,8 @@ export interface EventServerConfig {
   triggerMapper?: TriggerMapper;
   approvalBroker?: ApprovalBroker;
   outboxStore?: OutboxStore;
+  eventFileMaxAttempts?: number;
+  eventFileRetryDelayMs?: number;
 }
 
 export interface EventServerSnapshot {
@@ -41,6 +43,8 @@ type ActiveWorkersProvider = () =>
   | Promise<Array<Record<string, unknown>>>;
 
 const DAEMON_TOKEN_FILENAME = "daemon-token.json";
+const DEFAULT_EVENT_FILE_MAX_ATTEMPTS = 3;
+const DEFAULT_EVENT_FILE_RETRY_DELAY_MS = 250;
 
 export class EventServer {
   private server: http.Server | null = null;
@@ -59,6 +63,10 @@ export class EventServer {
   private approvalQueue: Map<string, { resolve: (approved: boolean) => void; timer: ReturnType<typeof setTimeout> }> = new Map();
   private approvalBroker?: ApprovalBroker;
   private outboxStore?: OutboxStore;
+  private readonly eventFileMaxAttempts: number;
+  private readonly eventFileRetryDelayMs: number;
+  private readonly eventFileAttempts = new Map<string, number>();
+  private readonly eventFileRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly authToken: string;
   private envelopeHook?: (eventData: Record<string, unknown>) => void | Promise<void>;
   private commandEnvelopeHook?: (envelope: Envelope) => void | Promise<void>;
@@ -75,6 +83,8 @@ export class EventServer {
     this.triggerMapper = config?.triggerMapper;
     this.approvalBroker = config?.approvalBroker;
     this.outboxStore = config?.outboxStore;
+    this.eventFileMaxAttempts = Math.max(1, config?.eventFileMaxAttempts ?? DEFAULT_EVENT_FILE_MAX_ATTEMPTS);
+    this.eventFileRetryDelayMs = Math.max(0, config?.eventFileRetryDelayMs ?? DEFAULT_EVENT_FILE_RETRY_DELAY_MS);
     this.authToken = randomBytes(32).toString("base64url");
     this.snapshotReader = new EventServerSnapshotReader(this.eventsDir);
     this.sseManager = new EventServerSseManager(this.logger, this.approvalBroker, this.outboxStore);
@@ -161,25 +171,11 @@ export class EventServer {
     if (this.fileWatcher) return; // already watching
 
     fs.mkdirSync(this.eventsDir, { recursive: true });
+    void this.rescanEventFiles();
 
     this.fileWatcher = fs.watch(this.eventsDir, (eventType, filename) => {
       if ((eventType !== "rename" && eventType !== "change") || !filename) return;
-      if (!filename.endsWith(".json") || filename.endsWith(".tmp")) return;
-
-      const filePath = path.join(this.eventsDir, filename);
-      if (this.processingFiles.has(filename)) return;
-      this.processingFiles.add(filename);
-      void (async () => {
-        try {
-          await this.processEventFile(filePath, filename);
-        } catch (err) {
-          this.logger?.error(
-            `EventServer: unhandled error processing event file "${filename}": ${String(err)}`
-          );
-        } finally {
-          this.processingFiles.delete(filename);
-        }
-      })();
+      this.queueEventFile(String(filename));
     });
   }
 
@@ -189,6 +185,10 @@ export class EventServer {
       this.fileWatcher.close();
       this.fileWatcher = null;
     }
+    for (const timer of this.eventFileRetryTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.eventFileRetryTimers.clear();
   }
 
   /**
@@ -196,54 +196,141 @@ export class EventServer {
    * Errors are logged but never propagated (caller must not crash).
    */
   private async processEventFile(filePath: string, filename: string): Promise<void> {
+    let stat;
     try {
-      let stat;
-      try {
-        // Retry on ENOENT: on macOS, fs.watch fires 'rename' before the file
-        // is visible to fsp.stat, so retry up to 3 times with 20ms delay.
-        let lastErr: unknown;
-        for (let attempt = 0; attempt < 3; attempt++) {
-          try {
-            stat = await fsp.stat(filePath);
-            break;
-          } catch (err) {
-            const code = (err as NodeJS.ErrnoException).code;
-            if (code !== "ENOENT") throw err;
-            lastErr = err;
-            await new Promise((r) => setTimeout(r, 20));
-          }
+      // Retry on ENOENT: on macOS, fs.watch fires 'rename' before the file
+      // is visible to fsp.stat, so retry up to 3 times with 20ms delay.
+      let lastErr: unknown;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          stat = await fsp.stat(filePath);
+          break;
+        } catch (err) {
+          const code = (err as NodeJS.ErrnoException).code;
+          if (code !== "ENOENT") throw err;
+          lastErr = err;
+          await new Promise((r) => setTimeout(r, 20));
         }
-        if (!stat) {
-          // File never appeared — already removed
-          void lastErr; // suppress unused warning
-          return;
+      }
+      if (!stat) {
+        // File never appeared — already removed
+        void lastErr; // suppress unused warning
+        return;
+      }
+    } catch {
+      return; // non-ENOENT error — file already removed or inaccessible
+    }
+    if (!stat.isFile()) return;
+
+    const content = await fsp.readFile(filePath, "utf-8");
+    const raw = JSON.parse(content) as unknown;
+    const event = PulSeedEventSchema.parse(raw);
+
+    // Dispatch through Gateway Envelope path or direct
+    if (this.envelopeHook) {
+      await this.envelopeHook(event as unknown as Record<string, unknown>);
+    } else {
+      await this.driveSystem.writeEvent(event);
+    }
+
+    // Move to processed/
+    const processedDir = path.join(this.eventsDir, "processed");
+    await fsp.mkdir(processedDir, { recursive: true });
+    const dstPath = path.join(processedDir, filename);
+    await fsp.rename(filePath, dstPath);
+    this.eventFileAttempts.delete(filename);
+  }
+
+  private async rescanEventFiles(): Promise<void> {
+    let entries: string[];
+    try {
+      entries = await fsp.readdir(this.eventsDir);
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      this.queueEventFile(entry);
+    }
+  }
+
+  private queueEventFile(filename: string, delayMs = 0): void {
+    if (!this.shouldProcessEventFilename(filename)) return;
+    if (this.eventFileRetryTimers.has(filename)) return;
+    if (delayMs <= 0 && this.processingFiles.has(filename)) return;
+
+    const run = (): void => {
+      this.eventFileRetryTimers.delete(filename);
+      if (this.processingFiles.has(filename)) return;
+      this.processingFiles.add(filename);
+      const filePath = path.join(this.eventsDir, filename);
+      void (async () => {
+        try {
+          await this.processEventFile(filePath, filename);
+        } catch (err) {
+          await this.handleEventFileFailure(filePath, filename, err);
+        } finally {
+          this.processingFiles.delete(filename);
         }
-      } catch {
-        return; // non-ENOENT error — file already removed or inaccessible
-      }
-      if (!stat.isFile()) return;
+      })();
+    };
 
-      const content = await fsp.readFile(filePath, "utf-8");
-      const raw = JSON.parse(content) as unknown;
-      const event = PulSeedEventSchema.parse(raw);
+    if (delayMs <= 0) {
+      run();
+      return;
+    }
 
-      // Dispatch through Gateway Envelope path or direct
-      if (this.envelopeHook) {
-        await this.envelopeHook(event as unknown as Record<string, unknown>);
-      } else {
-        await this.driveSystem.writeEvent(event);
-      }
+    const timer = setTimeout(run, delayMs);
+    timer.unref?.();
+    this.eventFileRetryTimers.set(filename, timer);
+  }
 
-      // Move to processed/
-      const processedDir = path.join(this.eventsDir, "processed");
-      await fsp.mkdir(processedDir, { recursive: true });
-      const dstPath = path.join(processedDir, filename);
-      await fsp.rename(filePath, dstPath);
-    } catch (err) {
-      this.logger?.error(
-        `EventServer: failed to process event file "${filename}": ${String(err)}`
+  private shouldProcessEventFilename(filename: string): boolean {
+    if (path.basename(filename) !== filename) return false;
+    if (!filename.endsWith(".json") || filename.endsWith(".tmp")) return false;
+    return filename !== "daemon-token.json";
+  }
+
+  private async handleEventFileFailure(
+    filePath: string,
+    filename: string,
+    err: unknown
+  ): Promise<void> {
+    const attempt = (this.eventFileAttempts.get(filename) ?? 0) + 1;
+    this.eventFileAttempts.set(filename, attempt);
+    const message = err instanceof Error ? err.message : String(err);
+
+    if (attempt < this.eventFileMaxAttempts) {
+      this.logger?.warn(
+        `EventServer: failed to process event file "${filename}", retrying (${attempt}/${this.eventFileMaxAttempts}): ${message}`
       );
-      // Do not re-throw — watcher must keep running
+      this.queueEventFile(filename, this.eventFileRetryDelayMs);
+      return;
+    }
+
+    this.logger?.error(
+      `EventServer: failed to process event file "${filename}" after ${attempt} attempts; moving to failed/: ${message}`
+    );
+    this.eventFileAttempts.delete(filename);
+    await this.moveFailedEventFile(filePath, filename);
+  }
+
+  private async moveFailedEventFile(filePath: string, filename: string): Promise<void> {
+    try {
+      const failedDir = path.join(this.eventsDir, "failed");
+      await fsp.mkdir(failedDir, { recursive: true });
+      let dstPath = path.join(failedDir, filename);
+      try {
+        await fsp.access(dstPath);
+        const parsed = path.parse(filename);
+        dstPath = path.join(failedDir, `${parsed.name}-${Date.now()}${parsed.ext}`);
+      } catch {
+        // Destination is free.
+      }
+      await fsp.rename(filePath, dstPath);
+    } catch (moveErr) {
+      this.logger?.error(
+        `EventServer: failed to quarantine event file "${filename}": ${String(moveErr)}`
+      );
     }
   }
 

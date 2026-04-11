@@ -27,6 +27,18 @@ export interface RuntimeWatchdogOptions {
   restartBackoffMs?: number;
   maxRestartBackoffMs?: number;
   childShutdownGraceMs?: number;
+  restartStormWindowMs?: number;
+  maxUnhealthyRestartsInWindow?: number;
+  onCircuitOpen?: (details: WatchdogCircuitOpenDetails) => Promise<void> | void;
+}
+
+export interface WatchdogCircuitOpenDetails extends Record<string, unknown> {
+  reason: ChildExitResult["reason"];
+  restartCount: number;
+  windowMs: number;
+  pid?: number;
+  code: number | null;
+  signal: NodeJS.Signals | null;
 }
 
 interface ChildExitResult {
@@ -42,6 +54,8 @@ const DEFAULT_STARTUP_GRACE_MS = 20_000;
 const DEFAULT_RESTART_BACKOFF_MS = 1_000;
 const DEFAULT_MAX_RESTART_BACKOFF_MS = 30_000;
 const DEFAULT_CHILD_SHUTDOWN_GRACE_MS = 5_000;
+const DEFAULT_RESTART_STORM_WINDOW_MS = 5 * 60_000;
+const DEFAULT_MAX_UNHEALTHY_RESTARTS_IN_WINDOW = 5;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -61,6 +75,9 @@ export class RuntimeWatchdog {
   private readonly restartBackoffMs: number;
   private readonly maxRestartBackoffMs: number;
   private readonly childShutdownGraceMs: number;
+  private readonly restartStormWindowMs: number;
+  private readonly maxUnhealthyRestartsInWindow: number;
+  private readonly onCircuitOpen?: (details: WatchdogCircuitOpenDetails) => Promise<void> | void;
   private currentChild: WatchdogChildProcess | null = null;
   private running = false;
   private stopping = false;
@@ -80,6 +97,12 @@ export class RuntimeWatchdog {
     this.maxRestartBackoffMs = options.maxRestartBackoffMs ?? DEFAULT_MAX_RESTART_BACKOFF_MS;
     this.childShutdownGraceMs =
       options.childShutdownGraceMs ?? DEFAULT_CHILD_SHUTDOWN_GRACE_MS;
+    this.restartStormWindowMs = Math.max(1, options.restartStormWindowMs ?? DEFAULT_RESTART_STORM_WINDOW_MS);
+    this.maxUnhealthyRestartsInWindow = Math.max(
+      1,
+      options.maxUnhealthyRestartsInWindow ?? DEFAULT_MAX_UNHEALTHY_RESTARTS_IN_WINDOW
+    );
+    this.onCircuitOpen = options.onCircuitOpen;
   }
 
   async start(): Promise<void> {
@@ -96,6 +119,7 @@ export class RuntimeWatchdog {
     this.running = true;
     this.stopping = false;
     let restartDelayMs = this.restartBackoffMs;
+    let unhealthyRestartTimestamps: number[] = [];
 
     await this.pidManager.writePID({
       pid: process.pid,
@@ -123,9 +147,21 @@ export class RuntimeWatchdog {
           break;
         }
 
-        restartDelayMs = result.healthy
-          ? this.restartBackoffMs
-          : Math.min(restartDelayMs * 2, this.maxRestartBackoffMs);
+        if (result.healthy) {
+          unhealthyRestartTimestamps = [];
+          restartDelayMs = this.restartBackoffMs;
+        } else {
+          const now = Date.now();
+          unhealthyRestartTimestamps = [
+            ...unhealthyRestartTimestamps.filter((timestamp) => now - timestamp <= this.restartStormWindowMs),
+            now,
+          ];
+          if (unhealthyRestartTimestamps.length >= this.maxUnhealthyRestartsInWindow) {
+            await this.tripCircuitBreaker(result, child, unhealthyRestartTimestamps.length);
+            break;
+          }
+          restartDelayMs = Math.min(restartDelayMs * 2, this.maxRestartBackoffMs);
+        }
 
         this.logger.warn("Watchdog restarting daemon child", {
           pid: child.pid,
@@ -141,6 +177,33 @@ export class RuntimeWatchdog {
       this.running = false;
       await this.pidManager.cleanup();
     }
+  }
+
+  private async tripCircuitBreaker(
+    result: ChildExitResult,
+    child: WatchdogChildProcess,
+    restartCount: number
+  ): Promise<void> {
+    this.stopping = true;
+    const details: WatchdogCircuitOpenDetails = {
+      reason: result.reason,
+      restartCount,
+      windowMs: this.restartStormWindowMs,
+      pid: child.pid,
+      code: result.code,
+      signal: result.signal,
+    };
+    this.logger.error("Watchdog circuit breaker opened after restart storm", details);
+    await this.healthStore.saveDaemonHealth({
+      status: "failed",
+      leader: false,
+      checked_at: Date.now(),
+      details: {
+        circuit_reason: "watchdog_circuit_open",
+        ...details,
+      },
+    });
+    await this.onCircuitOpen?.(details);
   }
 
   stop(): void {

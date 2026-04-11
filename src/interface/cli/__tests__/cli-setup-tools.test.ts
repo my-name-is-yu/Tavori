@@ -68,6 +68,8 @@ describe("CLI buildDeps tool wiring", () => {
     expect(coreLoopDeps["toolExecutor"]).toBe(deps.toolExecutor);
     expect(coreLoopDeps["toolRegistry"]).toBe(deps.toolRegistry);
     expect(coreLoopDeps["learningPipeline"]).toBe(deps.learningPipeline);
+    expect(coreLoopDeps["portfolioManager"]).toBe(deps.portfolioManager);
+    expect(coreLoopDeps["crossGoalPortfolio"]).toBe(deps.crossGoalPortfolio);
     expect((coreLoopDeps["observationEngine"] as { toolExecutor?: unknown }).toolExecutor).toBe(deps.toolExecutor);
     expect((coreLoopDeps["taskLifecycle"] as { toolExecutor?: unknown }).toolExecutor).toBe(deps.toolExecutor);
     expect((coreLoopDeps["taskLifecycle"] as { knowledgeTransfer?: unknown }).knowledgeTransfer).toBe(deps.knowledgeTransfer);

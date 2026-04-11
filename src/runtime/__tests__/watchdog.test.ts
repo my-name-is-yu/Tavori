@@ -282,4 +282,59 @@ describe("RuntimeWatchdog", () => {
       vi.useRealTimers();
     }
   }, 15_000);
+
+  it("opens the circuit breaker instead of restarting forever during a restart storm", async () => {
+    tmpDir = makeTempDir();
+    const runtimeRoot = path.join(tmpDir, "runtime");
+    const pidManager = new PIDManager(tmpDir);
+    const healthStore = new RuntimeHealthStore(runtimeRoot);
+    const leaderLockManager = new LeaderLockManager(runtimeRoot, 60);
+    await healthStore.ensureReady();
+
+    const children: FakeChildProcess[] = [];
+    const onCircuitOpen = vi.fn();
+    const logger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+    };
+    const watchdog = new RuntimeWatchdog({
+      pidManager,
+      healthStore,
+      leaderLockManager,
+      logger,
+      startChild: () => {
+        const child = new FakeChildProcess(40_000 + children.length);
+        children.push(child);
+        queueMicrotask(() => child.emit("exit", 1, null));
+        return child;
+      },
+      pollIntervalMs: 20,
+      heartbeatTimeoutMs: 50,
+      startupGraceMs: 0,
+      restartBackoffMs: 1,
+      maxRestartBackoffMs: 1,
+      childShutdownGraceMs: 1,
+      restartStormWindowMs: 1_000,
+      maxUnhealthyRestartsInWindow: 2,
+      onCircuitOpen,
+    });
+
+    await watchdog.start();
+
+    expect(children).toHaveLength(2);
+    expect(onCircuitOpen).toHaveBeenCalledOnce();
+    expect(logger.error).toHaveBeenCalledWith(
+      "Watchdog circuit breaker opened after restart storm",
+      expect.objectContaining({ restartCount: 2 })
+    );
+    expect(await healthStore.loadDaemonHealth()).toEqual(
+      expect.objectContaining({
+        status: "failed",
+        leader: false,
+        details: expect.objectContaining({ circuit_reason: "watchdog_circuit_open" }),
+      })
+    );
+    expect(fs.existsSync(pidManager.getPath())).toBe(false);
+  });
 });

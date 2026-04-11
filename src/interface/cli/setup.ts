@@ -27,6 +27,8 @@ import { SatisficingJudge } from "../../platform/drive/satisficing-judge.js";
 import { EthicsGate } from "../../platform/traits/ethics-gate.js";
 import { SessionManager } from "../../orchestrator/execution/session-manager.js";
 import { StrategyManager } from "../../orchestrator/strategy/strategy-manager.js";
+import { PortfolioManager } from "../../orchestrator/strategy/portfolio-manager.js";
+import { CrossGoalPortfolio } from "../../orchestrator/strategy/cross-goal-portfolio.js";
 import { GoalNegotiator } from "../../orchestrator/goal/goal-negotiator.js";
 import { TaskLifecycle } from "../../orchestrator/execution/task/task-lifecycle.js";
 import { ReportingEngine } from "../../reporting/reporting-engine.js";
@@ -220,6 +222,7 @@ export async function buildDeps(
   const sessionManager = new SessionManager(stateManager, goalDependencyGraph);
   const strategyManager = new StrategyManager(stateManager, llmClient);
   strategyManager.setToolExecutor?.(toolExecutor);
+  const portfolioManager = new PortfolioManager(strategyManager, stateManager);
 
   const reportingEngine = new ReportingEngine(stateManager, undefined, characterConfig);
 
@@ -271,6 +274,14 @@ export async function buildDeps(
     vectorIndex,
     embeddingClient,
   );
+  const crossGoalPortfolio = vectorIndex
+    ? new CrossGoalPortfolio(
+        stateManager,
+        goalDependencyGraph,
+        vectorIndex,
+        embeddingClient,
+      )
+    : undefined;
   const learningPipeline = new LearningPipeline(
     llmClient,
     vectorIndex ?? null,
@@ -359,6 +370,7 @@ export async function buildDeps(
     satisficingJudge,
     stallDetector,
     strategyManager,
+    portfolioManager,
     reportingEngine,
     driveSystem,
     adapterRegistry,
@@ -366,6 +378,7 @@ export async function buildDeps(
     stateAggregator,
     treeLoopOrchestrator,
     goalDependencyGraph,
+    crossGoalPortfolio,
     memoryLifecycleManager,
     driveScoreAdapter,
     knowledgeManager,
@@ -402,6 +415,8 @@ export async function buildDeps(
     hookManager,
     memoryLifecycleManager,
     knowledgeManager,
+    portfolioManager,
+    crossGoalPortfolio,
     learningPipeline,
     knowledgeTransfer,
     toolExecutor,

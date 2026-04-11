@@ -121,6 +121,18 @@ describe("events directory creation", () => {
 // ─── File watcher detects new JSON files ───
 
 describe("file watcher — detects new JSON files", () => {
+  it("rescans and processes existing JSON files when the watcher starts", { timeout: 10000 }, async () => {
+    const eventsDir = path.join(tmpDir, "events");
+    fs.mkdirSync(eventsDir, { recursive: true });
+    writeEventFile(eventsDir, "existing.json", validEvent);
+
+    server.startFileWatcher();
+
+    await waitFor(() => mockDriveSystem.writeEvent.mock.calls.length > 0, 8000);
+    expect(mockDriveSystem.writeEvent).toHaveBeenCalledOnce();
+    expect(fs.existsSync(path.join(eventsDir, "processed", "existing.json"))).toBe(true);
+  });
+
   it("calls driveSystem.writeEvent when a valid JSON file appears", { timeout: 10000 }, async () => {
     const eventsDir = path.join(tmpDir, "events");
     server.startFileWatcher();
@@ -225,6 +237,25 @@ describe("file watcher — processed files are moved to processed/", () => {
 // ─── Malformed files — graceful handling ───
 
 describe("file watcher — malformed files handled gracefully", () => {
+  it("retries dispatch failures and quarantines the event file", { timeout: 10000 }, async () => {
+    server.stopFileWatcher();
+    mockDriveSystem.writeEvent.mockRejectedValue(new Error("drive unavailable"));
+    server = new EventServer(mockDriveSystem as never, {
+      eventsDir: path.join(tmpDir, "events"),
+      eventFileMaxAttempts: 3,
+      eventFileRetryDelayMs: 20,
+    });
+    const eventsDir = path.join(tmpDir, "events");
+    server.startFileWatcher();
+    await waitForWatcherReady();
+
+    writeEventFile(eventsDir, "dispatch_failure.json", validEvent);
+
+    await waitFor(() => fs.existsSync(path.join(eventsDir, "failed", "dispatch_failure.json")), 8000);
+    expect(mockDriveSystem.writeEvent).toHaveBeenCalledTimes(3);
+    expect(fs.existsSync(path.join(eventsDir, "dispatch_failure.json"))).toBe(false);
+  });
+
   it("does not crash when a JSON file contains invalid JSON", async () => {
     const eventsDir = path.join(tmpDir, "events");
     server.startFileWatcher();
