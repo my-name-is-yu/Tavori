@@ -388,6 +388,23 @@ describe("TaskLifecycle", async () => {
       expect(result).toBe("large_gap");
     });
 
+    it("applies failure backoff when selecting among dimensions", () => {
+      const llm = createMockLLMClient([]);
+      const lifecycle = createLifecycle(llm);
+
+      const gapVector = makeGapVector("goal-1", [
+        { name: "recovering", gap: 0.9 },
+        { name: "alternative", gap: 0.5 },
+      ]);
+      const context = makeDriveContext(["recovering", "alternative"]);
+
+      const result = lifecycle.selectTargetDimension(gapVector, context, undefined, {
+        backoffByDimension: { recovering: 0.2 },
+      });
+
+      expect(result).toBe("alternative");
+    });
+
     it("independent_review beats self_report at equal gap", () => {
       const llm = createMockLLMClient([]);
       const lifecycle = createLifecycle(llm);

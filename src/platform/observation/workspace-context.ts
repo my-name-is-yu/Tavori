@@ -12,7 +12,7 @@ export interface WorkspaceContextOptions {
   maxFiles?: number;       // default: 5
   maxCharsPerFile?: number; // default: 4000
   externalFileMaxBytes?: number; // default: 10240 (10KB)
-  cacheTtlMs?: number; // default: 30000
+  cacheTtlMs?: number; // default: 0 (disabled to avoid stale daemon task context)
 }
 
 const ALLOWED_EXTERNAL_PREFIXES = [os.homedir(), "/tmp"];
@@ -160,7 +160,7 @@ export function createWorkspaceContextProvider(
     maxFiles = 15,
     maxCharsPerFile = 6000,
     externalFileMaxBytes = 10240,
-    cacheTtlMs = 30_000,
+    cacheTtlMs = 0,
   } = options;
   const cache = new Map<string, { value: string; expiresAt: number }>();
 
@@ -179,9 +179,11 @@ export function createWorkspaceContextProvider(
     }
 
     const cacheKey = `${effectiveWorkDir}\u0000${goalId}\u0000${dimensionName}`;
-    const cached = cache.get(cacheKey);
-    if (cached && cached.expiresAt > Date.now()) {
-      return cached.value;
+    if (cacheTtlMs > 0) {
+      const cached = cache.get(cacheKey);
+      if (cached && cached.expiresAt > Date.now()) {
+        return cached.value;
+      }
     }
 
     const parts: string[] = [`# Workspace: ${effectiveWorkDir}`];
@@ -243,7 +245,9 @@ export function createWorkspaceContextProvider(
         }
       }
       const result = parts.join("\n\n");
-      cache.set(cacheKey, { value: result, expiresAt: Date.now() + cacheTtlMs });
+      if (cacheTtlMs > 0) {
+        cache.set(cacheKey, { value: result, expiresAt: Date.now() + cacheTtlMs });
+      }
       return result;
     }
 
@@ -361,7 +365,9 @@ export function createWorkspaceContextProvider(
     }
 
     const result = parts.join("\n\n");
-    cache.set(cacheKey, { value: result, expiresAt: Date.now() + cacheTtlMs });
+    if (cacheTtlMs > 0) {
+      cache.set(cacheKey, { value: result, expiresAt: Date.now() + cacheTtlMs });
+    }
     return result;
   };
 }

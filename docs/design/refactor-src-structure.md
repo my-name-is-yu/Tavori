@@ -21,7 +21,6 @@ src/
 │   │   ├── claude-code-cli.ts
 │   │   ├── claude-api.ts
 │   │   ├── openai-codex.ts
-│   │   ├── browser-use-cli.ts
 │   │   ├── openclaw-acp.ts
 │   │   ├── a2a-adapter.ts
 │   │   ├── a2a-client.ts

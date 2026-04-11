@@ -16,7 +16,6 @@ import { ClaudeAPIAdapter } from "../../adapters/agents/claude-api.js";
 import { OpenAICodexCLIAdapter } from "../../adapters/agents/openai-codex.js";
 import { GitHubIssueAdapter } from "../../adapters/github-issue.js";
 import { A2AAdapter } from "../../adapters/agents/a2a-adapter.js";
-import { BrowserUseCLIAdapter } from "../../adapters/agents/browser-use-cli.js";
 import type { ProviderConfig } from "./provider-config.js";
 
 type OpenClawACPAdapterCtor = new (config: {
@@ -125,8 +124,8 @@ export async function buildLLMClient(): Promise<ILLMClient> {
 
 /**
  * Build an AdapterRegistry pre-populated with the standard adapters.
- * Registers ClaudeCodeCLIAdapter, ClaudeAPIAdapter, OpenAICodexCLIAdapter, GitHubIssueAdapter,
- * and any A2A agents configured in provider config or environment variables.
+ * Registers core execution adapters and any A2A agents configured in provider
+ * config or environment variables.
  */
 export async function buildAdapterRegistry(
   llmClient: ILLMClient,
@@ -137,7 +136,6 @@ export async function buildAdapterRegistry(
   registry.register(new ClaudeAPIAdapter(llmClient));
   registry.register(new OpenAICodexCLIAdapter());
   registry.register(new GitHubIssueAdapter());
-  registry.register(new BrowserUseCLIAdapter());
 
   // Register A2A agents from config
   const config = providerConfig ?? await loadProviderConfig();

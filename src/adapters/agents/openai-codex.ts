@@ -12,7 +12,8 @@
 //   - `-s danger-full-access` sets sandbox policy to allow full disk/command access
 //   - `-m <model>` selects the model (e.g. "o4-mini", "o3")
 //   - When [PROMPT] arg is omitted (or `-` is given), prompt is read from stdin
-//   - NOTE: --full-auto does NOT exist in this version; use sandbox policy instead
+//   - --skip-git-repo-check allows execution in temporary/synced worktrees that
+//     are not in Codex's trusted directory list.
 
 import type { IAdapter, AgentTask, AgentResult } from "../../orchestrator/execution/adapter-layer.js";
 import type { Logger } from "../../runtime/logger.js";
@@ -31,6 +32,8 @@ export interface OpenAICodexCLIAdapterConfig {
   model?: string;
   /** Repository path passed to Codex for workspace-aware execution. Default: "." */
   repoPath?: string;
+  /** Pass --skip-git-repo-check. Default: true for daemon/test workspaces. */
+  skipGitRepoCheck?: boolean;
 }
 
 export class OpenAICodexCLIAdapter implements IAdapter {
@@ -41,6 +44,7 @@ export class OpenAICodexCLIAdapter implements IAdapter {
   private readonly sandboxPolicy: string | null;
   private readonly model: string | undefined;
   private readonly repoPath: string;
+  private readonly skipGitRepoCheck: boolean;
   private readonly logger?: Logger;
 
   constructor(config: OpenAICodexCLIAdapterConfig = {}, logger?: Logger) {
@@ -49,6 +53,7 @@ export class OpenAICodexCLIAdapter implements IAdapter {
       config.sandboxPolicy !== undefined ? config.sandboxPolicy : "danger-full-access";
     this.model = config.model;
     this.repoPath = config.repoPath?.trim() || ".";
+    this.skipGitRepoCheck = config.skipGitRepoCheck ?? true;
     this.logger = logger;
   }
 
@@ -65,6 +70,10 @@ export class OpenAICodexCLIAdapter implements IAdapter {
 
     if (this.model) {
       spawnArgs.push("-m", this.model);
+    }
+
+    if (this.skipGitRepoCheck) {
+      spawnArgs.push("--skip-git-repo-check");
     }
 
     // allowed_tools: codex-cli does not have a native tool-restriction flag.

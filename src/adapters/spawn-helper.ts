@@ -3,9 +3,9 @@
 // Shared helper for adapter files that spawn a child process, accumulate
 // stdout/stderr, and enforce a timeout.
 //
-// The `settle()` double-resolve guard (adapted from browser-use-cli.ts) is
-// used internally so callers never receive two results even when Node.js emits
-// both `error` and `close` on a spawn failure (ENOENT).
+// The `settle()` double-resolve guard ensures callers never receive two
+// results even when Node.js emits both `error` and `close` on a spawn failure
+// (ENOENT).
 
 import { spawn } from "node:child_process";
 import type { AgentResult } from "../orchestrator/execution/adapter-layer.js";

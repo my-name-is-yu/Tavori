@@ -19,7 +19,7 @@ Set a goal. Seedy takes it from there — observing, planning, delegating to AI 
 ## What Can Seedy Do?
 
 - **Track long-term goals with real measurable progress** — "Increase test coverage to 90%," "Double monthly revenue," "Keep my dog healthy." Seedy decomposes goals into dimensions, measures each one, and keeps going.
-- **Delegate work to any AI agent** — Claude Code, OpenAI Codex, Browser Use, or your own custom adapter. Swap agents without changing goals.
+- **Delegate work to AI coding agents** — Claude Code, OpenAI Codex, OpenClaw, or your own custom adapter. Swap agents without changing goals.
 - **Know when to stop** — Seedy applies satisficing: when every dimension crosses its threshold with enough evidence, the goal is complete. No infinite loops. No premature exits.
 - **Stay safe** — Irreversible actions always need your approval. Trust is asymmetric: one failure costs more than three successes earn.
 
@@ -83,7 +83,6 @@ Deep dive: [Architecture Map](docs/architecture-map.md) | [How it works](docs/me
 | `openclaw_gateway` | OpenClaw Gateway | Goal detection, agent orchestration |
 | `claude_code_cli` | CLI | Code execution, file operations |
 | `openai_codex_cli` | CLI | Code execution, file operations |
-| `browser_use_cli` | CLI | Web browsing, scraping |
 | `claude_api` | LLM API | Text generation, analysis |
 | `github_issue` | REST API | Issue creation, search |
 | `a2a` | A2A Protocol | Remote agent delegation |

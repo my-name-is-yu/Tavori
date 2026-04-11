@@ -59,6 +59,8 @@ export interface VerifierDeps {
   trustManager: TrustManager;
   stallDetector: StallDetector;
   adapterRegistry?: AdapterRegistry;
+  /** Prefer this adapter for mechanical verification when available. */
+  preferredAdapterType?: string;
   logger?: Logger;
   onTaskComplete?: (strategyId: string) => void;
   durationToMs: (duration: { value: number; unit: string }) => number;

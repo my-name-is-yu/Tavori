@@ -6,7 +6,7 @@ import { SessionManager } from "../session-manager.js";
 import { TrustManager } from "../../../platform/traits/trust-manager.js";
 import { StrategyManager } from "../../strategy/strategy-manager.js";
 import { StallDetector } from "../../../platform/drive/stall-detector.js";
-import { TaskLifecycle } from "../task/task-lifecycle.js";
+import { AdapterRegistry, TaskLifecycle } from "../task/task-lifecycle.js";
 import type { Task } from "../../../base/types/task.js";
 import type {
   ILLMClient,
@@ -223,6 +223,173 @@ describe("TaskLifecycle", async () => {
       // L1 applicable (MVP auto-pass) + L2 pass → pass with high confidence
       expect(verification.verdict).toBe("pass");
       expect(verification.confidence).toBeGreaterThanOrEqual(0.8);
+    });
+
+    it("L1 applicable for direct file-check command prefixes", async () => {
+      const llm = createMockLLMClient([LLM_REVIEW_PASS]);
+      const lifecycle = createLifecycle(llm);
+      const task = makeTask({
+        success_criteria: [
+          {
+            description: "File contains recovery code",
+            verification_method: "rg -n \"recovery\" src/runtime/daemon/runner.ts",
+            is_blocking: true,
+          },
+        ],
+      });
+      const result = makeExecutionResult();
+
+      const verification = await lifecycle.verifyTask(task, result);
+      expect(verification.verdict).toBe("pass");
+      expect(verification.confidence).toBeGreaterThanOrEqual(0.8);
+    });
+
+    it("uses the preferred execution adapter for mechanical verification", async () => {
+      const llm = createMockLLMClient([LLM_REVIEW_PASS]);
+      const registry = new AdapterRegistry();
+      let fallbackAdapterCalls = 0;
+      let codexCalls = 0;
+      registry.register({
+        adapterType: "fallback_external_cli",
+        async execute() {
+          fallbackAdapterCalls += 1;
+          return {
+            success: false,
+            output: "",
+            error: "fallback adapter should not run",
+            exit_code: 1,
+            elapsed_ms: 1,
+            stopped_reason: "error",
+          };
+        },
+      });
+      registry.register({
+        adapterType: "openai_codex_cli",
+        async execute() {
+          codexCalls += 1;
+          return {
+            success: true,
+            output: "ok",
+            error: null,
+            exit_code: 0,
+            elapsed_ms: 1,
+            stopped_reason: "completed",
+          };
+        },
+      });
+      const lifecycle = createLifecycle(llm, { adapterRegistry: registry });
+      const task = makeTask({
+        success_criteria: [
+          {
+            description: "File contains recovery code",
+            verification_method: "rg -n \"recovery\" src/runtime/daemon/runner.ts",
+            is_blocking: true,
+          },
+        ],
+      });
+
+      const verification = await lifecycle.verifyTask(
+        task,
+        makeExecutionResult(),
+        "openai_codex_cli"
+      );
+
+      expect(fallbackAdapterCalls).toBe(0);
+      expect(codexCalls).toBe(1);
+      expect(verification.verdict).toBe("pass");
+    });
+
+    it("runs all mechanical blocking criteria instead of passing on the first match", async () => {
+      const llm = createMockLLMClient([LLM_REVIEW_PASS]);
+      const registry = new AdapterRegistry();
+      const calls: string[] = [];
+      registry.register({
+        adapterType: "openai_codex_cli",
+        async execute(agentTask) {
+          calls.push(agentTask.prompt);
+          return {
+            success: calls.length === 1,
+            output: calls.length === 1 ? "ok" : "",
+            error: calls.length === 1 ? null : "second criterion failed",
+            exit_code: calls.length === 1 ? 0 : 1,
+            elapsed_ms: 1,
+            stopped_reason: calls.length === 1 ? "completed" : "error",
+          };
+        },
+      });
+      const lifecycle = createLifecycle(llm, { adapterRegistry: registry });
+      const task = makeTask({
+        success_criteria: [
+          {
+            description: "Runtime file contains recovery code",
+            verification_method: "rg -n \"recovery\" src/runtime/watchdog.ts",
+            is_blocking: true,
+          },
+          {
+            description: "Runtime test contains recovery coverage",
+            verification_method: "rg -n \"recovery\" src/runtime/__tests__/watchdog.test.ts",
+            is_blocking: true,
+          },
+        ],
+      });
+
+      const verification = await lifecycle.verifyTask(
+        task,
+        makeExecutionResult(),
+        "openai_codex_cli"
+      );
+
+      expect(calls).toEqual([
+        "rg -n \"recovery\" src/runtime/watchdog.ts",
+        "rg -n \"recovery\" src/runtime/__tests__/watchdog.test.ts",
+      ]);
+      expect(verification.verdict).toBe("fail");
+      expect(verification.evidence[0]?.description).toContain("1/2 command(s)");
+    });
+
+    it("does not let non-blocking mechanical criteria override passing blocking review", async () => {
+      const llm = createMockLLMClient([LLM_REVIEW_PASS]);
+      const registry = new AdapterRegistry();
+      let calls = 0;
+      registry.register({
+        adapterType: "openai_codex_cli",
+        async execute() {
+          calls += 1;
+          return {
+            success: false,
+            output: "",
+            error: "supporting check failed",
+            exit_code: 1,
+            elapsed_ms: 1,
+            stopped_reason: "error",
+          };
+        },
+      });
+      const lifecycle = createLifecycle(llm, { adapterRegistry: registry });
+      const task = makeTask({
+        success_criteria: [
+          {
+            description: "Behavior is correct",
+            verification_method: "Independent review confirms behavior",
+            is_blocking: true,
+          },
+          {
+            description: "Supporting grep evidence",
+            verification_method: "rg -n \"optional\" src/runtime/watchdog.ts",
+            is_blocking: false,
+          },
+        ],
+      });
+
+      const verification = await lifecycle.verifyTask(
+        task,
+        makeExecutionResult(),
+        "openai_codex_cli"
+      );
+
+      expect(calls).toBe(0);
+      expect(verification.verdict).toBe("pass");
+      expect(verification.confidence).toBeLessThanOrEqual(0.7);
     });
 
     it("L1 skip + L2 pass results in verdict pass with lower confidence", async () => {

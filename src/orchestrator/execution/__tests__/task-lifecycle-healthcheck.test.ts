@@ -174,6 +174,98 @@ describe("TaskLifecycle — post-execution health check", () => {
     expect(healthCheckSpy).not.toHaveBeenCalled();
   });
 
+  it("runTaskCycle does not run health check by default", async () => {
+    const VALID_TASK_RESPONSE = `\`\`\`json
+{
+  "work_description": "Add tests",
+  "rationale": "Improve coverage",
+  "approach": "Write vitest tests",
+  "success_criteria": [
+    {
+      "description": "Tests pass",
+      "verification_method": "integration test",
+      "is_blocking": true
+    }
+  ],
+  "scope_boundary": {
+    "in_scope": ["tests/"],
+    "out_of_scope": ["src/"],
+    "blast_radius": "tests only"
+  },
+  "constraints": [],
+  "reversibility": "reversible",
+  "estimated_duration": null
+}
+\`\`\``;
+    const LLM_REVIEW_PASS = '{"verdict": "pass", "reasoning": "All criteria satisfied", "criteria_met": 1, "criteria_total": 1}';
+    const llm = createMockLLMClient([VALID_TASK_RESPONSE, LLM_REVIEW_PASS]);
+    strategyManager = new StrategyManager(stateManager, llm);
+    stallDetector = new StallDetector(stateManager);
+    const lifecycle = new TaskLifecycle(
+      stateManager,
+      llm,
+      sessionManager,
+      trustManager,
+      strategyManager,
+      stallDetector,
+      { approvalFn: async () => true, execFileSyncFn: mockExecFileSync }
+    );
+    const healthCheckSpy = vi.spyOn(lifecycle, "runPostExecutionHealthCheck");
+
+    const now = new Date().toISOString();
+    await stateManager.writeRaw("goals/goal-default-health/goal.json", {
+      id: "goal-default-health",
+      title: "Default Health Check Goal",
+      status: "active",
+      dimensions: [
+        {
+          name: "coverage",
+          label: "Coverage",
+          current_value: 0.5,
+          threshold: { type: "min", value: 0.8 },
+          confidence: 0.8,
+          observation_method: { type: "mechanical", source: "test", schedule: null, endpoint: null, confidence_tier: "mechanical" },
+          last_updated: now,
+          history: [],
+          weight: 1.0,
+        },
+      ],
+      gap_aggregation: "max",
+      constraints: [],
+      children_ids: [],
+      created_at: now,
+      updated_at: now,
+    });
+
+    const result = await lifecycle.runTaskCycle(
+      "goal-default-health",
+      {
+        goal_id: "goal-default-health",
+        gaps: [
+          {
+            dimension_name: "coverage",
+            raw_gap: 0.5,
+            normalized_gap: 0.5,
+            normalized_weighted_gap: 0.5,
+            confidence: 0.8,
+            uncertainty_weight: 1.0,
+          },
+        ],
+        timestamp: now,
+      },
+      {
+        time_since_last_attempt: { coverage: 24 },
+        deadlines: { coverage: null },
+        opportunities: {},
+        pacing: {},
+      },
+      makeMockAdapter()
+    );
+
+    expect(healthCheckSpy).not.toHaveBeenCalled();
+    expect(result.action).toBe("completed");
+  });
+
   // ─────────────────────────────────────────────
   // 2. Health check runs when enabled and execution succeeds
   // ─────────────────────────────────────────────

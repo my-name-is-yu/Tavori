@@ -389,6 +389,68 @@ describe("TaskLifecycle", async () => {
 
       expect(result.task.primary_dimension).toBe("high_gap");
     });
+
+    it("backs off a recently failed dimension and selects the next best gap", async () => {
+      await stateManager.writeRaw("tasks/goal-1/task-history.json", [
+        {
+          task_id: "failed-task",
+          work_description: "Old failed runtime task",
+          status: "error",
+          primary_dimension: "high_gap",
+          consecutive_failure_count: 1,
+          verification_verdict: "fail",
+          completed_at: new Date().toISOString(),
+        },
+      ]);
+      const llm = createMockLLMClient([
+        VALID_TASK_RESPONSE,
+        LLM_REVIEW_PASS,
+      ]);
+      const lifecycle = createLifecycle(llm, {
+        approvalFn: async () => true,
+      });
+      const gapVector = makeGapVector("goal-1", [
+        { name: "next_gap", gap: 0.7 },
+        { name: "high_gap", gap: 0.9 },
+      ]);
+      const context = makeDriveContext(["next_gap", "high_gap"]);
+      const adapter = createMockAdapter([{ success: true }]);
+
+      const result = await lifecycle.runTaskCycle("goal-1", gapVector, context, adapter);
+
+      expect(result.task.primary_dimension).toBe("next_gap");
+    });
+
+    it("does not back off dimensions with recent completed pass history", async () => {
+      await stateManager.writeRaw("tasks/goal-1/task-history.json", [
+        {
+          task_id: "passed-task",
+          work_description: "Old passing runtime task",
+          status: "completed",
+          primary_dimension: "high_gap",
+          consecutive_failure_count: 0,
+          verification_verdict: "pass",
+          completed_at: new Date().toISOString(),
+        },
+      ]);
+      const llm = createMockLLMClient([
+        VALID_TASK_RESPONSE,
+        LLM_REVIEW_PASS,
+      ]);
+      const lifecycle = createLifecycle(llm, {
+        approvalFn: async () => true,
+      });
+      const gapVector = makeGapVector("goal-1", [
+        { name: "next_gap", gap: 0.7 },
+        { name: "high_gap", gap: 0.9 },
+      ]);
+      const context = makeDriveContext(["next_gap", "high_gap"]);
+      const adapter = createMockAdapter([{ success: true }]);
+
+      const result = await lifecycle.runTaskCycle("goal-1", gapVector, context, adapter);
+
+      expect(result.task.primary_dimension).toBe("high_gap");
+    });
   });
 
 });

@@ -1,5 +1,4 @@
 import * as fs from "node:fs";
-import * as fsp from "node:fs/promises";
 import * as path from "node:path";
 import { spawnSync } from "node:child_process";
 import { CoreLoop } from "../../orchestrator/loop/core-loop.js";
@@ -8,7 +7,6 @@ import type { GoalNegotiator } from "../../orchestrator/goal/goal-negotiator.js"
 import type { Goal } from "../../base/types/goal.js";
 import { DriveSystem } from "../../platform/drive/drive-system.js";
 import { StateManager } from "../../base/state/state-manager.js";
-import { TaskSchema, type Task } from "../../base/types/task.js";
 import { getProviderRuntimeFingerprint } from "../../base/llm/provider-config.js";
 import type { CuriosityEngine } from "../../platform/traits/curiosity-engine.js";
 import { PIDManager } from "../pid-manager.js";
@@ -26,7 +24,6 @@ import { DreamAnalyzer } from "../../platform/dream/dream-analyzer.js";
 import { DreamScheduleSuggestionStore } from "../../platform/dream/dream-schedule-suggestions.js";
 import type { DreamRunReport, DreamTier } from "../../platform/dream/dream-types.js";
 import { runDreamConsolidation } from "../../reflection/dream-consolidation.js";
-import { PipelineStateSchema } from "../../base/types/pipeline.js";
 import { generateCronEntry } from "./signals.js";
 import { rotateDaemonLog, calculateAdaptiveInterval as calcAdaptiveInterval } from "./health.js";
 import { IngressGateway, HttpChannelAdapter } from "../gateway/index.js";
@@ -49,6 +46,12 @@ import {
   ProcessShutdownCoordinator,
   startDaemonStatusHeartbeat,
 } from "./runner-lifecycle.js";
+import {
+  handleCriticalDaemonError,
+  handleDaemonLoopError,
+  runCommandWithHealth as runCommandWithHealthFn,
+} from "./runner-errors.js";
+import { reconcileInterruptedExecutions as reconcileInterruptedExecutionsFn } from "./runner-recovery.js";
 import type { ShutdownMarker } from "./index.js";
 import {
   checkCrashRecoveryMarker,
@@ -71,9 +74,6 @@ import {
   writeShutdownMarkerFile,
 } from "./index.js";
 import type { GoalCycleScheduleSnapshotEntry } from "./maintenance.js";
-import { appendTaskOutcomeEvent } from "../../orchestrator/execution/task/task-outcome-ledger.js";
-import { durationToMs } from "../../orchestrator/execution/task/task-executor.js";
-
 const RUNTIME_JOURNAL_MAX_ATTEMPTS = 1_000;
 
 function gatherResidentWorkspaceContext(workspaceDir: string, seedDescription?: string): string {
@@ -248,6 +248,8 @@ export class DaemonRunner {
   private shutdownCoordinator: ProcessShutdownCoordinator | null = null;
   private stopStatusHeartbeat: (() => void) | null = null;
   private lastRuntimeStoreMaintenanceAt = 0;
+  private startupRuntimeStoreMaintenancePromise: Promise<void> | null = null;
+  private startupRuntimeStoreMaintenanceError: unknown = null;
   private readonly deps: DaemonDeps;
   private runtimeRoot: string | null = null;
   private approvalStore: ApprovalStore | null = null;
@@ -374,7 +376,6 @@ export class DaemonRunner {
       await this.checkCrashRecovery();
       await this.initializeRuntimeFoundation();
       await this.acquireRuntimeLeadership();
-      await this.runRuntimeStoreMaintenance(true);
 
       // 2c. Start EventServer (always-on) and file watcher
       if (!this.eventServer) {
@@ -593,6 +594,7 @@ export class DaemonRunner {
         supervisor: this.supervisor ? "ok" : "degraded",
       }
     );
+    this.startStartupRuntimeStoreMaintenance();
 
     // 8. Run main loop — supervisor mode when supervisor is injected via deps,
     //    fallback to sequential runLoop otherwise.
@@ -651,7 +653,11 @@ export class DaemonRunner {
       }
     } catch (err) {
       if (!startupReady) {
-        await this.releaseStartupOwnership();
+        try {
+          await this.drainStartupRuntimeStoreMaintenance();
+        } finally {
+          await this.releaseStartupOwnership();
+        }
       }
       throw err;
     }
@@ -880,23 +886,16 @@ export class DaemonRunner {
    * Increments crash_count and stops daemon if max_retries exceeded.
    */
   private handleLoopError(goalId: string, err: unknown): void {
-    this.state.last_error = err instanceof Error ? err.message : String(err);
-    this.state.crash_count++;
-    void this.runtimeOwnership.observeTaskExecution(
-      "failed",
-      `loop error for ${goalId}: ${this.state.last_error}`,
-    );
-    this.logger.error(`Loop error for goal ${goalId}`, {
-      error: this.state.last_error,
-      crash_count: this.state.crash_count,
-      max_retries: this.config.crash_recovery.max_retries,
+    const { shouldStop } = handleDaemonLoopError({
+      goalId,
+      error: err,
+      state: this.state,
+      maxRetries: this.config.crash_recovery.max_retries,
+      logger: this.logger,
+      observeTaskExecution: (status, reason) =>
+        this.runtimeOwnership.observeTaskExecution(status, reason),
     });
-
-    // If crash count exceeds max_retries, stop daemon
-    if (this.state.crash_count >= this.config.crash_recovery.max_retries) {
-      this.logger.error(
-        `Max crash retries (${this.config.crash_recovery.max_retries}) exceeded, stopping daemon`
-      );
+    if (shouldStop) {
       this.running = false;
     }
   }
@@ -906,13 +905,14 @@ export class DaemonRunner {
    * Marks state as crashed and stops the loop.
    */
   private async handleCriticalError(err: unknown): Promise<void> {
-    const msg = err instanceof Error ? err.message : String(err);
-    this.logger.error("Critical daemon error", { error: msg });
-    await this.runtimeOwnership.observeTaskExecution("failed", `critical daemon error: ${msg}`);
-    this.state.status = "crashed";
-    this.state.last_error = msg;
-    this.state.interrupted_goals = [...this.state.active_goals];
-    await this.saveDaemonState();
+    await handleCriticalDaemonError({
+      error: err,
+      state: this.state,
+      logger: this.logger,
+      observeTaskExecution: (status, reason) =>
+        this.runtimeOwnership.observeTaskExecution(status, reason),
+      saveDaemonState: () => this.saveDaemonState(),
+    });
     this.running = false;
   }
 
@@ -935,156 +935,11 @@ export class DaemonRunner {
   }
 
   private async reconcileInterruptedExecutions(): Promise<string[]> {
-    const recoveredGoalIds = new Set<string>();
-    const now = new Date().toISOString();
-
-    for (const task of await this.findRunningTasks()) {
-      const recoveredTask: Task = TaskSchema.parse({
-        ...task,
-        status: "error",
-        completed_at: task.completed_at ?? now,
-        heartbeat_at: now,
-        execution_output: [
-          task.execution_output,
-          "[RECOVERED] Task execution was interrupted by daemon crash or restart before completion.",
-        ]
-          .filter((value): value is string => typeof value === "string" && value.length > 0)
-          .join("\n"),
-      });
-
-      await this.stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, recoveredTask);
-      await this.appendRecoveredTaskHistory(recoveredTask);
-      await appendTaskOutcomeEvent(this.stateManager, {
-        task: recoveredTask,
-        type: "failed",
-        attempt: Math.max(task.consecutive_failure_count + 1, 1),
-        reason: "task execution interrupted by daemon recovery",
-      });
-      await appendTaskOutcomeEvent(this.stateManager, {
-        task: recoveredTask,
-        type: "retried",
-        attempt: Math.max(task.consecutive_failure_count + 1, 1),
-        action: "keep",
-        reason: "daemon restarted; task preserved for retry",
-      });
-      recoveredGoalIds.add(task.goal_id);
-    }
-
-    await this.reconcileInterruptedPipelines(now);
-
-    if (recoveredGoalIds.size > 0) {
-      this.logger.warn("Recovered interrupted task executions on startup", {
-        goals: [...recoveredGoalIds],
-        count: recoveredGoalIds.size,
-      });
-    }
-
-    return [...recoveredGoalIds];
-  }
-
-  private async findRunningTasks(): Promise<Task[]> {
-    const tasksDir = path.join(this.baseDir, "tasks");
-    let goalDirs: fs.Dirent[];
-    try {
-      goalDirs = await fsp.readdir(tasksDir, { withFileTypes: true });
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-        return [];
-      }
-      throw err;
-    }
-
-    const runningTasks: Task[] = [];
-    for (const goalDir of goalDirs) {
-      if (!goalDir.isDirectory()) {
-        continue;
-      }
-
-      const goalTaskDir = path.join(tasksDir, goalDir.name);
-      let taskEntries: fs.Dirent[];
-      try {
-        taskEntries = await fsp.readdir(goalTaskDir, { withFileTypes: true });
-      } catch {
-        continue;
-      }
-
-      for (const entry of taskEntries) {
-        if (!entry.isFile() || !entry.name.endsWith(".json") || entry.name === "task-history.json") {
-          continue;
-        }
-
-        try {
-          const raw = await this.stateManager.readRaw(`tasks/${goalDir.name}/${entry.name}`);
-          if (!raw || typeof raw !== "object" || (raw as Record<string, unknown>).status !== "running") {
-            continue;
-          }
-          runningTasks.push(TaskSchema.parse(raw));
-        } catch {
-          // Ignore malformed task files during startup reconciliation.
-        }
-      }
-    }
-
-    return runningTasks;
-  }
-
-  private async appendRecoveredTaskHistory(task: Task): Promise<void> {
-    const historyPath = `tasks/${task.goal_id}/task-history.json`;
-    const existing = await this.stateManager.readRaw(historyPath);
-    const history = Array.isArray(existing) ? existing : [];
-    const actualElapsedMs =
-      task.started_at && task.completed_at
-        ? new Date(task.completed_at).getTime() - new Date(task.started_at).getTime()
-        : null;
-
-    history.push({
-      task_id: task.id,
-      status: task.status,
-      primary_dimension: task.primary_dimension,
-      consecutive_failure_count: task.consecutive_failure_count,
-      completed_at: task.completed_at ?? new Date().toISOString(),
-      actual_elapsed_ms: actualElapsedMs,
-      estimated_duration_ms: task.estimated_duration ? durationToMs(task.estimated_duration) : null,
+    return reconcileInterruptedExecutionsFn({
+      baseDir: this.baseDir,
+      stateManager: this.stateManager,
+      logger: this.logger,
     });
-    await this.stateManager.writeRaw(historyPath, history);
-  }
-
-  private async reconcileInterruptedPipelines(now: string): Promise<void> {
-    const pipelinesDir = path.join(this.baseDir, "pipelines");
-    let entries: string[];
-    try {
-      entries = await fsp.readdir(pipelinesDir);
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-        return;
-      }
-      throw err;
-    }
-
-    for (const entry of entries) {
-      if (!entry.endsWith(".json")) {
-        continue;
-      }
-
-      try {
-        const raw = await this.stateManager.readRaw(`pipelines/${entry}`);
-        if (!raw || typeof raw !== "object") {
-          continue;
-        }
-        const pipelineState = PipelineStateSchema.parse(raw);
-        if (pipelineState.status !== "running") {
-          continue;
-        }
-
-        await this.stateManager.writeRaw(`pipelines/${entry}`, {
-          ...pipelineState,
-          status: "interrupted",
-          updated_at: now,
-        });
-      } catch {
-        // Ignore malformed pipeline state during startup reconciliation.
-      }
-    }
   }
 
   // ─── Private: Cleanup ───
@@ -1094,6 +949,13 @@ export class DaemonRunner {
    * Also writes "clean_shutdown" marker to enable crash-vs-clean detection on next startup.
    */
   private async cleanup(): Promise<void> {
+    let startupMaintenanceError: unknown = null;
+    try {
+      await this.drainStartupRuntimeStoreMaintenance();
+    } catch (err) {
+      startupMaintenanceError = err;
+    }
+
     await cleanupDaemonRun({
       baseDir: this.baseDir,
       state: this.state,
@@ -1102,6 +964,10 @@ export class DaemonRunner {
       runtimeOwnership: this.runtimeOwnership,
       logger: this.logger,
     });
+
+    if (startupMaintenanceError) {
+      throw startupMaintenanceError;
+    }
   }
 
   private beginGracefulShutdown(): void {
@@ -1713,18 +1579,11 @@ export class DaemonRunner {
   }
 
   private async runCommandWithHealth<T>(commandName: string, fn: () => Promise<T>): Promise<T> {
-    try {
-      const result = await fn();
-      await this.runtimeOwnership.observeCommandAcceptance("ok");
-      return result;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      await this.runtimeOwnership.observeCommandAcceptance(
-        "failed",
-        `${commandName} failed: ${message}`,
-      );
-      throw error;
-    }
+    return runCommandWithHealthFn(
+      commandName,
+      fn,
+      (status, reason) => this.runtimeOwnership.observeCommandAcceptance(status, reason),
+    );
   }
 
   private async handleApprovalResponseCommand(
@@ -1775,6 +1634,36 @@ export class DaemonRunner {
       logger: this.logger,
       now,
     });
+  }
+
+  private startStartupRuntimeStoreMaintenance(): void {
+    if (this.startupRuntimeStoreMaintenancePromise) {
+      return;
+    }
+
+    this.startupRuntimeStoreMaintenanceError = null;
+    this.startupRuntimeStoreMaintenancePromise = this.runRuntimeStoreMaintenance(true)
+      .catch((err) => {
+        this.startupRuntimeStoreMaintenanceError = err;
+        this.logger.error("Startup runtime store maintenance failed", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+  }
+
+  private async drainStartupRuntimeStoreMaintenance(): Promise<void> {
+    const maintenancePromise = this.startupRuntimeStoreMaintenancePromise;
+    if (!maintenancePromise) {
+      return;
+    }
+
+    await maintenancePromise;
+    this.startupRuntimeStoreMaintenancePromise = null;
+    const maintenanceError = this.startupRuntimeStoreMaintenanceError;
+    this.startupRuntimeStoreMaintenanceError = null;
+    if (maintenanceError) {
+      throw maintenanceError;
+    }
   }
 
   // ─── Private: Proactive Tick ───

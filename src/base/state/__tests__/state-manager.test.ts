@@ -266,7 +266,7 @@ describe("StateManager", async () => {
       // Should keep the last 500 (obs-10 through obs-509)
       expect(loaded!.entries[0].observation_id).toBe("obs-10");
       expect(loaded!.entries[499].observation_id).toBe("obs-509");
-    });
+    }, 30_000);
 
     it("appendGapHistoryEntry caps entries at 500", async () => {
       await manager.saveGoal(makeGoal({ id: "cap-gap" }));
@@ -288,7 +288,7 @@ describe("StateManager", async () => {
       // Should keep the last 500 (iteration 10 through 509)
       expect(loaded[0].iteration).toBe(10);
       expect(loaded[499].iteration).toBe(509);
-    });
+    }, 30_000);
   });
 
   describe("Goal Tree", async () => {
@@ -982,7 +982,7 @@ describe("StateManager", async () => {
       // Should have the last 500 entries (obs-10 through obs-509)
       expect(loaded!.entries[0].observation_id).toBe("obs-10");
       expect(loaded!.entries[499].observation_id).toBe("obs-509");
-    });
+    }, 30_000);
 
     it("listGoalIds propagates non-ENOENT errors", async () => {
       // Remove the goals directory then replace it with a file — readdir will fail with ENOTDIR

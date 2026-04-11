@@ -67,7 +67,7 @@ describe("OpenAICodexCLIAdapter", () => {
   // ─── spawn args ───
 
   describe("spawn arguments", () => {
-    it("spawns codex with 'exec -s danger-full-access' and writes prompt to stdin", async () => {
+    it("spawns codex with sandbox and trusted-directory bypass flags, and writes prompt to stdin", async () => {
       const adapter = new OpenAICodexCLIAdapter();
       const child = makeFakeChild();
 
@@ -79,7 +79,7 @@ describe("OpenAICodexCLIAdapter", () => {
       const [cliPath, spawnArgs, opts] = mockSpawn.mock.calls[0] as [string, string[], { cwd: string }];
       expect(cliPath).toBe("codex");
       // Prompt must NOT appear in spawn args (would expose it in `ps aux`)
-      expect(spawnArgs).toEqual(["exec", "-s", "danger-full-access"]);
+      expect(spawnArgs).toEqual(["exec", "-s", "danger-full-access", "--skip-git-repo-check"]);
       expect(spawnArgs).not.toContain("run tests");
       expect(opts.cwd).toBe(".");
       // Prompt is delivered via stdin instead
@@ -140,8 +140,21 @@ describe("OpenAICodexCLIAdapter", () => {
       const [, spawnArgs] = mockSpawn.mock.calls[0] as [string, string[]];
       expect(spawnArgs).not.toContain("-s");
       // Prompt is not in args — it goes to stdin
-      expect(spawnArgs).toEqual(["exec"]);
+      expect(spawnArgs).toEqual(["exec", "--skip-git-repo-check"]);
       expect(child.stdin.write).toHaveBeenCalledWith("hi", "utf8");
+    });
+
+    it("omits --skip-git-repo-check when explicitly disabled", async () => {
+      const adapter = new OpenAICodexCLIAdapter({ skipGitRepoCheck: false });
+      const child = makeFakeChild();
+
+      const executePromise = adapter.execute(makeTask({ prompt: "hi" }));
+      child.emit("close", 0);
+      await executePromise;
+
+      const [, spawnArgs] = mockSpawn.mock.calls[0] as [string, string[]];
+      expect(spawnArgs).not.toContain("--skip-git-repo-check");
+      expect(spawnArgs).toEqual(["exec", "-s", "danger-full-access"]);
     });
   });
 

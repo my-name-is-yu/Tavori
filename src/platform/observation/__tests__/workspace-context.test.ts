@@ -463,7 +463,21 @@ describe("createWorkspaceContextProvider — caching", () => {
     fs.rmSync(tmpWorkDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
   });
 
-  it("reuses cached workspace context within the TTL", async () => {
+  it("refreshes workspace context by default to avoid stale task generation inputs", async () => {
+    const provider = createWorkspaceContextProvider(
+      { workDir: tmpWorkDir },
+      () => "Check quality"
+    );
+
+    const first = await provider("goal-cache-default", "quality");
+    fs.writeFileSync(path.join(tmpWorkDir, "README.md"), "# Second", "utf-8");
+
+    const second = await provider("goal-cache-default", "quality");
+    expect(first).toContain("# First");
+    expect(second).toContain("# Second");
+  });
+
+  it("reuses cached workspace context within the TTL when cacheTtlMs is configured", async () => {
     const provider = createWorkspaceContextProvider(
       { workDir: tmpWorkDir, cacheTtlMs: 30_000 },
       () => "Check quality"

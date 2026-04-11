@@ -77,6 +77,29 @@ const VALID_TASK_RESPONSE = `\`\`\`json
 }
 \`\`\``;
 
+const SECOND_VALID_TASK_RESPONSE = `\`\`\`json
+{
+  "work_description": "Write integration tests for the authorization module",
+  "rationale": "Improve behavior coverage for permission regressions",
+  "approach": "Use vitest to cover role-based access checks and denied requests",
+  "success_criteria": [
+    {
+      "description": "Authorization flows have integration coverage",
+      "verification_method": "Run vitest and check authorization test count",
+      "is_blocking": true
+    }
+  ],
+  "scope_boundary": {
+    "in_scope": ["authorization module tests"],
+    "out_of_scope": ["authorization module implementation changes"],
+    "blast_radius": "tests/ directory only"
+  },
+  "constraints": ["Must not modify production code"],
+  "reversibility": "reversible",
+  "estimated_duration": { "value": 2, "unit": "hours" }
+}
+\`\`\``;
+
 const LLM_REVIEW_PASS = '{"verdict": "pass", "reasoning": "All criteria satisfied", "criteria_met": 1, "criteria_total": 1}';
 
 function makeGapVector(
@@ -665,7 +688,7 @@ describe("TaskLifecycle", async () => {
       };
       const llm = createMockLLMClient([
         VALID_TASK_RESPONSE, LLM_REVIEW_PASS,
-        VALID_TASK_RESPONSE, LLM_REVIEW_PASS,
+        SECOND_VALID_TASK_RESPONSE, LLM_REVIEW_PASS,
       ]);
       const lifecycle = createLifecycle(llm, {
         approvalFn: async () => true,

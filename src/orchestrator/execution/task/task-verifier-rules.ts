@@ -12,28 +12,53 @@ export async function runMechanicalVerification(
   task: Task
 ): Promise<{ applicable: boolean; passed: boolean; description: string }> {
   // Mechanical prefixes that indicate a command can be run directly
-  const mechanicalPrefixes = ["npm", "npx", "pytest", "sh", "bash", "node", "make", "cargo", "go ", "gh "];
+  const mechanicalPrefixes = [
+    "npm",
+    "npx",
+    "pytest",
+    "sh",
+    "bash",
+    "node",
+    "make",
+    "cargo",
+    "go ",
+    "gh ",
+    "rg ",
+    "grep ",
+    "test ",
+    "ls ",
+  ];
 
-  // Find the first success criterion with a mechanically-verifiable verification_method
-  const mechanicalCriterion = task.success_criteria.find((c) => {
-    const method = c.verification_method.toLowerCase().trim();
+  const isMechanicalMethod = (verificationMethod: string): boolean => {
+    const method = verificationMethod.toLowerCase().trim();
     return mechanicalPrefixes.some((prefix) => method.startsWith(prefix));
-  });
+  };
 
-  if (!mechanicalCriterion) {
+  const blockingMechanicalCriteria = task.success_criteria.filter(
+    (c) => c.is_blocking && isMechanicalMethod(c.verification_method)
+  );
+
+  if (blockingMechanicalCriteria.length === 0) {
     return {
       applicable: false,
       passed: false,
-      description: "No mechanical verification criteria applicable",
+      description: "No blocking mechanical verification criteria applicable",
     };
   }
+
+  const verificationCommands = blockingMechanicalCriteria.map((c) => c.verification_method.trim());
+  verificationCommands.sort((left, right) => {
+    const leftIsTestCommand = /^(npm|npx|pytest|sh|bash|node|make|cargo|go )/.test(left.toLowerCase());
+    const rightIsTestCommand = /^(npm|npx|pytest|sh|bash|node|make|cargo|go )/.test(right.toLowerCase());
+    return Number(rightIsTestCommand) - Number(leftIsTestCommand);
+  });
 
   // If no adapter registry is available, fall back to assumed pass (backward compat)
   if (!deps.adapterRegistry) {
     return {
       applicable: true,
       passed: true,
-      description: "Mechanical verification criteria detected (no adapter: assumed pass)",
+      description: `Mechanical verification criteria detected (${verificationCommands.length} command(s), no adapter: assumed pass)`,
     };
   }
 
@@ -43,11 +68,14 @@ export async function runMechanicalVerification(
     return {
       applicable: true,
       passed: true,
-      description: "Mechanical verification criteria detected (no adapters registered: assumed pass)",
+      description: `Mechanical verification criteria detected (${verificationCommands.length} command(s), no adapters registered: assumed pass)`,
     };
   }
 
-  const adapterType = availableAdapters[0]!;
+  const adapterType =
+    deps.preferredAdapterType && availableAdapters.includes(deps.preferredAdapterType)
+      ? deps.preferredAdapterType
+      : availableAdapters[0]!;
   let adapter: IAdapter;
   try {
     adapter = deps.adapterRegistry.getAdapter(adapterType);
@@ -55,47 +83,57 @@ export async function runMechanicalVerification(
     return {
       applicable: true,
       passed: true,
-      description: "Mechanical verification criteria detected (adapter lookup failed: assumed pass)",
+      description: `Mechanical verification criteria detected (${verificationCommands.length} command(s), adapter lookup failed: assumed pass)`,
     };
   }
 
-  // Execute the verification command via the adapter
-  const verificationCommand = mechanicalCriterion.verification_method.trim();
   const verificationTimeoutMs = 30_000; // 30 seconds default for L1 mechanical checks
+  const passedCommands: string[] = [];
 
-  const agentTask: AgentTask = {
-    prompt: verificationCommand,
-    timeout_ms: verificationTimeoutMs,
-    adapter_type: adapterType,
+  for (const verificationCommand of verificationCommands) {
+    const agentTask: AgentTask = {
+      prompt: verificationCommand,
+      timeout_ms: verificationTimeoutMs,
+      adapter_type: adapterType,
+    };
+
+    let result: AgentResult;
+    try {
+      result = await adapter.execute(agentTask);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      deps.logger?.error("runMechanicalVerification: adapter.execute() threw", { error: errMsg });
+      return {
+        applicable: true,
+        passed: false,
+        description: `Mechanical verification command threw: ${verificationCommand} — ${errMsg}`,
+      };
+    }
+
+    if (result.stopped_reason === "timeout") {
+      return {
+        applicable: true,
+        passed: false,
+        description: `Mechanical verification timed out after ${verificationTimeoutMs}ms (command: ${verificationCommand})`,
+      };
+    }
+
+    if (result.exit_code !== 0 || !result.success) {
+      return {
+        applicable: true,
+        passed: false,
+        description: `Mechanical verification failed after ${passedCommands.length}/${verificationCommands.length} command(s) (exit ${result.exit_code ?? "null"}): ${verificationCommand}${result.error ? ` — ${result.error}` : ""}`,
+      };
+    }
+
+    passedCommands.push(verificationCommand);
+  }
+
+  return {
+    applicable: true,
+    passed: true,
+    description: `Mechanical verification passed (${passedCommands.length} command(s)): ${passedCommands.join("; ")}`,
   };
-
-  let result: AgentResult;
-  try {
-    result = await adapter.execute(agentTask);
-  } catch (err) {
-    const errMsg = err instanceof Error ? err.message : String(err);
-    deps.logger?.error("runMechanicalVerification: adapter.execute() threw", { error: errMsg });
-    return {
-      applicable: true,
-      passed: false,
-      description: `Mechanical verification command threw: ${errMsg}`,
-    };
-  }
-
-  if (result.stopped_reason === "timeout") {
-    return {
-      applicable: true,
-      passed: false,
-      description: `Mechanical verification timed out after ${verificationTimeoutMs}ms (command: ${verificationCommand})`,
-    };
-  }
-
-  const passed = result.exit_code === 0 && result.success;
-  const description = passed
-    ? `Mechanical verification passed (exit 0): ${verificationCommand}`
-    : `Mechanical verification failed (exit ${result.exit_code ?? "null"}): ${verificationCommand}${result.error ? ` — ${result.error}` : ""}`;
-
-  return { applicable: true, passed, description };
 }
 
 // ─── P0 Guard 1: dimension_updates change magnitude limit (§3.2) ───
@@ -336,10 +374,14 @@ export async function appendTaskHistory(deps: VerifierDeps, goalId: string, task
     : null;
 
   history.push({
+    id: task.id,
     task_id: task.id,
+    work_description: task.work_description,
     status: task.status,
     primary_dimension: task.primary_dimension,
     consecutive_failure_count: task.consecutive_failure_count,
+    verification_verdict: task.verification_verdict ?? null,
+    verification_evidence: task.verification_evidence ?? [],
     completed_at: task.completed_at ?? new Date().toISOString(),
     actual_elapsed_ms,
     estimated_duration_ms,

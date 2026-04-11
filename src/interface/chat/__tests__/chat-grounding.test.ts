@@ -36,7 +36,6 @@ import { buildSystemPrompt } from "../grounding.js";
 import { ClaudeAPIAdapter } from "../../../adapters/agents/claude-api.js";
 import { ClaudeCodeCLIAdapter } from "../../../adapters/agents/claude-code-cli.js";
 import { OpenAICodexCLIAdapter } from "../../../adapters/agents/openai-codex.js";
-import { BrowserUseCLIAdapter } from "../../../adapters/agents/browser-use-cli.js";
 import { ChatRunner } from "../chat-runner.js";
 import type { ChatRunnerDeps } from "../chat-runner.js";
 import type { IAdapter, AgentResult } from "../../../orchestrator/execution/adapter-layer.js";
@@ -380,50 +379,6 @@ describe("OpenAICodexCLIAdapter — system_prompt prepend", () => {
 
     const opts = (spawnWithTimeout as ReturnType<typeof vi.fn>).mock.calls[0][2];
     expect(opts.stdinData).toBe("Analyze the repo");
-    expect(opts.stdinData).not.toContain("[System Context]");
-  });
-});
-
-describe("BrowserUseCLIAdapter — system_prompt prepend", () => {
-  beforeEach(() => {
-    (spawnWithTimeout as ReturnType<typeof vi.fn>).mockClear();
-    (spawnWithTimeout as ReturnType<typeof vi.fn>).mockResolvedValue({
-      stdout: "output",
-      stderr: "",
-      exitCode: 0,
-      timedOut: false,
-    });
-  });
-
-  it("prepends [System Context] block when system_prompt is set", async () => {
-    const adapter = new BrowserUseCLIAdapter({ cliPath: "echo" });
-
-    await adapter.execute({
-      prompt: "Search the web",
-      timeout_ms: 5000,
-      adapter_type: "browser_use_cli",
-      system_prompt: "You are PulSeed.",
-    });
-
-    expect(spawnWithTimeout).toHaveBeenCalledOnce();
-    const opts = (spawnWithTimeout as ReturnType<typeof vi.fn>).mock.calls[0][2];
-    expect(opts.stdinData).toContain("[System Context]");
-    expect(opts.stdinData).toContain("You are PulSeed.");
-    expect(opts.stdinData).toContain("[User Request]");
-    expect(opts.stdinData).toContain("Search the web");
-  });
-
-  it("passes prompt directly when system_prompt is undefined", async () => {
-    const adapter = new BrowserUseCLIAdapter({ cliPath: "echo" });
-
-    await adapter.execute({
-      prompt: "Search the web",
-      timeout_ms: 5000,
-      adapter_type: "browser_use_cli",
-    });
-
-    const opts = (spawnWithTimeout as ReturnType<typeof vi.fn>).mock.calls[0][2];
-    expect(opts.stdinData).toBe("Search the web");
     expect(opts.stdinData).not.toContain("[System Context]");
   });
 });

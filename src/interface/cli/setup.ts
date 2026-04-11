@@ -179,16 +179,6 @@ export async function buildDeps(
   const strategyManager = new StrategyManager(stateManager, llmClient);
   const adapterRegistry = await buildAdapterRegistry(llmClient);
 
-  const taskLifecycle = new TaskLifecycle({
-    stateManager,
-    llmClient,
-    sessionManager,
-    trustManager,
-    strategyManager,
-    stallDetector,
-    options: { approvalFn, logger, hookManager },
-  });
-
   const reportingEngine = new ReportingEngine(stateManager, undefined, characterConfig);
 
   const goalTreeManager = new GoalTreeManager(
@@ -239,6 +229,23 @@ export async function buildDeps(
     vectorIndex,
     embeddingClient,
   );
+
+  const taskLifecycle = new TaskLifecycle({
+    stateManager,
+    llmClient,
+    sessionManager,
+    trustManager,
+    strategyManager,
+    stallDetector,
+    options: {
+      approvalFn,
+      logger,
+      hookManager,
+      adapterRegistry,
+      knowledgeManager,
+      memoryLifecycle: memoryLifecycleManager,
+    },
+  });
 
   const gapCalculator: GapCalculatorModule = {
     calculateGapVector: GapCalculator.calculateGapVector,

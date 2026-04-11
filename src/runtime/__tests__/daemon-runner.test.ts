@@ -253,6 +253,105 @@ describe("DaemonRunner durable runtime", () => {
     await startPromise;
   });
 
+  it("does not block startup readiness on the initial runtime store maintenance pass", async () => {
+    let finishMaintenance!: () => void;
+    let maintenanceFinished = false;
+    const maintenanceGate = new Promise<void>((resolve) => {
+      finishMaintenance = resolve;
+    });
+    const eventServer = makeEventServerMock();
+    const deps = makeDeps(tmpDir, {
+      config: { check_interval_ms: 50 },
+      eventServer: eventServer as unknown as DaemonDeps["eventServer"],
+    });
+    const daemon = new DaemonRunner(deps);
+    const runRuntimeStoreMaintenance = vi.fn(async () => {
+      await maintenanceGate;
+      maintenanceFinished = true;
+    });
+    (daemon as unknown as {
+      runRuntimeStoreMaintenance(force?: boolean): Promise<void>;
+    }).runRuntimeStoreMaintenance = runRuntimeStoreMaintenance;
+    currentDaemon = daemon;
+
+    const startPromise = daemon.start(["goal-a"]);
+    currentStartPromise = startPromise;
+
+    await waitFor(() => runRuntimeStoreMaintenance.mock.calls.length > 0);
+    const state = await pollForJsonMatch<{
+      status: string;
+      active_goals: string[];
+    }>(
+      path.join(tmpDir, "daemon-state.json"),
+      (value) => value.status === "running" && value.active_goals.includes("goal-a")
+    );
+
+    expect(state.active_goals).toEqual(["goal-a"]);
+    expect(eventServer.start).toHaveBeenCalledOnce();
+    expect(runRuntimeStoreMaintenance).toHaveBeenCalledWith(true);
+    expect(maintenanceFinished).toBe(false);
+
+    let startSettled = false;
+    startPromise.then(
+      () => {
+        startSettled = true;
+      },
+      () => {
+        startSettled = true;
+      }
+    );
+
+    daemon.stop();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    expect(startSettled).toBe(false);
+
+    finishMaintenance();
+    await startPromise;
+    expect(maintenanceFinished).toBe(true);
+  });
+
+  it("cleans up and propagates initial runtime store maintenance failures on shutdown", async () => {
+    const maintenanceError = new Error("startup maintenance failed");
+    let rejectMaintenance!: (reason: Error) => void;
+    const maintenanceGate = new Promise<void>((_, reject) => {
+      rejectMaintenance = reject;
+    });
+    const eventServer = makeEventServerMock();
+    const deps = makeDeps(tmpDir, {
+      config: { check_interval_ms: 50 },
+      eventServer: eventServer as unknown as DaemonDeps["eventServer"],
+    });
+    const daemon = new DaemonRunner(deps);
+    const runRuntimeStoreMaintenance = vi.fn(async () => {
+      await maintenanceGate;
+    });
+    (daemon as unknown as {
+      runRuntimeStoreMaintenance(force?: boolean): Promise<void>;
+    }).runRuntimeStoreMaintenance = runRuntimeStoreMaintenance;
+    currentDaemon = daemon;
+
+    const startPromise = daemon.start(["goal-a"]);
+    startPromise.catch(() => {});
+    currentStartPromise = startPromise;
+
+    await waitFor(() => runRuntimeStoreMaintenance.mock.calls.length > 0);
+    await pollForJsonMatch<{ status: string; active_goals: string[] }>(
+      path.join(tmpDir, "daemon-state.json"),
+      (value) => value.status === "running" && value.active_goals.includes("goal-a")
+    );
+
+    rejectMaintenance(maintenanceError);
+    daemon.stop();
+    await expect(startPromise).rejects.toThrow("startup maintenance failed");
+
+    const state = JSON.parse(fs.readFileSync(path.join(tmpDir, "daemon-state.json"), "utf-8"));
+    expect(state.status).toBe("stopped");
+
+    const marker = JSON.parse(fs.readFileSync(path.join(tmpDir, "shutdown-state.json"), "utf-8"));
+    expect(marker.state).toBe("clean_shutdown");
+    expect(marker.goal_ids).toEqual(["goal-a"]);
+  });
+
   it("starts in idle status when launched without initial goals", async () => {
     const deps = makeDeps(tmpDir, { config: { check_interval_ms: 50 } });
     const daemon = new DaemonRunner(deps);

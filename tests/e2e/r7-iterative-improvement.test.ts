@@ -193,9 +193,12 @@ function makeOneDimGoal(id: string, dimensionName: string, minThreshold: number)
 
 // ─── LLM response factories ───
 
-function makeTaskGenerationResponse(primaryDimension = "code_quality"): string {
+function makeTaskGenerationResponse(
+  primaryDimension = "code_quality",
+  workDescription = `Improve the ${primaryDimension} through targeted refactoring and testing`
+): string {
   return JSON.stringify({
-    work_description: `Improve the ${primaryDimension} through targeted refactoring and testing`,
+    work_description: workDescription,
     rationale: `The ${primaryDimension} dimension is below the required threshold`,
     approach: "Systematic improvement via code review and test addition",
     success_criteria: [
@@ -394,17 +397,26 @@ describe("R7-1: 3-iteration progressive improvement", () => {
       // Iteration 2 — observations improving but still below threshold
       JSON.stringify({ score: 0.55, reason: "Code quality is improving" }),
       JSON.stringify({ score: 0.45, reason: "Test coverage is increasing" }),
-      "```json\n" + makeTaskGenerationResponse("code_quality") + "\n```",
+      "```json\n" + makeTaskGenerationResponse(
+        "code_quality",
+        "Reduce the code_quality gap by simplifying risky modules and adding regression checks"
+      ) + "\n```",
       makeLLMReviewResponse(),
       // Iteration 3 — meets threshold
       JSON.stringify({ score: 0.85, reason: "Code quality now meets requirements" }),
       JSON.stringify({ score: 0.75, reason: "Test coverage exceeds minimum" }),
       // Guard responses
-      "```json\n" + makeTaskGenerationResponse("code_quality") + "\n```",
+      "```json\n" + makeTaskGenerationResponse(
+        "code_quality",
+        "Harden the code_quality improvements with targeted cleanup and focused validation"
+      ) + "\n```",
       makeLLMReviewResponse(),
       JSON.stringify({ score: 0.85, reason: "Still meeting requirements" }),
       JSON.stringify({ score: 0.75, reason: "Still meeting coverage" }),
-      "```json\n" + makeTaskGenerationResponse("code_quality") + "\n```",
+      "```json\n" + makeTaskGenerationResponse(
+        "code_quality",
+        "Consolidate the code_quality gains by removing duplication and verifying behavior"
+      ) + "\n```",
       makeLLMReviewResponse(),
     ]);
 

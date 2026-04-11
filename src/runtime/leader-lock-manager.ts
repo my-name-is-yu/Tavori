@@ -144,7 +144,8 @@ export class LeaderLockManager {
 
     return withMutex(this.mutexPath, async () => {
       const current = await this.readRaw();
-      if (current && current.lease_until > now) {
+      const currentOwnerAlive = current ? await isProcessAlive(current.pid) : false;
+      if (current && current.lease_until > now && currentOwnerAlive) {
         return null;
       }
 

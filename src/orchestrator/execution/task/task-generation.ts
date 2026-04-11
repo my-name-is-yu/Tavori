@@ -149,17 +149,62 @@ export function trigramSimilarity(a: string, b: string): number {
 // ─── Task history entry (minimal shape needed for duplicate check) ───
 
 interface TaskHistoryEntry {
-  id: string;
-  work_description: string;
+  id?: string;
+  task_id?: string;
+  work_description?: string;
   status: string;
+  verification_verdict?: string | null;
+  consecutive_failure_count?: number;
+}
+
+const DUPLICATE_HISTORY_WINDOW = 30;
+const DUPLICATE_STATUS_ALLOWLIST = new Set([
+  "completed",
+  "failed",
+  "error",
+  "timed_out",
+  "abandoned",
+  "discarded",
+]);
+
+function isDuplicateCandidate(entry: TaskHistoryEntry): boolean {
+  if (DUPLICATE_STATUS_ALLOWLIST.has(entry.status)) return true;
+  if (entry.verification_verdict === "fail" || entry.verification_verdict === "partial") return true;
+  return (entry.consecutive_failure_count ?? 0) > 0;
+}
+
+function getHistoryTaskId(entry: TaskHistoryEntry): string | undefined {
+  return entry.task_id ?? entry.id;
+}
+
+async function resolveHistoryWorkDescription(
+  stateManager: StateManager,
+  goalId: string,
+  entry: TaskHistoryEntry
+): Promise<string> {
+  if (entry.work_description?.trim()) return entry.work_description;
+
+  const taskId = getHistoryTaskId(entry);
+  if (!taskId) return "";
+
+  try {
+    const raw = await stateManager.readRaw(`tasks/${goalId}/${taskId}.json`);
+    if (raw && typeof raw === "object") {
+      const description = (raw as { work_description?: unknown }).work_description;
+      return typeof description === "string" ? description : "";
+    }
+  } catch {
+    // Non-fatal: old history entries may reference tasks that were pruned.
+  }
+  return "";
 }
 
 // ─── checkDuplicateTask ───
 
 /**
- * Check whether `description` is too similar to a recently completed/failed task.
+ * Check whether `description` is too similar to a recently finalized or failed task.
  *
- * Reads `tasks/${goalId}/task-history.json`, takes last 10 entries, and returns
+ * Reads `tasks/${goalId}/task-history.json`, takes a recent window, and returns
  * the matching entry if trigram similarity >= 0.7. Returns null if no duplicate.
  */
 async function checkDuplicateTask(
@@ -179,13 +224,15 @@ async function checkDuplicateTask(
     return null;
   }
 
-  const recent = history.slice(-10);
+  const recent = history.slice(-DUPLICATE_HISTORY_WINDOW);
   for (const entry of recent) {
-    if (entry.status !== "completed" && entry.status !== "failed") continue;
-    const sim = trigramSimilarity(description, entry.work_description ?? "");
+    if (!isDuplicateCandidate(entry)) continue;
+    const workDescription = await resolveHistoryWorkDescription(stateManager, goalId, entry);
+    if (!workDescription) continue;
+    const sim = trigramSimilarity(description, workDescription);
     if (sim >= 0.7) {
       logger?.warn(
-        `WARN: duplicate task rejected: similar to recently ${entry.status} task "${entry.id}"`
+        `WARN: duplicate task rejected: similar to recently ${entry.status} task "${getHistoryTaskId(entry) ?? "unknown"}"`
       );
       return entry;
     }

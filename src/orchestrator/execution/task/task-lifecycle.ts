@@ -10,7 +10,10 @@ import { SessionManager } from "../session-manager.js";
 import { TrustManager } from "../../../platform/traits/trust-manager.js";
 import { StrategyManager } from "../../strategy/strategy-manager.js";
 import { StallDetector } from "../../../platform/drive/stall-detector.js";
-import { selectTargetDimension as _selectTargetDimension } from "../context/dimension-selector.js";
+import {
+  selectTargetDimension as _selectTargetDimension,
+  type DimensionSelectionOptions,
+} from "../context/dimension-selector.js";
 import type { Task, VerificationResult } from "../../../base/types/task.js";
 import type { GapVector } from "../../../base/types/gap.js";
 import type { DriveContext } from "../../../base/types/drive.js";
@@ -49,6 +52,7 @@ import { runPipelineTaskCycle as runPipelineTaskCycleFn } from "./task-pipeline-
 import type { PipelineCycleOptions } from "./task-pipeline-types.js";
 import type { KnowledgeTransfer } from "../../../platform/knowledge/transfer/knowledge-transfer.js";
 import type { KnowledgeManager } from "../../../platform/knowledge/knowledge-manager.js";
+import type { MemoryLifecycleManager } from "../../../platform/knowledge/memory/memory-lifecycle.js";
 import { buildEnrichedKnowledgeContext } from "./task-context-enricher.js";
 import { persistTaskCycleSideEffects } from "./task-side-effects.js";
 import { finalizeSuccessfulExecution } from "./task-post-execution.js";
@@ -99,6 +103,8 @@ export interface TaskLifecycleOptions {
   knowledgeTransfer?: KnowledgeTransfer;
   /** Optional KnowledgeManager for reflection generation and retrieval */
   knowledgeManager?: KnowledgeManager;
+  /** Optional MemoryLifecycleManager for lessons learned during task generation */
+  memoryLifecycle?: MemoryLifecycleManager;
   /** Optional guardrail runner for before_tool/after_tool hooks */
   guardrailRunner?: GuardrailRunner;
   /** Optional HookManager for lifecycle hook events */
@@ -136,6 +142,7 @@ export class TaskLifecycle {
   private readonly completionJudgerConfig?: CompletionJudgerConfig;
   private readonly knowledgeTransfer?: KnowledgeTransfer;
   private readonly knowledgeManager?: KnowledgeManager;
+  private readonly memoryLifecycle?: MemoryLifecycleManager;
   private readonly guardrailRunner?: GuardrailRunner;
   private readonly hookManager?: HookManager;
   private readonly toolExecutor?: ToolExecutor;
@@ -185,11 +192,12 @@ export class TaskLifecycle {
     this.capabilityDetector = resolvedOptions?.capabilityDetector;
     this.logger = resolvedOptions?.logger;
     this.adapterRegistry = resolvedOptions?.adapterRegistry;
-    this.healthCheckEnabled = resolvedOptions?.healthCheckEnabled ?? true;
+    this.healthCheckEnabled = resolvedOptions?.healthCheckEnabled ?? false;
     this.execFileSyncFn = resolvedOptions?.execFileSyncFn ?? _execFileSync;
     this.completionJudgerConfig = resolvedOptions?.completionJudgerConfig;
     this.knowledgeTransfer = resolvedOptions?.knowledgeTransfer;
     this.knowledgeManager = resolvedOptions?.knowledgeManager;
+    this.memoryLifecycle = resolvedOptions?.memoryLifecycle;
     this.guardrailRunner = resolvedOptions?.guardrailRunner;
     this.hookManager = resolvedOptions?.hookManager;
     this.toolExecutor = resolvedOptions?.toolExecutor;
@@ -202,8 +210,13 @@ export class TaskLifecycle {
   }
 
   /** Select highest-priority dimension to work on, weighted by confidence tier. */
-  selectTargetDimension(gapVector: GapVector, driveContext: DriveContext, dimensions?: Dimension[]): string {
-    return _selectTargetDimension(gapVector, driveContext, dimensions);
+  selectTargetDimension(
+    gapVector: GapVector,
+    driveContext: DriveContext,
+    dimensions?: Dimension[],
+    options?: DimensionSelectionOptions
+  ): string {
+    return _selectTargetDimension(gapVector, driveContext, dimensions, options);
   }
 
   /** Generate a task for the given goal and target dimension via LLM. */
@@ -262,6 +275,8 @@ export class TaskLifecycle {
         llmClient: this.llmClient,
         strategyManager: this.strategyManager,
         logger: this.logger,
+        knowledgeManager: this.knowledgeManager,
+        memoryLifecycle: this.memoryLifecycle,
       },
       goalId,
       targetDimension,
@@ -278,6 +293,53 @@ export class TaskLifecycle {
     return _checkIrreversibleApproval(this.trustManager, this.approvalFn, task, confidence);
   }
 
+  private async buildDimensionSelectionBackoff(goalId: string): Promise<DimensionSelectionOptions> {
+    const failureStatuses = new Set(["failed", "error", "timed_out", "abandoned", "discarded"]);
+    const backoffCounts = new Map<string, number>();
+
+    try {
+      const rawHistory = await this.stateManager.readRaw(`tasks/${goalId}/task-history.json`);
+      if (!Array.isArray(rawHistory)) {
+        return {};
+      }
+
+      for (const entry of rawHistory.slice(-20) as Array<Record<string, unknown>>) {
+        const dimension = typeof entry.primary_dimension === "string" ? entry.primary_dimension : null;
+        if (!dimension) {
+          continue;
+        }
+
+        const status = typeof entry.status === "string" ? entry.status : "";
+        const verdict = typeof entry.verification_verdict === "string" ? entry.verification_verdict : "";
+        const failureCount = typeof entry.consecutive_failure_count === "number"
+          ? entry.consecutive_failure_count
+          : 0;
+        const failed =
+          failureStatuses.has(status)
+          || verdict === "fail"
+          || verdict === "partial"
+          || failureCount > 0;
+        const passed = status === "completed" && verdict === "pass" && failureCount === 0;
+
+        if (failed && !passed) {
+          backoffCounts.set(dimension, (backoffCounts.get(dimension) ?? 0) + 1);
+        }
+      }
+    } catch {
+      return {};
+    }
+
+    if (backoffCounts.size === 0) {
+      return {};
+    }
+
+    const backoffByDimension: Record<string, number> = {};
+    for (const [dimension, count] of backoffCounts) {
+      backoffByDimension[dimension] = Math.max(0.1, 1 / (count + 1));
+    }
+    return { backoffByDimension };
+  }
+
   /** Execute a task via the given adapter. */
   async executeTask(task: Task, adapter: IAdapter, workspaceContext?: string): Promise<AgentResult> {
     return executeTaskWithGuards({
@@ -291,9 +353,10 @@ export class TaskLifecycle {
   /** Verify task execution results using 3-layer verification. */
   async verifyTask(
     task: Task,
-    executionResult: AgentResult
+    executionResult: AgentResult,
+    preferredAdapterType?: string
   ): Promise<VerificationResult> {
-    return _verifyTask(this.verifierDeps(), task, executionResult);
+    return _verifyTask(this.verifierDeps(preferredAdapterType), task, executionResult);
   }
 
   /** Handle a verification verdict (pass/partial/fail). */
@@ -352,8 +415,9 @@ export class TaskLifecycle {
       // If goal load fails, fall back to unweighted selection
       this.logger?.warn(`[TaskLifecycle] Failed to load goal "${goalId}" for dimension selection, using unweighted fallback: ${err instanceof Error ? err.message : String(err)}`);
     }
+    const dimensionSelectionOptions = await this.buildDimensionSelectionBackoff(goalId);
     const targetDimension = await runPhase("select-target-dimension", async () =>
-      this.selectTargetDimension(gapVector, driveContext, goalDimensions)
+      this.selectTargetDimension(gapVector, driveContext, goalDimensions, dimensionSelectionOptions)
     );
 
     const enrichedKnowledgeContext = await runPhase("enrich-knowledge-context", () =>
@@ -438,7 +502,10 @@ export class TaskLifecycle {
 
     // 5. Verify task — use token accumulator to capture LLM tokens consumed during verification
     const verifierTokenAccumulator = { tokensUsed: 0 };
-    const verifierDepsWithAccumulator = { ...this.verifierDeps(), _tokenAccumulator: verifierTokenAccumulator };
+    const verifierDepsWithAccumulator = {
+      ...this.verifierDeps(adapter.adapterType),
+      _tokenAccumulator: verifierTokenAccumulator,
+    };
     const verificationResult = await runPhase("verify-task", () =>
       _verifyTask(verifierDepsWithAccumulator, taskForVerification, executionResult)
     );
@@ -510,7 +577,7 @@ export class TaskLifecycle {
   }
 
   /** Build the VerifierDeps object passed to task-verifier.ts functions. */
-  private verifierDeps() {
+  private verifierDeps(preferredAdapterType?: string) {
     return {
       stateManager: this.stateManager,
       llmClient: this.llmClient,
@@ -518,6 +585,7 @@ export class TaskLifecycle {
       trustManager: this.trustManager,
       stallDetector: this.stallDetector,
       adapterRegistry: this.adapterRegistry,
+      preferredAdapterType,
       logger: this.logger,
       onTaskComplete: this.onTaskComplete,
       durationToMs: durationToMs,

@@ -185,6 +185,27 @@ describe("buildTaskGenerationPrompt — section ordering", () => {
   });
 });
 
+describe("buildTaskGenerationPrompt — code-agent operational KPI grounding", () => {
+  it("discourages test-only tasks for operational KPI dimensions", async () => {
+    const goal = makeGoal({ id: "g-kpi", title: "Stabilize resident daemon" });
+    const sm = makeMockStateManager({ "g-kpi": goal });
+
+    const prompt = await buildTaskGenerationPrompt(
+      sm,
+      "g-kpi",
+      "resident_daemon_recovery",
+      undefined,
+      "openai_codex_cli"
+    );
+
+    expect(prompt).toContain("operational KPI dimensions");
+    expect(prompt).toContain("do not generate a test-only/regression-only task");
+    expect(prompt).toContain("include at least one relevant test/build command");
+    expect(prompt).toContain("npx vitest run <test-file>");
+    expect(prompt).toContain("do not wrap it in prose like \"Use rg ...\"");
+  });
+});
+
 describe("buildTaskGenerationPrompt — referenced issue section", () => {
   beforeEach(() => {
     mockFetchIssueContext.mockReset();
@@ -252,5 +273,45 @@ describe("buildTaskGenerationPrompt — referenced issue section", () => {
     } finally {
       cwdSpy.mockRestore();
     }
+  });
+});
+
+describe("buildTaskGenerationPrompt — recent failed task history", () => {
+  beforeEach(() => {
+    mockFetchIssueContext.mockReset();
+    mockFetchIssueContext.mockResolvedValue("");
+  });
+
+  it("includes recent failed attempts to discourage repeated task generation", async () => {
+    const goal = makeGoal({ id: "g-repeat", title: "Improve daemon recovery" });
+    const sm = {
+      loadGoal: vi.fn(async (id: string) => (id === "g-repeat" ? goal : null)),
+      readRaw: vi.fn(async (key: string) => {
+        if (key === "tasks/g-repeat/task-history.json") {
+          return [
+            {
+              task_id: "task-old",
+              status: "running",
+              verification_verdict: "fail",
+              consecutive_failure_count: 1,
+              verification_evidence: ["execution failed before applying a durable recovery change"],
+            },
+          ];
+        }
+        if (key === "tasks/g-repeat/task-old.json") {
+          return {
+            work_description: "Add focused daemon recovery regression test",
+          };
+        }
+        return null;
+      }),
+    } as unknown as StateManager;
+
+    const prompt = await buildTaskGenerationPrompt(sm, "g-repeat", "resident_daemon_recovery");
+
+    expect(prompt).toContain("Recent Failed/Discarded Task Attempts");
+    expect(prompt).toContain("Add focused daemon recovery regression test");
+    expect(prompt).toContain("execution failed before applying a durable recovery change");
+    expect(prompt).toContain("Do not generate another task that repeats the same edit/test direction");
   });
 });

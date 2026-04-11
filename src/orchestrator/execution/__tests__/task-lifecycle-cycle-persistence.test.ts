@@ -233,6 +233,31 @@ describe("TaskLifecycle — persistence", () => {
     expect(history[0]!.primary_dimension).toBe("coverage");
   });
 
+  it("task history records work_description and verification verdict for duplicate avoidance", async () => {
+    const llm = createMockLLMClient([]);
+    const lifecycle = createLifecycle(llm);
+    const task = makeTask({ work_description: "Add focused daemon recovery regression test" });
+    const vr: import("../../../base/types/task.js").VerificationResult = {
+      task_id: "task-1",
+      verdict: "fail",
+      confidence: 0.9,
+      evidence: [
+        { layer: "independent_review", description: "No durable recovery improvement", confidence: 0.8 },
+      ],
+      dimension_updates: [],
+      timestamp: new Date().toISOString(),
+    };
+
+    await stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, task);
+    await lifecycle.handleFailure(task, vr);
+
+    const history = await stateManager.readRaw("tasks/goal-1/task-history.json") as Array<Record<string, unknown>>;
+    expect(history[0]!.id).toBe("task-1");
+    expect(history[0]!.work_description).toBe("Add focused daemon recovery regression test");
+    expect(history[0]!.verification_verdict).toBe("fail");
+    expect(history[0]!.verification_evidence).toEqual(["No durable recovery improvement"]);
+  });
+
   it("task history records consecutive_failure_count on failure", async () => {
     const llm = createMockLLMClient([]);
     const lifecycle = createLifecycle(llm);

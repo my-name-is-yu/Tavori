@@ -14,6 +14,11 @@ const CONFIDENCE_WEIGHTS: Record<string, number> = {
   self_report: 0.3,
 };
 
+export interface DimensionSelectionOptions {
+  /** Multiplicative selection penalty. 1 = no penalty, lower = deprioritize. */
+  backoffByDimension?: Record<string, number>;
+}
+
 function getConfidenceWeight(dim: Dimension): number {
   const tier = dim.observation_method.confidence_tier;
   return CONFIDENCE_WEIGHTS[tier] ?? 0.3;
@@ -33,7 +38,8 @@ function getConfidenceWeight(dim: Dimension): number {
 export function selectTargetDimension(
   gapVector: GapVector,
   driveContext: DriveContext,
-  dimensions?: Dimension[]
+  dimensions?: Dimension[],
+  options?: DimensionSelectionOptions
 ): string {
   if (gapVector.gaps.length === 0) {
     throw new Error("selectTargetDimension: gapVector has no gaps (empty gap vector)");
@@ -42,7 +48,9 @@ export function selectTargetDimension(
   const scores = scoreAllDimensions(gapVector, driveContext);
   const ranked = rankDimensions(scores);
 
-  if (!dimensions || dimensions.length === 0) {
+  const backoffByDimension = options?.backoffByDimension ?? {};
+  const hasBackoff = Object.keys(backoffByDimension).length > 0;
+  if ((!dimensions || dimensions.length === 0) && !hasBackoff) {
     // No dimension metadata available — fall back to drive-score ranking only
     // ranked is non-empty: gapVector.gaps.length === 0 guard above ensures at least one gap
     return ranked[0]?.dimension_name ?? gapVector.gaps[0]?.dimension_name ?? "";
@@ -50,14 +58,17 @@ export function selectTargetDimension(
 
   // Build a lookup from dimension name → confidence weight
   const weightByName = new Map<string, number>();
-  for (const dim of dimensions) {
+  for (const dim of dimensions ?? []) {
     weightByName.set(dim.name, getConfidenceWeight(dim));
   }
 
-  // Apply confidence-tier weighting to final_score for selection only
+  // Apply confidence-tier weighting and failure backoff to final_score for selection only
   const weighted = ranked.map((score) => ({
     dimension_name: score.dimension_name,
-    weighted_score: score.final_score * (weightByName.get(score.dimension_name) ?? 0.3),
+    weighted_score:
+      score.final_score
+      * (dimensions && dimensions.length > 0 ? (weightByName.get(score.dimension_name) ?? 0.3) : 1)
+      * (backoffByDimension[score.dimension_name] ?? 1),
   }));
 
   weighted.sort((a, b) => {

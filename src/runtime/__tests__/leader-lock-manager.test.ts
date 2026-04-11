@@ -76,6 +76,53 @@ describe("LeaderLockManager", () => {
     expect(await manager.read()).toEqual(acquired);
   });
 
+  it("acquire reclaims an unexpired lock when the recorded process is dead", async () => {
+    tmpDir = makeTempDir();
+    const manager = new LeaderLockManager(tmpDir, 1_000);
+
+    const stalePath = path.join(tmpDir, "leader", "leader.json");
+    await fsp.mkdir(path.dirname(stalePath), { recursive: true });
+    await fsp.writeFile(
+      stalePath,
+      JSON.stringify({
+        owner_token: "dead-owner",
+        pid: 999_999_999,
+        acquired_at: 100,
+        last_renewed_at: 100,
+        lease_until: 10_000,
+      }),
+      "utf-8"
+    );
+
+    const acquired = await manager.acquire({ now: 200, ownerToken: "leader-b" });
+    expect(acquired).not.toBeNull();
+    expect(acquired!.owner_token).toBe("leader-b");
+    expect(await manager.read()).toEqual(acquired);
+  });
+
+  it("acquire keeps an unexpired lock when the recorded process is alive", async () => {
+    tmpDir = makeTempDir();
+    const manager = new LeaderLockManager(tmpDir, 1_000);
+
+    const stalePath = path.join(tmpDir, "leader", "leader.json");
+    await fsp.mkdir(path.dirname(stalePath), { recursive: true });
+    await fsp.writeFile(
+      stalePath,
+      JSON.stringify({
+        owner_token: "live-owner",
+        pid: process.pid,
+        acquired_at: 100,
+        last_renewed_at: 100,
+        lease_until: 10_000,
+      }),
+      "utf-8"
+    );
+
+    const acquired = await manager.acquire({ now: 200, ownerToken: "leader-b" });
+    expect(acquired).toBeNull();
+    expect((await manager.read())?.owner_token).toBe("live-owner");
+  });
+
   it("reapStale removes expired lock files", async () => {
     tmpDir = makeTempDir();
     const manager = new LeaderLockManager(tmpDir, 1_000);

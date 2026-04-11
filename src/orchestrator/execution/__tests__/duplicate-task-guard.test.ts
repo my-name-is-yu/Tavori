@@ -156,6 +156,43 @@ describe("generateTask — duplicate guard (§4.2)", () => {
     expect(task).toBeNull();
   });
 
+  it("returns null when generated task is similar to a recently discarded failed task", async () => {
+    const llm = createMockLLMClient([VALID_TASK_RESPONSE]);
+    const deps = makeDeps(llm);
+
+    const history = [
+      {
+        id: "task-discarded-1",
+        work_description: "Add unit tests for the authentication module",
+        status: "running",
+        verification_verdict: "fail",
+        consecutive_failure_count: 1,
+      },
+    ];
+    await stateManager.writeRaw("tasks/goal-1/task-history.json", history);
+
+    const { task } = await generateTask(deps, "goal-1", "test_coverage");
+    expect(task).toBeNull();
+  });
+
+  it("uses task_id to load missing work_description from old history entries", async () => {
+    const llm = createMockLLMClient([VALID_TASK_RESPONSE]);
+    const deps = makeDeps(llm);
+
+    await stateManager.writeRaw("tasks/goal-1/task-old-json.json", {
+      work_description: "Add unit tests for the authentication module",
+    });
+    await stateManager.writeRaw("tasks/goal-1/task-history.json", [
+      {
+        task_id: "task-old-json",
+        status: "error",
+      },
+    ]);
+
+    const { task } = await generateTask(deps, "goal-1", "test_coverage");
+    expect(task).toBeNull();
+  });
+
   it("does NOT reject when similar task is still pending (not completed/failed)", async () => {
     const llm = createMockLLMClient([VALID_TASK_RESPONSE]);
     const deps = makeDeps(llm);
@@ -165,6 +202,23 @@ describe("generateTask — duplicate guard (§4.2)", () => {
         id: "task-pending-1",
         work_description: "Add unit tests for the authentication module",
         status: "pending",
+      },
+    ];
+    await stateManager.writeRaw("tasks/goal-1/task-history.json", history);
+
+    const { task } = await generateTask(deps, "goal-1", "test_coverage");
+    expect(task).not.toBeNull();
+  });
+
+  it("does NOT reject when similar task is running without a failure verdict", async () => {
+    const llm = createMockLLMClient([VALID_TASK_RESPONSE]);
+    const deps = makeDeps(llm);
+
+    const history = [
+      {
+        id: "task-running-1",
+        work_description: "Add unit tests for the authentication module",
+        status: "running",
       },
     ];
     await stateManager.writeRaw("tasks/goal-1/task-history.json", history);
@@ -190,11 +244,11 @@ describe("generateTask — duplicate guard (§4.2)", () => {
     expect(task).not.toBeNull();
   });
 
-  it("only checks the last 10 history entries", async () => {
+  it("only checks the recent history window", async () => {
     const llm = createMockLLMClient([VALID_TASK_RESPONSE]);
     const deps = makeDeps(llm);
 
-    // Entry at index 0 is similar but older than the last 10
+    // Entry at index 0 is similar but older than the recent window
     const history: Array<{ id: string; work_description: string; status: string }> = [
       {
         id: "task-old-ancient",
@@ -202,8 +256,8 @@ describe("generateTask — duplicate guard (§4.2)", () => {
         status: "completed",
       },
     ];
-    // Fill with 10 different recent entries
-    for (let i = 0; i < 10; i++) {
+    // Fill with 30 different recent entries
+    for (let i = 0; i < 30; i++) {
       history.push({
         id: `task-recent-${i}`,
         work_description: `Deploy service ${i} to staging environment`,
@@ -212,7 +266,7 @@ describe("generateTask — duplicate guard (§4.2)", () => {
     }
     await stateManager.writeRaw("tasks/goal-1/task-history.json", history);
 
-    // The ancient similar entry is beyond the last-10 window, so should NOT reject
+    // The ancient similar entry is beyond the recent window, so should NOT reject
     const { task } = await generateTask(deps, "goal-1", "test_coverage");
     expect(task).not.toBeNull();
   });

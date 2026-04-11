@@ -11,9 +11,20 @@ const MAX_KNOWLEDGE_CONTEXT_CHARS = 4_000;
 const MAX_WORKSPACE_CONTEXT_CHARS = 6_000;
 const MAX_EXISTING_TASKS_CHARS = 2_000;
 const MAX_FAILURE_CONTEXT_CHARS = 2_000;
+const RECENT_FAILURE_HISTORY_LIMIT = 6;
 
 const repositoryContextCache = new Map<string, Promise<RepositoryPromptContext>>();
 const referencedIssueContextCache = new Map<string, Promise<string>>();
+
+interface PromptTaskHistoryEntry {
+  id?: string;
+  task_id?: string;
+  work_description?: string;
+  status?: string;
+  verification_verdict?: string | null;
+  verification_evidence?: string[];
+  consecutive_failure_count?: number;
+}
 
 function clampSection(content: string, maxChars: number, label: string): string {
   if (content.length <= maxChars) return content;
@@ -81,6 +92,76 @@ async function getReferencedIssueContext(repoRoot: string, issueLookupText: stri
 
   referencedIssueContextCache.set(cacheKey, issueContextPromise);
   return issueContextPromise;
+}
+
+function getTaskHistoryEntryId(entry: PromptTaskHistoryEntry): string | undefined {
+  return entry.task_id ?? entry.id;
+}
+
+function isRecentFailureEntry(entry: PromptTaskHistoryEntry): boolean {
+  if (entry.verification_verdict === "fail" || entry.verification_verdict === "partial") return true;
+  if ((entry.consecutive_failure_count ?? 0) > 0) return true;
+  return ["failed", "error", "timed_out", "abandoned", "discarded"].includes(entry.status ?? "");
+}
+
+async function resolveTaskHistoryDescription(
+  stateManager: StateManager,
+  goalId: string,
+  entry: PromptTaskHistoryEntry
+): Promise<string> {
+  if (entry.work_description?.trim()) return entry.work_description;
+
+  const taskId = getTaskHistoryEntryId(entry);
+  if (!taskId) return "";
+
+  try {
+    const raw = await stateManager.readRaw(`tasks/${goalId}/${taskId}.json`);
+    if (raw && typeof raw === "object") {
+      const description = (raw as { work_description?: unknown }).work_description;
+      return typeof description === "string" ? description : "";
+    }
+  } catch {
+    // Non-fatal: old task history entries may point at pruned task files.
+  }
+
+  return "";
+}
+
+async function buildRecentFailureHistorySection(
+  stateManager: StateManager,
+  goalId: string
+): Promise<string> {
+  let history: PromptTaskHistoryEntry[] = [];
+  try {
+    const raw = await stateManager.readRaw(`tasks/${goalId}/task-history.json`);
+    if (Array.isArray(raw)) {
+      history = raw as PromptTaskHistoryEntry[];
+    }
+  } catch {
+    return "";
+  }
+
+  const recentFailures = history.filter(isRecentFailureEntry).slice(-RECENT_FAILURE_HISTORY_LIMIT);
+  if (recentFailures.length === 0) return "";
+
+  const lines: string[] = [];
+  for (const entry of recentFailures) {
+    const description = await resolveTaskHistoryDescription(stateManager, goalId, entry);
+    if (!description) continue;
+    const verdict = entry.verification_verdict ? `, verdict=${entry.verification_verdict}` : "";
+    const evidence = entry.verification_evidence?.length
+      ? ` — evidence: ${entry.verification_evidence.slice(0, 2).join("; ")}`
+      : "";
+    lines.push(`- [${entry.status ?? "unknown"}${verdict}] ${description}${evidence}`);
+  }
+
+  if (lines.length === 0) return "";
+
+  return clampSection(
+    `\n=== Recent Failed/Discarded Task Attempts (avoid repeating) ===\n${lines.join("\n")}\nDo not generate another task that repeats the same edit/test direction unless the new task directly addresses the listed failure reason.\n`,
+    MAX_FAILURE_CONTEXT_CHARS,
+    "recent failure history"
+  );
 }
 
 /**
@@ -179,10 +260,11 @@ Gap Analysis:
 You MUST produce implementation tasks that modify or create files.
 The executing agent will run in a code sandbox with full file access.
 Tasks should involve writing code, fixing bugs, adding tests, or editing configuration — NOT analysis or planning.
+For operational KPI dimensions such as reliability, recovery, latency, uptime, or daemon stability, do not generate a test-only/regression-only task unless the goal explicitly asks for tests; prefer the smallest runtime/config/code change that directly moves the KPI, with tests only as supporting validation.
 Constraints:
 - No git commit/push/merge operations
-- Success criteria must use file checks only (e.g., "file X exists")
-- verification_method: use file existence/content checks (e.g., "test -f README.md")\n`;
+- Success criteria must be directly verifiable. Use file/content checks as supporting evidence, but for runtime/code behavior changes include at least one relevant test/build command such as "npx vitest run <test-file>" or "npm run build".
+- verification_method: start with a directly runnable check command such as "rg ...", "grep ...", "test -f ...", "npm ...", or "npx ..."; do not wrap it in prose like "Use rg ..."\n`;
   } else if (adapterType) {
     adapterSection = `\nExecution context: ${adapterType} adapter.\n`;
   }
@@ -236,6 +318,8 @@ Constraints:
     // no failure context — skip injection
   }
 
+  const recentFailureHistorySection = await buildRecentFailureHistorySection(stateManager, goalId);
+
   // Parent Goal Context section
   const parentSection = parentChain.length > 0
     ? `## Parent Goal Context\n${parentChain.map((p, i) => `${"  ".repeat(i)}Goal: ${p.title}\n${"  ".repeat(i)}Description: ${p.description}`).join("\n")}`
@@ -251,7 +335,7 @@ Constraints:
 
   return `${goalSection}
 ${dimensionSection}
-${parentSection ? `${parentSection}\n` : ""}${issueSection ? `${issueSection}\n` : ""}${purposeSection ? `${purposeSection}\n` : ""}${repoSection}${adapterSection}${knowledgeSection}${workspaceSection}${existingTasksSection}${failureContextSection}${reflectionsSection}${lessonsSection}
+${parentSection ? `${parentSection}\n` : ""}${issueSection ? `${issueSection}\n` : ""}${purposeSection ? `${purposeSection}\n` : ""}${repoSection}${adapterSection}${knowledgeSection}${workspaceSection}${existingTasksSection}${failureContextSection}${recentFailureHistorySection}${reflectionsSection}${lessonsSection}
 Requirements:
 - Specific to actual project (goal, description, repo context)
 - No generic improvements unless in goal description
