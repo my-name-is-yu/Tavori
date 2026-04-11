@@ -1,6 +1,6 @@
 {
   "name": "pulseed",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "description": "AI agent orchestrator that gives existing agents the drive to persist — set a goal, and PulSeed observes, delegates, verifies, and loops until done.",
   "type": "module",
   "main": "dist/index.js",
@@ -38,7 +38,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/my-name-is-yu/PulSeed.git"
+    "url": "git+https://github.com/my-name-is-yu/PulSeed.git"
   },
   "files": [
     "dist",

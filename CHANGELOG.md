@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.4] - 2026-04-11
+
+### Added
+- Added resident daemon KPI reporting for process liveness, command acceptance, task execution, task success rate, retry/abandon rate, and task latency
+- Added `pulseed daemon ping` as a cheap live command-acceptance probe
+- Documented the resident daemon recovery model, durable state layout, KPI surface, and forced-failure verification strategy
+
+### Changed
+- Hardened the resident daemon runtime with live health probes, durable supervisor state, task outcome ledgers, startup reconciliation, schedule persistence, and memory/checkpoint recovery coverage
+- Normalized npm package repository metadata for publish-time validation
+- Bumped the npm package version to `0.4.4`
+
+### Fixed
+- Fixed CI regressions around partial `DriveSystem` mocks by preserving a compatibility path for activation snapshots
+- Fixed concurrent atomic JSON writes to the same file by using unique temporary filenames
+- Fixed a proactive scheduling E2E timeout by making the cooldown assertion stop after the first deterministic goal cycle
+
 ## [0.4.3] - 2026-04-10
 
 ### Fixed
