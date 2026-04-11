@@ -30,6 +30,12 @@ import type { CapabilityAcquisitionOutcome } from "./capability.js";
 
 // ─── Phase 5 ───
 
+function resolveGoalWorkspacePath(goal: Goal): string | undefined {
+  const constraint = goal.constraints.find((entry) => entry.startsWith("workspace_path:"));
+  const workspacePath = constraint?.slice("workspace_path:".length).trim();
+  return workspacePath || undefined;
+}
+
 /** Completion check + milestone deadline check.
  * Sets result.error on fatal failure, sets result.completionJudgment. */
 export async function checkCompletionAndMilestones(
@@ -127,14 +133,15 @@ export async function detectStallsAndRebalance(
     // Gather tool-based workspace evidence for stall detection (Phase 6)
     if (ctx.toolExecutor) {
       try {
+        const workspacePath = resolveGoalWorkspacePath(goal);
         const toolContext = {
-          cwd: process.cwd(),
+          cwd: workspacePath ?? process.cwd(),
           goalId,
           trustBalance: 0,
           preApproved: true,
           approvalFn: async () => false,
         };
-        const evidence = await gatherStallEvidence(ctx.toolExecutor, toolContext);
+        const evidence = await gatherStallEvidence(ctx.toolExecutor, toolContext, workspacePath);
         result.toolStallEvidence = evidence;
         if (!evidence.hasWorkspaceChanges) {
           ctx.logger?.info("CoreLoop: stall evidence — no workspace changes detected", { goalId, toolErrors: evidence.toolErrors });

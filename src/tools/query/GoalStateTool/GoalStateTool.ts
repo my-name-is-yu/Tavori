@@ -13,7 +13,7 @@ export type GoalStateInput = z.infer<typeof GoalStateInputSchema>;
 export class GoalStateTool implements ITool<GoalStateInput, unknown> {
   readonly metadata: ToolMetadata = {
     name: "goal_state",
-    aliases: ["get_goal_state", "observe_goal"],
+    aliases: ["get_goal_state", "read_goal_state"],
     permissionLevel: PERMISSION_LEVEL,
     isReadOnly: true,
     isDestructive: false,

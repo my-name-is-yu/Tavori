@@ -31,6 +31,7 @@ import { GoalNegotiator } from "../../orchestrator/goal/goal-negotiator.js";
 import { TaskLifecycle } from "../../orchestrator/execution/task/task-lifecycle.js";
 import { ReportingEngine } from "../../reporting/reporting-engine.js";
 import { CoreLoop } from "../../orchestrator/loop/core-loop.js";
+import { ScheduleEngine } from "../../runtime/schedule/engine.js";
 import { TreeLoopOrchestrator } from "../../orchestrator/goal/tree-loop-orchestrator.js";
 import { GoalTreeManager } from "../../orchestrator/goal/goal-tree-manager.js";
 import { StateAggregator } from "../../orchestrator/goal/state-aggregator.js";
@@ -52,6 +53,8 @@ import { TimeHorizonEngine } from "../../platform/time/time-horizon-engine.js";
 import { HookManager } from "../../runtime/hook-manager.js";
 import { getCliLogger } from "./cli-logger.js";
 import { formatOperationError } from "./utils.js";
+import { ToolRegistry, ToolExecutor, ToolPermissionManager, ConcurrencyController, createBuiltinTools } from "../../tools/index.js";
+import { isSafeBashCommand } from "../tui/bash-mode.js";
 
 export function createCliDataSourceAdapter(cfg: DataSourceConfig): IDataSourceAdapter | null {
   if (cfg.type === "file") {
@@ -97,6 +100,37 @@ export async function buildDeps(
   const llmClient = await buildLLMClient();
   const trustManager = new TrustManager(stateManager);
   const driveSystem = new DriveSystem(stateManager);
+  const adapterRegistry = await buildAdapterRegistry(llmClient);
+  const scheduleEngine = new ScheduleEngine({ baseDir: stateManager.getBaseDir() });
+  await scheduleEngine.loadEntries();
+  const toolRegistry = new ToolRegistry();
+  const registerBuiltinTools = (deps?: Parameters<typeof createBuiltinTools>[0]) => {
+    for (const tool of createBuiltinTools(deps)) {
+      if (!toolRegistry.get(tool.metadata.name)) {
+        toolRegistry.register(tool);
+      }
+    }
+  };
+  registerBuiltinTools({ stateManager, trustManager, registry: toolRegistry, scheduleEngine });
+  const permissionManager = new ToolPermissionManager({
+    trustManager,
+    allowRules: [
+      {
+        toolName: "shell",
+        inputMatcher: (input) =>
+          typeof input === "object" &&
+          input !== null &&
+          typeof (input as Record<string, unknown>)["command"] === "string" &&
+          isSafeBashCommand((input as Record<string, unknown>)["command"] as string),
+        reason: "safe shell command",
+      },
+    ],
+  });
+  const toolExecutor = new ToolExecutor({
+    registry: toolRegistry,
+    permissionManager,
+    concurrency: new ConcurrencyController(),
+  });
 
   // Read datasource configs from ~/.pulseed/datasources/
   const dsDir = getDatasourcesDir();
@@ -157,6 +191,7 @@ export async function buildDeps(
   const observationPreChecker = new DimensionPreChecker({
     min_observation_interval_sec: 60,
     strategies: ["age", "git_diff"],
+    toolExecutor,
   });
   const observationEngine = new ObservationEngine(
     stateManager,
@@ -166,7 +201,8 @@ export async function buildDeps(
     {},
     logger,
     observationPreChecker,
-    hookManager
+    hookManager,
+    toolExecutor
   );
   const progressPredictor = new ProgressPredictor();
   const stallDetector = new StallDetector(stateManager, characterConfig, progressPredictor);
@@ -177,7 +213,7 @@ export async function buildDeps(
   const goalDependencyGraph = new GoalDependencyGraph(stateManager, llmClient, undefined, logger);
   const sessionManager = new SessionManager(stateManager, goalDependencyGraph);
   const strategyManager = new StrategyManager(stateManager, llmClient);
-  const adapterRegistry = await buildAdapterRegistry(llmClient);
+  strategyManager.setToolExecutor?.(toolExecutor);
 
   const reportingEngine = new ReportingEngine(stateManager, undefined, characterConfig);
 
@@ -229,6 +265,12 @@ export async function buildDeps(
     vectorIndex,
     embeddingClient,
   );
+  registerBuiltinTools({
+    adapterRegistry,
+    knowledgeManager,
+    observationEngine,
+    sessionManager,
+  });
 
   const taskLifecycle = new TaskLifecycle({
     stateManager,
@@ -244,6 +286,7 @@ export async function buildDeps(
       adapterRegistry,
       knowledgeManager,
       memoryLifecycle: memoryLifecycleManager,
+      toolExecutor,
     },
   });
 
@@ -306,6 +349,8 @@ export async function buildDeps(
     contextProvider,
     onProgress,
     goalRefiner,
+    toolExecutor,
+    toolRegistry,
   }, config);
 
   coreLoop.setTimeHorizonEngine(new TimeHorizonEngine());
@@ -331,5 +376,7 @@ export async function buildDeps(
     hookManager,
     memoryLifecycleManager,
     knowledgeManager,
+    toolExecutor,
+    toolRegistry,
   };
 }

@@ -14,6 +14,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
+import * as path from "node:path";
 import {
   type CoreLoopDeps,
   type GapCalculatorModule,
@@ -252,6 +253,36 @@ afterEach(() => {
 // ─── Tests ───
 
 describe("detectStallsAndRebalance — reRefineLeaf on observation-failure stall", () => {
+  it("uses the goal workspace_path for tool-based stall evidence", async () => {
+    const deps = createBaseDeps(tmpDir);
+    const workspacePath = path.join(tmpDir, "workspace");
+    fs.mkdirSync(workspacePath, { recursive: true });
+    const goal = makeGoal({
+      id: "goal-1",
+      constraints: [`workspace_path:${workspacePath}`],
+    });
+    await deps.stateManager.saveGoal(goal);
+    await deps.stateManager.saveGapHistory("goal-1", []);
+
+    const execute = vi.fn().mockResolvedValue({
+      success: true,
+      data: "",
+      summary: "no changes",
+      durationMs: 0,
+    });
+    const ctx = buildPhaseCtx(deps, { maxIterations: 10, adapterType: "openai_codex_cli" });
+    ctx.toolExecutor = { execute } as never;
+    const result = makeIterationResult();
+
+    await detectStallsAndRebalance(ctx, "goal-1", goal, result);
+
+    expect(execute).toHaveBeenCalledWith(
+      "git-diff",
+      { target: "unstaged", path: workspacePath },
+      expect.objectContaining({ cwd: workspacePath, goalId: "goal-1" }),
+    );
+  });
+
   it("calls reRefineLeaf() when stall suggested_cause is information_deficit and goalRefiner is present", async () => {
     const deps = createBaseDeps(tmpDir);
 
