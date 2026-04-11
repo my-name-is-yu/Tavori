@@ -4,6 +4,7 @@
 //   1. Bot token (from @BotFather) — verified via getMe API
 //   2. chat_id (number) — instruct user to message the bot and use getUpdates
 //   3. allowed_user_ids (optional, comma-separated)
+//   4. identity_key (optional) — share one PulSeed session across chat platforms
 //
 // Writes config to ~/.pulseed/plugins/telegram-bot/config.json
 // Copies plugin.yaml from the repo if available.
@@ -156,7 +157,15 @@ export async function cmdTelegramSetup(_args: string[]): Promise<number> {
       }
     }
 
-    // Step 4: Write config
+    // Step 4: identity_key (optional)
+    console.log("\nStep 4: Cross-platform identity (optional)");
+    console.log("  Use the same key in Telegram, Discord, WhatsApp, and Signal configs");
+    console.log("  when they should continue the same PulSeed chat session.");
+    console.log("  Leave empty to keep this Telegram chat separate.\n");
+
+    const identityKey = await ask(rl, "Identity key (e.g. personal) or press Enter to skip: ");
+
+    // Step 5: Write config
     const pluginDir = getPluginDir();
     await ensurePluginDir(pluginDir);
 
@@ -165,6 +174,7 @@ export async function cmdTelegramSetup(_args: string[]): Promise<number> {
       chat_id: chatId,
       allowed_user_ids: allowedUserIds,
       polling_timeout: 30,
+      ...(identityKey ? { identity_key: identityKey } : {}),
     };
 
     const configPath = path.join(pluginDir, "config.json");
@@ -181,6 +191,11 @@ export async function cmdTelegramSetup(_args: string[]): Promise<number> {
       console.log(`  Allowed users: ${allowedUserIds.join(", ")}`);
     } else {
       console.log("  Allowed users: (all)");
+    }
+    if (identityKey) {
+      console.log(`  Identity key: ${identityKey}`);
+    } else {
+      console.log("  Identity key: (not set)");
     }
     console.log("\nRun 'pulseed plugin install' to activate the plugin.");
 

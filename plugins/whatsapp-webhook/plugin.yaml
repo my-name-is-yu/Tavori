@@ -1,0 +1,62 @@
+name: whatsapp-webhook
+version: "1.0.0"
+type: notifier
+capabilities:
+  - whatsapp_notification
+  - bidirectional_chat
+supported_events:
+  - goal_complete
+  - approval_needed
+  - stall_detected
+  - task_blocked
+  - goal_progress
+  - trust_change
+  - schedule_change_detected
+  - schedule_heartbeat_failure
+  - schedule_escalation
+  - schedule_report_ready
+description: "WhatsApp Cloud API webhook plugin for PulSeed — bidirectional chat"
+config_schema:
+  phone_number_id:
+    type: string
+    required: true
+    description: "WhatsApp Cloud API phone number id"
+  access_token:
+    type: string
+    required: true
+    description: "WhatsApp Cloud API access token"
+  verify_token:
+    type: string
+    required: true
+    description: "Webhook verify token configured in Meta"
+  recipient_id:
+    type: string
+    required: true
+    description: "Default recipient used for outbound notifications"
+  identity_key:
+    type: string
+    required: true
+    description: "Cross-platform identity key passed to the shared session manager"
+  host:
+    type: string
+    required: false
+    default: 127.0.0.1
+    description: "Webhook host"
+  port:
+    type: number
+    required: false
+    default: 8788
+    description: "Webhook port"
+  path:
+    type: string
+    required: false
+    default: /webhook
+    description: "Webhook path"
+  app_secret:
+    type: string
+    required: false
+    description: "Optional Meta app secret for X-Hub-Signature-256 verification"
+entry_point: "dist/index.js"
+min_pulseed_version: "0.1.0"
+permissions:
+  network: true

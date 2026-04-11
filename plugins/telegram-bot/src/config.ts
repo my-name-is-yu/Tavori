@@ -9,6 +9,7 @@ export interface TelegramConfig {
   allowed_user_ids: number[];
   allow_all: boolean;
   polling_timeout: number;
+  identity_key?: string;
 }
 
 // ─── Config loader + validator ───
@@ -56,6 +57,9 @@ function validateConfig(raw: unknown): TelegramConfig {
   if (typeof pollingTimeout !== "number" || !Number.isInteger(pollingTimeout)) {
     throw new Error("telegram-bot: polling_timeout must be an integer");
   }
+  if (cfg["identity_key"] !== undefined && (typeof cfg["identity_key"] !== "string" || cfg["identity_key"].trim().length === 0)) {
+    throw new Error("telegram-bot: identity_key must be a non-empty string when set");
+  }
 
   return {
     bot_token: cfg["bot_token"] as string,
@@ -63,5 +67,6 @@ function validateConfig(raw: unknown): TelegramConfig {
     allowed_user_ids: allowedUserIds as number[],
     allow_all: allowAll,
     polling_timeout: Math.min(Math.max(pollingTimeout as number, 1), 60),
+    identity_key: cfg["identity_key"] as string | undefined,
   };
 }

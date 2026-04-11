@@ -64,6 +64,12 @@ export type { CoreLoopDeps, LoopConfig, LoopResult } from "./orchestrator/loop/c
 export { CLIRunner } from "./interface/cli/cli-runner.js";
 export { ChatRunner } from "./interface/chat/chat-runner.js";
 export type { ChatRunnerDeps, ChatRunResult } from "./interface/chat/chat-runner.js";
+export { CrossPlatformChatSessionManager, getGlobalCrossPlatformChatSessionManager } from "./interface/chat/cross-platform-session.js";
+export type {
+  CrossPlatformChatSessionOptions,
+  CrossPlatformChatSessionInfo,
+  CrossPlatformIncomingChatMessage,
+} from "./interface/chat/cross-platform-session.js";
 export type {
   ChatEvent,
   ChatEventHandler,

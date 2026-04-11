@@ -32,6 +32,8 @@ function reportTypeToEventType(reportType: string): NotificationEventType | null
   switch (reportType) {
     case "goal_completion":
       return "goal_complete";
+    case "approval_request":
+      return "approval_needed";
     case "urgent_alert":
       return "approval_needed";
     case "stall_escalation":
@@ -41,6 +43,12 @@ function reportTypeToEventType(reportType: string): NotificationEventType | null
     case "capability_escalation":
       return "task_blocked";
     case "progress_update":
+      return "goal_progress";
+    case "daily_summary":
+      return "goal_progress";
+    case "weekly_report":
+      return "goal_progress";
+    case "execution_summary":
       return "goal_progress";
     case "schedule_change":
       return "schedule_change_detected";
@@ -171,11 +179,14 @@ export class NotificationDispatcher implements INotificationDispatcher {
    */
   private async dispatchToPluginNotifiers(report: Report): Promise<void> {
     if (!this.notifierRegistry) return;
+    if (this.isDND(report.report_type) || this.isCooldown(report.report_type)) return;
 
     const eventType = reportTypeToEventType(report.report_type);
     if (eventType === null) return;
 
-    const notifiers = this.notifierRegistry.findForEvent(eventType);
+    const notifiers = this.notifierRegistry
+      .findForEvent(eventType)
+      .filter((notifier) => this.pluginNotifierAcceptsReportType(notifier.name, report.report_type));
     if (notifiers.length === 0) return;
 
     const event: NotificationEvent = {
@@ -196,13 +207,19 @@ export class NotificationDispatcher implements INotificationDispatcher {
       notifiers.map((n) => n.notify(event))
     );
 
+    let delivered = false;
     for (let i = 0; i < settlements.length; i++) {
       const result = settlements[i];
       if (result.status === "rejected") {
         const notifierName = notifiers[i].name;
         const reason = result.reason instanceof Error ? result.reason.message : String(result.reason);
         this.logger?.error(`[NotificationDispatcher] plugin notifier "${notifierName}" failed: ${reason}`);
+      } else {
+        delivered = true;
       }
+    }
+    if (delivered) {
+      this.lastSent.set(report.report_type, Date.now());
     }
   }
 
@@ -276,6 +293,31 @@ export class NotificationDispatcher implements INotificationDispatcher {
   ): boolean {
     if (channel.report_types.length === 0) return true;
     return channel.report_types.includes(reportType);
+  }
+
+  /**
+   * Decide whether a registered INotifier should receive this report.
+   * mode=all keeps existing behavior unless a per-notifier route disables or narrows it.
+   * mode=only sends only to explicitly listed enabled routes.
+   * mode=none disables plugin notifier delivery while legacy channels still work.
+   */
+  private pluginNotifierAcceptsReportType(notifierName: string, reportType: string): boolean {
+    const routing = this.config.plugin_notifiers;
+    if (routing.mode === "none") {
+      return false;
+    }
+
+    const route = routing.routes.find((candidate) => candidate.id === notifierName);
+    if (routing.mode === "only" && route === undefined) {
+      return false;
+    }
+    if (route?.enabled === false) {
+      return false;
+    }
+    if (route && route.report_types.length > 0) {
+      return route.report_types.includes(reportType);
+    }
+    return true;
   }
 
   /** Dispatch to the correct sender based on channel type. */

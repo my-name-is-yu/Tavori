@@ -80,6 +80,10 @@ describe("setup notification step", () => {
           format: "json",
         },
       ],
+      plugin_notifiers: {
+        mode: "all",
+        routes: [],
+      },
       do_not_disturb: {
         enabled: false,
         start_hour: 22,

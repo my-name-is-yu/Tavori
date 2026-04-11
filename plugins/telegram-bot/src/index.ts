@@ -34,7 +34,7 @@ export class TelegramBotPlugin {
 
     this.notifier = new TelegramNotifier(this.api, config.chat_id);
 
-    this.processor = new TelegramChatRunnerProcessor(this.pluginDir);
+    this.processor = new TelegramChatRunnerProcessor(this.pluginDir, process.cwd(), config.identity_key);
 
     this.bridge = new ChatBridge(
       (text, chatId, emit) => this.processor!.processMessage(text, chatId, emit),

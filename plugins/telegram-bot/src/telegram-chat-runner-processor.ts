@@ -10,6 +10,7 @@ import {
   ToolPermissionManager,
   ConcurrencyController,
   createBuiltinTools,
+  getGlobalCrossPlatformChatSessionManager,
   type ChatEventHandler,
   type IAdapter,
   type ILLMClient,
@@ -35,14 +36,30 @@ function formatError(message: string): string {
 
 export class TelegramChatRunnerProcessor {
   private readonly workspaceRoot: string;
+  private readonly identityKey: string | undefined;
   private bootstrapPromise: Promise<BootstrapResult> | null = null;
   private readonly sessions = new Map<number, ChatRunnerLike>();
 
-  constructor(_pluginDir: string, workspaceRoot = process.cwd()) {
+  constructor(_pluginDir: string, workspaceRoot = process.cwd(), identityKey?: string) {
     this.workspaceRoot = workspaceRoot;
+    this.identityKey = identityKey;
   }
 
   async processMessage(text: string, chatId: number, emit: ChatEventHandler): Promise<string> {
+    const shared = await this.getSharedManager();
+    if (shared !== null) {
+      return shared.processIncomingMessage({
+        text,
+        platform: "telegram",
+        identity_key: this.identityKey,
+        conversation_id: String(chatId),
+        sender_id: String(chatId),
+        cwd: this.workspaceRoot,
+        onEvent: emit,
+        metadata: { chat_id: chatId },
+      });
+    }
+
     try {
       const runner = await this.getRunner(chatId);
       runner.onEvent = emit;
@@ -52,6 +69,26 @@ export class TelegramChatRunnerProcessor {
       const message = err instanceof Error ? err.message : String(err);
       console.warn(`[telegram-bot] chat runner unavailable for chat ${chatId}: ${message}`);
       return formatError(message);
+    }
+  }
+
+  private async getSharedManager(): Promise<{
+    processIncomingMessage(input: {
+      text: string;
+      platform: string;
+      identity_key?: string;
+      conversation_id: string;
+      sender_id: string;
+      cwd: string;
+      onEvent: ChatEventHandler;
+      metadata: Record<string, unknown>;
+    }): Promise<string>;
+  } | null> {
+    try {
+      const manager = await getGlobalCrossPlatformChatSessionManager();
+      return typeof manager.processIncomingMessage === "function" ? manager : null;
+    } catch {
+      return null;
     }
   }
 

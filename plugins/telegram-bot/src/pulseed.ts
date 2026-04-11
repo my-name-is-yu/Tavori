@@ -6,6 +6,11 @@ export {
   ToolRegistry,
   createBuiltinTools,
   ChatRunner,
+  getGlobalCrossPlatformChatSessionManager,
+  ToolExecutor,
+  ToolPermissionManager,
+  ConcurrencyController,
+  TrustManager,
 } from "../../../src/index.js";
 
 export type {

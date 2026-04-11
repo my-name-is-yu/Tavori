@@ -26,6 +26,7 @@ import { isDaemonRunning, probeDaemonHealth } from "../../../runtime/daemon/clie
 import { PluginLoader } from "../../../runtime/plugin-loader.js";
 import { NotifierRegistry } from "../../../runtime/notifier-registry.js";
 import { NotificationDispatcher } from "../../../runtime/notification-dispatcher.js";
+import { getNotificationConfigPath, loadNotificationConfig } from "../../../runtime/notification-routing.js";
 import { AdapterRegistry } from "../../../orchestrator/execution/adapter-layer.js";
 import { DataSourceRegistry } from "../../../platform/observation/data-source-adapter.js";
 import { getProviderRuntimeFingerprint } from "../../../base/llm/provider-config.js";
@@ -258,10 +259,10 @@ export async function cmdStart(
   } catch (err) {
     getCliLogger().warn(`[daemon] Plugin loading failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
   }
-  const notificationDispatcher = new NotificationDispatcher(undefined, notifierRegistry);
-  deps.reportingEngine.setNotificationDispatcher(notificationDispatcher);
-
   const daemonBaseDir = deps.stateManager.getBaseDir();
+  const notificationConfig = await loadNotificationConfig(getNotificationConfigPath(daemonBaseDir));
+  const notificationDispatcher = new NotificationDispatcher(notificationConfig, notifierRegistry);
+  deps.reportingEngine.setNotificationDispatcher(notificationDispatcher);
 
   // Create EventServer for event-driven wake-ups and SSE clients.
   const eventServer = new EventServer(

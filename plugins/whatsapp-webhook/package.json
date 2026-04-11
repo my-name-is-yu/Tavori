@@ -1,0 +1,31 @@
+{
+  "name": "@pulseed/whatsapp-webhook",
+  "version": "1.0.0",
+  "description": "WhatsApp Cloud API webhook plugin for PulSeed — bidirectional chat",
+  "type": "module",
+  "main": "dist/index.js",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "pulseed",
+    "plugin",
+    "whatsapp",
+    "webhook",
+    "chat"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "pulseed": ">=0.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

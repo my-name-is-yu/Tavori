@@ -152,6 +152,82 @@ describe("NotificationDispatcher — NotifierRegistry integration", () => {
     });
   });
 
+  it("routes daily and weekly reports through plugin notifiers", async () => {
+    const notifier = makeNotifier("report-target", ["goal_progress"]);
+    registry.register("report-target", notifier);
+
+    await dispatcher.dispatch(makeReport({ report_type: "weekly_report" }));
+
+    expect(notifier.notify).toHaveBeenCalledOnce();
+    const event = (notifier.notify as ReturnType<typeof vi.fn>).mock.calls[0][0] as NotificationEvent;
+    expect(event.type).toBe("goal_progress");
+    expect(event.details.report_type).toBe("weekly_report");
+  });
+
+  it("filters plugin notifier delivery through notification config", async () => {
+    dispatcher = new NotificationDispatcher(
+      {
+        plugin_notifiers: {
+          mode: "only",
+          routes: [{ id: "discord-bot", enabled: true, report_types: ["weekly_report"] }],
+        },
+      },
+      registry
+    );
+    const discord = makeNotifier("discord-bot", ["goal_progress"]);
+    const whatsapp = makeNotifier("whatsapp-webhook", ["goal_progress"]);
+    registry.register("discord-bot", discord);
+    registry.register("whatsapp-webhook", whatsapp);
+
+    await dispatcher.dispatch(makeReport({ report_type: "weekly_report" }));
+
+    expect(discord.notify).toHaveBeenCalledOnce();
+    expect(whatsapp.notify).not.toHaveBeenCalled();
+  });
+
+  it("applies DND suppression to plugin notifiers", async () => {
+    dispatcher = new NotificationDispatcher(
+      {
+        do_not_disturb: {
+          enabled: true,
+          start_hour: 0,
+          end_hour: 23,
+          exceptions: [],
+        },
+      },
+      registry
+    );
+    const notifier = makeNotifier("discord-bot", ["goal_complete"]);
+    registry.register("discord-bot", notifier);
+
+    await dispatcher.dispatch(makeReport({ report_type: "goal_completion" }));
+
+    expect(notifier.notify).not.toHaveBeenCalled();
+  });
+
+  it("applies cooldown suppression to plugin notifiers after a plugin delivery", async () => {
+    dispatcher = new NotificationDispatcher(
+      {
+        cooldown: {
+          goal_completion: 60,
+          urgent_alert: 0,
+          approval_request: 0,
+          stall_escalation: 60,
+          strategy_change: 30,
+          capability_escalation: 60,
+        },
+      },
+      registry
+    );
+    const notifier = makeNotifier("discord-bot", ["goal_complete"]);
+    registry.register("discord-bot", notifier);
+
+    await dispatcher.dispatch(makeReport({ report_type: "goal_completion" }));
+    await dispatcher.dispatch(makeReport({ report_type: "goal_completion", id: "r2" }));
+
+    expect(notifier.notify).toHaveBeenCalledOnce();
+  });
+
   it("one failing notifier does not prevent other notifiers from receiving event", async () => {
     const failing = makeNotifier("failing", ["goal_complete"], async () => {
       throw new Error("boom");

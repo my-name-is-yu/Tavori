@@ -13,6 +13,7 @@ const mockBuildAdapterRegistry = vi.hoisted(() => vi.fn().mockResolvedValue({
   getAdapter: vi.fn().mockReturnValue({ adapterType: "openai_api" }),
 }));
 const mockCreateBuiltinTools = vi.hoisted(() => vi.fn().mockReturnValue([]));
+const mockGetGlobalCrossPlatformChatSessionManager = vi.hoisted(() => vi.fn().mockResolvedValue(null));
 
 vi.mock("pulseed", () => {
   class FakeStateManager {
@@ -53,6 +54,7 @@ vi.mock("pulseed", () => {
       register = vi.fn();
     },
     createBuiltinTools: mockCreateBuiltinTools,
+    getGlobalCrossPlatformChatSessionManager: mockGetGlobalCrossPlatformChatSessionManager,
   };
 });
 
@@ -66,6 +68,8 @@ describe("TelegramChatRunnerProcessor", () => {
     mockBuildLLMClient.mockClear();
     mockBuildAdapterRegistry.mockClear();
     mockCreateBuiltinTools.mockClear();
+    mockGetGlobalCrossPlatformChatSessionManager.mockReset();
+    mockGetGlobalCrossPlatformChatSessionManager.mockResolvedValue(null);
   });
 
   it("reuses one ChatRunner per chatId", async () => {
@@ -99,6 +103,27 @@ describe("TelegramChatRunnerProcessor", () => {
     const processor = new TelegramChatRunnerProcessor("/tmp/plugins/telegram-bot");
 
     await expect(processor.processMessage("hello", 101, vi.fn())).resolves.toBe("Error: missing provider config");
+    expect(mockCreatedRunners).toHaveLength(0);
+  });
+
+  it("uses the shared cross-platform manager when available", async () => {
+    const processIncomingMessage = vi.fn().mockResolvedValue("shared-output");
+    mockGetGlobalCrossPlatformChatSessionManager.mockResolvedValue({ processIncomingMessage });
+    const emit = vi.fn();
+    const processor = new TelegramChatRunnerProcessor("/tmp/plugins/telegram-bot", "/workspace", "shared-human");
+
+    await expect(processor.processMessage("hello", 101, emit)).resolves.toBe("shared-output");
+
+    expect(processIncomingMessage).toHaveBeenCalledWith({
+      text: "hello",
+      platform: "telegram",
+      identity_key: "shared-human",
+      conversation_id: "101",
+      sender_id: "101",
+      cwd: "/workspace",
+      onEvent: emit,
+      metadata: { chat_id: 101 },
+    });
     expect(mockCreatedRunners).toHaveLength(0);
   });
 });

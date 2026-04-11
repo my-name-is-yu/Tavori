@@ -89,9 +89,20 @@ describe("config — loadConfig", () => {
     expect(cfg.allow_all).toBe(true);
   });
 
+  it("accepts optional identity_key for cross-platform continuation", () => {
+    writeTmpConfig(tmpDir, { bot_token: "tok", chat_id: 1, identity_key: "personal" });
+    const cfg = loadConfig(tmpDir);
+    expect(cfg.identity_key).toBe("personal");
+  });
+
   it("throws when allow_all is not a boolean", () => {
     writeTmpConfig(tmpDir, { bot_token: "tok", chat_id: 1, allow_all: "yes" });
     expect(() => loadConfig(tmpDir)).toThrow("allow_all");
+  });
+
+  it("throws when identity_key is empty", () => {
+    writeTmpConfig(tmpDir, { bot_token: "tok", chat_id: 1, identity_key: "" });
+    expect(() => loadConfig(tmpDir)).toThrow("identity_key");
   });
 
   it("throws when config.json does not exist", () => {

@@ -1,0 +1,49 @@
+name: signal-bridge
+version: "1.0.0"
+type: notifier
+capabilities:
+  - signal_notification
+  - bidirectional_chat
+supported_events:
+  - goal_progress
+  - goal_complete
+  - task_blocked
+  - approval_needed
+  - stall_detected
+  - trust_change
+  - schedule_change_detected
+  - schedule_heartbeat_failure
+  - schedule_escalation
+  - schedule_report_ready
+description: "signal-cli REST bridge plugin for PulSeed — bidirectional chat"
+config_schema:
+  bridge_url:
+    type: string
+    required: true
+    description: "signal-cli REST bridge base URL"
+  account:
+    type: string
+    required: true
+    description: "Signal account/number used for send and receive"
+  recipient_id:
+    type: string
+    required: true
+    description: "Default recipient used for outbound notifications"
+  identity_key:
+    type: string
+    required: true
+    description: "Cross-platform identity key passed to the shared session manager"
+  poll_interval_ms:
+    type: number
+    required: false
+    default: 5000
+    description: "Polling interval for inbound messages"
+  receive_timeout_ms:
+    type: number
+    required: false
+    default: 2000
+    description: "Bridge receive timeout"
+entry_point: "dist/index.js"
+min_pulseed_version: "0.1.0"
+permissions:
+  network: true

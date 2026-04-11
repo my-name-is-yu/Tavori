@@ -5,6 +5,7 @@ import { getPluginsDir } from "../base/utils/paths.js";
 import { getPulseedVersion as getPackageVersion } from "../base/utils/pulseed-meta.js";
 import { writeJsonFileAtomic } from "../base/utils/json-io.js";
 import { ValidationError } from "../base/utils/errors.js";
+import { getGlobalCrossPlatformChatSessionManager } from "../interface/chat/cross-platform-session.js";
 import type { Logger } from "./logger.js";
 import {
   PluginManifestSchema,
@@ -100,6 +101,7 @@ export class PluginLoader {
     }
 
     // 2. Dynamically import the entry point
+    exposeCrossPlatformChatSessionManager();
     const entryPath = path.resolve(pluginDir, manifest.entry_point);
     if (!entryPath.startsWith(pluginDir + path.sep) && entryPath !== pluginDir) {
       throw new ValidationError(`Plugin entry point escapes plugin directory: ${manifest.entry_point}`);
@@ -114,7 +116,7 @@ export class PluginLoader {
       throw new Error(`Failed to import plugin entry point: ${entryPath} — ${msg}`);
     }
 
-    const impl = module.default;
+    const impl = await this.preparePluginImplementation(module.default, pluginDir);
     if (impl === undefined || impl === null) {
       throw new Error(
         `Plugin entry point has no default export: ${entryPath}`
@@ -123,11 +125,42 @@ export class PluginLoader {
 
     // 3. Validate interface compliance
     this.validateInterface(manifest.type, impl);
+    await this.initPluginIfNeeded(impl);
 
     // 4. Register in the appropriate registry
     await this.registerPlugin(manifest, impl, pluginDir);
 
     return this.buildSuccessState(manifest);
+  }
+
+  async preparePluginImplementation(impl: unknown, pluginDir: string): Promise<unknown> {
+    if (typeof impl !== "function") {
+      return impl;
+    }
+
+    try {
+      return new (impl as new (pluginDir: string) => unknown)(pluginDir);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (!message.includes("not a constructor") && !message.includes("Class constructor")) {
+        throw err;
+      }
+      const result = (impl as (pluginDir: string) => unknown | Promise<unknown>)(pluginDir);
+      return await result;
+    }
+  }
+
+  async initPluginIfNeeded(impl: unknown): Promise<void> {
+    if (typeof impl !== "object" || impl === null || !("init" in impl)) {
+      return;
+    }
+
+    const init = (impl as { init?: unknown }).init;
+    if (typeof init !== "function") {
+      return;
+    }
+
+    await init.call(impl);
   }
 
   /**
@@ -365,6 +398,15 @@ export class PluginLoader {
 }
 
 // ─── Module-level helpers ───
+
+interface PulseedRuntimeGlobal {
+  __pulseedGetGlobalCrossPlatformChatSessionManager?: typeof getGlobalCrossPlatformChatSessionManager;
+}
+
+function exposeCrossPlatformChatSessionManager(): void {
+  (globalThis as typeof globalThis & PulseedRuntimeGlobal)
+    .__pulseedGetGlobalCrossPlatformChatSessionManager = getGlobalCrossPlatformChatSessionManager;
+}
 
 // ─── PulSeed version (read once from package.json) ───
 

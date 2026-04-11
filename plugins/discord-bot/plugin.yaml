@@ -1,0 +1,63 @@
+name: discord-bot
+version: "1.0.0"
+type: notifier
+capabilities:
+  - discord_notification
+  - bidirectional_chat
+supported_events:
+  - goal_complete
+  - approval_needed
+  - stall_detected
+  - task_blocked
+  - goal_progress
+  - trust_change
+  - schedule_change_detected
+  - schedule_heartbeat_failure
+  - schedule_escalation
+  - schedule_report_ready
+description: "Discord interaction webhook plugin for PulSeed — bidirectional chat"
+config_schema:
+  application_id:
+    type: string
+    required: true
+    description: "Discord application id used for interaction follow-ups"
+  public_key_hex:
+    type: string
+    required: false
+    description: "Discord interaction public key in hex form"
+  bot_token:
+    type: string
+    required: true
+    description: "Discord bot token used for outbound notifications"
+  channel_id:
+    type: string
+    required: true
+    description: "Channel id that receives outbound messages"
+  identity_key:
+    type: string
+    required: true
+    description: "Cross-platform identity key passed to the shared session manager"
+  command_name:
+    type: string
+    required: false
+    default: pulseed
+    description: "Slash command name that triggers chat handoff"
+  ephemeral:
+    type: boolean
+    required: false
+    default: false
+    description: "Whether slash-command acknowledgements are visible only to the caller"
+  port:
+    type: number
+    required: false
+    default: 8787
+    description: "Local webhook port"
+  host:
+    type: string
+    required: false
+    default: 127.0.0.1
+    description: "Local webhook host"
+entry_point: "dist/index.js"
+min_pulseed_version: "0.1.0"
+permissions:
+  network: true

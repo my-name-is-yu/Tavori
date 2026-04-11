@@ -1,31 +1,20 @@
 // ─── pulseed notify commands (add, list, remove, test) ───
 
 import { parseArgs } from "node:util";
-import * as path from "node:path";
-import { readJsonFileOrNull, writeJsonFileAtomic } from "../../../base/utils/json-io.js";
-import { NotificationConfigSchema } from "../../../base/types/notification.js";
 import type { NotificationConfig, NotificationChannel } from "../../../base/types/notification.js";
-import { getPulseedDirPath } from "../../../base/utils/paths.js";
-
-function getNotificationConfigPath(baseDir?: string): string {
-  return path.join(baseDir ?? getPulseedDirPath(), "notification.json");
-}
+import {
+  applyNaturalLanguageNotificationRouting,
+  getNotificationConfigPath,
+  loadNotificationConfig,
+  saveNotificationConfig,
+} from "../../../runtime/notification-routing.js";
 
 async function loadConfig(configPath: string): Promise<NotificationConfig> {
-  const raw = await readJsonFileOrNull(configPath);
-  if (raw === null) {
-    return NotificationConfigSchema.parse({});
-  }
-  const result = NotificationConfigSchema.safeParse(raw);
-  if (!result.success) {
-    console.error(`Warning: notification config has invalid format, resetting. (${result.error.message})`);
-    return NotificationConfigSchema.parse({});
-  }
-  return result.data;
+  return loadNotificationConfig(configPath);
 }
 
 async function saveConfig(configPath: string, config: NotificationConfig): Promise<void> {
-  await writeJsonFileAtomic(configPath, config);
+  await saveNotificationConfig(configPath, config);
 }
 
 function formatChannel(ch: NotificationChannel, index: number): string {
@@ -188,7 +177,7 @@ async function cmdNotifyAdd(args: string[], configPath: string): Promise<number>
 async function cmdNotifyList(configPath: string): Promise<number> {
   const config = await loadConfig(configPath);
 
-  if (config.channels.length === 0) {
+  if (config.channels.length === 0 && config.plugin_notifiers.routes.length === 0) {
     console.log("No channels configured");
     return 0;
   }
@@ -196,6 +185,13 @@ async function cmdNotifyList(configPath: string): Promise<number> {
   console.log("Notification Channels:");
   for (let i = 0; i < config.channels.length; i++) {
     console.log(formatChannel(config.channels[i]!, i));
+  }
+  console.log(`Plugin notifiers: ${config.plugin_notifiers.mode}`);
+  for (const route of config.plugin_notifiers.routes) {
+    const reports = route.report_types.length > 0
+      ? ` reports: ${route.report_types.join(", ")}`
+      : " reports: all";
+    console.log(`  ${route.id}: ${route.enabled ? "enabled" : "disabled"};${reports}`);
   }
   return 0;
 }
@@ -286,6 +282,24 @@ async function cmdNotifyTest(args: string[], configPath: string): Promise<number
   return 0;
 }
 
+async function cmdNotifyRoute(args: string[], configPath: string): Promise<number> {
+  const instruction = args.join(" ").trim();
+  if (!instruction) {
+    console.error("Usage: pulseed notify route <natural language instruction>");
+    return 1;
+  }
+
+  try {
+    const update = await applyNaturalLanguageNotificationRouting(instruction, configPath);
+    console.log(update.summary);
+    return 0;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`Error: ${message}`);
+    return 1;
+  }
+}
+
 export async function cmdNotify(args: string[]): Promise<number> {
   const subcommand = args[0];
   const rest = args.slice(1);
@@ -304,15 +318,19 @@ export async function cmdNotify(args: string[]): Promise<number> {
     case "test":
       return cmdNotifyTest(rest, configPath);
 
+    case "route":
+      return cmdNotifyRoute(rest, configPath);
+
     default:
       console.error(
-        "Usage: pulseed notify <add|list|remove|test>\n" +
+        "Usage: pulseed notify <add|list|remove|test|route>\n" +
           "  add slack --webhook-url <url>\n" +
           "  add webhook --url <url> [--header 'Key: Value']\n" +
           "  add email --address <email> --smtp-host <host> [--smtp-port <port>]\n" +
           "  list\n" +
           "  remove <index>\n" +
-          "  test [index]"
+          "  test [index]\n" +
+          "  route <natural language instruction>"
       );
       return 1;
   }

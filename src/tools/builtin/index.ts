@@ -43,6 +43,7 @@ export { ArchiveGoalTool } from "../mutation/ArchiveGoalTool/ArchiveGoalTool.js"
 export { DeleteGoalTool } from "../mutation/DeleteGoalTool/DeleteGoalTool.js";
 export { TogglePluginTool } from "../mutation/TogglePluginTool/TogglePluginTool.js";
 export { UpdateConfigTool } from "../mutation/UpdateConfigTool/UpdateConfigTool.js";
+export { ConfigureNotificationRoutingTool } from "../mutation/ConfigureNotificationRoutingTool/ConfigureNotificationRoutingTool.js";
 export { ResetTrustTool } from "../mutation/ResetTrustTool/ResetTrustTool.js";
 export { RunAdapterTool } from "../execution/RunAdapterTool/RunAdapterTool.js";
 export { SpawnSessionTool } from "../execution/SpawnSessionTool/SpawnSessionTool.js";
@@ -109,6 +110,7 @@ import { ArchiveGoalTool } from "../mutation/ArchiveGoalTool/ArchiveGoalTool.js"
 import { DeleteGoalTool } from "../mutation/DeleteGoalTool/DeleteGoalTool.js";
 import { TogglePluginTool } from "../mutation/TogglePluginTool/TogglePluginTool.js";
 import { UpdateConfigTool } from "../mutation/UpdateConfigTool/UpdateConfigTool.js";
+import { ConfigureNotificationRoutingTool } from "../mutation/ConfigureNotificationRoutingTool/ConfigureNotificationRoutingTool.js";
 import { ResetTrustTool } from "../mutation/ResetTrustTool/ResetTrustTool.js";
 import { RunAdapterTool } from "../execution/RunAdapterTool/RunAdapterTool.js";
 import { SpawnSessionTool } from "../execution/SpawnSessionTool/SpawnSessionTool.js";
@@ -221,7 +223,7 @@ export function createBuiltinTools(deps?: BuiltinToolDeps): ITool[] {
     );
   }
 
-  tools.push(new TogglePluginTool(), new UpdateConfigTool());
+  tools.push(new TogglePluginTool(), new UpdateConfigTool(), new ConfigureNotificationRoutingTool());
 
   if (deps?.trustManager) {
     tools.push(new ResetTrustTool(deps.trustManager));

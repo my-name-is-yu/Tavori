@@ -172,6 +172,43 @@ describe("cmdNotify", () => {
     expect(consoleSpy).toHaveBeenCalledWith("No channels configured");
   });
 
+  it("route updates plugin notifier routing from natural language", async () => {
+    const code = await cmdNotify(["route", "緊急通知はWhatsAppだけに送って"]);
+
+    expect(code).toBe(0);
+
+    const raw = JSON.parse(
+      fs.readFileSync(path.join(tmpDir, "notification.json"), "utf-8")
+    );
+    expect(raw.plugin_notifiers).toEqual({
+      mode: "only",
+      routes: [
+        {
+          id: "whatsapp-webhook",
+          enabled: true,
+          report_types: ["urgent_alert", "approval_request"],
+        },
+      ],
+    });
+    expect(consoleSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Plugin notification routing set to only")
+    );
+  });
+
+  it("route rejects invalid existing config without overwriting it", async () => {
+    const configPath = path.join(tmpDir, "notification.json");
+    const invalidJson = JSON.stringify({ channels: [{ type: "webhook", url: "not-a-url" }] });
+    fs.writeFileSync(configPath, invalidJson, "utf-8");
+
+    const code = await cmdNotify(["route", "Discordだけ"]);
+
+    expect(code).toBe(1);
+    expect(consoleErrSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Invalid notification config")
+    );
+    expect(fs.readFileSync(configPath, "utf-8")).toBe(invalidJson);
+  });
+
   // ─── remove ───
 
   it("remove by index works", async () => {

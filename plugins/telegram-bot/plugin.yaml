@@ -25,6 +25,10 @@ config_schema:
     type: array
     required: false
     description: "Telegram user IDs allowed to send commands (empty = all)"
+  identity_key:
+    type: string
+    required: false
+    description: "Optional cross-platform identity key shared with Discord, WhatsApp, and Signal plugins"
   polling_timeout:
     type: number
     default: 30

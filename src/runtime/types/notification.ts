@@ -42,6 +42,19 @@ export const NotificationChannelSchema = z.discriminatedUnion("type", [
 ]);
 export type NotificationChannel = z.infer<typeof NotificationChannelSchema>;
 
+export const PluginNotifierRouteSchema = z.object({
+  id: z.string().min(1),
+  enabled: z.boolean().default(true),
+  report_types: z.array(z.string()).default([]),
+});
+export type PluginNotifierRoute = z.infer<typeof PluginNotifierRouteSchema>;
+
+export const PluginNotifierRoutingSchema = z.object({
+  mode: z.enum(["all", "only", "none"]).default("all"),
+  routes: z.array(PluginNotifierRouteSchema).default([]),
+}).default({});
+export type PluginNotifierRouting = z.infer<typeof PluginNotifierRoutingSchema>;
+
 // Do Not Disturb
 export const DoNotDisturbSchema = z.object({
   enabled: z.boolean().default(false),
@@ -82,6 +95,7 @@ export type NotificationBatching = z.infer<typeof NotificationBatchingSchema>;
 // Full notification config
 export const NotificationConfigSchema = z.object({
   channels: z.array(NotificationChannelSchema).default([]),
+  plugin_notifiers: PluginNotifierRoutingSchema,
   do_not_disturb: DoNotDisturbSchema.default({}),
   cooldown: NotificationCooldownSchema.default({}),
   goal_overrides: z.array(GoalReportingOverrideSchema).default([]),

@@ -1,4 +1,5 @@
 import * as p from "@clack/prompts";
+import { NotificationConfigSchema } from "../../../../base/types/notification.js";
 import type { NotificationConfig } from "../../../../base/types/notification.js";
 import { guardCancel } from "./utils.js";
 
@@ -36,7 +37,7 @@ export async function stepNotification(): Promise<NotificationConfig | null> {
     })
   );
 
-  return {
+  return NotificationConfigSchema.parse({
     channels: [
       {
         type: "webhook",
@@ -65,5 +66,5 @@ export async function stepNotification(): Promise<NotificationConfig | null> {
       window_minutes: 30,
       digest_format: "compact",
     },
-  };
+  });
 }

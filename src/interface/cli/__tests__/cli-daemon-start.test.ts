@@ -15,6 +15,7 @@ const {
   scheduleEngineArgs,
   daemonRunnerArgs,
   watchdogArgs,
+  notificationDispatcherArgs,
 } = vi.hoisted(() => ({
   buildDepsMock: vi.fn(),
   daemonStartMock: vi.fn().mockResolvedValue(undefined),
@@ -28,6 +29,7 @@ const {
   scheduleEngineArgs: [] as unknown[],
   daemonRunnerArgs: [] as unknown[],
   watchdogArgs: [] as unknown[],
+  notificationDispatcherArgs: [] as unknown[],
 }));
 
 vi.mock("node:os", async (importOriginal) => {
@@ -120,7 +122,8 @@ vi.mock("../../../runtime/notifier-registry.js", () => ({
 }));
 
 vi.mock("../../../runtime/notification-dispatcher.js", () => ({
-  NotificationDispatcher: vi.fn().mockImplementation(function () {
+  NotificationDispatcher: vi.fn().mockImplementation(function (...args: unknown[]) {
+    notificationDispatcherArgs.push(args);
     return {
       setRealtimeSink: setRealtimeSinkMock,
     };
@@ -157,8 +160,10 @@ describe("cmdStart", () => {
     scheduleEngineArgs.length = 0;
     daemonRunnerArgs.length = 0;
     watchdogArgs.length = 0;
+    notificationDispatcherArgs.length = 0;
     delete process.env.PULSEED_WATCHDOG_CHILD;
     fs.rmSync(mockedHome, { recursive: true, force: true });
+    fs.rmSync("/tmp/pulseed-daemon-start-base", { recursive: true, force: true });
 
     buildDepsMock.mockResolvedValue({
       coreLoop: {},
@@ -174,11 +179,23 @@ describe("cmdStart", () => {
 
   afterEach(() => {
     fs.rmSync(mockedHome, { recursive: true, force: true });
+    fs.rmSync("/tmp/pulseed-daemon-start-base", { recursive: true, force: true });
     delete process.env.PULSEED_WATCHDOG_CHILD;
   });
 
   it("wires EventServer realtime sink and full ScheduleEngine deps in the watchdog child process", async () => {
     process.env.PULSEED_WATCHDOG_CHILD = "1";
+    fs.mkdirSync("/tmp/pulseed-daemon-start-base", { recursive: true });
+    fs.writeFileSync(
+      "/tmp/pulseed-daemon-start-base/notification.json",
+      JSON.stringify({
+        plugin_notifiers: {
+          mode: "only",
+          routes: [{ id: "discord-bot", enabled: true, report_types: ["weekly_report"] }],
+        },
+      }),
+      "utf-8"
+    );
 
     await cmdStart(
       { getBaseDir: vi.fn().mockReturnValue("/tmp/pulseed-daemon-start-base") } as never,
@@ -187,6 +204,15 @@ describe("cmdStart", () => {
     );
 
     expect(setRealtimeSinkMock).toHaveBeenCalledOnce();
+    expect(notificationDispatcherArgs[0]).toEqual([
+      expect.objectContaining({
+        plugin_notifiers: {
+          mode: "only",
+          routes: [{ id: "discord-bot", enabled: true, report_types: ["weekly_report"] }],
+        },
+      }),
+      expect.any(Object),
+    ]);
     const realtimeSink = setRealtimeSinkMock.mock.calls[0]?.[0] as ((report: unknown) => Promise<void>) | undefined;
     expect(realtimeSink).toBeTypeOf("function");
 

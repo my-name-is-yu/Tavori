@@ -307,6 +307,57 @@ describe("PluginLoader.validateInterface", () => {
   });
 });
 
+// ─── PluginLoader.preparePluginImplementation/initPluginIfNeeded ───
+
+describe("PluginLoader implementation preparation", () => {
+  let loader: PluginLoader;
+
+  beforeEach(() => {
+    loader = new PluginLoader(
+      makeAdapterRegistry(),
+      makeDataSourceRegistry(),
+      makeNotifierRegistry(),
+      "/tmp/plugins"
+    );
+  });
+
+  it("instantiates class default exports with the plugin directory and initializes them", async () => {
+    const init = vi.fn().mockResolvedValue(undefined);
+
+    class ClassNotifier implements INotifier {
+      readonly name = "class-notifier";
+
+      constructor(readonly pluginDir: string) {}
+
+      init = init;
+      notify = vi.fn().mockResolvedValue(undefined);
+      supports = vi.fn().mockReturnValue(true);
+    }
+
+    const impl = await loader.preparePluginImplementation(ClassNotifier, "/tmp/plugins/class-notifier");
+
+    expect(impl).toBeInstanceOf(ClassNotifier);
+    expect((impl as ClassNotifier).pluginDir).toBe("/tmp/plugins/class-notifier");
+    expect(() => loader.validateInterface("notifier", impl)).not.toThrow();
+
+    await loader.initPluginIfNeeded(impl);
+    expect(init).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses factory functions when the default export is not constructible", async () => {
+    const impl = makeNotifierImpl();
+    const factory = vi.fn(() => impl);
+
+    const prepared = await loader.preparePluginImplementation(
+      factory,
+      "/tmp/plugins/factory-notifier"
+    );
+
+    expect(prepared).toBe(impl);
+    expect(factory).toHaveBeenCalledWith("/tmp/plugins/factory-notifier");
+  });
+});
+
 // ─── PluginLoader.loadManifest ───
 
 describe("PluginLoader.loadManifest (mocked fs)", () => {
