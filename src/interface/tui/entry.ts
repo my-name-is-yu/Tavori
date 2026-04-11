@@ -56,13 +56,13 @@ async function startDaemonDetached(baseDir: string): Promise<void> {
   child.unref();
 }
 
-async function waitForDaemon(baseDir: string, timeoutMs: number): Promise<number> {
+async function waitForDaemon(baseDir: string, timeoutMs: number): Promise<{ port: number; authToken?: string | null }> {
   const { isDaemonRunning } = await import("../../runtime/daemon/client.js");
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
-    const { running, port } = await isDaemonRunning(baseDir);
-    if (running) return port;
+    const { running, port, authToken } = await isDaemonRunning(baseDir);
+    if (running) return { port, authToken };
     await new Promise((r) => setTimeout(r, 500));
   }
   throw new Error("Daemon failed to start within timeout");
@@ -426,14 +426,14 @@ async function startTUIDaemonMode(): Promise<void> {
   let daemonClient: InstanceType<typeof DaemonClient>;
 
   try {
-    const { running, port } = await isDaemonRunning(baseDir);
+    const { running, port, authToken } = await isDaemonRunning(baseDir);
 
     if (running) {
-      daemonClient = new DaemonClient({ host: "127.0.0.1", port });
+      daemonClient = new DaemonClient({ host: "127.0.0.1", port, authToken, baseDir });
     } else {
       await startDaemonDetached(baseDir);
-      const readyPort = await waitForDaemon(baseDir, 10_000);
-      daemonClient = new DaemonClient({ host: "127.0.0.1", port: readyPort });
+      const ready = await waitForDaemon(baseDir, 10_000);
+      daemonClient = new DaemonClient({ host: "127.0.0.1", port: ready.port, authToken: ready.authToken, baseDir });
     }
 
     daemonClient.connect();

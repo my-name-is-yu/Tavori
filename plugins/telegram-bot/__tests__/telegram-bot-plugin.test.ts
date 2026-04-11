@@ -77,6 +77,23 @@ describe("config — loadConfig", () => {
     expect(cfg.allowed_user_ids).toEqual([]);
   });
 
+  it("defaults allow_all to false", () => {
+    writeTmpConfig(tmpDir, { bot_token: "tok", chat_id: 1 });
+    const cfg = loadConfig(tmpDir);
+    expect(cfg.allow_all).toBe(false);
+  });
+
+  it("accepts explicit allow_all when set to true", () => {
+    writeTmpConfig(tmpDir, { bot_token: "tok", chat_id: 1, allow_all: true });
+    const cfg = loadConfig(tmpDir);
+    expect(cfg.allow_all).toBe(true);
+  });
+
+  it("throws when allow_all is not a boolean", () => {
+    writeTmpConfig(tmpDir, { bot_token: "tok", chat_id: 1, allow_all: "yes" });
+    expect(() => loadConfig(tmpDir)).toThrow("allow_all");
+  });
+
   it("throws when config.json does not exist", () => {
     expect(() => loadConfig(tmpDir)).toThrow("telegram-bot: failed to read config.json");
   });
@@ -311,14 +328,17 @@ describe("TelegramNotifier", () => {
 describe("PollingLoop", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
   let api: TelegramAPI;
+  let tmpDir: string;
 
   beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "tg-loop-"));
     fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     api = new TelegramAPI("tok");
   });
 
   afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true , maxRetries: 3, retryDelay: 100 });
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
@@ -332,8 +352,14 @@ describe("PollingLoop", () => {
     } as unknown as Response;
   }
 
+  function loadLoopConfig(data: Record<string, unknown>): void {
+    writeTmpConfig(tmpDir, data);
+    loadConfig(tmpDir);
+  }
+
   it("processes messages from allowed users", async () => {
     const onMessage = vi.fn().mockResolvedValue(undefined);
+    loadLoopConfig({ bot_token: "tok", chat_id: 200, allowed_user_ids: [111] });
 
     // First call returns one message; second call blocks until stop()
     let stopLoop!: () => void;
@@ -345,7 +371,7 @@ describe("PollingLoop", () => {
       ]))
       .mockReturnValueOnce(blocker);
 
-    const loop = new PollingLoop(api, onMessage, [111]);
+    const loop = new PollingLoop(api, onMessage, [111], { allowedChatId: 200 });
     loop.start();
 
     // Let the first iteration run
@@ -360,6 +386,7 @@ describe("PollingLoop", () => {
 
   it("rejects messages from non-allowed users", async () => {
     const onMessage = vi.fn().mockResolvedValue(undefined);
+    loadLoopConfig({ bot_token: "tok", chat_id: 200, allowed_user_ids: [111] });
 
     let stopLoop!: () => void;
     const blocker = new Promise<Response>((resolve) => { stopLoop = () => resolve(updatesResponse([])); });
@@ -370,7 +397,7 @@ describe("PollingLoop", () => {
       ]))
       .mockReturnValueOnce(blocker);
 
-    const loop = new PollingLoop(api, onMessage, [111]); // 999 not in list
+    const loop = new PollingLoop(api, onMessage, [111], { allowedChatId: 200 }); // 999 not in list
     loop.start();
 
     await new Promise((r) => setImmediate(r));
@@ -382,8 +409,9 @@ describe("PollingLoop", () => {
     stopLoop();
   });
 
-  it("allows all users when allowed_user_ids is empty", async () => {
+  it("rejects messages when allowed_user_ids is empty and allow_all is false", async () => {
     const onMessage = vi.fn().mockResolvedValue(undefined);
+    loadLoopConfig({ bot_token: "tok", chat_id: 300, allowed_user_ids: [] });
 
     let stopLoop!: () => void;
     const blocker = new Promise<Response>((resolve) => { stopLoop = () => resolve(updatesResponse([])); });
@@ -394,7 +422,32 @@ describe("PollingLoop", () => {
       ]))
       .mockReturnValueOnce(blocker);
 
-    const loop = new PollingLoop(api, onMessage, []); // empty = allow all
+    const loop = new PollingLoop(api, onMessage, [], { allowedChatId: 300 });
+    loop.start();
+
+    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setImmediate(r));
+
+    expect(onMessage).not.toHaveBeenCalled();
+
+    loop.stop();
+    stopLoop();
+  });
+
+  it("allows all users when allow_all is true but still requires the configured chat_id", async () => {
+    const onMessage = vi.fn().mockResolvedValue(undefined);
+    loadLoopConfig({ bot_token: "tok", chat_id: 300, allowed_user_ids: [], allow_all: true });
+
+    let stopLoop!: () => void;
+    const blocker = new Promise<Response>((resolve) => { stopLoop = () => resolve(updatesResponse([])); });
+
+    fetchMock
+      .mockResolvedValueOnce(updatesResponse([
+        { update_id: 1, message: { message_id: 1, from: { id: 777 }, chat: { id: 300 }, text: "hi" } },
+      ]))
+      .mockReturnValueOnce(blocker);
+
+    const loop = new PollingLoop(api, onMessage, [], { allowedChatId: 300, allowAll: true });
     loop.start();
 
     await new Promise((r) => setImmediate(r));
@@ -406,15 +459,41 @@ describe("PollingLoop", () => {
     stopLoop();
   });
 
+  it("rejects messages from the wrong chat even when the user is allowed", async () => {
+    const onMessage = vi.fn().mockResolvedValue(undefined);
+    loadLoopConfig({ bot_token: "tok", chat_id: 300, allowed_user_ids: [777] });
+
+    let stopLoop!: () => void;
+    const blocker = new Promise<Response>((resolve) => { stopLoop = () => resolve(updatesResponse([])); });
+
+    fetchMock
+      .mockResolvedValueOnce(updatesResponse([
+        { update_id: 1, message: { message_id: 1, from: { id: 777 }, chat: { id: 999 }, text: "hi" } },
+      ]))
+      .mockReturnValueOnce(blocker);
+
+    const loop = new PollingLoop(api, onMessage, [777], { allowedChatId: 300 });
+    loop.start();
+
+    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setImmediate(r));
+
+    expect(onMessage).not.toHaveBeenCalled();
+
+    loop.stop();
+    stopLoop();
+  });
+
   it("stop() halts the loop — running becomes false", async () => {
     const onMessage = vi.fn().mockResolvedValue(undefined);
+    loadLoopConfig({ bot_token: "tok", chat_id: 300, allowed_user_ids: [] });
 
     let stopLoop!: () => void;
     const blocker = new Promise<Response>((resolve) => { stopLoop = () => resolve(updatesResponse([])); });
 
     fetchMock.mockReturnValueOnce(blocker);
 
-    const loop = new PollingLoop(api, onMessage, []);
+    const loop = new PollingLoop(api, onMessage, [], { allowedChatId: 300 });
     loop.start();
 
     loop.stop(); // stop before first fetch resolves
@@ -429,6 +508,7 @@ describe("PollingLoop", () => {
   it("handles getUpdates errors without crashing (backoff)", async () => {
     const onMessage = vi.fn().mockResolvedValue(undefined);
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    loadLoopConfig({ bot_token: "tok", chat_id: 300, allowed_user_ids: [] });
 
     let stopLoop!: () => void;
     const blocker = new Promise<Response>((resolve) => { stopLoop = () => resolve(updatesResponse([])); });
@@ -437,7 +517,7 @@ describe("PollingLoop", () => {
       .mockRejectedValueOnce(new Error("network timeout"))
       .mockReturnValueOnce(blocker);
 
-    const loop = new PollingLoop(api, onMessage, []);
+    const loop = new PollingLoop(api, onMessage, [], { allowedChatId: 300 });
     loop.start();
 
     await new Promise((r) => setImmediate(r));

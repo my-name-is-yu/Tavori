@@ -54,6 +54,14 @@ describe("JsonQueryTool", () => {
       const result = await tool.checkPermissions({ file_path: "any.json", query: "name" });
       expect(result.status).toBe("allowed");
     });
+
+    it("requires approval for files outside cwd", async () => {
+      const result = await tool.checkPermissions(
+        { file_path: "../outside.json", query: "name" },
+        makeContext(tmpDir)
+      );
+      expect(result.status).toBe("needs_approval");
+    });
   });
 
   describe("isConcurrencySafe", () => {

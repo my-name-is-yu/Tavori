@@ -67,6 +67,7 @@ describe("DaemonClient snapshot + replay", () => {
       port: server.getPort(),
       reconnectInterval: 50,
       maxReconnectAttempts: 2,
+      authToken: server.getAuthToken(),
     });
 
     try {
@@ -97,6 +98,7 @@ describe("DaemonClient snapshot + replay", () => {
       port: server.getPort(),
       reconnectInterval: 50,
       maxReconnectAttempts: 2,
+      authToken: server.getAuthToken(),
     });
 
     try {

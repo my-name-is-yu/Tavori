@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { ITool, ToolResult, ToolCallContext, PermissionCheckResult, ToolMetadata } from "../../types.js";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { validateFilePath } from "../FileValidationTool/FileValidationTool.js";
 import { DESCRIPTION } from "./prompt.js";
 import { TAGS, CATEGORY as _CATEGORY, MAX_OUTPUT_CHARS, READ_ONLY, PERMISSION_LEVEL } from "./constants.js";
 
@@ -37,7 +38,13 @@ export class JsonQueryTool implements ITool<JsonQueryInput, unknown> {
     }
   }
 
-  async checkPermissions(_input: JsonQueryInput, _context?: ToolCallContext): Promise<PermissionCheckResult> {
+  async checkPermissions(input: JsonQueryInput, context?: ToolCallContext): Promise<PermissionCheckResult> {
+    if (context) {
+      const validation = validateFilePath(input.file_path, context.cwd);
+      if (!validation.valid) {
+        return { status: "needs_approval", reason: `Reading JSON outside the working directory: ${validation.resolved}` };
+      }
+    }
     return { status: "allowed" };
   }
 

@@ -22,14 +22,15 @@ const createMockDriveSystem = (tmpDir: string) => ({
 async function startWithRetry(
   driveSystem: ReturnType<typeof createMockDriveSystem>
 ): Promise<{ server: EventServer; port: number }> {
-  const s = new EventServer(driveSystem as never, { port: 0 });
+  const s = new EventServer(driveSystem as never, { port: 0, eventsDir: path.join(tmpDir, "events") });
   await s.start();
   return { server: s, port: s.getPort() };
 }
 
 function postEvent(
   port: number,
-  body: unknown
+  body: unknown,
+  authToken: string | null | undefined = server?.getAuthToken()
 ): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
     const data = JSON.stringify(body);
@@ -42,6 +43,7 @@ function postEvent(
         headers: {
           "Content-Type": "application/json",
           "Content-Length": Buffer.byteLength(data),
+          ...authHeaders(authToken),
         },
       },
       (res) => {
@@ -60,12 +62,16 @@ function makeRequest(
   port: number,
   method: string,
   urlPath: string,
-  body?: unknown
+  body?: unknown,
+  authToken: string | null | undefined = server?.getAuthToken(),
+  extraHeaders: http.OutgoingHttpHeaders = {}
 ): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
     const data = body !== undefined ? JSON.stringify(body) : "";
     const headers: http.OutgoingHttpHeaders = {
       "Content-Type": "application/json",
+      ...authHeaders(authToken),
+      ...extraHeaders,
     };
     if (data.length > 0) {
       headers["Content-Length"] = Buffer.byteLength(data);
@@ -94,7 +100,8 @@ function collectSseEvents(
   port: number,
   urlPath: string,
   eventType: string,
-  expectedCount: number
+  expectedCount: number,
+  authToken: string | null | undefined = server?.getAuthToken()
 ): Promise<unknown[]> {
   return new Promise((resolve, reject) => {
     const received: unknown[] = [];
@@ -104,7 +111,7 @@ function collectSseEvents(
         hostname: "127.0.0.1",
         port,
         path: urlPath,
-        headers: { Accept: "text/event-stream" },
+        headers: { Accept: "text/event-stream", ...authHeaders(authToken) },
       },
       (res) => {
         let buffer = "";
@@ -158,6 +165,10 @@ function collectSseEvents(
   });
 }
 
+function authHeaders(authToken: string | null | undefined): http.OutgoingHttpHeaders {
+  return authToken ? { Authorization: `Bearer ${authToken}` } : {};
+}
+
 const validEvent: PulSeedEvent = {
   type: "external",
   source: "test-source",
@@ -175,7 +186,7 @@ let port: number;
 beforeEach(async () => {
   tmpDir = makeTempDir();
   mockDriveSystem = createMockDriveSystem(tmpDir);
-  server = new EventServer(mockDriveSystem as never, { port: 0 });
+  server = new EventServer(mockDriveSystem as never, { port: 0, eventsDir: path.join(tmpDir, "events") });
   // port will be set after start() for tests that need it; for tests that
   // call start() themselves they must read server.getPort() afterward.
   port = 0;
@@ -222,7 +233,7 @@ describe("start / stop", () => {
     await server.start();
     await server.stop();
 
-    const server2 = new EventServer(mockDriveSystem as never, { port: 0 });
+    const server2 = new EventServer(mockDriveSystem as never, { port: 0, eventsDir: path.join(tmpDir, "events") });
     await server2.start();
     expect(server2.isRunning()).toBe(true);
     await server2.stop();
@@ -352,6 +363,7 @@ describe("POST /events — invalid data", () => {
             headers: {
               "Content-Type": "application/json",
               "Content-Length": Buffer.byteLength(data),
+              Authorization: `Bearer ${server.getAuthToken()}`,
             },
           },
           (res) => {
@@ -443,6 +455,88 @@ describe("routing — wrong method or path", () => {
     await makeRequest(port, "GET", "/events");
     await makeRequest(port, "POST", "/wrong", validEvent);
     expect(mockDriveSystem.writeEvent).not.toHaveBeenCalled();
+  });
+});
+
+describe("daemon HTTP auth guard", () => {
+  beforeEach(async () => {
+    await server.start();
+    port = server.getPort();
+  });
+
+  it("writes a per-daemon token file next to the events directory", () => {
+    const tokenPath = path.join(tmpDir, "daemon-token.json");
+    const tokenFile = JSON.parse(fs.readFileSync(tokenPath, "utf-8")) as {
+      token?: string;
+      port?: number;
+    };
+
+    expect(tokenFile.token).toBe(server.getAuthToken());
+    expect(tokenFile.port).toBe(port);
+  });
+
+  it("keeps /health available without auth", async () => {
+    const result = await makeRequest(port, "GET", "/health", undefined, null);
+    expect(result.status).toBe(200);
+  });
+
+  it("rejects state-changing POST requests without a bearer token", async () => {
+    const result = await postEvent(port, validEvent, null);
+    expect(result.status).toBe(401);
+    expect(mockDriveSystem.writeEvent).not.toHaveBeenCalled();
+  });
+
+  it("rejects browser cross-site requests even with a valid bearer token", async () => {
+    const result = await makeRequest(
+      port,
+      "POST",
+      "/goals/g-1/start",
+      {},
+      server.getAuthToken(),
+      {
+        Origin: "https://attacker.example",
+        "Sec-Fetch-Site": "cross-site",
+      }
+    );
+
+    expect(result.status).toBe(403);
+  });
+
+  it("rejects non-JSON POST requests", async () => {
+    const result = await makeRequest(
+      port,
+      "POST",
+      "/goals/g-1/start",
+      {},
+      server.getAuthToken(),
+      { "Content-Type": "text/plain" }
+    );
+
+    expect(result.status).toBe(415);
+  });
+
+  it("rejects unauthenticated SSE and does not emit wildcard CORS", async () => {
+    const result = await new Promise<{ status: number; cors: string | undefined }>((resolve, reject) => {
+      const req = http.get(
+        {
+          hostname: "127.0.0.1",
+          port,
+          path: "/stream",
+          headers: { Accept: "text/event-stream" },
+        },
+        (res) => {
+          res.resume();
+          res.on("end", () => resolve({
+            status: res.statusCode ?? 0,
+            cors: res.headers["access-control-allow-origin"] as string | undefined,
+          }));
+        }
+      );
+      req.on("error", reject);
+    });
+
+    expect(result.status).toBe(401);
+    expect(result.cors).toBeUndefined();
   });
 });
 

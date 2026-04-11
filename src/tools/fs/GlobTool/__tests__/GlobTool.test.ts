@@ -79,6 +79,16 @@ describe("GlobTool", () => {
     expect(result.status).toBe("allowed");
   });
 
+  it("checkPermissions requires approval for traversal patterns", async () => {
+    const result = await tool.checkPermissions({ pattern: "../*.ts", limit: 500 }, makeContext(tmpDir));
+    expect(result.status).toBe("needs_approval");
+  });
+
+  it("checkPermissions requires approval for paths outside cwd", async () => {
+    const result = await tool.checkPermissions({ pattern: "*.ts", path: "../outside", limit: 500 }, makeContext(tmpDir));
+    expect(result.status).toBe("needs_approval");
+  });
+
   it("isConcurrencySafe returns true", () => {
     expect(tool.isConcurrencySafe({ pattern: "**/*.ts", limit: 500 })).toBe(true);
   });

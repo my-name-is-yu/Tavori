@@ -3,6 +3,10 @@ import type { TelegramAPI } from "./telegram-api.js";
 // ─── Types ───
 
 type OnMessageFn = (text: string, fromUserId: number, chatId: number) => Promise<void>;
+interface PollingLoopOptions {
+  allowedChatId: number;
+  allowAll?: boolean;
+}
 
 // ─── Backoff config ───
 
@@ -14,15 +18,19 @@ export class PollingLoop {
   private readonly api: TelegramAPI;
   private readonly onMessage: OnMessageFn;
   private readonly allowedUserIds: number[];
+  private readonly allowedChatId: number;
+  private readonly allowAll: boolean;
 
   private running = false;
   private offset = 0;
   private abortController: AbortController | null = null;
 
-  constructor(api: TelegramAPI, onMessage: OnMessageFn, allowedUserIds: number[]) {
+  constructor(api: TelegramAPI, onMessage: OnMessageFn, allowedUserIds: number[], options: PollingLoopOptions) {
     this.api = api;
     this.onMessage = onMessage;
     this.allowedUserIds = allowedUserIds;
+    this.allowedChatId = options.allowedChatId;
+    this.allowAll = options.allowAll ?? false;
   }
 
   start(): void {
@@ -52,12 +60,17 @@ export class PollingLoop {
           const msg = update.message;
           if (!msg?.text) continue;
 
-          const fromId = msg.from.id;
-          if (this.allowedUserIds.length > 0 && !this.allowedUserIds.includes(fromId)) {
+          const fromId = msg.from?.id;
+          const chatId = msg.chat?.id;
+          if (typeof fromId !== "number" || !Number.isInteger(fromId)) continue;
+          if (typeof chatId !== "number" || !Number.isInteger(chatId)) continue;
+          if (chatId !== this.allowedChatId) continue;
+
+          if (!this.allowAll && !this.allowedUserIds.includes(fromId)) {
             continue;
           }
 
-          await this.onMessage(msg.text, fromId, msg.chat.id);
+          await this.onMessage(msg.text, fromId, chatId);
         }
       } catch (err) {
         if (!this.running) break;

@@ -64,9 +64,14 @@ describe("ListDirTool", () => {
   });
 
   describe("checkPermissions", () => {
-    it("always returns allowed", async () => {
-      const result = await tool.checkPermissions({ path: tmpDir, recursive: false, maxDepth: 2, includeHidden: false }, makeContext());
+    it("returns allowed for paths inside cwd", async () => {
+      const result = await tool.checkPermissions({ path: tmpDir, recursive: false, maxDepth: 2, includeHidden: false }, makeContext(tmpDir));
       expect(result.status).toBe("allowed");
+    });
+
+    it("requires approval for paths outside cwd", async () => {
+      const result = await tool.checkPermissions({ path: "../outside", recursive: false, maxDepth: 2, includeHidden: false }, makeContext(tmpDir));
+      expect(result.status).toBe("needs_approval");
     });
   });
 

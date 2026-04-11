@@ -147,6 +147,14 @@ describe("GrepTool", () => {
     expect(result.status).toBe("allowed");
   });
 
+  it("checkPermissions requires approval for paths outside cwd", async () => {
+    const result = await tool.checkPermissions(
+      { pattern: "test", path: "../outside", outputMode: "files_with_matches", limit: 250, caseInsensitive: false },
+      makeContext(tmpDir)
+    );
+    expect(result.status).toBe("needs_approval");
+  });
+
   it("isConcurrencySafe returns true", () => {
     expect(tool.isConcurrencySafe({ pattern: "test", outputMode: "files_with_matches", limit: 250, caseInsensitive: false })).toBe(true);
   });

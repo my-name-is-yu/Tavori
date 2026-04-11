@@ -5,6 +5,7 @@ import type { StateManager } from "../../../base/state/state-manager.js";
 import type { IAdapter } from "../../../orchestrator/execution/adapter-layer.js";
 import type { ILLMClient, LLMResponse } from "../../../base/llm/llm-client.js";
 import type { ToolRegistry } from "../../../tools/registry.js";
+import type { ToolExecutor } from "../../../tools/executor.js";
 import type { ITool, ToolResult, ToolCallContext } from "../../../tools/types.js";
 import { z } from "zod";
 
@@ -98,6 +99,14 @@ function makeMockRegistry(tool: ITool): ToolRegistry {
   } as unknown as ToolRegistry;
 }
 
+function makeMockExecutor(
+  executeImpl: (toolName: string, input: unknown, context: ToolCallContext) => Promise<ToolResult>
+): ToolExecutor {
+  return {
+    execute: vi.fn().mockImplementation(executeImpl),
+  } as unknown as ToolExecutor;
+}
+
 function makeDeps(overrides: Partial<ChatRunnerDeps> = {}): ChatRunnerDeps {
   return {
     stateManager: makeMockStateManager(),
@@ -131,6 +140,49 @@ describe("ChatRunner — tool status callbacks", () => {
 
       expect(onToolStart).toHaveBeenCalledOnce();
       expect(onToolStart).toHaveBeenCalledWith(toolName, toolArgs);
+    });
+
+    it("routes tool calls through ToolExecutor when available", async () => {
+      const onToolStart = vi.fn();
+      const onToolEnd = vi.fn();
+      const tool = makeMockTool(toolName, async () => {
+        throw new Error("raw tool.call should not run");
+      });
+      const executor = makeMockExecutor(async (executedName, input, context) => {
+        expect(executedName).toBe(toolName);
+        expect(input).toEqual(toolArgs);
+        const approved = await context.approvalFn({
+          toolName: executedName,
+          input,
+          reason: "approval required",
+          permissionLevel: "write_local",
+          isDestructive: false,
+          reversibility: "unknown",
+        });
+        expect(approved).toBe(false);
+        return {
+          success: false,
+          data: null,
+          summary: "User denied approval",
+          durationMs: 5,
+        };
+      });
+      const deps = makeDeps({
+        llmClient: makeLLMClientWithToolCall(toolName, toolArgs),
+        registry: makeMockRegistry(tool),
+        onToolStart,
+        onToolEnd,
+        toolExecutor: executor,
+      });
+      const runner = new ChatRunner(deps);
+
+      const result = await runner.execute("test", "/repo");
+
+      expect((executor.execute as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
+      expect(tool.call).not.toHaveBeenCalled();
+      expect(onToolStart).toHaveBeenCalledOnce();
+      expect(onToolEnd).toHaveBeenCalledOnce();
+      expect(result.output).toBe("Tool executed, here is the result.");
     });
 
     it("is called before tool.call() executes", async () => {

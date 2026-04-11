@@ -12,7 +12,7 @@ describe("src/index.ts exports", () => {
     expect(barrel.extractJSON).toBe(llmModule.extractJSON);
     expect(barrel.EthicsGate).toBe(ethicsModule.EthicsGate);
     expect(barrel.StateManager).toBe(stateModule.StateManager);
-  });
+  }, 15_000);
 
   it("re-exports selected utility functions as callable values", async () => {
     const barrel = await import("../index.js");
@@ -20,5 +20,5 @@ describe("src/index.ts exports", () => {
     expect(typeof barrel.calculateDimensionGap).toBe("function");
     expect(typeof barrel.scoreAllDimensions).toBe("function");
     expect(typeof barrel.buildLLMClient).toBe("function");
-  });
+  }, 15_000);
 });

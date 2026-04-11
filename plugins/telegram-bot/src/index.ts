@@ -49,7 +49,8 @@ export class TelegramBotPlugin {
       async (text, fromUserId, chatId) => {
         await bridge.handleMessage(text, fromUserId, chatId);
       },
-      config.allowed_user_ids
+      config.allowed_user_ids,
+      { allowedChatId: config.chat_id, allowAll: config.allow_all }
     );
   }
 

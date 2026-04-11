@@ -3,6 +3,7 @@ import * as fs from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import * as path from "node:path";
 import type { ITool, ToolResult, ToolCallContext, PermissionCheckResult, ToolMetadata, ToolDescriptionContext } from "../../types.js";
+import { validateFilePath } from "../FileValidationTool/FileValidationTool.js";
 import { DESCRIPTION_TEMPLATE } from "./prompt.js";
 import { TAGS, CATEGORY as _CATEGORY, MAX_OUTPUT_CHARS, READ_ONLY, PERMISSION_LEVEL } from "./constants.js";
 
@@ -40,16 +41,17 @@ export class ListDirTool implements ITool<ListDirInput, DirEntry[]> {
     return DESCRIPTION_TEMPLATE(cwd);
   }
 
-  async call(input: ListDirInput, _context: ToolCallContext): Promise<ToolResult> {
+  async call(input: ListDirInput, context: ToolCallContext): Promise<ToolResult> {
     const startTime = Date.now();
+    const dirPath = path.isAbsolute(input.path) ? input.path : path.resolve(context.cwd, input.path);
     try {
-      const entries = await listDir(input.path, input.recursive, input.maxDepth, input.includeHidden, 0);
+      const entries = await listDir(dirPath, input.recursive, input.maxDepth, input.includeHidden, 0);
       return {
         success: true,
         data: entries,
-        summary: `Listed ${entries.length} entries in ${input.path}`,
+        summary: `Listed ${entries.length} entries in ${dirPath}`,
         durationMs: Date.now() - startTime,
-        artifacts: [input.path],
+        artifacts: [dirPath],
       };
     } catch (err) {
       return {
@@ -62,7 +64,13 @@ export class ListDirTool implements ITool<ListDirInput, DirEntry[]> {
     }
   }
 
-  async checkPermissions(_input: ListDirInput, _context?: ToolCallContext): Promise<PermissionCheckResult> {
+  async checkPermissions(input: ListDirInput, context?: ToolCallContext): Promise<PermissionCheckResult> {
+    if (context) {
+      const validation = validateFilePath(input.path, context.cwd);
+      if (!validation.valid) {
+        return { status: "needs_approval", reason: `Listing outside the working directory: ${validation.resolved}` };
+      }
+    }
     return { status: "allowed" };
   }
 

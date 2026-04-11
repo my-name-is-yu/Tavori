@@ -21,9 +21,10 @@ import { EscalationHandler } from "../../chat/escalation.js";
 import { DaemonClient, isDaemonRunning } from "../../../runtime/daemon/client.js";
 import { ScheduleEngine } from "../../../runtime/schedule/engine.js";
 import { TrustManager } from "../../../platform/traits/trust-manager.js";
-import { ToolRegistry } from "../../../tools/registry.js";
+import { ToolRegistry, ToolExecutor, ToolPermissionManager, ConcurrencyController } from "../../../tools/index.js";
 import { createBuiltinTools } from "../../../tools/builtin/index.js";
 import { applyChatEventToMessages } from "../../chat/chat-event-state.js";
+import { isSafeBashCommand } from "../../tui/bash-mode.js";
 
 const logger = getCliLogger();
 
@@ -198,6 +199,25 @@ export async function cmdChat(
     })) {
       registry.register(tool);
     }
+    const permissionManager = new ToolPermissionManager({
+      trustManager,
+      allowRules: [
+        {
+          toolName: "shell",
+          inputMatcher: (input) =>
+            typeof input === "object" &&
+            input !== null &&
+            typeof (input as Record<string, unknown>)["command"] === "string" &&
+            isSafeBashCommand((input as Record<string, unknown>)["command"] as string),
+          reason: "safe shell command",
+        },
+      ],
+    });
+    const toolExecutor = new ToolExecutor({
+      registry,
+      permissionManager,
+      concurrency: new ConcurrencyController(),
+    });
 
     // Build escalation + tend deps (optional — /track and /tend work only when LLM is available)
     let escalationHandler: EscalationHandler | undefined;
@@ -219,7 +239,15 @@ export async function cmdChat(
     try {
       const daemonInfo = await isDaemonRunning(pulseedDir);
       if (daemonInfo.running) {
-        daemonClient = new DaemonClient({ host: "127.0.0.1", port: daemonInfo.port });
+        if (daemonInfo.authToken) {
+          process.env["PULSEED_DAEMON_TOKEN"] = daemonInfo.authToken;
+        }
+        daemonClient = new DaemonClient({
+          host: "127.0.0.1",
+          port: daemonInfo.port,
+          authToken: daemonInfo.authToken,
+          baseDir: pulseedDir,
+        });
         daemonBaseUrl = `http://127.0.0.1:${daemonInfo.port}`;
       }
     } catch {
@@ -236,6 +264,7 @@ export async function cmdChat(
       daemonClient,
       daemonBaseUrl,
       registry,
+      toolExecutor,
       approvalFn: promptChatApproval,
     });
 

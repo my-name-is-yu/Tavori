@@ -29,6 +29,8 @@ import { makeTempDir, cleanupTempDir } from "../helpers/temp-dir.js";
 
 // ─── Shared helpers ───
 
+const eventServerAuthTokens = new Map<number, string>();
+
 function writeHooksJson(dir: string, hooks: HookConfig[]): void {
   fs.writeFileSync(path.join(dir, "hooks.json"), JSON.stringify({ hooks }), "utf-8");
 }
@@ -51,11 +53,16 @@ function makeHttpRequest(
   port: number,
   method: string,
   urlPath: string,
-  body?: unknown
+  body?: unknown,
+  authToken?: string
 ): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
     const data = body !== undefined ? JSON.stringify(body) : "";
-    const headers: http.OutgoingHttpHeaders = { "Content-Type": "application/json" };
+    const resolvedAuthToken = authToken ?? eventServerAuthTokens.get(port);
+    const headers: http.OutgoingHttpHeaders = {
+      "Content-Type": "application/json",
+      ...(resolvedAuthToken ? { Authorization: `Bearer ${resolvedAuthToken}` } : {}),
+    };
     if (data.length > 0) headers["Content-Length"] = Buffer.byteLength(data);
     const req = http.request(
       { hostname: "127.0.0.1", port, path: urlPath, method, headers },
@@ -69,6 +76,10 @@ function makeHttpRequest(
     if (data.length > 0) req.write(data);
     req.end();
   });
+}
+
+function rememberEventServerAuth(server: EventServer): void {
+  eventServerAuthTokens.set(server.getPort(), server.getAuthToken());
 }
 
 function makeMockMCPConnection(overrides: Partial<IMCPConnection> = {}): IMCPConnection {
@@ -350,6 +361,7 @@ describe("Phase B — Remote Trigger API: POST trigger creates event", () => {
     });
     await server.start();
     port = server.getPort();
+    rememberEventServerAuth(server);
   });
 
   afterEach(async () => {
@@ -478,6 +490,7 @@ describe("Phase B — Remote Trigger API: GET /goals returns goal states", () =>
     });
     await server.start();
     port = server.getPort();
+    rememberEventServerAuth(server);
   });
 
   afterEach(async () => {
@@ -723,6 +736,7 @@ describe("Phase B — Hook + Trigger integration: trigger fires → hook interce
     });
     await server.start();
     port = server.getPort();
+    rememberEventServerAuth(server);
   });
 
   afterEach(async () => {
@@ -846,6 +860,7 @@ describe("Phase B — EventServer lifecycle: start → requests → graceful shu
     });
     await server.start();
     const port = server.getPort();
+    rememberEventServerAuth(server);
 
     expect(server.isRunning()).toBe(true);
 
@@ -880,6 +895,7 @@ describe("Phase B — EventServer lifecycle: start → requests → graceful shu
     });
     await server.start();
     const port = server.getPort();
+    rememberEventServerAuth(server);
 
     const res = await makeHttpRequest(port, "GET", "/unknown/path");
     expect(res.status).toBe(404);
@@ -897,6 +913,7 @@ describe("Phase B — EventServer lifecycle: start → requests → graceful shu
     });
     await server.start();
     const port = server.getPort();
+    rememberEventServerAuth(server);
 
     // Fire 5 concurrent health checks
     const requests = Array.from({ length: 5 }, () =>
@@ -932,6 +949,7 @@ describe("Phase B — EventServer lifecycle: start → requests → graceful shu
     });
     await server.start();
     const port = server.getPort();
+    rememberEventServerAuth(server);
 
     const res = await makeHttpRequest(port, "POST", "/events", {
       type: "external",
@@ -959,6 +977,7 @@ describe("Phase B — EventServer lifecycle: start → requests → graceful shu
     });
     await server.start();
     const port = server.getPort();
+    rememberEventServerAuth(server);
 
     const res = await makeHttpRequest(port, "POST", "/events", {
       bad_field: "not a valid event",

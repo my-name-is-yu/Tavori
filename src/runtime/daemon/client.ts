@@ -4,6 +4,9 @@
 // Receives events via SSE, sends commands via REST.
 
 import http from "node:http";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { DEFAULT_PORT } from "../port-utils.js";
 
 export interface DaemonClientConfig {
@@ -11,6 +14,8 @@ export interface DaemonClientConfig {
   port: number;
   reconnectInterval?: number; // ms, default 3000
   maxReconnectAttempts?: number; // default 10
+  authToken?: string | null;
+  baseDir?: string;
 }
 
 export interface DaemonEvent {
@@ -43,8 +48,49 @@ export interface DaemonHealthProbeResult {
 
 type EventHandler = (data: unknown) => void;
 
+const DAEMON_TOKEN_FILENAME = "daemon-token.json";
+const DAEMON_TOKEN_ENV = "PULSEED_DAEMON_TOKEN";
+
+export interface DaemonAuthToken {
+  token: string;
+  host?: string;
+  port?: number;
+  pid?: number;
+  created_at?: string;
+}
+
+export function getDaemonTokenPath(baseDir?: string): string {
+  return path.join(baseDir ?? process.env["PULSEED_HOME"] ?? path.join(os.homedir(), ".pulseed"), DAEMON_TOKEN_FILENAME);
+}
+
+export function readDaemonAuthToken(baseDir?: string, expectedPort?: number): string | null {
+  const envToken = process.env[DAEMON_TOKEN_ENV];
+  if (envToken && envToken.trim() !== "") {
+    return envToken.trim();
+  }
+
+  try {
+    const raw = fs.readFileSync(getDaemonTokenPath(baseDir), "utf-8");
+    const parsed = JSON.parse(raw) as Partial<DaemonAuthToken>;
+    if (expectedPort !== undefined && parsed.port !== undefined && parsed.port !== expectedPort) {
+      return null;
+    }
+    return typeof parsed.token === "string" && parsed.token.length > 0 ? parsed.token : null;
+  } catch {
+    return null;
+  }
+}
+
+interface ResolvedDaemonClientConfig {
+  host: string;
+  port: number;
+  reconnectInterval: number;
+  maxReconnectAttempts: number;
+  authToken: string | null;
+}
+
 export class DaemonClient {
-  private config: Required<DaemonClientConfig>;
+  private config: ResolvedDaemonClientConfig;
   private handlers: Map<string, Set<EventHandler>> = new Map();
   private sseRequest: http.ClientRequest | null = null;
   private reconnectAttempts = 0;
@@ -61,6 +107,7 @@ export class DaemonClient {
       port: config.port,
       reconnectInterval: config.reconnectInterval ?? 3000,
       maxReconnectAttempts: config.maxReconnectAttempts ?? 10,
+      authToken: config.authToken ?? readDaemonAuthToken(config.baseDir, config.port),
     };
   }
 
@@ -82,6 +129,7 @@ export class DaemonClient {
     const headers: Record<string, string> = {
       Accept: "text/event-stream",
       "Cache-Control": "no-cache",
+      ...this.authHeaders(),
     };
     if (this.lastEventId) {
       headers["Last-Event-ID"] = this.lastEventId;
@@ -290,7 +338,12 @@ export class DaemonClient {
   private get(path: string): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const req = http.get(
-        { hostname: this.config.host, port: this.config.port, path },
+        {
+          hostname: this.config.host,
+          port: this.config.port,
+          path,
+          headers: this.authHeaders(),
+        },
         (res) => {
           let body = "";
           res.setEncoding("utf-8");
@@ -336,6 +389,7 @@ export class DaemonClient {
           headers: {
             "Content-Type": "application/json",
             "Content-Length": Buffer.byteLength(body),
+            ...this.authHeaders(),
           },
         },
         (res) => {
@@ -355,6 +409,10 @@ export class DaemonClient {
       req.write(body);
       req.end();
     });
+  }
+
+  private authHeaders(): Record<string, string> {
+    return this.config.authToken ? { Authorization: `Bearer ${this.config.authToken}` } : {};
   }
 }
 
@@ -385,7 +443,7 @@ export async function probeDaemonHealth(config: Pick<DaemonClientConfig, "host" 
   }
 }
 
-export async function isDaemonRunning(baseDir: string): Promise<{ running: boolean; port: number }> {
+export async function isDaemonRunning(baseDir: string): Promise<{ running: boolean; port: number; authToken?: string | null }> {
   const fs = await import("node:fs/promises");
   const path = await import("node:path");
   // DEFAULT_PORT imported from port-utils
@@ -417,9 +475,13 @@ export async function isDaemonRunning(baseDir: string): Promise<{ running: boole
       // Use default port
     }
 
+    const authToken = readDaemonAuthToken(baseDir, port);
+
     // Verify EventServer is actually responding
     const probe = await probeDaemonHealth({ host: "127.0.0.1", port });
-    return { running: probe.ok, port };
+    return authToken
+      ? { running: probe.ok, port, authToken }
+      : { running: probe.ok, port };
   } catch {
     return { running: false, port: DEFAULT_PORT };
   }

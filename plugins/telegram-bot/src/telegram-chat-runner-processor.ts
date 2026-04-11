@@ -6,6 +6,9 @@ import {
   buildLLMClient,
   loadProviderConfig,
   ToolRegistry,
+  ToolExecutor,
+  ToolPermissionManager,
+  ConcurrencyController,
   createBuiltinTools,
   type ChatEventHandler,
   type IAdapter,
@@ -13,12 +16,14 @@ import {
   type ChatRunnerLike,
   type ProviderConfig,
 } from "pulseed";
+import { TrustManager } from "pulseed";
 
 interface BootstrapResult {
   stateManager: StateManager;
   llmClient: ILLMClient;
   adapter: IAdapter;
   registry: ToolRegistry;
+  toolExecutor: ToolExecutor;
   providerConfig: ProviderConfig;
 }
 
@@ -60,6 +65,7 @@ export class TelegramChatRunnerProcessor {
       adapter: bootstrap.adapter,
       llmClient: bootstrap.llmClient,
       registry: bootstrap.registry,
+      toolExecutor: bootstrap.toolExecutor,
     });
     runner.startSession(this.workspaceRoot);
     this.sessions.set(chatId, runner);
@@ -85,15 +91,25 @@ export class TelegramChatRunnerProcessor {
     const registry = await buildAdapterRegistry(llmClient, providerConfig);
     const adapter = registry.getAdapter(providerConfig.adapter);
     const toolRegistry = new ToolRegistry();
-    for (const tool of createBuiltinTools({ stateManager })) {
+    const trustManager = new TrustManager(stateManager);
+    for (const tool of createBuiltinTools({ stateManager, trustManager, registry: toolRegistry })) {
       toolRegistry.register(tool);
     }
+    const permissionManager = new ToolPermissionManager({
+      trustManager,
+    });
+    const toolExecutor = new ToolExecutor({
+      registry: toolRegistry,
+      permissionManager,
+      concurrency: new ConcurrencyController(),
+    });
 
     return {
       stateManager,
       llmClient,
       adapter,
       registry: toolRegistry,
+      toolExecutor,
       providerConfig,
     };
   }

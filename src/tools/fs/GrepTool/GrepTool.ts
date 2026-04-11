@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ITool, ToolResult, ToolCallContext, PermissionCheckResult, ToolMetadata } from "../../types.js";
 import { execFileNoThrow } from "../../../base/utils/execFileNoThrow.js";
+import { validateFilePath } from "../FileValidationTool/FileValidationTool.js";
 import { DESCRIPTION } from "./prompt.js";
 import { TAGS, PERMISSION_LEVEL, MAX_OUTPUT_CHARS, READ_ONLY } from "./constants.js";
 
@@ -84,7 +85,13 @@ export class GrepTool implements ITool<GrepInput, string> {
     }
   }
 
-  async checkPermissions(_input: GrepInput, _context?: ToolCallContext): Promise<PermissionCheckResult> {
+  async checkPermissions(input: GrepInput, context?: ToolCallContext): Promise<PermissionCheckResult> {
+    if (context) {
+      const validation = validateFilePath(input.path ?? ".", context.cwd);
+      if (!validation.valid) {
+        return { status: "needs_approval", reason: `Searching outside the working directory: ${validation.resolved}` };
+      }
+    }
     return { status: "allowed" };
   }
 

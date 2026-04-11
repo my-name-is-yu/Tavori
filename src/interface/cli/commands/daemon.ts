@@ -32,7 +32,7 @@ import { getProviderRuntimeFingerprint } from "../../../base/llm/provider-config
 import { buildDeps } from "../setup.js";
 import { formatOperationError } from "../utils.js";
 import { getCliLogger } from "../cli-logger.js";
-import { getPulseedDirPath, getLogsDir } from "../../../base/utils/paths.js";
+import { getPulseedDirPath, getLogsDir, getEventsDir } from "../../../base/utils/paths.js";
 import { summarizeTaskOutcomeLedgers } from "../../../orchestrator/execution/task/task-outcome-ledger.js";
 import type { SupervisorState } from "../../../runtime/executor/index.js";
 
@@ -266,7 +266,7 @@ export async function cmdStart(
   // Create EventServer for event-driven wake-ups and SSE clients.
   const eventServer = new EventServer(
     deps.driveSystem,
-    { port: resolvedDaemonConfig.event_server_port },
+    { port: resolvedDaemonConfig.event_server_port, eventsDir: getEventsDir(daemonBaseDir) },
     logger
   );
   notificationDispatcher.setRealtimeSink(async (report) => {

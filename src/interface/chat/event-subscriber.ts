@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import { readDaemonAuthToken } from "../../runtime/daemon/client.js";
 
 export interface TendNotification {
   type: "progress" | "stall" | "complete" | "error" | "approval";
@@ -39,7 +40,8 @@ export class EventSubscriber extends EventEmitter {
   constructor(
     private baseUrl: string,
     private goalId: string,
-    private verbosity: NotificationVerbosity = "normal"
+    private verbosity: NotificationVerbosity = "normal",
+    private authToken: string | null = readDaemonAuthToken()
   ) {
     super();
   }
@@ -60,7 +62,11 @@ export class EventSubscriber extends EventEmitter {
       }
 
       const res = await fetch(`${this.baseUrl}/stream?after=${this.lastOutboxSeq}`, {
-        headers: { Accept: "text/event-stream", "Cache-Control": "no-cache" },
+        headers: {
+          Accept: "text/event-stream",
+          "Cache-Control": "no-cache",
+          ...this.authHeaders(),
+        },
         signal: this.abortController!.signal,
       });
 
@@ -273,7 +279,7 @@ export class EventSubscriber extends EventEmitter {
   private async bootstrapSnapshot(): Promise<void> {
     try {
       const res = await fetch(`${this.baseUrl}/snapshot`, {
-        headers: { Accept: "application/json" },
+        headers: { Accept: "application/json", ...this.authHeaders() },
         signal: this.abortController!.signal,
       });
       if (!res.ok) {
@@ -295,5 +301,9 @@ export class EventSubscriber extends EventEmitter {
     } catch {
       // Snapshot bootstrap is best-effort.
     }
+  }
+
+  private authHeaders(): Record<string, string> {
+    return this.authToken ? { Authorization: `Bearer ${this.authToken}` } : {};
   }
 }

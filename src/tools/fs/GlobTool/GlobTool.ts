@@ -1,6 +1,8 @@
 import { z } from "zod";
 import type { ITool, ToolResult, ToolCallContext, PermissionCheckResult, ToolMetadata, ToolDescriptionContext } from "../../types.js";
 import { glob } from "glob";
+import { isAbsolute } from "node:path";
+import { validateFilePath } from "../FileValidationTool/FileValidationTool.js";
 import { DESCRIPTION_PREFIX, DESCRIPTION_SUFFIX } from "./prompt.js";
 import { TAGS, PERMISSION_LEVEL, MAX_OUTPUT_CHARS, READ_ONLY } from "./constants.js";
 
@@ -55,7 +57,16 @@ export class GlobTool implements ITool<GlobInput, string[]> {
     }
   }
 
-  async checkPermissions(_input: GlobInput, _context?: ToolCallContext): Promise<PermissionCheckResult> {
+  async checkPermissions(input: GlobInput, context?: ToolCallContext): Promise<PermissionCheckResult> {
+    if (isAbsolute(input.pattern) || input.pattern.split(/[\\/]+/).includes("..")) {
+      return { status: "needs_approval", reason: `Glob pattern may access outside the working directory: ${input.pattern}` };
+    }
+    if (context) {
+      const validation = validateFilePath(input.path ?? ".", context.cwd);
+      if (!validation.valid) {
+        return { status: "needs_approval", reason: `Globbing outside the working directory: ${validation.resolved}` };
+      }
+    }
     return { status: "allowed" };
   }
 

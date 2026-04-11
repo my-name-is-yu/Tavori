@@ -661,61 +661,75 @@ export class ChatRunner {
         ...this.eventBase(eventContext),
       });
 
-      // Gate: check permissions before execution
-      const permResult = await tool.checkPermissions(parsed.data, context);
-      if (permResult.status === "denied") {
-        this.emitEvent({
-          type: "tool_end",
-          toolCallId,
-          toolName: name,
-          success: false,
-          summary: permResult.reason,
-          durationMs: Date.now() - startTime,
-          ...this.eventBase(eventContext),
-        });
-        return `Tool ${name} denied: ${permResult.reason}`;
-      }
-      if (permResult.status === "needs_approval") {
+      let result: { success: boolean; summary: string; data?: unknown; error?: string };
+      if (this.deps.toolExecutor) {
         this.emitEvent({
           type: "tool_update",
           toolCallId,
           toolName: name,
-          status: "awaiting_approval",
-          message: permResult.reason,
+          status: "running",
+          message: "running",
           ...this.eventBase(eventContext),
         });
-        const approved = await context.approvalFn({
-          toolName: name,
-          input: parsed.data,
-          reason: permResult.reason,
-          permissionLevel: tool.metadata.permissionLevel,
-          isDestructive: tool.metadata.isDestructive,
-          reversibility: "unknown",
-        });
-        if (!approved) {
+        this.deps.onToolStart?.(name, args);
+        result = await this.deps.toolExecutor.execute(name, parsed.data, context);
+      } else {
+        // Gate: check permissions before execution
+        const permResult = await tool.checkPermissions(parsed.data, context);
+        if (permResult.status === "denied") {
           this.emitEvent({
             type: "tool_end",
             toolCallId,
             toolName: name,
             success: false,
-            summary: `Not approved: ${permResult.reason}`,
+            summary: permResult.reason,
             durationMs: Date.now() - startTime,
             ...this.eventBase(eventContext),
           });
-          return `Tool ${name} not approved: ${permResult.reason}`;
+          return `Tool ${name} denied: ${permResult.reason}`;
         }
+        if (permResult.status === "needs_approval") {
+          this.emitEvent({
+            type: "tool_update",
+            toolCallId,
+            toolName: name,
+            status: "awaiting_approval",
+            message: permResult.reason,
+            ...this.eventBase(eventContext),
+          });
+          const approved = await context.approvalFn({
+            toolName: name,
+            input: parsed.data,
+            reason: permResult.reason,
+            permissionLevel: tool.metadata.permissionLevel,
+            isDestructive: tool.metadata.isDestructive,
+            reversibility: "unknown",
+          });
+          if (!approved) {
+            this.emitEvent({
+              type: "tool_end",
+              toolCallId,
+              toolName: name,
+              success: false,
+              summary: `Not approved: ${permResult.reason}`,
+              durationMs: Date.now() - startTime,
+              ...this.eventBase(eventContext),
+            });
+            return `Tool ${name} not approved: ${permResult.reason}`;
+          }
+        }
+        this.emitEvent({
+          type: "tool_update",
+          toolCallId,
+          toolName: name,
+          status: "running",
+          message: "running",
+          ...this.eventBase(eventContext),
+        });
+        this.deps.onToolStart?.(name, args);
+        result = await tool.call(parsed.data, context);
       }
 
-      this.emitEvent({
-        type: "tool_update",
-        toolCallId,
-        toolName: name,
-        status: "running",
-        message: "running",
-        ...this.eventBase(eventContext),
-      });
-      this.deps.onToolStart?.(name, args);
-      const result = await tool.call(parsed.data, context);
       const durationMs = Date.now() - startTime;
       this.deps.onToolEnd?.(name, { success: result.success, summary: result.summary || '...', durationMs });
       this.emitEvent({

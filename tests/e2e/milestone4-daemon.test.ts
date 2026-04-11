@@ -410,7 +410,11 @@ describe("Milestone 4 — Group 2: Event-Driven Integration", () => {
 
     // Use a dynamic port to avoid collisions
     const port = 41800 + Math.floor(Math.random() * 100);
-    const eventServer = new EventServer(driveSystem, { host: "127.0.0.1", port });
+    const eventServer = new EventServer(driveSystem, {
+      host: "127.0.0.1",
+      port,
+      eventsDir: path.join(tempDir, "events"),
+    });
 
     expect(eventServer.isRunning()).toBe(false);
 
@@ -429,7 +433,10 @@ describe("Milestone 4 — Group 2: Event-Driven Integration", () => {
 
     const response = await fetch(`http://127.0.0.1:${port}/events`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${eventServer.getAuthToken()}`,
+      },
       body: JSON.stringify(event),
     });
 

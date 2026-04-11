@@ -100,6 +100,14 @@ describe("ReadTool", () => {
     expect(result.status).toBe("allowed");
   });
 
+  it("checkPermissions requires approval for files outside cwd", async () => {
+    const result = await tool.checkPermissions(
+      { file_path: "../outside.txt", limit: 2000 },
+      makeContext(tmpDir)
+    );
+    expect(result.status).toBe("needs_approval");
+  });
+
   it("isConcurrencySafe returns true", () => {
     expect(tool.isConcurrencySafe({ file_path: testFile, limit: 2000 })).toBe(true);
   });

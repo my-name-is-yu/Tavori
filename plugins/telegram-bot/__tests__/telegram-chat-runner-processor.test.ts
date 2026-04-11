@@ -36,6 +36,16 @@ vi.mock("pulseed", () => {
   return {
     StateManager: FakeStateManager,
     ChatRunner: FakeChatRunner,
+    TrustManager: class {
+      constructor(_stateManager: unknown) {}
+    },
+    ToolExecutor: class {
+      constructor(_deps: unknown) {}
+    },
+    ToolPermissionManager: class {
+      constructor(_deps: unknown) {}
+    },
+    ConcurrencyController: class {},
     buildLLMClient: mockBuildLLMClient,
     buildAdapterRegistry: mockBuildAdapterRegistry,
     loadProviderConfig: mockLoadProviderConfig,

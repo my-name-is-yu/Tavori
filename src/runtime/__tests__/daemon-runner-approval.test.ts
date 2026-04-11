@@ -68,7 +68,8 @@ function request(
   port: number,
   method: string,
   urlPath: string,
-  body?: unknown
+  body: unknown,
+  authToken: string
 ): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
     const data = body === undefined ? "" : JSON.stringify(body);
@@ -80,6 +81,7 @@ function request(
         method,
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
           ...(data ? { "Content-Length": Buffer.byteLength(data) } : {}),
         },
       },
@@ -102,7 +104,7 @@ function request(
   });
 }
 
-function waitForSseEvent(port: number, eventType: string): Promise<unknown> {
+function waitForSseEvent(port: number, eventType: string, authToken: string): Promise<unknown> {
   return new Promise((resolve, reject) => {
     let settled = false;
     const req = http.get(
@@ -110,7 +112,7 @@ function waitForSseEvent(port: number, eventType: string): Promise<unknown> {
         hostname: "127.0.0.1",
         port,
         path: "/stream",
-        headers: { Accept: "text/event-stream" },
+        headers: { Accept: "text/event-stream", Authorization: `Bearer ${authToken}` },
       },
       (res) => {
         let buffer = "";
@@ -245,7 +247,8 @@ describe("DaemonRunner durable approval restart", () => {
       poll();
     });
 
-    const restored = await waitForSseEvent(port, "approval_required");
+    const authToken = (daemon as any)?.eventServer?.getAuthToken?.() as string;
+    const restored = await waitForSseEvent(port, "approval_required", authToken);
     expect(restored).toEqual(
       expect.objectContaining({
         requestId: approvalId,
@@ -257,7 +260,7 @@ describe("DaemonRunner durable approval restart", () => {
     const approveResult = await request(port, "POST", "/goals/goal-1/approve", {
       requestId: approvalId,
       approved: true,
-    });
+    }, authToken);
     expect(approveResult.status).toBe(200);
 
     const resolvedPath = paths.approvalResolvedPath(approvalId);

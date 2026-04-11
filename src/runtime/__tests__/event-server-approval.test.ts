@@ -19,7 +19,8 @@ function request(
   port: number,
   method: string,
   urlPath: string,
-  body?: unknown
+  body: unknown,
+  authToken: string
 ): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
     const data = body === undefined ? "" : JSON.stringify(body);
@@ -31,6 +32,7 @@ function request(
         method,
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
           ...(data ? { "Content-Length": Buffer.byteLength(data) } : {}),
         },
       },
@@ -53,7 +55,7 @@ function request(
   });
 }
 
-function waitForSseEvent(port: number, eventType: string): Promise<unknown> {
+function waitForSseEvent(port: number, eventType: string, authToken: string): Promise<unknown> {
   return new Promise((resolve, reject) => {
     let settled = false;
     const req = http.get(
@@ -61,7 +63,7 @@ function waitForSseEvent(port: number, eventType: string): Promise<unknown> {
         hostname: "127.0.0.1",
         port,
         path: "/stream",
-        headers: { Accept: "text/event-stream" },
+        headers: { Accept: "text/event-stream", Authorization: `Bearer ${authToken}` },
       },
       (res) => {
         let buffer = "";
@@ -161,7 +163,7 @@ describe("EventServer durable approval integration", () => {
       const result = await request(server.getPort(), "POST", "/goals/goal-1/approve", {
         requestId: "approval-http",
         approved: true,
-      });
+      }, server.getAuthToken());
 
       expect(result.status).toBe(200);
       await expect(approval).resolves.toBe(true);
@@ -206,7 +208,7 @@ describe("EventServer durable approval integration", () => {
 
     try {
       await server.start();
-      const event = await waitForSseEvent(server.getPort(), "approval_required");
+      const event = await waitForSseEvent(server.getPort(), "approval_required", server.getAuthToken());
       expect(event).toEqual({
         requestId: "approval-sse",
         goalId: "goal-sse",

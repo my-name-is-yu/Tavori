@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import { isAbsolute, relative, resolve } from "node:path";
 
 const BLOCKED_PATTERNS = [".env", "credentials", "secret", ".ssh/", "id_rsa", "node_modules"];
 
@@ -8,7 +8,8 @@ export function validateFilePath(
 ): { valid: boolean; resolved: string; error?: string } {
   const resolvedCwd = resolve(cwd);
   const resolved = resolve(cwd, filePath);
-  if (!resolved.startsWith(resolvedCwd)) {
+  const pathFromCwd = relative(resolvedCwd, resolved);
+  if (pathFromCwd.startsWith("..") || isAbsolute(pathFromCwd)) {
     return { valid: false, resolved, error: "Path traversal outside working directory" };
   }
   const lower = resolved.toLowerCase();

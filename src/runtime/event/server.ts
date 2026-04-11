@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
 import * as http from "node:http";
+import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { DriveSystem } from "../../platform/drive/drive-system.js";
 import { PulSeedEventSchema } from "../../base/types/drive.js";
 import { TriggerEventSchema, TriggerMappingsConfigSchema } from "../../base/types/trigger.js";
@@ -39,6 +40,8 @@ type ActiveWorkersProvider = () =>
   | Array<Record<string, unknown>>
   | Promise<Array<Record<string, unknown>>>;
 
+const DAEMON_TOKEN_FILENAME = "daemon-token.json";
+
 export class EventServer {
   private server: http.Server | null = null;
   private driveSystem: DriveSystem;
@@ -56,6 +59,7 @@ export class EventServer {
   private approvalQueue: Map<string, { resolve: (approved: boolean) => void; timer: ReturnType<typeof setTimeout> }> = new Map();
   private approvalBroker?: ApprovalBroker;
   private outboxStore?: OutboxStore;
+  private readonly authToken: string;
   private envelopeHook?: (eventData: Record<string, unknown>) => void | Promise<void>;
   private commandEnvelopeHook?: (envelope: Envelope) => void | Promise<void>;
   private activeWorkersProvider?: ActiveWorkersProvider;
@@ -71,6 +75,7 @@ export class EventServer {
     this.triggerMapper = config?.triggerMapper;
     this.approvalBroker = config?.approvalBroker;
     this.outboxStore = config?.outboxStore;
+    this.authToken = randomBytes(32).toString("base64url");
     this.snapshotReader = new EventServerSnapshotReader(this.eventsDir);
     this.sseManager = new EventServerSseManager(this.logger, this.approvalBroker, this.outboxStore);
   }
@@ -89,13 +94,15 @@ export class EventServer {
       this.server = http.createServer((req, res) => this.handleRequest(req, res));
       const server = this.server;
       server.listen(startPort, this.host, () => {
-        // Capture the actual bound port (important for port 0 and auto-retry cases)
-        const addr = server.address();
-        if (addr && typeof addr === "object") {
-          this.port = addr.port;
-        }
-        this.logger?.info(`EventServer listening on ${this.host}:${this.port}`);
-        resolve();
+        void (async () => {
+          try {
+            await this.finishServerStartup(server);
+            this.logger?.info(`EventServer listening on ${this.host}:${this.port}`);
+            resolve();
+          } catch (err) {
+            server.close(() => reject(err));
+          }
+        })();
       });
       this.server.on("error", (err: NodeJS.ErrnoException) => {
         // EADDRINUSE should not reach here since findAvailablePort pre-checks,
@@ -104,12 +111,15 @@ export class EventServer {
           const fallbackStart = startPort + MAX_PORT_ATTEMPTS;
           findAvailablePort(fallbackStart).then((fallback) => {
             server.listen(fallback, this.host, () => {
-              const addr = server.address();
-              if (addr && typeof addr === "object") {
-                this.port = addr.port;
-              }
-              this.logger?.info(`EventServer listening on ${this.host}:${this.port} (fallback)`);
-              resolve();
+              void (async () => {
+                try {
+                  await this.finishServerStartup(server);
+                  this.logger?.info(`EventServer listening on ${this.host}:${this.port} (fallback)`);
+                  resolve();
+                } catch (err) {
+                  server.close(() => reject(err));
+                }
+              })();
             });
           }).catch(reject);
         } else {
@@ -126,10 +136,13 @@ export class EventServer {
     this.sseManager.closeAllClients();
     return new Promise((resolve) => {
       if (!this.server) {
-        resolve();
+        void this.removeAuthTokenFile().finally(() => resolve());
         return;
       }
-      this.server.close(() => resolve());
+      this.server.close(() => {
+        this.server = null;
+        void this.removeAuthTokenFile().finally(() => resolve());
+      });
     });
   }
 
@@ -303,6 +316,10 @@ export class EventServer {
     if (req.method === "GET" && urlPath === "/health") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ status: "ok", uptime: process.uptime() }));
+      return;
+    }
+
+    if (!this.authorizeRequest(req, res)) {
       return;
     }
 
@@ -656,6 +673,10 @@ export class EventServer {
     return this.eventsDir;
   }
 
+  getAuthToken(): string {
+    return this.authToken;
+  }
+
   private async handleGetSnapshot(res: http.ServerResponse): Promise<void> {
     try {
       const snapshot = await this.buildSnapshot();
@@ -702,6 +723,139 @@ export class EventServer {
       this.outboxStore,
       this.activeWorkersProvider
     );
+  }
+
+  private async finishServerStartup(server: http.Server): Promise<void> {
+    const addr = server.address();
+    if (addr && typeof addr === "object") {
+      this.port = addr.port;
+    }
+    await this.persistAuthToken();
+  }
+
+  private getAuthTokenPath(): string {
+    return path.join(path.dirname(this.eventsDir), DAEMON_TOKEN_FILENAME);
+  }
+
+  private async persistAuthToken(): Promise<void> {
+    const tokenPath = this.getAuthTokenPath();
+    await fsp.mkdir(path.dirname(tokenPath), { recursive: true });
+    const payload = {
+      token: this.authToken,
+      host: this.host,
+      port: this.port,
+      pid: process.pid,
+      created_at: new Date().toISOString(),
+    };
+    await fsp.writeFile(tokenPath, JSON.stringify(payload, null, 2), {
+      encoding: "utf-8",
+      mode: 0o600,
+    });
+    await fsp.chmod(tokenPath, 0o600).catch(() => undefined);
+  }
+
+  private async removeAuthTokenFile(): Promise<void> {
+    const tokenPath = this.getAuthTokenPath();
+    try {
+      const raw = await fsp.readFile(tokenPath, "utf-8");
+      const parsed = JSON.parse(raw) as { token?: unknown };
+      if (parsed.token !== this.authToken) return;
+      await fsp.unlink(tokenPath);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+        this.logger?.warn(`EventServer: failed to remove auth token file: ${String(err)}`);
+      }
+    }
+  }
+
+  private authorizeRequest(req: http.IncomingMessage, res: http.ServerResponse): boolean {
+    if (!this.isAllowedHost(req.headers.host)) {
+      this.writeJsonError(res, 403, "Forbidden host");
+      return false;
+    }
+
+    if (!this.isAllowedOrigin(req.headers.origin)) {
+      this.writeJsonError(res, 403, "Forbidden origin");
+      return false;
+    }
+
+    const fetchSite = this.singleHeader(req.headers["sec-fetch-site"])?.toLowerCase();
+    if (fetchSite && fetchSite !== "same-origin" && fetchSite !== "none") {
+      this.writeJsonError(res, 403, "Forbidden browser request");
+      return false;
+    }
+
+    if (!this.hasValidAuth(req.headers.authorization)) {
+      this.writeJsonError(res, 401, "Unauthorized");
+      return false;
+    }
+
+    if (req.method === "POST" && !this.hasJsonContentType(req.headers["content-type"])) {
+      this.writeJsonError(res, 415, "Content-Type must be application/json");
+      return false;
+    }
+
+    return true;
+  }
+
+  private hasValidAuth(header: string | string[] | undefined): boolean {
+    const value = this.singleHeader(header);
+    if (!value?.startsWith("Bearer ")) return false;
+    const candidate = value.slice("Bearer ".length).trim();
+    const expected = Buffer.from(this.authToken);
+    const actual = Buffer.from(candidate);
+    return actual.length === expected.length && timingSafeEqual(actual, expected);
+  }
+
+  private hasJsonContentType(header: string | string[] | undefined): boolean {
+    const value = this.singleHeader(header);
+    return value?.split(";")[0]?.trim().toLowerCase() === "application/json";
+  }
+
+  private isAllowedHost(hostHeader: string | undefined): boolean {
+    if (!hostHeader) return false;
+    const hostname = this.parseHostname(hostHeader);
+    if (!hostname) return false;
+    return this.isAllowedHostname(hostname);
+  }
+
+  private isAllowedOrigin(originHeader: string | string[] | undefined): boolean {
+    const origin = this.singleHeader(originHeader);
+    if (!origin) return true;
+    try {
+      const parsed = new URL(origin);
+      if (parsed.protocol !== "http:") return false;
+      if (!this.isAllowedHostname(parsed.hostname)) return false;
+      const originPort = parsed.port ? Number.parseInt(parsed.port, 10) : 80;
+      return originPort === this.port;
+    } catch {
+      return false;
+    }
+  }
+
+  private isAllowedHostname(hostname: string): boolean {
+    const normalized = hostname.toLowerCase().replace(/^\[/, "").replace(/\]$/, "");
+    return normalized === this.host.toLowerCase()
+      || normalized === "127.0.0.1"
+      || normalized === "localhost"
+      || normalized === "::1";
+  }
+
+  private parseHostname(hostHeader: string): string | null {
+    try {
+      return new URL(`http://${hostHeader}`).hostname;
+    } catch {
+      return null;
+    }
+  }
+
+  private singleHeader(header: string | string[] | undefined): string | undefined {
+    return Array.isArray(header) ? header[0] : header;
+  }
+
+  private writeJsonError(res: http.ServerResponse, status: number, error: string): void {
+    res.writeHead(status, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error }));
   }
 }
 

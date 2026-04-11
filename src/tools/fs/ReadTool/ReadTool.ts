@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { ITool, ToolResult, ToolCallContext, PermissionCheckResult, ToolMetadata } from "../../types.js";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+import { validateFilePath } from "../FileValidationTool/FileValidationTool.js";
 import { DESCRIPTION } from "./prompt.js";
 import { TAGS, PERMISSION_LEVEL, MAX_OUTPUT_CHARS, READ_ONLY } from "./constants.js";
 
@@ -61,11 +62,17 @@ export class ReadTool implements ITool<ReadInput, string> {
     }
   }
 
-  async checkPermissions(input: ReadInput): Promise<PermissionCheckResult> {
+  async checkPermissions(input: ReadInput, context?: ToolCallContext): Promise<PermissionCheckResult> {
     const basename = path.basename(input.file_path);
     const sensitivePatterns = [".env", "credentials", "secret", "private_key"];
     if (sensitivePatterns.some((p) => basename.toLowerCase().includes(p))) {
       return { status: "needs_approval", reason: `Reading potentially sensitive file: ${basename}` };
+    }
+    if (context) {
+      const validation = validateFilePath(input.file_path, context.cwd);
+      if (!validation.valid) {
+        return { status: "needs_approval", reason: `Reading outside the working directory: ${validation.resolved}` };
+      }
     }
     return { status: "allowed" };
   }

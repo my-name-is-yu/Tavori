@@ -16,6 +16,12 @@ describe("validateFilePath", () => {
     expect(result.error).toContain("Path traversal");
   });
 
+  it("rejects sibling prefix escapes", () => {
+    const result = validateFilePath("../test-evil/output/file.txt", "/tmp/test");
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("Path traversal");
+  });
+
   it("rejects .env paths", () => {
     const result = validateFilePath(".env", cwd);
     expect(result.valid).toBe(false);

@@ -24,11 +24,15 @@ function makeRequest(
   port: number,
   method: string,
   urlPath: string,
-  body?: unknown
+  body?: unknown,
+  authToken: string | null | undefined = server?.getAuthToken()
 ): Promise<{ status: number; body: string }> {
   return new Promise((resolve, reject) => {
     const data = body !== undefined ? JSON.stringify(body) : "";
-    const headers: http.OutgoingHttpHeaders = { "Content-Type": "application/json" };
+    const headers: http.OutgoingHttpHeaders = {
+      "Content-Type": "application/json",
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    };
     if (data.length > 0) headers["Content-Length"] = Buffer.byteLength(data);
     const req = http.request(
       { hostname: "127.0.0.1", port, path: urlPath, method, headers },
