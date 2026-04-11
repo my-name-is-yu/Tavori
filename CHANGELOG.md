@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.5] - 2026-04-11
+
+### Added
+- Added PulSeed chat input routing so standalone PulSeed can accept Hermes-style user input channels through the chat/runtime path (#640)
+- Added Soil system memory and Soil viewer publish integrations for memory browsing and publishing workflows (#638, #639)
+- Wired CrossGoalPortfolio into the production runtime for cross-goal allocation and rebalance decisions (#633, #643)
+- Connected workspace learning runtime dependencies, including explicit workspace propagation and CoreLoop learning triggers (#630, #632, #642)
+
+### Changed
+- Strengthened daemon quality and task grounding after the resident runtime release (#636)
+- Routed CLI tool runtime dependencies through production wiring so workspace-grounded execution does not depend on test-only construction paths (#641)
+- Bumped the package version to `0.4.5`
+
+### Fixed
+- Hardened external access surfaces for safer runtime operation (#637)
+- Added out-of-process daemon supervision, file-watcher retry/quarantine, orphaned running-work recovery, and portfolio ingress watchdog wiring (#597, #598, #604, #643)
+- Completed WaitStrategy lifecycle wiring so wait activation captures a gap baseline, wait suppression uses `WaitStrategy.wait_until`, and expired waits resolve through completed/terminated states for success, fallback, and failure paths (#594, #644)
+
 ## [0.4.4] - 2026-04-11
 
 ### Added
