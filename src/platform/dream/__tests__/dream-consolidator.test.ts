@@ -116,6 +116,97 @@ describe("DreamConsolidator", () => {
     });
   });
 
+  it("skips disabled categories without running their collector", async () => {
+    tmpDir = makeTempDir("dream-consolidator-disabled-");
+    await seedDreamFiles(tmpDir);
+    const memoryQualityService = {
+      run: vi.fn().mockResolvedValue({
+        findings: 1,
+        contradictionsFound: 0,
+        stalenessFound: 1,
+        redundancyFound: 0,
+        repairsApplied: 0,
+        entriesFlagged: 1,
+      }),
+    };
+
+    const consolidator = new DreamConsolidator({
+      baseDir: tmpDir,
+      memoryQualityService,
+      config: {
+        knowledgeOptimization: {
+          enabled: false,
+          redundancySimilarityThreshold: 0.95,
+          autoRepairAgentMemory: true,
+          minAutoRepairConfidence: 0.8,
+        },
+      },
+    });
+    const report = await consolidator.run({ tier: "light" });
+    const knowledgeOptimization = report.categories.find((category) => category.category === "knowledgeOptimization");
+
+    expect(memoryQualityService.run).not.toHaveBeenCalled();
+    expect(knowledgeOptimization).toMatchObject({
+      status: "skipped",
+      metrics: {},
+      warnings: ["category disabled"],
+      errors: [],
+    });
+  });
+
+  it("surfaces optional service unavailable warnings as completed category results", async () => {
+    tmpDir = makeTempDir("dream-consolidator-service-unavailable-");
+    await seedDreamFiles(tmpDir);
+
+    const consolidator = new DreamConsolidator({ baseDir: tmpDir });
+    const report = await consolidator.run({ tier: "deep" });
+    const legacy = report.categories.find((category) => category.category === "legacyReflectionCompatibility");
+    const knowledgeOptimization = report.categories.find((category) => category.category === "knowledgeOptimization");
+
+    expect(legacy).toMatchObject({
+      status: "completed",
+      warnings: ["legacy compatibility service unavailable"],
+    });
+    expect(knowledgeOptimization).toMatchObject({
+      status: "completed",
+      warnings: ["memory quality service unavailable"],
+    });
+  });
+
+  it("logs the category failure contract and records the error", async () => {
+    tmpDir = makeTempDir("dream-consolidator-category-failure-");
+    await seedDreamFiles(tmpDir);
+    const warn = vi.fn();
+    const legacyConsolidationService = {
+      run: vi.fn().mockRejectedValue(new Error("legacy exploded")),
+    };
+
+    const consolidator = new DreamConsolidator({
+      baseDir: tmpDir,
+      legacyConsolidationService,
+      logger: { warn } as never,
+    });
+    const report = await consolidator.run({ tier: "deep" });
+    const legacy = report.categories.find((category) => category.category === "legacyReflectionCompatibility");
+
+    expect(warn).toHaveBeenCalledWith("Dream consolidation category failed", {
+      category: "legacyReflectionCompatibility",
+      error: "legacy exploded",
+    });
+    expect(legacy).toMatchObject({
+      status: "failed",
+      errors: ["legacy exploded"],
+      warnings: [],
+    });
+    expect(report.operational?.failures).toEqual(expect.arrayContaining([
+      {
+        category: "legacyReflectionCompatibility",
+        source_ref: null,
+        reason: "legacy exploded",
+      },
+    ]));
+  });
+
   it("emits bounded activation artifacts from workflow-backed passes", async () => {
     tmpDir = makeTempDir("dream-consolidator-artifacts-");
     await seedDreamFiles(tmpDir);

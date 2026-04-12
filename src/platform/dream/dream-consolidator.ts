@@ -80,6 +80,18 @@ interface DreamConsolidationPass {
   run(input: DreamConsolidationPassInput): Promise<DreamConsolidationPassResult>;
 }
 
+type CategoryCollector = (tier: DreamTier) => Promise<DreamConsolidationPassResult>;
+
+interface ActivationArtifactInput {
+  type: DreamActivationArtifact["type"];
+  source: string;
+  summary: string;
+  payload?: Record<string, unknown>;
+  evidenceRefs?: string[];
+  confidence: number;
+  scope?: DreamActivationArtifact["scope"];
+}
+
 export interface DreamLegacyConsolidationReport {
   goals_consolidated: number;
   entries_compressed: number;
@@ -232,84 +244,69 @@ export class DreamConsolidator {
     category: DreamConsolidationCategory,
     tier: DreamTier
   ): Promise<DreamConsolidationPassResult> {
-    switch (category) {
-      case "memory":
-        return { metrics: {
+    const collectors: Record<DreamConsolidationCategory, CategoryCollector> = {
+      memory: async (tier) => ({ metrics: {
           goalsConsidered: await this.countGoalDirs(tier),
           latentFactsExtracted: 0,
           lessonsDistilled: 0,
           archivalItemsCollected: 0,
-        } };
-      case "agentMemory":
-        return { metrics: {
+        } }),
+      agentMemory: async () => ({ metrics: {
           agentMemoryEntriesScanned: await this.countAgentMemoryEntries(),
           ...(await this.collectDreamSoilSyncMetrics()),
           autoAppliedConsolidations: 0,
           duplicatesMerged: 0,
-        } };
-      case "crossGoalTransfer":
-        return this.collectCrossGoalTransferResult();
-      case "decisionHistory":
-        return this.collectDecisionHistoryResult();
-      case "stallHistory":
-        return this.collectStallHistoryResult();
-      case "sessionData":
-        return { metrics: {
+        } }),
+      crossGoalTransfer: () => this.collectCrossGoalTransferResult(),
+      decisionHistory: () => this.collectDecisionHistoryResult(),
+      stallHistory: () => this.collectStallHistoryResult(),
+      sessionData: async () => ({ metrics: {
           sessionsScanned: await this.countJsonlLines(path.join("dream", "session-logs.jsonl")),
           coldSessionsArchived: 0,
           bundlesCreated: 0,
           indexEntriesUpdated: 0,
-        } };
-      case "iterationLogs":
-        return { metrics: {
+        } }),
+      iterationLogs: async () => ({ metrics: {
           iterationLogsScanned: await this.countFilesNamed("iteration-logs.jsonl"),
           rotatedLogSegments: 0,
           archivedCompletedGoalLogs: 0,
           indexEntriesUpdated: 0,
-        } };
-      case "gapHistory":
-        return { metrics: {
+        } }),
+      gapHistory: async () => ({ metrics: {
           goalsAnalyzed: await this.countFilesNamed("gap-history.json"),
           dimensionsModeled: 0,
           falseProgressCasesDetected: 0,
           archetypesEmitted: 0,
-        } };
-      case "observationLogs":
-        return { metrics: {
+        } }),
+      observationLogs: async () => ({ metrics: {
           observationsScanned: await this.countFilesNamed("observations.json"),
           flakyMethodsDetected: 0,
           driftAlertsProduced: 0,
-        } };
-      case "reports":
-        return { metrics: {
+        } }),
+      reports: async () => ({ metrics: {
           reportsScanned: await this.countJsonFiles(path.join(this.deps.baseDir, "dream", "reports")),
           sequencesExtracted: 0,
           summaryReportsCreated: 0,
           lowSignalReportsCleanedUp: 0,
-        } };
-      case "trustScores":
-        return { metrics: {
+        } }),
+      trustScores: async () => ({ metrics: {
           trustDomainsAnalyzed: await this.countTrustDomains(),
           overrideEventsReplayed: 0,
           oscillationsDetected: 0,
           recalibrationRecommendations: 0,
-        } };
-      case "strategyHistory":
-        return this.collectStrategyHistoryResult();
-      case "verificationArtifacts":
-        return this.collectVerificationArtifactsResult();
-      case "archive":
-        return { metrics: {
+        } }),
+      strategyHistory: () => this.collectStrategyHistoryResult(),
+      verificationArtifacts: () => this.collectVerificationArtifactsResult(),
+      archive: async () => ({ metrics: {
           archivesScanned: await this.countJsonFiles(path.join(this.deps.baseDir, "archive")),
           postmortemLessonsExtracted: 0,
           solvedBeforeEntriesAdded: 0,
           reusableTemplatesEmitted: 0,
-        } };
-      case "legacyReflectionCompatibility":
-        return this.collectLegacyReflectionCompatibilityResult();
-      case "knowledgeOptimization":
-        return this.collectKnowledgeOptimizationResult(tier);
-    }
+        } }),
+      legacyReflectionCompatibility: () => this.collectLegacyReflectionCompatibilityResult(),
+      knowledgeOptimization: (tier) => this.collectKnowledgeOptimizationResult(tier),
+    };
+    return collectors[category](tier);
   }
 
   private artifactId(parts: string[]): string {
@@ -341,12 +338,17 @@ export class DreamConsolidator {
     });
   }
 
+  private activationArtifactIf(enabled: boolean, input: ActivationArtifactInput): DreamActivationArtifact[] {
+    return enabled ? [this.buildActivationArtifact(input)] : [];
+  }
+
   private async collectStallHistoryResult(): Promise<DreamConsolidationPassResult> {
     const eventMetrics = await this.collectDreamEventWorkflowMetrics();
     const workflows = await loadDreamWorkflowRecords(this.deps.baseDir);
     const stallWorkflows = workflows.filter((workflow) => workflow.type === "stall_recovery");
-    const activationArtifacts = stallWorkflows.length > 0
-      ? [this.buildActivationArtifact({
+    const activationArtifacts = this.activationArtifactIf(
+      stallWorkflows.length > 0,
+      {
           type: "workflow_hint_pack",
           source: "stallHistory",
           summary: `${stallWorkflows.length} stall recovery workflow(s) available`,
@@ -355,8 +357,8 @@ export class DreamConsolidator {
           },
           evidenceRefs: stallWorkflows.flatMap((workflow) => workflow.evidence_refs).slice(0, 20),
           confidence: Math.max(...stallWorkflows.map((workflow) => workflow.confidence), 0.5),
-        })]
-      : [];
+        }
+    );
     return {
       metrics: {
         ...eventMetrics,
@@ -373,8 +375,9 @@ export class DreamConsolidator {
     const eventMetrics = await this.collectDreamEventWorkflowMetrics();
     const workflows = await loadDreamWorkflowRecords(this.deps.baseDir);
     const verificationWorkflows = workflows.filter((workflow) => workflow.type === "verification_recovery");
-    const activationArtifacts = verificationWorkflows.length > 0
-      ? [this.buildActivationArtifact({
+    const activationArtifacts = this.activationArtifactIf(
+      verificationWorkflows.length > 0,
+      {
           type: "verification_recovery_pack",
           source: "verificationArtifacts",
           summary: `${verificationWorkflows.length} verification recovery workflow(s) available`,
@@ -383,8 +386,8 @@ export class DreamConsolidator {
           },
           evidenceRefs: verificationWorkflows.flatMap((workflow) => workflow.evidence_refs).slice(0, 20),
           confidence: Math.max(...verificationWorkflows.map((workflow) => workflow.confidence), 0.5),
-        })]
-      : [];
+        }
+    );
     return {
       metrics: {
         ...eventMetrics,
@@ -402,15 +405,16 @@ export class DreamConsolidator {
     const heuristics = typeof raw === "object" && raw !== null && Array.isArray((raw as { heuristics?: unknown[] }).heuristics)
       ? (raw as { heuristics: unknown[] }).heuristics
       : [];
-    const activationArtifacts = heuristics.length > 0
-      ? [this.buildActivationArtifact({
+    const activationArtifacts = this.activationArtifactIf(
+      heuristics.length > 0,
+      {
           type: "decision_heuristic_pack",
           source: "decisionHistory",
           summary: `${heuristics.length} decision heuristic(s) available`,
           payload: { heuristic_count: heuristics.length },
           confidence: 0.65,
-        })]
-      : [];
+        }
+    );
     return {
       metrics: {
         decisionRecordsScanned: await this.countFilesNamed("decision-history.json"),
@@ -427,15 +431,16 @@ export class DreamConsolidator {
   private async collectStrategyHistoryResult(): Promise<DreamConsolidationPassResult> {
     const raw = await readJsonFileOrNull(path.join(this.deps.baseDir, "strategy-templates.json"));
     const templates = Array.isArray(raw) ? raw : [];
-    const activationArtifacts = templates.length > 0
-      ? [this.buildActivationArtifact({
+    const activationArtifacts = this.activationArtifactIf(
+      templates.length > 0,
+      {
           type: "pattern_hint_pack",
           source: "strategyHistory",
           summary: `${templates.length} strategy template(s) available`,
           payload: { template_count: templates.length },
           confidence: 0.65,
-        })]
-      : [];
+        }
+    );
     return {
       metrics: {
         timelinesReconstructed: await this.countFilesNamed("strategy-history.json"),
@@ -450,15 +455,16 @@ export class DreamConsolidator {
 
   private async collectCrossGoalTransferResult(): Promise<DreamConsolidationPassResult> {
     const learnedPatterns = await this.countLearnedPatterns();
-    const activationArtifacts = learnedPatterns > 0
-      ? [this.buildActivationArtifact({
+    const activationArtifacts = this.activationArtifactIf(
+      learnedPatterns > 0,
+      {
           type: "semantic_context_pack",
           source: "crossGoalTransfer",
           summary: `${learnedPatterns} learned pattern(s) available for cross-goal transfer`,
           payload: { learned_pattern_count: learnedPatterns },
           confidence: 0.6,
-        })]
-      : [];
+        }
+    );
     return {
       metrics: {
         goalPairsScanned: Math.max(0, await this.countGoalPairs()),
@@ -521,8 +527,9 @@ export class DreamConsolidator {
       autoRepair: config.autoRepairAgentMemory,
       minAutoRepairConfidence: config.minAutoRepairConfidence,
     });
-    const activationArtifacts = quality.findings > 0
-      ? [this.buildActivationArtifact({
+    const activationArtifacts = this.activationArtifactIf(
+      quality.findings > 0,
+      {
           type: "knowledge_gap_pack",
           source: "knowledgeOptimization",
           summary: `${quality.findings} memory quality issue(s) found`,
@@ -534,8 +541,8 @@ export class DreamConsolidator {
             entries_flagged: quality.entriesFlagged,
           },
           confidence: quality.repairsApplied > 0 ? 0.85 : 0.7,
-        })]
-      : [];
+        }
+    );
 
     return {
       metrics: {
