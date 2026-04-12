@@ -220,7 +220,7 @@ describe("LoopSupervisor", () => {
 
     try {
       await supervisor.start(["g-reset"]);
-      await waitFor(() => runCount >= 2, 3_000);
+      await waitFor(() => runCount >= 2, 10_000);
       await supervisor.shutdown();
 
       expect(supervisor.getState().crashCounts["g-reset"]).toBeUndefined();

@@ -4,6 +4,27 @@ import type { StallAnalysis, StallReport } from "../../base/types/stall.js";
 import type { TransferCandidate } from "../../base/types/cross-portfolio.js";
 import type { TaskCycleResult } from "../execution/task/task-execution-types.js";
 import type { VerificationLayer1Result } from "./verification-layer1.js";
+import type { CorePhaseKind } from "../execution/agent-loop/core-phase-runner.js";
+
+export interface CorePhaseIterationResult {
+  phase: CorePhaseKind;
+  status: "skipped" | "completed" | "low_confidence" | "failed";
+  summary?: string;
+  traceId?: string;
+  sessionId?: string;
+  turnId?: string;
+  stopReason?: string;
+  lowConfidence?: boolean;
+  error?: string;
+}
+
+export interface NextIterationDirective {
+  sourcePhase: "knowledge_refresh" | "replanning_options" | "stall_investigation";
+  reason: string;
+  focusDimension?: string;
+  preferredAction?: "continue" | "refine" | "pivot";
+  requestedPhase?: "knowledge_refresh" | "normal";
+}
 
 export interface LoopIterationResult {
   loopIndex: number;
@@ -43,6 +64,10 @@ export interface LoopIterationResult {
   waitExpired?: boolean;
   /** Strategy ID of the active WaitStrategy, if any. */
   waitStrategyId?: string;
+  /** Agentic core phase results collected during the iteration. */
+  corePhaseResults?: CorePhaseIterationResult[];
+  /** Deterministic scheduler directive for the next iteration of the same goal. */
+  nextIterationDirective?: NextIterationDirective;
 }
 
 /**

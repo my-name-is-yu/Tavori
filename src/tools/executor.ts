@@ -81,14 +81,17 @@ export class ToolExecutor {
       );
     }
     if (permResult.status === "needs_approval") {
-      const approved = await context.approvalFn({
+      const approvalRequest = {
         toolName: tool.metadata.name,
         input,
         reason: permResult.reason,
         permissionLevel: tool.metadata.permissionLevel,
         isDestructive: tool.metadata.isDestructive,
         reversibility: "reversible",
-      });
+        ...(callId ? { callId } : {}),
+      } as const;
+      await context.onApprovalRequested?.(approvalRequest);
+      const approved = await context.approvalFn(approvalRequest);
       if (!approved) {
         return this.failResult(
           `User denied approval: ${permResult.reason}`,

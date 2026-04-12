@@ -2,6 +2,7 @@
 
 Overview of PulSeed's design documentation, organized by subsystem.
 
+<<<<<<< HEAD
 ## Read This First
 
 Start here when you need the current implementation-facing design:
@@ -19,6 +20,36 @@ These four documents should answer "how the system is shaped now." The rest of `
 - `current-baseline.md` is the engineering baseline for current implementation.
 - The subsystem docs below may mix current behavior, near-term design, and future proposals.
 - If a design note conflicts with code, prefer the code and update the design note.
+=======
+## Current Reading Guide
+
+These design docs include a mix of:
+
+- current architectural intent
+- partially implemented proposals
+- historical implementation notes from earlier layouts
+
+For the current public architecture, read in this order first:
+
+1. `../README.md`
+2. `../getting-started.md`
+3. `../mechanism.md`
+4. `../runtime.md`
+5. `../architecture-map.md`
+6. `../module-map.md`
+
+Then use the design docs below for subsystem detail.
+
+### Current architectural baseline
+
+PulSeed is currently best understood as:
+
+- `CoreLoop`: long-lived control over goal progress, completion, reprioritization, stall handling, tree mode, and multi-goal scheduling
+- `AgentLoop`: bounded tool-using execution for tasks, chat turns, and selected CoreLoop phases
+- tools and Soil as shared substrate across both loops
+
+If a lower-level design document still describes PulSeed as a single flat loop only, treat that as historical simplification rather than the exact current runtime shape.
+>>>>>>> e49c85c9 (implement native agentloop and coreloop phases)
 
 ## Core — Loop and State Management
 

@@ -1,5 +1,7 @@
 # `/tend` — Chat-to-CoreLoop Handoff Command
 
+> Current implementation note: chat/TUI are now built on a stronger native AgentLoop path, and daemon/runtime ownership has evolved since this document was written. Treat `/tend` here as a handoff pattern from bounded chat execution into long-lived goal control, not as a precise wire-level description of the current UI/runtime code.
+
 ## 1. Overview
 
 `/tend` is a slash command within PulSeed's chat/TUI mode that transitions a conversational context into autonomous CoreLoop execution via the daemon.

@@ -36,7 +36,16 @@ export async function cmdProvider(argv: string[]): Promise<number> {
   }
 
   if (providerSubcommand === "set") {
-    let values: { provider?: string; model?: string; adapter?: string; llm?: string };
+    let values: {
+      provider?: string;
+      model?: string;
+      adapter?: string;
+      llm?: string;
+      "agentloop-worktree"?: string;
+      "agentloop-worktree-base-dir"?: string;
+      "agentloop-worktree-keep-debug"?: string;
+      "agentloop-worktree-cleanup"?: string;
+    };
     try {
       ({ values } = parseArgs({
         args: argv.slice(1),
@@ -45,9 +54,24 @@ export async function cmdProvider(argv: string[]): Promise<number> {
           model: { type: "string" },
           adapter: { type: "string" },
           llm: { type: "string" }, // backward compat alias for --provider
+          "agentloop-worktree": { type: "string" },
+          "agentloop-worktree-base-dir": { type: "string" },
+          "agentloop-worktree-keep-debug": { type: "string" },
+          "agentloop-worktree-cleanup": { type: "string" },
         },
         strict: false,
-      }) as { values: { provider?: string; model?: string; adapter?: string; llm?: string } });
+      }) as {
+        values: {
+          provider?: string;
+          model?: string;
+          adapter?: string;
+          llm?: string;
+          "agentloop-worktree"?: string;
+          "agentloop-worktree-base-dir"?: string;
+          "agentloop-worktree-keep-debug"?: string;
+          "agentloop-worktree-cleanup"?: string;
+        };
+      });
     } catch (err) {
       getCliLogger().error(formatOperationError("parse provider set arguments", err));
       values = {};
@@ -57,7 +81,7 @@ export async function cmdProvider(argv: string[]): Promise<number> {
     const providerValue = values.provider ?? values.llm;
 
     const validProviders = ["anthropic", "openai", "ollama"];
-    const validAdapters = ["claude_code_cli", "claude_api", "openai_codex_cli", "openai_api", "github_issue"];
+    const validAdapters = ["agent_loop", "claude_code_cli", "claude_api", "openai_codex_cli", "openai_api", "github_issue"];
 
     if (providerValue && !validProviders.includes(providerValue)) {
       // Accept "codex" as alias for "openai" (backward compat)
@@ -77,14 +101,39 @@ export async function cmdProvider(argv: string[]): Promise<number> {
       );
       return 1;
     }
+    if (values["agentloop-worktree"] && !["on", "off"].includes(values["agentloop-worktree"])) {
+      getCliLogger().error('Error: --agentloop-worktree must be "on" or "off".');
+      return 1;
+    }
+    if (values["agentloop-worktree-keep-debug"] && !["true", "false"].includes(values["agentloop-worktree-keep-debug"])) {
+      getCliLogger().error('Error: --agentloop-worktree-keep-debug must be "true" or "false".');
+      return 1;
+    }
+    if (values["agentloop-worktree-cleanup"] && !["on_success", "always", "never"].includes(values["agentloop-worktree-cleanup"])) {
+      getCliLogger().error('Error: --agentloop-worktree-cleanup must be one of "on_success", "always", "never".');
+      return 1;
+    }
 
     const current = await loadProviderConfig();
     const resolvedProvider = (values.provider ?? providerValue) as ProviderConfig["provider"] | undefined;
+    const nextWorktree = {
+      ...(current.agent_loop?.worktree ?? {}),
+      ...(values["agentloop-worktree"] ? { enabled: values["agentloop-worktree"] === "on" } : {}),
+      ...(values["agentloop-worktree-base-dir"] !== undefined ? { base_dir: values["agentloop-worktree-base-dir"] } : {}),
+      ...(values["agentloop-worktree-keep-debug"] ? { keep_for_debug: values["agentloop-worktree-keep-debug"] === "true" } : {}),
+      ...(values["agentloop-worktree-cleanup"] ? { cleanup_policy: values["agentloop-worktree-cleanup"] as "on_success" | "always" | "never" } : {}),
+    };
     const updated: ProviderConfig = {
       ...current,
       ...(resolvedProvider ? { provider: resolvedProvider } : {}),
       ...(values.model ? { model: values.model } : {}),
       ...(values.adapter ? { adapter: values.adapter as ProviderConfig["adapter"] } : {}),
+      ...((values["agentloop-worktree"]
+        || values["agentloop-worktree-base-dir"] !== undefined
+        || values["agentloop-worktree-keep-debug"]
+        || values["agentloop-worktree-cleanup"])
+        ? { agent_loop: { ...(current.agent_loop ?? {}), worktree: nextWorktree } }
+        : {}),
     };
 
     await saveProviderConfig(updated);

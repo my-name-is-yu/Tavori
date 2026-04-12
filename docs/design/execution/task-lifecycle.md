@@ -3,6 +3,8 @@
 > Defines the full process from when a task is generated to when it is completed or fails.
 > This document concretely describes "what a task is," "how it is created, executed, and concluded."
 
+> Current implementation note: TaskLifecycle now has two execution paths. It can still delegate to external adapters, but it can also route task execution through PulSeed's native `agent_loop` runtime. Read this document as the task contract and lifecycle shape; the execution backend is no longer assumed to be only an external session.
+
 ---
 
 ## 1. Separating Task Selection from Task Generation

@@ -14,6 +14,7 @@ import type { IAdapter } from "../../orchestrator/execution/adapter-layer.js";
 import { ClaudeCodeCLIAdapter } from "../../adapters/agents/claude-code-cli.js";
 import { ClaudeAPIAdapter } from "../../adapters/agents/claude-api.js";
 import { OpenAICodexCLIAdapter } from "../../adapters/agents/openai-codex.js";
+import { NativeAgentLoopAdapter } from "../../adapters/agents/native-agent-loop.js";
 import { GitHubIssueAdapter } from "../../adapters/github-issue.js";
 import { A2AAdapter } from "../../adapters/agents/a2a-adapter.js";
 import type { ProviderConfig } from "./provider-config.js";
@@ -135,6 +136,7 @@ export async function buildAdapterRegistry(
   registry.register(new ClaudeCodeCLIAdapter());
   registry.register(new ClaudeAPIAdapter(llmClient));
   registry.register(new OpenAICodexCLIAdapter());
+  registry.register(new NativeAgentLoopAdapter());
   registry.register(new GitHubIssueAdapter());
 
   // Register A2A agents from config

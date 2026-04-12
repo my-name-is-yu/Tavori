@@ -15,7 +15,10 @@ import {
   type IAdapter,
   type ILLMClient,
   type ChatRunnerLike,
+  type ChatAgentLoopRunner,
   type ProviderConfig,
+  createNativeChatAgentLoopRunner,
+  shouldUseNativeTaskAgentLoop,
 } from "pulseed";
 import { TrustManager } from "pulseed";
 
@@ -26,6 +29,7 @@ interface BootstrapResult {
   registry: ToolRegistry;
   toolExecutor: ToolExecutor;
   providerConfig: ProviderConfig;
+  chatAgentLoopRunner?: ChatAgentLoopRunner;
 }
 
 type ProcessMessageFn = (text: string, chatId: number, emit: ChatEventHandler) => Promise<string | void> | string | void;
@@ -103,6 +107,7 @@ export class TelegramChatRunnerProcessor {
       llmClient: bootstrap.llmClient,
       registry: bootstrap.registry,
       toolExecutor: bootstrap.toolExecutor,
+      chatAgentLoopRunner: bootstrap.chatAgentLoopRunner,
     });
     runner.startSession(this.workspaceRoot);
     this.sessions.set(chatId, runner);
@@ -140,6 +145,16 @@ export class TelegramChatRunnerProcessor {
       permissionManager,
       concurrency: new ConcurrencyController(),
     });
+    const chatAgentLoopRunner = shouldUseNativeTaskAgentLoop(providerConfig, llmClient)
+      ? createNativeChatAgentLoopRunner({
+          llmClient,
+          providerConfig,
+          toolRegistry,
+          toolExecutor,
+          cwd: this.workspaceRoot,
+          traceBaseDir: stateManager.getBaseDir(),
+        })
+      : undefined;
 
     return {
       stateManager,
@@ -148,6 +163,7 @@ export class TelegramChatRunnerProcessor {
       registry: toolRegistry,
       toolExecutor,
       providerConfig,
+      chatAgentLoopRunner,
     };
   }
 }

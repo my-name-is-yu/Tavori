@@ -16,6 +16,12 @@ export interface ExecutorReport {
   summary: string;
   partial_results: string[];
   blockers: string[];
+  stop_reason?: string;
+  completion_evidence: string[];
+  verification_hints: string[];
+  trace_id?: string;
+  session_id?: string;
+  turn_id?: string;
 }
 
 export interface VerdictResult {

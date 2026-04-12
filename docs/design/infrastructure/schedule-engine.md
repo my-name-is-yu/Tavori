@@ -5,6 +5,8 @@
 
 > Related: `plugin-architecture.md`, `reporting.md`, `daemon-client-architecture.md`, `docs/design/core/observation.md`, `docs/design/execution/data-source.md`
 
+> Current implementation note: scheduling now coexists with the dual-loop architecture. A scheduled activation may ultimately drive CoreLoop, which in turn may invoke bounded AgentLoop phases and native task execution. Read "full CoreLoop" in this document as "long-lived control path," not as a single flat sequence without internal agentic phases.
+
 ---
 
 ## §1 Overview and Positioning

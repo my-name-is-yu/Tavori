@@ -84,19 +84,31 @@ node dist/interface/cli/cli-runner.js goal list
 ### Run the Core Loop
 
 ```bash
+<<<<<<< HEAD
 node dist/interface/cli/cli-runner.js run
+=======
+node dist/interface/cli/cli-runner.js run --goal <goal-id>
+>>>>>>> e49c85c9 (implement native agentloop and coreloop phases)
 ```
 
 ### Check Status
 
 ```bash
+<<<<<<< HEAD
 node dist/interface/cli/cli-runner.js status
+=======
+node dist/interface/cli/cli-runner.js status --goal <goal-id>
+>>>>>>> e49c85c9 (implement native agentloop and coreloop phases)
 ```
 
 ### Report
 
 ```bash
+<<<<<<< HEAD
 node dist/interface/cli/cli-runner.js report
+=======
+node dist/interface/cli/cli-runner.js report --goal <goal-id>
+>>>>>>> e49c85c9 (implement native agentloop and coreloop phases)
 ```
 
 ### TUI (Interactive UI)
@@ -112,7 +124,11 @@ TUI controls:
 
 > **TUI notes**:
 > - Display may be garbled over SSH + tmux due to insufficient terminal width → use `Ctrl-b z` to zoom the pane and gain more width
+<<<<<<< HEAD
 > - Chat is command-based, not free-form input
+=======
+> - Chat can use the native AgentLoop path when the configured model supports tool calling
+>>>>>>> e49c85c9 (implement native agentloop and coreloop phases)
 > - If frozen, press `Ctrl-C` or run `pkill -f "node dist/interface/cli/cli-runner.js"` from another terminal pane
 
 ## 4. Connecting to Ollama from Another Machine
@@ -129,7 +145,11 @@ curl http://<older-mac-ip>:11434/v1/models
 # Run PulSeed from your development machine
 PULSEED_LLM_PROVIDER=ollama \
 OLLAMA_BASE_URL=http://<older-mac-ip>:11434 \
+<<<<<<< HEAD
 node dist/interface/cli/cli-runner.js run
+=======
+node dist/interface/cli/cli-runner.js run --goal <goal-id>
+>>>>>>> e49c85c9 (implement native agentloop and coreloop phases)
 ```
 
 ## 5. Test Scenarios
@@ -144,6 +164,7 @@ node dist/interface/cli/cli-runner.js goal add "A simple goal for testing"
 node dist/interface/cli/cli-runner.js goal list
 
 # 3. Run the core loop
+<<<<<<< HEAD
 node dist/interface/cli/cli-runner.js run
 
 # 4. Check status
@@ -151,6 +172,15 @@ node dist/interface/cli/cli-runner.js status
 
 # 5. Generate a report
 node dist/interface/cli/cli-runner.js report
+=======
+node dist/interface/cli/cli-runner.js run --goal <goal-id>
+
+# 4. Check status
+node dist/interface/cli/cli-runner.js status --goal <goal-id>
+
+# 5. Generate a report
+node dist/interface/cli/cli-runner.js report --goal <goal-id>
+>>>>>>> e49c85c9 (implement native agentloop and coreloop phases)
 ```
 
 ### B. TUI Operation Check
@@ -167,7 +197,11 @@ node dist/interface/cli/cli-runner.js tui
 ```bash
 # Run PulSeed while Ollama is stopped → verify retry and error output
 # (stop ollama in another terminal first, then run)
+<<<<<<< HEAD
 node dist/interface/cli/cli-runner.js run
+=======
+node dist/interface/cli/cli-runner.js run --goal <goal-id>
+>>>>>>> e49c85c9 (implement native agentloop and coreloop phases)
 ```
 
 ## 6. Known Issues
@@ -176,7 +210,10 @@ node dist/interface/cli/cli-runner.js run
 |-------|-------|------------|
 | ~~`npx pulseed` produces no output~~ | ~~Fixed~~ Updated to use `import.meta.url` + `realpathSync` check | Both `npx pulseed` and `node dist/interface/cli/cli-runner.js` work |
 | TUI display garbled | Insufficient terminal width over SSH + tmux | Zoom the pane with `Ctrl-b z` |
+<<<<<<< HEAD
 | TUI chat says "I didn't understand" | Chat is command-based (free-form input not supported) | Check available commands with `/help` |
+=======
+>>>>>>> e49c85c9 (implement native agentloop and coreloop phases)
 | TUI frozen | Ink rendering issue | `Ctrl-C` or `pkill -f "node dist/interface/cli/cli-runner.js"` |
 | `ANTHROPIC_API_KEY` required | Hard-coded check at TUI startup | Set `ANTHROPIC_API_KEY=dummy` |
 

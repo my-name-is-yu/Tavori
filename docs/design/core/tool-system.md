@@ -4,13 +4,15 @@
 > Status: Draft
 > Related: `execution-boundary.md`, `mechanism.md`, `observation.md`, `task-lifecycle.md`, `knowledge-acquisition.md`, `cc-inspired-improvements.md`
 
+> Current implementation note: the tool system is no longer purely prospective. Built-in tools, `ToolRegistry`, `ToolExecutor`, native AgentLoop routing, core-phase tool policy, and Soil query integration are implemented. Sections that describe "future integration" should be read selectively against the current code in `src/tools/`, `src/interface/chat/`, and `src/orchestrator/execution/agent-loop/`.
+
 ---
 
 ## 1. Design Philosophy
 
 ### 1.1 The Key Insight
 
-PulSeed's core loop has always had a structural bottleneck: every interaction with the real world requires spawning an agent session. Observation? Delegate to an agent. Verification? Delegate to an agent. Knowledge acquisition? Delegate to an agent. Even reading a file to check if it exists requires a full agent round-trip.
+PulSeed originally had a structural bottleneck: every interaction with the real world tended to require spawning an agent session. The current implementation has already broken that bottleneck for many paths by using direct tools in chat, native AgentLoop execution, verification, and selected core phases.
 
 This design proposes a fundamental shift: **tools are the universal capability layer that sits beneath every operation in the core loop.** Not "execution capability bolted onto Phase C," but tools as infrastructure that makes observation faster, gap calculation more accurate, knowledge acquisition cheaper, and verification more reliable.
 
@@ -20,7 +22,7 @@ The insight comes from Claude Code's architecture, where tools are not a feature
 
 The previous framing (execution-boundary.md) drew a hard line: "PulSeed thinks. Agents act." This framing was useful for the initial architecture --- it kept PulSeed focused on orchestration. But it created an artificial constraint: PulSeed cannot even *look* at the world directly. It must always ask an agent to look for it.
 
-The new framing: **PulSeed perceives the world directly through tools. Complex reasoning and multi-step work is delegated to agents.**
+The current framing: **PulSeed perceives the world directly through tools. Complex reasoning and bounded multi-step execution run through AgentLoop. Larger mutations and external execution can still be delegated through adapters.**
 
 This is not a relaxation of the execution boundary. It is a *refinement*. The boundary moves from "PulSeed never touches the world" to "PulSeed uses read-only tools for perception; agents handle creative, multi-step work and all mutations."
 

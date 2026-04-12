@@ -156,6 +156,44 @@ export class TreeLoopOrchestrator {
     return selectedId;
   }
 
+  /**
+   * Attempt to select a preferred node from within the tree rooted at rootId.
+   *
+   * Returns:
+   *   - string: preferred eligible node selected and marked running
+   *   - undefined: no preferred eligible node available, caller should fall back
+   *   - null: parallel loop limit already reached, caller should not select more
+   */
+  async selectPreferredNode(
+    rootId: string,
+    preferredNodeIds: string[]
+  ): Promise<string | null | undefined> {
+    if (preferredNodeIds.length === 0) return undefined;
+
+    const treeState = await this.goalTreeManager.getTreeState(rootId);
+    if (treeState.active_loops.length >= this.config.parallel_loop_limit) {
+      return null;
+    }
+
+    const allIds = new Set([rootId, ...await this._collectAllDescendantIds(rootId)]);
+    const candidates = preferredNodeIds.filter((id) => allIds.has(id));
+    if (candidates.length === 0) return undefined;
+
+    const selectedId = await this._selectEligibleNodeId(candidates);
+    if (selectedId === null) return undefined;
+
+    const selected = await this.stateManager.loadGoal(selectedId);
+    if (selected) {
+      await this.stateManager.saveGoal({
+        ...selected,
+        loop_status: "running",
+        updated_at: new Date().toISOString(),
+      });
+    }
+
+    return selectedId;
+  }
+
   // ─── Node Loop Control ───
 
   /**

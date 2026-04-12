@@ -2,6 +2,8 @@ export { GlobTool } from "../fs/GlobTool/GlobTool.js";
 export { GrepTool } from "../fs/GrepTool/GrepTool.js";
 export { ReadTool } from "../fs/ReadTool/ReadTool.js";
 export { ShellTool } from "../system/ShellTool/ShellTool.js";
+export { ShellCommandTool } from "../system/ShellCommandTool/ShellCommandTool.js";
+export { UpdatePlanTool } from "../system/UpdatePlanTool/UpdatePlanTool.js";
 export { HttpFetchTool } from "../network/HttpFetchTool/HttpFetchTool.js";
 export { JsonQueryTool } from "../fs/JsonQueryTool/JsonQueryTool.js";
 export { GitLogTool } from "../system/GitLogTool/GitLogTool.js";
@@ -32,6 +34,8 @@ export { SleepTool } from "../system/SleepTool/SleepTool.js";
 export { GitDiffTool } from "../system/GitDiffTool/GitDiffTool.js";
 export { FileWriteTool } from "../fs/FileWriteTool/FileWriteTool.js";
 export { FileEditTool } from "../fs/FileEditTool/FileEditTool.js";
+export { ApplyPatchTool } from "../fs/ApplyPatchTool/ApplyPatchTool.js";
+export { ViewImageTool } from "../media/ViewImageTool/ViewImageTool.js";
 export { validateFilePath } from "../fs/FileValidationTool/FileValidationTool.js";
 export { SetGoalTool } from "../mutation/SetGoalTool/SetGoalTool.js";
 export { TaskCreateTool } from "../mutation/TaskCreateTool/TaskCreateTool.js";
@@ -71,6 +75,8 @@ import { GlobTool } from "../fs/GlobTool/GlobTool.js";
 import { GrepTool } from "../fs/GrepTool/GrepTool.js";
 import { ReadTool } from "../fs/ReadTool/ReadTool.js";
 import { ShellTool } from "../system/ShellTool/ShellTool.js";
+import { ShellCommandTool } from "../system/ShellCommandTool/ShellCommandTool.js";
+import { UpdatePlanTool } from "../system/UpdatePlanTool/UpdatePlanTool.js";
 import { HttpFetchTool } from "../network/HttpFetchTool/HttpFetchTool.js";
 import { JsonQueryTool } from "../fs/JsonQueryTool/JsonQueryTool.js";
 import { GitLogTool } from "../system/GitLogTool/GitLogTool.js";
@@ -100,6 +106,8 @@ import { SleepTool } from "../system/SleepTool/SleepTool.js";
 import { GitDiffTool } from "../system/GitDiffTool/GitDiffTool.js";
 import { FileWriteTool } from "../fs/FileWriteTool/FileWriteTool.js";
 import { FileEditTool } from "../fs/FileEditTool/FileEditTool.js";
+import { ApplyPatchTool } from "../fs/ApplyPatchTool/ApplyPatchTool.js";
+import { ViewImageTool } from "../media/ViewImageTool/ViewImageTool.js";
 import { SetGoalTool } from "../mutation/SetGoalTool/SetGoalTool.js";
 import { TaskCreateTool } from "../mutation/TaskCreateTool/TaskCreateTool.js";
 import { TaskOutputTool } from "../mutation/TaskOutputTool/TaskOutputTool.js";
@@ -161,6 +169,7 @@ export interface BuiltinToolDeps {
 export function createBuiltinTools(deps?: BuiltinToolDeps): ITool[] {
   const tools: ITool[] = [
     new EnvTool(),
+    new ApplyPatchTool(),
     new FileEditTool(),
     new FileWriteTool(),
     new GitDiffTool(),
@@ -172,9 +181,12 @@ export function createBuiltinTools(deps?: BuiltinToolDeps): ITool[] {
     new ListDirTool(),
     new ProcessStatusTool(),
     new ReadTool(),
+    new ShellCommandTool(),
     new ShellTool(),
     new SleepTool(),
     new TestRunnerTool(),
+    new UpdatePlanTool(),
+    new ViewImageTool(),
   ];
 
   if (deps?.stateManager) {

@@ -59,6 +59,8 @@ import { finalizeSuccessfulExecution } from "./task-post-execution.js";
 import { GuardrailRunner } from "../../../platform/traits/guardrail-runner.js";
 import type { HookManager } from "../../../runtime/hook-manager.js";
 import type { ToolExecutor } from "../../../tools/executor.js";
+import type { TaskAgentLoopRunner } from "../agent-loop/task-agent-loop-runner.js";
+import { taskAgentLoopResultToAgentResult } from "../agent-loop/task-agent-loop-result.js";
 import {
   formatPatternHints,
   loadDreamActivationState,
@@ -111,10 +113,17 @@ export interface TaskLifecycleOptions {
   hookManager?: HookManager;
   /** Optional ToolExecutor for post-execution git diff verification (read-only) */
   toolExecutor?: ToolExecutor;
+  /** Native task-level agentloop runner. When present, runTaskCycle executes tasks through this path. */
+  agentLoopRunner?: TaskAgentLoopRunner;
   /** Optional explicit workspace root for git-based revert operations. */
   revertCwd?: string;
   /** Optional explicit workspace root for post-execution health checks. */
   healthCheckCwd?: string;
+}
+
+export interface TaskCycleRunOptions {
+  targetDimensionOverride?: string;
+  knowledgeContextPrefix?: string;
 }
 
 export interface TaskLifecycleDeps extends TaskLifecycleCoreDeps {
@@ -148,6 +157,7 @@ export class TaskLifecycle {
   private readonly guardrailRunner?: GuardrailRunner;
   private readonly hookManager?: HookManager;
   private readonly toolExecutor?: ToolExecutor;
+  private readonly agentLoopRunner?: TaskAgentLoopRunner;
   private readonly revertCwd?: string;
   private readonly healthCheckCwd?: string;
   private onTaskComplete?: (strategyId: string) => void;
@@ -204,6 +214,7 @@ export class TaskLifecycle {
     this.guardrailRunner = resolvedOptions?.guardrailRunner;
     this.hookManager = resolvedOptions?.hookManager;
     this.toolExecutor = resolvedOptions?.toolExecutor;
+    this.agentLoopRunner = resolvedOptions?.agentLoopRunner;
     this.revertCwd = resolvedOptions?.revertCwd;
     this.healthCheckCwd = resolvedOptions?.healthCheckCwd;
   }
@@ -354,6 +365,66 @@ export class TaskLifecycle {
     });
   }
 
+  /** Execute a task through the native task-level agentloop. */
+  async executeTaskWithAgentLoop(
+    task: Task,
+    workspaceContext?: string,
+    knowledgeContext?: string,
+  ): Promise<AgentResult> {
+    if (!this.agentLoopRunner) {
+      throw new Error("TaskLifecycle: agentLoopRunner is required for native agentloop execution.");
+    }
+
+    const runningTask = { ...task, status: "running" as const, started_at: new Date().toISOString() };
+    await this.stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, runningTask);
+    await appendTaskOutcomeEvent(this.stateManager, {
+      task: runningTask,
+      type: "started",
+      attempt: task.consecutive_failure_count + 1,
+    });
+
+    let result: AgentResult;
+    try {
+      const agentLoopResult = await this.agentLoopRunner.runTask({
+        task: runningTask,
+        workspaceContext,
+        knowledgeContext,
+      });
+      result = taskAgentLoopResultToAgentResult(agentLoopResult);
+    } catch (err) {
+      result = {
+        success: false,
+        output: "",
+        error: err instanceof Error ? err.message : String(err),
+        exit_code: null,
+        elapsed_ms: 0,
+        stopped_reason: "error",
+      };
+    }
+
+    const completedAt = new Date().toISOString();
+    const nextStatus =
+      result.success ? "completed" as const :
+      result.stopped_reason === "timeout" ? "timed_out" as const :
+      "error" as const;
+    await this.stateManager.writeRaw(`tasks/${task.goal_id}/${task.id}.json`, {
+      ...runningTask,
+      status: nextStatus,
+      execution_output: result.output,
+      ...(nextStatus === "completed" ? { completed_at: completedAt } : {}),
+      ...(nextStatus === "timed_out" ? { timeout_at: completedAt } : {}),
+    });
+
+    await appendTaskOutcomeEvent(this.stateManager, {
+      task: { ...runningTask, status: nextStatus },
+      type: result.success ? "succeeded" : "failed",
+      attempt: task.consecutive_failure_count + 1,
+      reason: result.error ?? undefined,
+    });
+
+    return result;
+  }
+
   /** Verify task execution results using 3-layer verification. */
   async verifyTask(
     task: Task,
@@ -387,7 +458,8 @@ export class TaskLifecycle {
     adapter: IAdapter,
     knowledgeContext?: string,
     existingTasks?: string[],
-    workspaceContext?: string
+    workspaceContext?: string,
+    options?: TaskCycleRunOptions
   ): Promise<TaskCycleResult> {
     const runPhase = async <T>(phase: string, fn: () => Promise<T>): Promise<T> => {
       const phaseStart = Date.now();
@@ -420,14 +492,25 @@ export class TaskLifecycle {
       this.logger?.warn(`[TaskLifecycle] Failed to load goal "${goalId}" for dimension selection, using unweighted fallback: ${err instanceof Error ? err.message : String(err)}`);
     }
     const dimensionSelectionOptions = await this.buildDimensionSelectionBackoff(goalId);
-    const targetDimension = await runPhase("select-target-dimension", async () =>
-      this.selectTargetDimension(gapVector, driveContext, goalDimensions, dimensionSelectionOptions)
-    );
+    const targetDimension = options?.targetDimensionOverride
+      ?? await runPhase("select-target-dimension", async () =>
+        this.selectTargetDimension(gapVector, driveContext, goalDimensions, dimensionSelectionOptions)
+      );
+    if (options?.targetDimensionOverride) {
+      this.logger?.info("TaskLifecycle: using target dimension override", {
+        goalId,
+        targetDimension,
+      });
+    }
+
+    const baseKnowledgeContext = options?.knowledgeContextPrefix
+      ? [options.knowledgeContextPrefix, knowledgeContext].filter(Boolean).join("\n\n")
+      : knowledgeContext;
 
     const enrichedKnowledgeContext = await runPhase("enrich-knowledge-context", () =>
       buildEnrichedKnowledgeContext({
         goalId,
-        knowledgeContext,
+        knowledgeContext: baseKnowledgeContext,
         ...this.enrichmentDeps(),
       })
     );
@@ -488,7 +571,9 @@ export class TaskLifecycle {
     this.logger?.debug(`[DEBUG-TL] Executing task ${task.id} via adapter ${adapter.adapterType}`);
     void this.hookManager?.emit("PreExecute", { goal_id: goalId, data: { task_id: task.id } });
     const executionResult = await runPhase("execute-task", () =>
-      this.executeTask(task, adapter, workspaceContext)
+      this.agentLoopRunner
+        ? this.executeTaskWithAgentLoop(task, workspaceContext, enrichedKnowledgeContext)
+        : this.executeTask(task, adapter, workspaceContext)
     );
     void this.hookManager?.emit("PostExecute", { goal_id: goalId, data: { task_id: task.id, success: executionResult.success } });
     this.logger?.info(`[task] executed: ${executionResult.success ? 'success' : 'failed'}`, { taskId: task.id });

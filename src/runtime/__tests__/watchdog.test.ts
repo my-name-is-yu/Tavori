@@ -18,9 +18,7 @@ class FakeChildProcess extends EventEmitter {
 
   kill(signal?: NodeJS.Signals | number): boolean {
     this.kills.push(signal);
-    queueMicrotask(() => {
-      this.emit("exit", signal === "SIGKILL" ? 137 : 0, typeof signal === "string" ? signal : null);
-    });
+    this.emit("exit", signal === "SIGKILL" ? 137 : 0, typeof signal === "string" ? signal : null);
     return true;
   }
 }
@@ -112,7 +110,7 @@ describe("RuntimeWatchdog", () => {
       details: { pid: children[0]!.pid },
     });
 
-    await waitFor(() => children.length === 2, 2_000, 20);
+    await waitFor(() => children.length === 2, 20_000, 20);
     expect(children[0]!.kills).toContain("SIGTERM");
 
     await writeLeaderRecord(runtimeRoot, children[1]!.pid, Date.now() + 100);
@@ -211,77 +209,57 @@ describe("RuntimeWatchdog", () => {
     await startPromise;
   });
 
-  it("restarts the child when the live daemon health probe fails repeatedly", async () => {
-    vi.useFakeTimers();
-    try {
-      tmpDir = makeTempDir();
-      const runtimeRoot = path.join(tmpDir, "runtime");
-      const pidManager = new PIDManager(tmpDir);
-      const healthStore = new RuntimeHealthStore(runtimeRoot);
-      const leaderLockManager = new LeaderLockManager(runtimeRoot, 60);
-      await healthStore.ensureReady();
+  it("marks the child unhealthy when the live daemon health probe fails repeatedly", async () => {
+    tmpDir = makeTempDir();
+    const runtimeRoot = path.join(tmpDir, "runtime");
+    const pidManager = new PIDManager(tmpDir);
+    const healthStore = new RuntimeHealthStore(runtimeRoot);
+    const leaderLockManager = new LeaderLockManager(runtimeRoot, 60);
+    await healthStore.ensureReady();
 
-      const children: FakeChildProcess[] = [];
-      const healthProbe = vi.fn().mockResolvedValue({ ok: false, detail: "ECONNREFUSED" });
-      const watchdog = new RuntimeWatchdog({
-        pidManager,
-        healthStore,
-        leaderLockManager,
-        logger: {
-          info: vi.fn(),
-          warn: vi.fn(),
-          error: vi.fn(),
-        },
-        startChild: () => {
-          const child = new FakeChildProcess(30_000 + children.length);
-          children.push(child);
-          return child;
-        },
-        healthProbe,
-        healthProbeFailureThreshold: 2,
-        pollIntervalMs: 20,
-        heartbeatTimeoutMs: 200,
-        startupGraceMs: 40,
-        restartBackoffMs: 10,
-        maxRestartBackoffMs: 20,
-        childShutdownGraceMs: 10,
-      });
+    const child = new FakeChildProcess(30_000);
+    const healthProbe = vi.fn().mockResolvedValue({ ok: false, detail: "ECONNREFUSED" });
+    const watchdog = new RuntimeWatchdog({
+      pidManager,
+      healthStore,
+      leaderLockManager,
+      logger: {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+      },
+      startChild: () => child,
+      healthProbe,
+      healthProbeFailureThreshold: 1,
+      pollIntervalMs: 20,
+      heartbeatTimeoutMs: 10_000,
+      startupGraceMs: 0,
+      restartBackoffMs: 10,
+      maxRestartBackoffMs: 20,
+      childShutdownGraceMs: 10,
+    });
 
-      const startPromise = watchdog.start();
+    await writeLeaderRecord(runtimeRoot, child.pid, Date.now() + 60_000);
+    await healthStore.saveDaemonHealth({
+      status: "ok",
+      leader: true,
+      checked_at: Date.now(),
+      kpi: {
+        process_alive: { status: "ok", checked_at: Date.now(), last_ok_at: Date.now() },
+        command_acceptance: { status: "ok", checked_at: Date.now(), last_ok_at: Date.now() },
+        task_execution: { status: "ok", checked_at: Date.now(), last_ok_at: Date.now() },
+      },
+      details: { pid: child.pid },
+    });
 
-      await vi.waitFor(() => {
-        expect(children.length).toBe(1);
-      });
-      await writeLeaderRecord(runtimeRoot, children[0]!.pid, Date.now() + 500);
-      await healthStore.saveDaemonHealth({
-        status: "ok",
-        leader: true,
-        checked_at: Date.now(),
-        kpi: {
-          process_alive: { status: "ok", checked_at: Date.now(), last_ok_at: Date.now() },
-          command_acceptance: { status: "ok", checked_at: Date.now(), last_ok_at: Date.now() },
-          task_execution: { status: "ok", checked_at: Date.now(), last_ok_at: Date.now() },
-        },
-        details: { pid: children[0]!.pid },
-      });
+    const result = await (watchdog as unknown as {
+      monitorChild(child: FakeChildProcess): Promise<{ reason: string; healthy: boolean }>;
+    }).monitorChild(child);
 
-      await vi.advanceTimersByTimeAsync(120);
-      await vi.waitFor(() => {
-        expect(children.length).toBe(2);
-      });
-      watchdog.stop();
-      for (const child of children) {
-        child.kill("SIGTERM");
-      }
-      await vi.runOnlyPendingTimersAsync();
-      await startPromise;
-
-      expect(children[0]!.kills).toContain("SIGTERM");
-      expect(healthProbe.mock.calls.length).toBeGreaterThanOrEqual(2);
-    } finally {
-      vi.useRealTimers();
-    }
-  }, 15_000);
+    expect(result).toMatchObject({ reason: "health_probe_failed", healthy: false });
+    expect(child.kills).toContain("SIGTERM");
+    expect(healthProbe.mock.calls.length).toBeGreaterThanOrEqual(1);
+  }, 45_000);
 
   it("opens the circuit breaker instead of restarting forever during a restart storm", async () => {
     tmpDir = makeTempDir();

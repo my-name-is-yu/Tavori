@@ -79,6 +79,10 @@ export class ChatHistory {
     return { ...this.session, messages: [...this.session.messages] };
   }
 
+  getSessionId(): string {
+    return this.sessionId;
+  }
+
   async persist(): Promise<void> {
     await this.stateManager.writeRaw(
       `chat/sessions/${this.sessionId}.json`,

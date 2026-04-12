@@ -406,6 +406,7 @@ export async function scoreDrivesAndCheckKnowledge(
       //    task execution every loop. Gap detection runs once; after that, let the
       //    normal task cycle proceed.
       const isCodeExecutionContext =
+        ctx.config.adapterType === "agent_loop" ||
         ctx.config.adapterType === "openai_codex_cli" ||
         ctx.config.adapterType === "claude_code_cli" ||
         goal.constraints.some((constraint) => constraint.startsWith("workspace_path:"));

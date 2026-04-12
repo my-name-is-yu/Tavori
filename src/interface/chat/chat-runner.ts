@@ -24,6 +24,12 @@ import { EventSubscriber } from "./event-subscriber.js";
 import type { DaemonClient } from "../../runtime/daemon/client.js";
 import type { GoalNegotiator } from "../../orchestrator/goal/goal-negotiator.js";
 import type { ChatEvent, ChatEventContext } from "./chat-events.js";
+import type { ChatAgentLoopRunner } from "../../orchestrator/execution/agent-loop/chat-agent-loop-runner.js";
+import type {
+  AgentLoopEvent,
+  AgentLoopEventSink,
+} from "../../orchestrator/execution/agent-loop/agent-loop-events.js";
+import type { AgentLoopSessionState } from "../../orchestrator/execution/agent-loop/agent-loop-session-state.js";
 
 // ─── Types ───
 
@@ -62,6 +68,8 @@ export interface ChatRunnerDeps {
   daemonBaseUrl?: string;
   /** Optional: channel-agnostic chat stream events. */
   onEvent?: (event: ChatEvent) => void;
+  /** Optional: native agentloop runner for chat turns. */
+  chatAgentLoopRunner?: ChatAgentLoopRunner;
 }
 
 export interface ChatRunResult {
@@ -83,6 +91,7 @@ const MAX_TOOL_LOOPS = 5;
 const COMMAND_HELP = `Available commands:
   /help    Show this help message
   /clear   Clear conversation history
+  /resume  Resume the last native agentloop turn when resumable state exists
   /exit    Exit chat mode
   /track   Promote session to Tier 2 goal pursuit (not yet implemented)
   /tend    Generate a goal from chat history and start autonomous daemon execution`;
@@ -119,6 +128,7 @@ export class ChatRunner {
    */
   onNotification: ((message: string) => void) | undefined = undefined;
   onEvent: ((event: ChatEvent) => void) | undefined = undefined;
+  private nativeAgentLoopStatePath: string | null = null;
 
   constructor(deps: ChatRunnerDeps) {
     this.deps = deps;
@@ -135,6 +145,7 @@ export class ChatRunner {
     this.history = new ChatHistory(this.deps.stateManager, sessionId, gitRoot);
     this.sessionCwd = gitRoot;
     this.sessionActive = true;
+    this.nativeAgentLoopStatePath = `chat/agentloop/${sessionId}.state.json`;
   }
 
   private async handleCommand(input: string): Promise<ChatRunResult | null> {
@@ -334,9 +345,10 @@ export class ChatRunner {
    */
   async execute(input: string, cwd: string, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<ChatRunResult> {
     const eventContext = this.createEventContext();
+    const resumeOnly = this.isResumeCommand(input);
 
     // Intercept commands before any adapter call
-    const commandResult = await this.handleCommand(input);
+    const commandResult = resumeOnly ? null : await this.handleCommand(input);
     if (commandResult !== null) {
       if (commandResult.output) {
         this.emitEvent({
@@ -351,7 +363,7 @@ export class ChatRunner {
     }
 
     // Intercept plain Y/n responses (and any other input) when a /tend confirmation is pending
-    if (this.pendingTend !== null) {
+    if (this.pendingTend !== null && !resumeOnly) {
       const confirmationResult = await this.handleTendConfirmation(input.trim(), Date.now());
       if (confirmationResult.output) {
         this.emitEvent({
@@ -375,6 +387,7 @@ export class ChatRunner {
       const gitRoot = resolveGitRoot(cwd);
       const sessionId = crypto.randomUUID();
       this.history = new ChatHistory(this.deps.stateManager, sessionId, gitRoot);
+      this.nativeAgentLoopStatePath = `chat/agentloop/${sessionId}.state.json`;
     }
     const gitRoot = this.sessionCwd ?? resolveGitRoot(cwd);
 
@@ -382,7 +395,9 @@ export class ChatRunner {
     const history = this.history!;
 
     // Persist-before-execute: user message written to disk first
-    await history.appendUserMessage(input);
+    if (!resumeOnly) {
+      await history.appendUserMessage(input);
+    }
     this.emitEvent({
       type: "lifecycle_start",
       input,
@@ -412,7 +427,7 @@ export class ChatRunner {
 
     // Build conversation history from prior turns (last 10)
     const messages = history.getMessages();
-    const priorTurns = messages.slice(0, -1).slice(-10);
+    const priorTurns = resumeOnly ? messages.slice(-10) : messages.slice(0, -1).slice(-10);
     let historyBlock = "";
     if (priorTurns.length > 0) {
       const lines = priorTurns.map((m: { role: string; content: string }) =>
@@ -421,12 +436,104 @@ export class ChatRunner {
       historyBlock = `Previous conversation:\n${lines}\n\nCurrent message:\n`;
     }
 
-    const context = await buildChatContext(input, gitRoot);
-    const basePrompt = context ? `${context}\n\n${input}` : input;
+    const context = resumeOnly ? "" : await buildChatContext(input, gitRoot);
+    const basePrompt = resumeOnly ? "" : (context ? `${context}\n\n${input}` : input);
     const prompt = historyBlock ? `${historyBlock}${basePrompt}` : basePrompt;
 
     const start = Date.now();
     const assistantBuffer: AssistantBuffer = { text: "" };
+
+    if (resumeOnly && !this.deps.chatAgentLoopRunner) {
+      const elapsed_ms = Date.now() - start;
+      const output = "Resume requires the native chat agentloop runtime.";
+      this.emitEvent({
+        type: "assistant_final",
+        text: output,
+        persisted: false,
+        ...this.eventBase(eventContext),
+      });
+      this.emitLifecycleEndEvent("error", elapsed_ms, eventContext, false);
+      return {
+        success: false,
+        output,
+        elapsed_ms,
+      };
+    }
+
+    if (this.deps.chatAgentLoopRunner) {
+      try {
+        const resumeState = resumeOnly ? await this.loadResumableAgentLoopState() : null;
+        if (resumeOnly && !resumeState) {
+          const elapsed_ms = Date.now() - start;
+          const output = "No resumable native agentloop state found.";
+          this.emitEvent({
+            type: "assistant_final",
+            text: output,
+            persisted: false,
+            ...this.eventBase(eventContext),
+          });
+          this.emitLifecycleEndEvent("error", elapsed_ms, eventContext, false);
+          return {
+            success: false,
+            output,
+            elapsed_ms,
+          };
+        }
+        const result = await this.deps.chatAgentLoopRunner.execute({
+          message: basePrompt,
+          cwd,
+          goalId: this.deps.goalId,
+          history: priorTurns.map((m: { role: string; content: string }) => ({
+            role: m.role === "assistant" ? "assistant" : "user",
+            content: m.content,
+          })),
+          eventSink: this.createAgentLoopEventSink(eventContext),
+          approvalFn: async (request) => {
+            if (this.deps.approvalFn) {
+              return this.deps.approvalFn(request.reason);
+            }
+            return false;
+          },
+          ...(this.nativeAgentLoopStatePath ? { resumeStatePath: this.nativeAgentLoopStatePath } : {}),
+          ...(resumeState ? { resumeState } : {}),
+          ...(resumeOnly ? { resumeOnly: true } : {}),
+          ...(systemPrompt ? { systemPrompt } : {}),
+        });
+        const elapsed_ms = Date.now() - start;
+        if (result.output) {
+          this.pushAssistantDelta(result.output, assistantBuffer, eventContext);
+        }
+        if (result.success) {
+          await history.appendAssistantMessage(result.output);
+          this.emitEvent({
+            type: "assistant_final",
+            text: result.output,
+            persisted: true,
+            ...this.eventBase(eventContext),
+          });
+          this.emitLifecycleEndEvent("completed", elapsed_ms, eventContext, true);
+        } else {
+          this.emitLifecycleErrorEvent(result.output || result.error || "Unknown error", assistantBuffer.text, eventContext);
+          this.emitLifecycleEndEvent("error", elapsed_ms, eventContext, false);
+        }
+        return {
+          success: result.success,
+          output: result.output,
+          elapsed_ms,
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.emitLifecycleErrorEvent(message, assistantBuffer.text, eventContext);
+        this.emitLifecycleEndEvent("error", Date.now() - start, eventContext, false);
+        return {
+          success: false,
+          output: assistantBuffer.text
+            ? `${assistantBuffer.text}\n\n[interrupted: ${message}]`
+            : `Error: ${message}`,
+          elapsed_ms: Date.now() - start,
+        };
+      }
+    }
 
     // Use llmClient with self-knowledge tools when available (function calling path)
     // Skip executeWithTools for clients that don't support tool calling (e.g. CodexLLMClient)
@@ -620,6 +727,150 @@ export class ChatRunner {
     } catch {
       // Non-JSON result or unexpected shape — ignore
     }
+  }
+
+  private createAgentLoopEventSink(eventContext: ChatEventContext): AgentLoopEventSink {
+    return {
+      emit: async (event: AgentLoopEvent) => {
+        if (event.type === "tool_call_started") {
+          this.emitEvent({
+            type: "tool_start",
+            toolCallId: event.callId,
+            toolName: event.toolName,
+            args: this.parseAgentLoopPreview(event.inputPreview),
+            ...this.eventBase(eventContext),
+          });
+          this.emitEvent({
+            type: "tool_update",
+            toolCallId: event.callId,
+            toolName: event.toolName,
+            status: "running",
+            message: "started",
+            ...this.eventBase(eventContext),
+          });
+          return;
+        }
+
+        if (event.type === "tool_call_finished") {
+          this.emitEvent({
+            type: "tool_end",
+            toolCallId: event.callId,
+            toolName: event.toolName,
+            success: event.success,
+            summary: event.outputPreview,
+            durationMs: event.durationMs,
+            ...this.eventBase(eventContext),
+          });
+          return;
+        }
+
+        if (event.type === "assistant_message" && event.phase === "commentary" && event.contentPreview) {
+          this.pushAssistantDelta(event.contentPreview, { text: "" }, eventContext);
+          return;
+        }
+
+        if (event.type === "plan_update") {
+          this.emitEvent({
+            type: "tool_update",
+            toolCallId: `plan:${event.turnId}:${event.createdAt}`,
+            toolName: "update_plan",
+            status: "result",
+            message: event.summary,
+            ...this.eventBase(eventContext),
+          });
+          return;
+        }
+
+        if (event.type === "approval_request") {
+          this.emitEvent({
+            type: "tool_update",
+            toolCallId: event.callId,
+            toolName: event.toolName,
+            status: "awaiting_approval",
+            message: event.reason,
+            ...this.eventBase(eventContext),
+          });
+          return;
+        }
+
+        if (event.type === "approval") {
+          this.emitEvent({
+            type: "tool_update",
+            toolCallId: `approval:${event.turnId}:${event.createdAt}`,
+            toolName: event.toolName,
+            status: "result",
+            message: `approval ${event.status}: ${event.reason}`,
+            ...this.eventBase(eventContext),
+          });
+          return;
+        }
+
+        if (event.type === "resumed") {
+          this.emitEvent({
+            type: "tool_update",
+            toolCallId: `resume:${event.turnId}:${event.createdAt}`,
+            toolName: "agentloop_resume",
+            status: "result",
+            message: `resumed ${event.restoredMessages} message(s) from ${event.fromUpdatedAt}`,
+            ...this.eventBase(eventContext),
+          });
+          return;
+        }
+
+        if (event.type === "context_compaction") {
+          this.emitEvent({
+            type: "tool_update",
+            toolCallId: `compaction:${event.turnId}:${event.createdAt}`,
+            toolName: "context_compaction",
+            status: "result",
+            message: `${event.phase} ${event.reason}: ${event.inputMessages} -> ${event.outputMessages}`,
+            ...this.eventBase(eventContext),
+          });
+        }
+      },
+    };
+  }
+
+  private parseAgentLoopPreview(preview: string): Record<string, unknown> {
+    try {
+      const parsed = JSON.parse(preview) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      // fall through
+    }
+    return preview ? { preview } : {};
+  }
+
+  private isResumeCommand(input: string): boolean {
+    return input.trim().toLowerCase() === "/resume";
+  }
+
+  private async loadResumableAgentLoopState(): Promise<AgentLoopSessionState | null> {
+    if (!this.nativeAgentLoopStatePath) return null;
+    const raw = await this.deps.stateManager.readRaw(this.nativeAgentLoopStatePath);
+    if (!this.isAgentLoopSessionState(raw)) return null;
+    if (raw.status === "completed") return null;
+    return {
+      ...raw,
+      messages: [...raw.messages],
+      calledTools: [...raw.calledTools],
+    };
+  }
+
+  private isAgentLoopSessionState(value: unknown): value is AgentLoopSessionState {
+    if (!value || typeof value !== "object") return false;
+    const candidate = value as Record<string, unknown>;
+    return typeof candidate["sessionId"] === "string"
+      && typeof candidate["traceId"] === "string"
+      && typeof candidate["turnId"] === "string"
+      && typeof candidate["goalId"] === "string"
+      && typeof candidate["cwd"] === "string"
+      && typeof candidate["modelRef"] === "string"
+      && Array.isArray(candidate["messages"])
+      && Array.isArray(candidate["calledTools"])
+      && typeof candidate["status"] === "string";
   }
 
   /** Dispatch a tool call through the registry. */

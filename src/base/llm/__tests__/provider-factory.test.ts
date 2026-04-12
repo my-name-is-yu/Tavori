@@ -48,6 +48,7 @@ vi.mock("../provider-config.js", () => ({
 
 import { buildLLMClient } from "../provider-factory.js";
 import { LLMClient } from "../llm-client.js";
+import { OpenAILLMClient } from "../openai-client.js";
 
 // ─── Tests ───
 
@@ -141,6 +142,21 @@ describe("buildLLMClient — early API key validation", () => {
       });
 
       await expect(buildLLMClient()).resolves.not.toThrow();
+    });
+
+    it("uses OpenAILLMClient for native agent_loop", async () => {
+      const MockedOpenAILLMClient = vi.mocked(OpenAILLMClient);
+      MockedOpenAILLMClient.mockClear();
+      mockLoadProviderConfig.mockResolvedValue({
+        provider: "openai",
+        model: "gpt-5.4-mini",
+        adapter: "agent_loop",
+        api_key: "sk-test",
+      });
+
+      await buildLLMClient();
+
+      expect(MockedOpenAILLMClient).toHaveBeenCalledOnce();
     });
   });
 

@@ -204,11 +204,28 @@ export function checkDimensionDirection(
 // ─── parseExecutorReport ───
 
 export function parseExecutorReport(executionResult: AgentResult): import("./task-verifier-types.js").ExecutorReport {
+  const completionEvidence = executionResult.agentLoop?.completionEvidence ?? [];
+  const verificationHints = executionResult.agentLoop?.verificationHints ?? [];
+  const stopReason = executionResult.agentLoop?.stopReason ?? executionResult.stopped_reason;
+  const summaryParts = [
+    executionResult.output.slice(0, 500),
+    completionEvidence.length > 0 ? `completion evidence: ${completionEvidence.join("; ")}` : "",
+  ].filter((part) => part.length > 0);
+
   return {
     completed: executionResult.success,
-    summary: executionResult.output.slice(0, 500),
-    partial_results: [],
-    blockers: executionResult.error ? [executionResult.error] : [],
+    summary: summaryParts.join("\n"),
+    partial_results: completionEvidence,
+    blockers: [
+      ...(executionResult.error ? [executionResult.error] : []),
+      ...(executionResult.success || stopReason === "completed" ? [] : [`stop reason: ${stopReason}`]),
+    ],
+    stop_reason: stopReason,
+    completion_evidence: completionEvidence,
+    verification_hints: verificationHints,
+    trace_id: executionResult.agentLoop?.traceId,
+    session_id: executionResult.agentLoop?.sessionId,
+    turn_id: executionResult.agentLoop?.turnId,
   };
 }
 

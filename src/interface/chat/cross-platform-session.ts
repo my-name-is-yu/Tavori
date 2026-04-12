@@ -13,6 +13,10 @@ import {
   ToolPermissionManager,
   ToolRegistry,
 } from "../../tools/index.js";
+import {
+  createNativeChatAgentLoopRunner,
+  shouldUseNativeTaskAgentLoop,
+} from "../../orchestrator/execution/agent-loop/index.js";
 
 export interface CrossPlatformChatSessionOptions {
   /**
@@ -288,11 +292,22 @@ async function createGlobalCrossPlatformChatSessionManager(): Promise<CrossPlatf
     concurrency: new ConcurrencyController(),
   });
 
+  const chatAgentLoopRunner = shouldUseNativeTaskAgentLoop(providerConfig, llmClient)
+    ? createNativeChatAgentLoopRunner({
+        llmClient,
+        providerConfig,
+        toolRegistry,
+        toolExecutor,
+        traceBaseDir: stateManager.getBaseDir(),
+      })
+    : undefined;
+
   return new CrossPlatformChatSessionManager({
     stateManager,
     adapter,
     llmClient,
     registry: toolRegistry,
     toolExecutor,
+    chatAgentLoopRunner,
   });
 }

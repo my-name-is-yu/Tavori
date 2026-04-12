@@ -1,174 +1,83 @@
-# Getting Started with PulSeed
+# Getting Started
 
-This guide gets you from zero to a running goal loop in about 5 minutes.
+This guide reflects the current public surface of PulSeed as of the `CoreLoop + AgentLoop` architecture.
 
----
+## 1. Install
 
-## 1. Prerequisites
-
-- **Node.js 20 or later** — check with `node --version`
-- **An LLM API key** — OpenAI is the recommended starting point; Anthropic and local Ollama are also supported
-
----
-
-## 2. Installation
-
-### Global install (recommended)
+Node.js 20+ is required.
 
 ```bash
 npm install -g pulseed
-pulseed --help
 ```
 
-### Local install (for a single project)
+## 2. Run setup
+
+Use the setup wizard first.
 
 ```bash
-npm install pulseed
-npx pulseed --help
+pulseed setup
 ```
 
-### From source
+What setup does:
+
+- chooses provider and model
+- selects the default adapter
+- writes `~/.pulseed/provider.json`
+- can enable the native `agent_loop` path, which is now the recommended default when your model supports tool calling
+
+## 3. Create a goal
 
 ```bash
+<<<<<<< HEAD
 git clone https://github.com/my-name-is-yu/PulSeed.git
 cd PulSeed
 npm install
 npm run build
 node dist/interface/cli/cli-runner.js --help
+=======
+pulseed goal add "Increase test coverage to 90%"
+>>>>>>> e49c85c9 (implement native agentloop and coreloop phases)
 ```
 
----
+This stores a goal with measurable dimensions and enough state for the CoreLoop to continue later.
 
-## 3. Configure Your LLM Provider
-
-PulSeed needs an LLM to reason about goals, generate tasks, and verify results.
-
-### Option A — Environment variables (quickest)
+Useful follow-ups:
 
 ```bash
-export OPENAI_API_KEY=sk-...
-# PULSEED_LLM_PROVIDER defaults to openai when OPENAI_API_KEY is set
+pulseed goal list
+pulseed goal show <goal-id>
 ```
 
-### Option B — Persistent provider file
-
-Create `~/.pulseed/provider.json`:
-
-```json
-{
-  "provider": "openai",
-  "model": "gpt-5.4-mini",
-  "apiKey": "sk-..."
-}
-```
-
-PulSeed reads this file on every startup, so you only need to set it once. See [configuration.md](configuration.md) for the full provider.json reference and examples for Anthropic and Ollama.
-
-### Verify the connection
-
-```bash
-pulseed status
-```
-
-Expected output (no goals registered yet):
-
-```
-No goals found. Add one with: pulseed goal add "<description>"
-```
-
-If you see an API key error instead, double-check the key and that `PULSEED_LLM_PROVIDER` matches your key type.
-
----
-
-## 4. Your First Goal
-
-### Step 1 — Discover goal suggestions (optional but helpful)
-
-```bash
-pulseed suggest .
-```
-
-PulSeed scans your current directory and proposes concrete goals based on what it finds. Example output:
-
-```
-Suggested goals:
-  1. Increase test coverage to 80% (currently ~52%)
-  2. Add JSDoc to all exported functions
-  3. Fix 3 open TODO comments in src/
-
-Select a goal [1-3] or press Enter to skip:
-```
-
-Select a number, or skip and add your own goal manually.
-
-### Step 2 — Add a goal manually
-
-```bash
-pulseed goal add "Ensure all tests pass and coverage is above 80%"
-```
-
-PulSeed calls the LLM to negotiate the goal: it evaluates feasibility, decomposes the description into measurable dimensions (e.g., `test_pass_rate`, `coverage_percent`), and assigns thresholds. You will be shown a summary and asked to confirm.
-
-Expected output:
-
-```
-Negotiating goal...
-
-Goal: Ensure all tests pass and coverage is above 80%
-Dimensions:
-  - test_pass_rate  >=1.0  (currently: unknown)
-  - coverage_pct   >=80   (currently: unknown)
-Feasibility: achievable
-
-Accept this goal? [Y/n]:
-```
-
-Press Enter to accept.
-
-### Step 3 — Run the loop
+## 4. Run one iteration
 
 ```bash
 pulseed run --goal <goal-id>
 ```
 
-The goal ID is shown after the goal is accepted (e.g., `goal_abc123`). You can also look it up with:
+`pulseed run` executes one CoreLoop run for the goal. Inside that run, PulSeed may:
 
-```bash
-pulseed goal list
-```
+1. observe evidence
+2. calculate gaps and drive scores
+3. decide whether to continue, refine, pivot, or verify
+4. run bounded agentic core phases such as knowledge refresh or stall investigation
+5. generate and execute a task
+6. verify the result and persist the outcome
 
-Example run output:
+If the selected adapter is `agent_loop`, task execution is performed by PulSeed's native AgentLoop rather than an external CLI agent wrapper.
 
-```
-Observing... [Ensure all tests pass and coverage is above 80%]
-  test_pass_rate: 0.94 (gap: 0.06)
-  coverage_pct:   61   (gap: 19)
-
-Largest gap: coverage_pct
-Generating task...
-  Task: Write unit tests for src/utils/formatter.ts (currently 0% covered)
-  Adapter: openai_codex_cli
-
-Approve task? [Y/n]: Y
-
-Executing...
-Verifying...
-  coverage_pct: 61 → 67 (+6)
-
-Loop complete. Run again to continue.
-```
-
-### Step 4 — Check progress
+## 5. Check progress
 
 ```bash
 pulseed status --goal <goal-id>
 pulseed report --goal <goal-id>
+pulseed task list --goal <goal-id>
 ```
 
----
+Use these to inspect the current goal state, latest report, and task history.
 
-## 5. What Happens Next
+## 6. Use chat mode
 
+<<<<<<< HEAD
 `pulseed run` starts PulSeed's core loop for the selected goal and keeps iterating until completion, stall, explicit stop, or the active iteration budget is exhausted:
 
 The current runtime combines:
@@ -183,30 +92,80 @@ The exact step shape varies by goal and execution path, but the common flow is:
 3. **Choose the next task or bounded execution step**
 4. **Execute with adapters or tools**
 5. **Verify outcomes and update persisted state**
+=======
+```bash
+pulseed chat
+```
 
-State is written to `~/.pulseed/` after every loop, so you can stop and resume at any time. Running `pulseed run` again picks up exactly where the last run left off.
+Chat mode is no longer just a command router. It can run through the native AgentLoop with tools when the configured provider supports it.
+>>>>>>> e49c85c9 (implement native agentloop and coreloop phases)
 
-To run the loop continuously without manual re-invocation, use daemon mode:
+Current chat characteristics:
+
+- tool-using bounded turns
+- context compaction when history grows
+- approval flow for restricted actions
+- ability to operate PulSeed through tools instead of direct internal calls
+
+## 7. Use the TUI
+
+```bash
+pulseed tui
+```
+
+The TUI sits on the same runtime and orchestration stack as the CLI. It is the main interactive view for:
+
+- goal progress
+- reports
+- approvals
+- chat
+- loop control
+
+## 8. Run continuously
+
+Start the resident runtime:
 
 ```bash
 pulseed start --goal <goal-id>
 pulseed stop
 ```
 
-Or generate a crontab entry:
+Or print a cron entry:
 
 ```bash
 pulseed cron --goal <goal-id>
 ```
 
----
+The daemon and cron paths still feed the same CoreLoop and TaskLifecycle.
 
-## 6. Next Steps
+## 9. Recommended adapter choices
 
-- **Real-world examples** — [docs/usecase.md](usecase.md): dog health monitoring, SaaS revenue growth
-- **Full configuration reference** — [docs/configuration.md](configuration.md): all env vars, provider.json formats, plugin config
-- **Available adapters** — README.md `Supported Adapters` table
-- **Architecture deep-dive** — [docs/mechanism.md](mechanism.md), [docs/runtime.md](runtime.md)
-- **Design documents** — [docs/design/](design/) (34 files covering every subsystem)
-- **OpenAI / Codex setup** — [docs/codex-testing-guide.md](codex-testing-guide.md)
-- **Local LLM (Ollama)** — [docs/local-llm-testing-guide.md](local-llm-testing-guide.md)
+Default recommendation:
+
+- OpenAI or Anthropic with `agent_loop`
+
+When to use external adapters instead:
+
+- `openai_codex_cli` or `claude_code_cli` when you want the provider's own CLI behavior
+- `github_issue` when execution should be an issue handoff rather than a local agent session
+
+## 10. What PulSeed stores locally
+
+PulSeed writes local state under `~/.pulseed/`, including:
+
+- goals
+- tasks
+- reports
+- runtime state
+- schedules
+- memory
+- Soil projections
+
+## 11. Next docs
+
+- [README](../README.md)
+- [Mechanism](mechanism.md)
+- [Runtime](runtime.md)
+- [Configuration](configuration.md)
+- [Architecture Map](architecture-map.md)
+- [Module Map](module-map.md)

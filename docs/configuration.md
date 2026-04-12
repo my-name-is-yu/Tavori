@@ -1,267 +1,182 @@
-# PulSeed Configuration Reference
+# Configuration
 
----
+This document reflects the current public configuration surface.
 
-## 1. Environment Variables
+## 1. First-run recommendation
 
-All variables are optional unless marked **required**.
-
-### LLM Provider
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PULSEED_LLM_PROVIDER` | `openai` | Active provider: `openai`, `anthropic`, or `ollama` |
-| `OPENAI_API_KEY` | — | **Required** when provider is `openai` |
-| `OPENAI_MODEL` | `gpt-5.4-mini` | OpenAI model name. Note: `gpt-4o-mini` is not compatible with the `openai_codex_cli` adapter — use `gpt-5.4-mini` instead |
-| `OPENAI_BASE_URL` | OpenAI default | Override for Azure OpenAI or a proxy (e.g., `https://<endpoint>.openai.azure.com/`) |
-| `ANTHROPIC_API_KEY` | — | **Required** when provider is `anthropic`. Set to `dummy` when using Ollama to bypass the TUI startup check |
-
-### Ollama (local LLM)
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL. Override when Ollama is running on another machine |
-
-### Plugin / Integrations
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PULSEED_CLI_PATH` | `pulseed` | Full path to the PulSeed CLI binary. Used by the `@pulseed/openclaw-plugin` when `pulseed` is not in `$PATH` |
-
-### Notes
-
-- The `o1` / `o3` / `o4` OpenAI reasoning model families do not accept a `temperature` parameter. PulSeed omits it automatically when calling these models.
-- Reasoning models (`o3`, `o4-mini`) can be set via `OPENAI_MODEL` or `provider.json`. They tend to produce higher-quality goal decomposition at higher cost.
-- You can also use a `.env` file at the project root. Confirm it is listed in `.gitignore` before committing.
+Use:
 
 ```bash
-# .env example — source with: set -a; source .env; set +a
-PULSEED_LLM_PROVIDER=openai
-OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxx
-OPENAI_MODEL=gpt-5.4-mini
+pulseed setup
 ```
 
----
+The setup flow is the recommended way to configure:
 
-## 2. ~/.pulseed/ Directory Layout
+- provider
+- model
+- default adapter
+- native `agent_loop` options such as worktree behavior
 
-All PulSeed runtime state lives under `~/.pulseed/`. The directory is created automatically on first run.
+PulSeed stores the persistent result in `~/.pulseed/provider.json`.
 
-```
-~/.pulseed/
-├── provider.json            # LLM provider config (optional, see §3)
-├── daemon-state.json        # Last daemon state, active goals, and recovery markers
-├── shutdown-state.json      # Clean-vs-unclean shutdown marker
-├── goals/                   # Active goal state (one file per goal)
-├── tasks/                   # Task files, task history, and outcome ledgers
-├── pipelines/               # Pipeline execution state for resumable multi-stage tasks
-├── checkpoints/             # Execution context checkpoints
-├── runtime/                 # Durable resident-daemon coordination state
-│   ├── queue.json           # Journal-backed command/event queue
-│   ├── supervisor-state.json # Active worker and crash-counter snapshot
-│   ├── health/              # Runtime KPI health snapshots
-│   ├── leader/              # Runtime leader lock
-│   ├── leases/              # Per-goal execution leases
-│   ├── approvals/           # Pending/resolved approval requests
-│   └── outbox/              # Durable client event stream
-├── schedules.json           # Heartbeat/probe/cron/goal-trigger schedules
-├── reports/                 # Loop reports (Markdown)
-├── ethics/                  # Ethics gate decision logs
-├── plugins/                 # User-installed plugins (loaded at startup)
-├── logs/
-│   └── cron.log             # Output from cron-scheduled runs
-└── memory/
-    ├── short-term/
-    │   └── goals/<goal_id>/
-    │       ├── experience-log.json   # Raw experience log
-    │       ├── observations.json     # Observation history
-    │       ├── strategies.json       # Strategy history
-    │       └── tasks.json            # Task history
-    ├── long-term/
-    │   ├── lessons/
-    │   │   ├── by-goal/<goal_id>.json
-    │   │   ├── by-dimension/<name>.json
-    │   │   └── global.json
-    │   └── statistics/<goal_id>.json
-    └── archive/<goal_id>/   # Completed or cancelled goals
-```
+## 2. Recommended default
 
-For resident-daemon recovery, treat `daemon-state.json`, `runtime/`, `tasks/`, `pipelines/`, `checkpoints/`, `memory/`, and `schedules.json` as the minimum durable state set. If these are preserved, the daemon can restore active goals, reconcile interrupted task and pipeline work, retain memory/context, and keep the four schedule layers from being lost across restart. See [Runtime Auto-Recovery](design/infrastructure/runtime-auto-recovery.md) for the recovery model and KPI surfaces.
+For most users, the recommended default is:
 
-To wipe all state and start fresh:
+- provider: OpenAI or Anthropic
+- adapter: `agent_loop`
 
-```bash
-rm -rf ~/.pulseed
-```
+That enables PulSeed's native bounded AgentLoop runtime for task execution and chat when the chosen model supports tool calling.
 
----
+## 3. `~/.pulseed/provider.json`
 
-## 3. provider.json
-
-`~/.pulseed/provider.json` is an optional file that sets the LLM provider persistently. When present, its values are used as defaults; environment variables override them.
-
-### Format
-
-```json
-{
-  "provider": "openai | anthropic | ollama",
-  "model": "<model-name>",
-  "api_key": "<your-api-key>"
-}
-```
-
-The `model` field is respected by **all providers** (openai, anthropic, and ollama). If omitted, each provider falls back to its default model.
-
-### OpenAI example
+Typical shape:
 
 ```json
 {
   "provider": "openai",
   "model": "gpt-5.4-mini",
-  "api_key": "sk-..."
+  "adapter": "agent_loop",
+  "api_key": "sk-...",
+  "agent_loop": {
+    "worktree": {
+      "enabled": true,
+      "base_dir": "~/.pulseed/worktrees",
+      "keep_for_debug": false,
+      "cleanup_policy": "on_success"
+    }
+  }
 }
 ```
 
-### Anthropic example
+Important top-level fields:
 
-```json
-{
-  "provider": "anthropic",
-  "model": "claude-opus-4-5",
-  "api_key": "sk-ant-..."
-}
-```
+- `provider`: `openai`, `anthropic`, or `ollama`
+- `model`: provider-specific model name
+- `adapter`: `agent_loop`, `openai_codex_cli`, `claude_code_cli`, `openai_api`, `claude_api`, or other registered adapters
+- `api_key`: when required by the provider
+- `base_url`: optional provider override
 
-### Ollama (local LLM) example
+Important `agent_loop` field:
 
-No API key is needed. The `base_url` field overrides the default `http://localhost:11434`.
+- `agent_loop.worktree`: worktree policy for native task execution
 
-```json
-{
-  "provider": "ollama",
-  "model": "qwen3:4b"
-}
-```
+## 4. Environment variables
 
-To connect to Ollama on a remote machine:
+Environment variables override file config.
 
-```json
-{
-  "provider": "ollama",
-  "model": "qwen3:4b",
-  "base_url": "http://192.168.1.50:11434"
-}
-```
+### Provider selection
 
-### Model recommendations
+| Variable | Meaning |
+|---|---|
+| `PULSEED_LLM_PROVIDER` | Provider override: `openai`, `anthropic`, `ollama` |
+| `OPENAI_API_KEY` | OpenAI key |
+| `ANTHROPIC_API_KEY` | Anthropic key |
+| `OPENAI_BASE_URL` | Optional OpenAI-compatible endpoint override |
+| `OLLAMA_BASE_URL` | Optional Ollama endpoint override |
 
-| Use case | Recommended model |
-|----------|------------------|
-| Default / everyday use | `gpt-5.4-mini` (OpenAI) |
-| Higher-quality reasoning | `gpt-4.1` or `o4-mini` (OpenAI) |
-| Anthropic users | `claude-opus-4-5` |
-| Local / offline | `qwen3:4b` via Ollama |
+### Notes
 
----
+- Native `agent_loop` is supported by both OpenAI-backed and Anthropic-backed tool-calling models in the current implementation
+- Some models are usable through API adapters but not a CLI adapter, or vice versa
+- `pulseed setup` is safer than editing config by hand because it validates provider and adapter combinations
 
-## 4. Plugin Configuration
+## 5. Adapter choices
 
-Plugins extend PulSeed with new adapters, notifiers, and integrations. They are loaded from `~/.pulseed/plugins/` at startup.
+Current public adapter choices:
 
-### Installing a plugin
+| Adapter | Meaning |
+|---|---|
+| `agent_loop` | PulSeed's native bounded tool-using agent runtime |
+| `openai_codex_cli` | External Codex CLI adapter |
+| `claude_code_cli` | External Claude Code CLI adapter |
+| `openai_api` | API-based execution path |
+| `claude_api` | API-based execution path |
+| `github_issue` | Issue-handoff style execution |
+
+When to prefer `agent_loop`:
+
+- you want one runtime model for chat and task execution
+- you want bounded tool use, compaction, and traces inside PulSeed
+- you want worktree support through native task execution
+
+## 6. Worktree configuration
+
+Native `agent_loop` task execution can prepare a dedicated worktree.
+
+Public knobs:
+
+- `enabled`
+- `base_dir`
+- `keep_for_debug`
+- `cleanup_policy`
+
+Operational meaning:
+
+- when enabled, task execution can run in a separate worktree instead of mutating the primary workspace directly
+- when `keep_for_debug` is true, PulSeed leaves the worktree behind for inspection
+
+## 7. Local state layout
+
+PulSeed stores runtime state under `~/.pulseed/`.
+
+Common directories:
+
+- `goals/`
+- `tasks/`
+- `reports/`
+- `runtime/`
+- `schedules.json`
+- `memory/`
+- `chat/`
+- `plugins/`
+
+Depending on the features in use, you may also see:
+
+- checkpoints
+- runtime health snapshots
+- Soil projections and indexes
+- schedule suggestions and approval state
+
+## 8. Common commands
 
 ```bash
-# Official plugin via npm
-npm install -g @pulseed/slack-notifier
-
-# Copy or symlink the plugin directory into ~/.pulseed/plugins/
-# (plugins installed globally are auto-discovered if they follow the naming convention)
+pulseed setup
+pulseed config
+pulseed run --goal <id>
+pulseed chat
+pulseed tui
+pulseed start --goal <id>
 ```
 
-### Plugin directory structure
+Useful config-related commands:
 
-```
-~/.pulseed/plugins/
-└── my-plugin/
-    ├── package.json
-    └── index.js     # Must export a default function conforming to IPlugin
-```
+- `pulseed setup`
+- `pulseed provider`
+- `pulseed config`
+- `pulseed schedule ...`
+- `pulseed plugin ...`
 
-### Notable plugins
+## 9. Current CLI surface
 
-| Plugin | Description |
-|--------|-------------|
-| `@pulseed/openclaw-plugin` | OpenClaw Gateway — goal detection, agent orchestration, progress tracking |
-| `@pulseed/slack-notifier` | Slack notifications for goal events |
+Common public commands:
 
-The OpenClaw plugin reads `PULSEED_CLI_PATH` if `pulseed` is not in `$PATH`.
+| Command | Purpose |
+|---|---|
+| `pulseed setup` | Configure provider, model, and adapter |
+| `pulseed goal add "<text>"` | Create a goal |
+| `pulseed run --goal <id>` | Execute CoreLoop for one goal |
+| `pulseed status --goal <id>` | Inspect goal state |
+| `pulseed report --goal <id>` | Read the latest report |
+| `pulseed task list --goal <id>` | Inspect tasks |
+| `pulseed chat` | Start chat mode |
+| `pulseed tui` | Start the terminal UI |
+| `pulseed start --goal <id>` | Start the daemon |
+| `pulseed stop` | Stop the daemon |
+| `pulseed cron --goal <id>` | Print a cron entry |
 
-For building your own plugin, see [docs/design/infrastructure/plugin-development-guide.md](design/infrastructure/plugin-development-guide.md).
+## 10. Practical guidance
 
----
-
-## 5. CLI Flags
-
-Common flags available across multiple commands. Run `pulseed <command> --help` for the full flag list for any specific command.
-
-### Global flags
-
-| Flag | Description |
-|------|-------------|
-| `--goal <id>` | Goal ID to operate on. Required by `run`, `status`, `report`, `log`, `start`, `cron` |
-| `--yes`, `-y` | Auto-approve all task prompts (non-interactive mode). Also auto-selects the first suggestion in `pulseed suggest` |
-| `--adapter <type>` | Override the default adapter for this run. Valid: `claude_api`, `claude_code_cli`, `openai_codex_cli`, `openai_api`, `github_issue` |
-| `--provider <name>` | Override the LLM provider for this run: `openai`, `anthropic`, `ollama` |
-| `--model <name>` | Override the LLM model for this run |
-| `--tree` | Run in goal-tree mode (used with multi-level goals) |
-
-### Command reference
-
-| Command | Description |
-|---------|-------------|
-| `pulseed goal add "<text>"` | Negotiate and register a new goal |
-| `pulseed goal list` | List all goals with status |
-| `pulseed goal show <id>` | Show goal details and dimensions |
-| `pulseed goal archive <id>` | Archive a completed or abandoned goal |
-| `pulseed suggest [path]` | Suggest goals based on the given path or current directory |
-| `pulseed run --goal <id>` | Run one core loop iteration |
-| `pulseed status --goal <id>` | Show progress, gaps, and trust scores |
-| `pulseed report --goal <id>` | Display the latest report |
-| `pulseed log --goal <id>` | View observation and gap history |
-| `pulseed start --goal <id>` | Start daemon mode for continuous looping |
-| `pulseed stop` | Stop the running daemon |
-| `pulseed cron --goal <id>` | Print a crontab entry for scheduled runs |
-| `pulseed schedule list/add/remove` | Manage persisted schedule entries |
-| `pulseed schedule presets` | List reusable schedule presets such as `daily_brief` and `weekly_review` |
-| `pulseed schedule suggestions list/apply/reject/dismiss` | Review and materialize dream-generated schedule suggestions |
-| `pulseed tui` | Launch the interactive terminal UI |
-| `pulseed setup` | Interactive provider and adapter setup wizard |
-| `pulseed datasource add/list/remove` | Manage data sources |
-| `pulseed task list --goal <id>` | List tasks for a goal |
-| `pulseed task show <taskId> --goal <id>` | Show task details |
-| `pulseed cleanup` | Archive all completed goals |
-
-### setup wizard flags
-
-```bash
-pulseed setup --provider openai --model gpt-5.4-mini --adapter openai_codex_cli
-```
-
-Use `--provider`, `--model`, and `--adapter` to run setup non-interactively (useful in CI or scripts).
-
-### Postgres datasource
-
-PulSeed ships a first-party `database` datasource backed by `psql`. A working
-`psql` binary must be available in `$PATH` for health checks and query
-execution.
-
-```bash
-pulseed datasource add database \
-  --name "Prod analytics" \
-  --connection-string postgresql://localhost:5432/analytics \
-  --dimension open_issue_count \
-  --query "SELECT count(*) FROM issues WHERE state = 'open'"
-```
-
-This stores the SQL in `dimension_mapping`, so the observation layer can read
-`open_issue_count` without custom glue code.
+- Start with `agent_loop` unless you specifically want an external agent CLI
+- Use `pulseed setup` after pulling new versions, because provider defaults may evolve
+- Treat `src/` and `provider.json` as the implementation truth when deeper docs disagree

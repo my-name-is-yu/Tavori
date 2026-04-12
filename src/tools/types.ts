@@ -146,6 +146,8 @@ export interface ToolCallContext {
   preApproved: boolean;
   /** Approval callback for interactive permission requests */
   approvalFn: (request: ApprovalRequest) => Promise<boolean>;
+  /** Optional hook emitted before approvalFn is invoked */
+  onApprovalRequested?: (request: ApprovalRequest & { callId?: string }) => Promise<void> | void;
   /** When true, bypass DENY_PATTERNS in ShellTool (internal use only) */
   trusted?: boolean;
   /** Abort signal for cancellation */

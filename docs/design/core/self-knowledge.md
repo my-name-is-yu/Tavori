@@ -128,14 +128,18 @@ Returns a static description of PulSeed's architecture and capabilities.
 - Layer structure (Layer 0-15) with module names
 - Module responsibilities summary
 - Execution boundary: "PulSeed orchestrates goal pursuit. It perceives the world directly through read-only tools (Glob, Grep, Read, Shell, HttpFetch, JsonQuery) and delegates all mutations and complex multi-step work to agents."
+<<<<<<< HEAD
 - Runtime shape: CoreLoop (long-lived control) + AgentLoop (bounded execution with tool choice)
+=======
+- Runtime shape: CoreLoop for long-lived control plus AgentLoop for bounded tool-using execution
+>>>>>>> e49c85c9 (implement native agentloop and coreloop phases)
 - 4-element model: Goal -> Current State -> Gap -> Constraints
 
 **Data source**: Hardcoded text
 
 **Use cases**: "What is PulSeed?", "How does the core loop work?", "What can you do?", "Explain your architecture."
 
-**Note**: Because this is a static string, it must be manually updated when the architecture changes. This is an acceptable trade-off -- architectural changes are infrequent.
+**Note**: Because this is a static string, it must be manually updated when the architecture changes. The current architecture should describe the dual-loop model rather than a single flat loop.
 
 ---
 

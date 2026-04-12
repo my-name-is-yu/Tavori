@@ -481,7 +481,8 @@ describe("CoreLoop", async () => {
         mocks.adapter,
         undefined, // knowledgeContext (no knowledge manager configured)
         undefined, // existingTasks (adapter has no listExistingTasks)
-        undefined  // workspaceContext
+        undefined, // workspaceContext
+        expect.any(Object), // taskGenerationHints
       );
     });
   });

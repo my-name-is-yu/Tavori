@@ -193,6 +193,19 @@ describe("validateProviderConfig", () => {
     );
   });
 
+  it("reports error when api_key is missing for native agent_loop on openai", () => {
+    const result = validateProviderConfig({
+      provider: "openai",
+      model: "gpt-5.4-mini",
+      adapter: "agent_loop",
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContainEqual(
+      expect.stringContaining("API key required")
+    );
+  });
+
   it("does not report error when api_key is missing for openai_codex_cli adapter", () => {
     const result = validateProviderConfig({
       provider: "openai",
@@ -256,6 +269,7 @@ describe("MODEL_REGISTRY", () => {
     const entry = MODEL_REGISTRY["gpt-4o-mini"];
     expect(entry.adapters).not.toContain("openai_codex_cli");
     expect(entry.adapters).toContain("openai_api");
+    expect(entry.adapters).toContain("agent_loop");
   });
 
   it("claude models are anthropic provider", () => {

@@ -46,6 +46,7 @@ export { ClaudeCodeCLIAdapter } from "./adapters/agents/claude-code-cli.js";
 export { ClaudeAPIAdapter } from "./adapters/agents/claude-api.js";
 export { OpenAICodexCLIAdapter } from "./adapters/agents/openai-codex.js";
 export type { OpenAICodexCLIAdapterConfig } from "./adapters/agents/openai-codex.js";
+export { NativeAgentLoopAdapter } from "./adapters/agents/native-agent-loop.js";
 export { GitHubIssueAdapter } from "./adapters/github-issue.js";
 export type { GitHubIssueAdapterConfig } from "./adapters/github-issue.js";
 export { GitHubIssueDataSourceAdapter } from "./adapters/datasources/github-issue-datasource.js";
@@ -55,6 +56,13 @@ export type { CodexLLMClientConfig } from "./base/llm/codex-llm-client.js";
 export { loadProviderConfig, saveProviderConfig, DEFAULT_PROVIDER_CONFIG, migrateProviderConfig, validateProviderConfig, MODEL_REGISTRY } from "./base/llm/provider-config.js";
 export type { ProviderConfig, ValidationResult } from "./base/llm/provider-config.js";
 export { TaskLifecycle } from "./orchestrator/execution/task/task-lifecycle.js";
+export {
+  ChatAgentLoopRunner,
+  TaskAgentLoopRunner,
+  createNativeChatAgentLoopRunner,
+  createNativeTaskAgentLoopRunner,
+  shouldUseNativeTaskAgentLoop,
+} from "./orchestrator/execution/agent-loop/index.js";
 export { ReportingEngine } from "./reporting/reporting-engine.js";
 export { KnowledgeManager } from "./platform/knowledge/knowledge-manager.js";
 export { CapabilityDetector } from "./platform/observation/capability-detector.js";

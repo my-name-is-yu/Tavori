@@ -5,21 +5,26 @@
 
 > Related: `observation.md`, `task-lifecycle.md`, `execution-boundary.md`, `session-and-context.md`, `curiosity.md`, `stall-detection.md`
 
+> Current implementation note: knowledge acquisition now spans both deterministic CoreLoop control and bounded agentic phases. The current runtime can use direct tools, Soil, memory recall, and native AgentLoop phases before falling back to heavier investigation work.
+
 ---
 
 ## 1. Role of Knowledge Acquisition
 
 ### Role in the Core Loop
 
-Knowledge acquisition cuts across every step of the task discovery loop (mechanism.md §2), but it is triggered primarily at two points.
+Knowledge acquisition cuts across CoreLoop control and bounded agentic execution, but it is triggered primarily at two points.
 
 ```
-Observation → Gap Recognition → Strategy Selection → Task Definition → (back to Observation)
-                   ↑                    ↑
-         Knowledge gap detected  Knowledge gap detected
-                   │                    │
-                   ↓                    ↓
-         Investigation task generated   Investigation task generated
+Observation / evidence collection -> gap interpretation -> replanning / strategy selection -> task definition
+                         ↑                              ↑
+              Knowledge gap detected         Knowledge gap detected
+                         │                              │
+                         ↓                              ↓
+            direct tool/Soil refresh or bounded AgentLoop phase
+                         │
+                         ↓
+            if still unresolved: investigation task generated
 ```
 
 **Trigger 1: During Gap Recognition**
@@ -36,7 +41,7 @@ Knowledge acquisition is a means to achieving a goal, not an end in itself. PulS
 
 ## 2. Detecting Knowledge Gaps
 
-Knowledge gaps are detected via five types of signals. All of them arise naturally within the core loop.
+Knowledge gaps are detected via multiple signals. They can arise in deterministic CoreLoop logic, in bounded core phases such as `knowledge_refresh`, or during task generation.
 
 ### 2.1 Difficulty Interpreting Observations
 

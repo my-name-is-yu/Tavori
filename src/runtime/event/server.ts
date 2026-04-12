@@ -67,6 +67,7 @@ export class EventServer {
   private readonly eventFileRetryDelayMs: number;
   private readonly eventFileAttempts = new Map<string, number>();
   private readonly eventFileRetryTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private fileWatcherGeneration = 0;
   private readonly authToken: string;
   private envelopeHook?: (eventData: Record<string, unknown>) => void | Promise<void>;
   private commandEnvelopeHook?: (envelope: Envelope) => void | Promise<void>;
@@ -171,16 +172,19 @@ export class EventServer {
     if (this.fileWatcher) return; // already watching
 
     fs.mkdirSync(this.eventsDir, { recursive: true });
-    void this.rescanEventFiles();
+    const generation = ++this.fileWatcherGeneration;
+    void this.rescanEventFiles(generation);
 
     this.fileWatcher = fs.watch(this.eventsDir, (eventType, filename) => {
+      if (generation !== this.fileWatcherGeneration) return;
       if ((eventType !== "rename" && eventType !== "change") || !filename) return;
-      this.queueEventFile(String(filename));
+      this.queueEventFile(String(filename), 0, generation);
     });
   }
 
   /** Stop the file watcher and clean up the handle. */
   stopFileWatcher(): void {
+    this.fileWatcherGeneration += 1;
     if (this.fileWatcher) {
       this.fileWatcher.close();
       this.fileWatcher = null;
@@ -241,24 +245,30 @@ export class EventServer {
     this.eventFileAttempts.delete(filename);
   }
 
-  private async rescanEventFiles(): Promise<void> {
+  private async rescanEventFiles(generation: number): Promise<void> {
     let entries: string[];
     try {
       entries = await fsp.readdir(this.eventsDir);
     } catch {
       return;
     }
+    if (generation !== this.fileWatcherGeneration) return;
     for (const entry of entries) {
-      this.queueEventFile(entry);
+      this.queueEventFile(entry, 0, generation);
     }
   }
 
-  private queueEventFile(filename: string, delayMs = 0): void {
+  private queueEventFile(filename: string, delayMs = 0, generation = this.fileWatcherGeneration): void {
+    if (generation !== this.fileWatcherGeneration) return;
     if (!this.shouldProcessEventFilename(filename)) return;
     if (this.eventFileRetryTimers.has(filename)) return;
     if (delayMs <= 0 && this.processingFiles.has(filename)) return;
 
     const run = (): void => {
+      if (generation !== this.fileWatcherGeneration) {
+        this.eventFileRetryTimers.delete(filename);
+        return;
+      }
       this.eventFileRetryTimers.delete(filename);
       if (this.processingFiles.has(filename)) return;
       this.processingFiles.add(filename);

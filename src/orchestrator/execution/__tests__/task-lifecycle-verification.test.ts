@@ -599,6 +599,58 @@ describe("TaskLifecycle", async () => {
       expect(l2Prompt).toContain("UNIQUE_OUTPUT_MARKER_12345");
     });
 
+    it("includes agentloop verification metadata in L2 review prompt and persisted result", async () => {
+      const spy = createSpyLLMClient([LLM_REVIEW_PASS]);
+      const lifecycle = createLifecycle(spy);
+      const task = makeTask({
+        success_criteria: [
+          {
+            description: "Behavior is correct",
+            verification_method: "Manual review",
+            is_blocking: true,
+          },
+        ],
+      });
+      const result = makeExecutionResult({
+        output: "Patched implementation",
+        agentLoop: {
+          traceId: "trace-1",
+          sessionId: "session-1",
+          turnId: "turn-1",
+          stopReason: "completed",
+          modelTurns: 3,
+          toolCalls: 2,
+          compactions: 1,
+          completionEvidence: ["updated handler", "added regression test"],
+          verificationHints: ["run targeted vitest"],
+          filesChangedPaths: ["src/example.ts"],
+        },
+      });
+
+      const verification = await lifecycle.verifyTask(task, result);
+
+      const l2Prompt = spy.calls[0]!.messages[0]!.content;
+      expect(l2Prompt).toContain("Supplemental execution metadata");
+      expect(l2Prompt).toContain("updated handler");
+      expect(l2Prompt).toContain("run targeted vitest");
+
+      const selfReport = verification.evidence.find((e) => e.layer === "self_report");
+      expect(selfReport?.description).toContain("completion evidence: updated handler; added regression test");
+      expect(selfReport?.description).toContain("verification hints: run targeted vitest");
+
+      const persisted = await stateManager.readRaw(
+        `verification/${task.id}/verification-result.json`
+      ) as Record<string, unknown>;
+      expect(persisted.agent_loop).toMatchObject({
+        traceId: "trace-1",
+        stopReason: "completed",
+      });
+      expect(persisted.executor_report).toMatchObject({
+        completion_evidence: ["updated handler", "added regression test"],
+        verification_hints: ["run targeted vitest"],
+      });
+    });
+
     it("truncates very long output in L2 review prompt", async () => {
       const spy = createSpyLLMClient([LLM_REVIEW_PASS]);
       const lifecycle = createLifecycle(spy);

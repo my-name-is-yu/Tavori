@@ -25,6 +25,10 @@ import { ToolRegistry, ToolExecutor, ToolPermissionManager, ConcurrencyControlle
 import { createBuiltinTools } from "../../../tools/builtin/index.js";
 import { applyChatEventToMessages } from "../../chat/chat-event-state.js";
 import { isSafeBashCommand } from "../../tui/bash-mode.js";
+import {
+  createNativeChatAgentLoopRunner,
+  shouldUseNativeTaskAgentLoop,
+} from "../../../orchestrator/execution/agent-loop/index.js";
 
 const logger = getCliLogger();
 
@@ -184,7 +188,12 @@ export async function cmdChat(
 
   try {
     const llmClient = await buildLLMClient();
-    const adapterRegistry = await buildAdapterRegistry(llmClient);
+    const providerConfig = await loadProviderConfig();
+    const effectiveProviderConfig = {
+      ...providerConfig,
+      adapter: adapterType as typeof providerConfig.adapter,
+    };
+    const adapterRegistry = await buildAdapterRegistry(llmClient, effectiveProviderConfig);
     const adapter = adapterRegistry.getAdapter(adapterType);
     const pulseedDir = stateManager.getBaseDir();
     const trustManager = new TrustManager(stateManager);
@@ -218,6 +227,16 @@ export async function cmdChat(
       permissionManager,
       concurrency: new ConcurrencyController(),
     });
+    const chatAgentLoopRunner = shouldUseNativeTaskAgentLoop(effectiveProviderConfig, llmClient)
+      ? createNativeChatAgentLoopRunner({
+          llmClient,
+          providerConfig: effectiveProviderConfig,
+          toolRegistry: registry,
+          toolExecutor,
+          cwd: process.cwd(),
+          traceBaseDir: stateManager.getBaseDir(),
+        })
+      : undefined;
 
     // Build escalation + tend deps (optional — /track and /tend work only when LLM is available)
     let escalationHandler: EscalationHandler | undefined;
@@ -265,6 +284,7 @@ export async function cmdChat(
       daemonBaseUrl,
       registry,
       toolExecutor,
+      chatAgentLoopRunner,
       approvalFn: promptChatApproval,
     });
 

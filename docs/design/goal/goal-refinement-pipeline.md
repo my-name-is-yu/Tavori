@@ -2,6 +2,8 @@
 
 > Related: `goal-tree.md`, `gap-calculation.md`, `satisficing.md`
 
+> Current implementation note: parts of this design have been implemented, but this document still mixes proposal text with older file paths. The current code lives under `src/orchestrator/goal/` and `src/orchestrator/loop/`. Read this as the design rationale for unifying goal negotiation, decomposition, and runtime re-refinement.
+
 ---
 
 ## 1. Problem
@@ -129,9 +131,15 @@ The prompt includes available data sources from ObservationEngine so the LLM can
 ### 3.4 Where It Lives
 
 ```
+<<<<<<< HEAD
 src/orchestrator/goal/goal-refiner.ts          # NEW — GoalRefiner class
 src/orchestrator/goal/refiner-prompts.ts       # NEW — leaf test prompt builder
 src/base/types/goal-refiner.ts                 # NEW — RefineConfig, LeafTestResult, RefineResult schemas
+=======
+src/orchestrator/goal/goal-refiner.ts     # GoalRefiner class
+src/orchestrator/goal/refiner-prompts.ts  # leaf test prompt builder
+src/base/types/goal-refiner.ts            # RefineConfig, LeafTestResult, RefineResult schemas
+>>>>>>> e49c85c9 (implement native agentloop and coreloop phases)
 ```
 
 **GoalRefiner** composes:
@@ -178,7 +186,11 @@ Each step is independently testable and deployable. No breaking changes until st
 
 2. **Add leaf test** — `src/orchestrator/goal/refiner-prompts.ts` with `buildLeafTestPrompt()`. Unit-testable with mock LLM. No integration yet.
 
+<<<<<<< HEAD
 3. **Add GoalRefiner** — `src/orchestrator/goal/goal-refiner.ts` implementing `refine()`. Calls GoalNegotiator and GoalTreeManager internally. Integration tests against mock LLM.
+=======
+3. **Add GoalRefiner** — `src/orchestrator/goal/goal-refiner.ts` implementing `refine()`. Calls GoalNegotiator and GoalTreeManager internally. Integration tests against mock LLM. Old paths still work.
+>>>>>>> e49c85c9 (implement native agentloop and coreloop phases)
 
 4. **Wire CLI** — `goal add` calls `refine()` by default. `--negotiate` and `--tree` flags become aliases / deprecated. `--no-refine` skips refinement entirely.
 

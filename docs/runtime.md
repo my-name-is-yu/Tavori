@@ -1,30 +1,38 @@
-# PulSeed --- Runtime Infrastructure
+# Runtime
 
+<<<<<<< HEAD
 Implementation-facing baseline: [docs/design/current-baseline.md](design/current-baseline.md)
 
 > The foundational design for "running" the task discovery engine (mechanism.md).
 > While mechanism.md defines "what PulSeed thinks about," this document defines "how PulSeed runs."
+=======
+This document describes how PulSeed runs today.
+>>>>>>> e49c85c9 (implement native agentloop and coreloop phases)
 
----
+The key runtime idea is:
 
-## 1. Orchestration --- How to Execute Discovered Tasks
+- the same orchestration stack is reused by CLI, TUI, chat, and daemon flows
+- `CoreLoop` remains the long-lived controller
+- `AgentLoop` is the bounded executor used inside task, chat, and selected core-phase flows
 
-The output of the task discovery engine is "what should be done next." Executing those tasks, collecting results, and passing them to the next loop — this is the responsibility of the orchestration layer.
+## 1. Runtime surfaces
 
-The task discovery engine decides WHAT. The orchestration layer handles HOW. This separation is intentional. Mixing "what should be done" with "how to control execution" leaves both incomplete.
+PulSeed currently exposes four main ways to run:
 
-### Session Management
+- CLI commands
+- chat mode
+- TUI
+- daemon / cron
 
-A session is the smallest unit of execution. One task, one session. Sessions are stateless: they receive the information they need at startup and return results at completion. That's it.
+All of them share the same underlying state and orchestration modules.
 
-PulSeed has full control over the session lifecycle.
+## 2. CLI
 
-- **Launch**: Start the session by passing the task's scope, success criteria, and constraints. The session doesn't need to know the overall goal. It only needs to know its own task.
-- **Monitoring**: Track the session's progress. Detect timeouts, abnormal terminations, and resource exhaustion.
-- **Termination**: Success criteria met, timeout reached, or stall detected. Terminate the session under whichever condition applies.
+The CLI entry point is `pulseed`.
 
-When a session ends, PulSeed's state is not lost. All state is written to persistent files. Sessions are disposable workspaces; PulSeed's memory lives outside sessions.
+Common commands:
 
+<<<<<<< HEAD
 Execution means are abstracted through adapters. Various AI agents (Claude Code CLI, Claude API, OpenAI Codex CLI, etc.), API calls, human requests. The most suitable execution means is chosen based on the nature of the task. The orchestration layer does not depend on the type of adapter.
 
 ### Result Verification
@@ -126,252 +134,186 @@ In MVP, "scheduling" is the user's (or system cron's) responsibility. PulSeed do
 - Users approve/reject tasks via the approval overlay (`ApprovalOverlay`) on screen. Approval decisions are returned to `TaskLifecycle`'s `approvalFn` via a Promise (same interface as the CLI version's readline reading)
 
 ```
+=======
+```bash
+pulseed setup
+pulseed goal add "<description>"
+pulseed run --goal <id>
+pulseed status --goal <id>
+pulseed report --goal <id>
+pulseed chat
+>>>>>>> e49c85c9 (implement native agentloop and coreloop phases)
 pulseed tui
-  ↓
-entry.ts (DI wiring + Ink render)
-  ↓
-App (app.tsx)
-  ├── useLoop (use-loop.ts): LoopState management, CoreLoop start/stop
-  ├── Dashboard (dashboard.tsx): Goal and dimension progress display
-  ├── Chat (chat.tsx): Chat interface (via IntentRecognizer)
-  ├── ApprovalOverlay (approval-overlay.tsx): Task approval UI
-  ├── HelpOverlay (help-overlay.tsx): Help display
-  └── ReportView (report-view.tsx): Report display
+pulseed start --goal <id>
+pulseed stop
 ```
 
-TUI is not a replacement for CLI mode but a complement to it. The loop execution unit is identical; only "how to view and operate" differs.
+`pulseed run --goal <id>` is the direct way to execute one CoreLoop run.
 
-### Phase 2a: Built-in Scheduler (Daemon Mode)
+## 3. Chat mode
 
-**`pulseed start`** launches a daemon that automatically executes the core loop at configured intervals. **`pulseed stop`** stops it.
+`pulseed chat` is now a real bounded agent runtime, not just a command router.
 
-- The daemon is the resident runtime host for the core loop
-- The core loop itself requires no changes. The cost of daemonization is small
-- Execution interval can be configured per goal (see drive-system.md scheduling design)
-- Process management (PID file, logs, live health probes, durable queueing, and recovery) is handled by the daemon layer
+When the configured provider supports native tool calling, chat uses the native AgentLoop path.
 
-The production daemon uses a watchdog + durable runtime model rather than relying on an in-memory loop. It records runtime health, command acceptance, task execution outcomes, queue claims, goal leases, approvals, outbox events, schedules, task ledgers, and checkpoints to disk so a restart can recover the active goal set and reconcile interrupted work. For the concrete recovery design and operational KPIs, see [Runtime Auto-Recovery](design/infrastructure/runtime-auto-recovery.md).
+Important runtime behavior:
 
-PulSeed now also persists first-class schedule entries under the same runtime state. Common workflows can be created from reusable presets with `pulseed schedule presets` and `pulseed schedule add --preset <name>`, and dream-generated schedule suggestions can be reviewed with `pulseed schedule suggestions <list|apply|reject|dismiss>`.
+- persistent chat session history
+- streaming tool events
+- approvals for restricted actions
+- context compaction
+- ability to operate CoreLoop through tools rather than direct internal calls
 
-Schedule presets are available through `pulseed schedule presets` and `pulseed schedule add --preset <key>`.
+The design rule is explicit in the implementation: chat should manipulate long-lived control through tools, not by bypassing runtime boundaries.
 
-- `daily_brief` depends on an LLM client and notification delivery
-- `weekly_review` depends on an LLM client and notification delivery
-- `dream_consolidation` depends on memory and knowledge consolidation services
-- `goal_probe` depends on a registered data source
+## 4. TUI
 
-Dream-generated schedule suggestions are reviewable through `pulseed schedule suggestions list` and can be `apply`/`reject`/`dismiss`ed. Applied suggestions record provenance on the resulting schedule entry so later surfaces can explain where the schedule came from.
+The TUI is the interactive terminal shell around the same runtime.
 
-### Phase 2b: cron Entry Generation
+It combines:
 
-**`pulseed cron`** outputs a crontab entry the user can add to their shell.
+- goal progress
+- reports
+- approvals
+- chat
+- loop control
 
-```
-$ pulseed cron
-# crontab entry for running PulSeed hourly:
-0 * * * * /usr/local/bin/pulseed run >> ~/.pulseed/logs/cron.log 2>&1
-```
+The TUI can also wire native chat and task AgentLoop runners when the active provider config enables `agent_loop`.
 
-Phase 2b is an alternative to Phase 2a, an option for users who "don't want to keep a daemon running." Whichever is used, the same core loop is executed.
+## 5. Daemon and cron
 
-### Design Principles
+Daemon mode is the resident host for continuous operation.
 
-- The core loop is implemented as a pure function. No dependency on global state
-- CLI is implemented first. Daemon/cron are thin wrappers added afterward
-- Whether the decision of "when to run" stays with the user (MVP) or is delegated to PulSeed (Phase 2) is the user's choice
-
----
-
-## 3. Drive Method --- When and at What Timing to Run
-
-When should the task discovery loop be executed? Running it continuously is wasteful, and running it only on a fixed schedule is insufficient.
-
-### Drive Decision
-
-The core of PulSeed's drive method boils down to one question: **"Is there a goal that needs attention right now?"**
-
-At each potential activation timing, PulSeed answers this question. If the answer is yes, it runs the task discovery loop. If no, it does nothing. This judgment itself must be lightweight. Check the state of each goal and see only whether attention is needed. Deep analysis happens inside the loop.
-
-"Do nothing" is a normal state. When all goals are progressing well, or when intentionally waiting, PulSeed stays quiet. Not running unnecessary loops is itself a smart use of resources.
-
-### Goal-Driven Scheduling
-
-Execution timing follows the nature of the goal. Not a fixed heartbeat.
-
-**Emergency-response goals**: Event-driven is primary, periodic checking is supplementary. Run the loop immediately upon detecting a state change. Periodic checking runs at low frequency as a safety net to prevent "misses."
-
-**Deadline-bound goals**: The distance to the deadline determines execution frequency. While the deadline is far, low-frequency periodic checking is sufficient. As the deadline approaches, the check frequency increases. This is tied to the deadline-driven score in mechanism.md. Goals with higher scores receive attention more frequently.
-
-**Continuous goals**: Low-frequency periodic checks are the baseline. Frequency is raised only when an anomaly is detected. Quietly monitoring normally, reacting immediately when a problem occurs.
-
-When a single PulSeed instance has multiple goals, each goal has its own drive rhythm. The most frequently driven goal determines how often PulSeed activates, but not every goal is checked at every activation. Only goals that need attention have the loop run for them.
-
-### Active and Waiting
-
-PulSeed is not always active. It recognizes situations where "waiting" is the correct judgment.
-
-Immediately after launching an initiative. It takes time for effects to appear. Measuring immediately is meaningless. Decide to "measure N days later" and in the meantime attend to other goals or wait quietly.
-
-When there are external dependencies. Waiting for others' approval, waiting for external service responses, waiting for market reactions. There are timings that PulSeed cannot control. Being able to wait when it's time to wait is equivalent to not taking unnecessary actions.
-
-However, "waiting" is not "forgetting." Goals that are waiting also have their state confirmed periodically. Because the situation may have changed while waiting.
-
-### Types of Activation Triggers
-
-There are 4 types of triggers that activate PulSeed.
-
-**Scheduled activation**: Periodic checks based on the nature of the goal. The most fundamental drive method.
-
-**Event activation**: Change notifications from outside. A data source value exceeded a threshold, a message came from the user, a notification came from an external service. There's no reason to wait when a change occurs.
-
-**Completion activation**: A task completed. Collect the result, update state, discover the next task. Task completion is a natural starting point for the loop.
-
-**Deadline activation**: A deadline is approaching. Separately from periodic checks, the approach of a deadline itself becomes a trigger. When less than one week remains until a deadline, an additional check runs separately from the regular periodic check.
-
-These triggers are not exclusive. Multiple triggers can fire simultaneously. PulSeed records "why it was activated" and processes the most urgent goal first.
-
----
-
-## 4. Context Management --- Handling Long-Term Goals with a Finite Context
-
-An LLM's context window is finite. The goals PulSeed pursues span months to years. How is this contradiction resolved?
-
-The answer is simple. **Most information lives outside the context window.**
-
-### Controlling Session Boundaries
-
-PulSeed controls the start and end of sessions. This is the key to solving the context problem.
-
-The node boundaries of the goal tree become natural session boundaries. One sub-goal, one task corresponds to one session. When a session ends, the results are collected and the context is reset. The next session starts from a blank slate.
-
-The concept of "continuing from the previous session" doesn't exist. Each session is an independent execution unit. The information needed is explicitly passed at session start. It doesn't depend on memory from the previous session.
-
-### Context Assembly
-
-> For the specific algorithm for context selection (priority-based inclusion rules, exclusion rules per session type, MVP's fixed top-4 method), see `design/execution/session-and-context.md` §4. This section describes only the overview.
-
-When launching a session, PulSeed assembles and passes only the information that session needs.
-
-What is passed to task execution sessions:
-- Task definition and success criteria
-- Relevant constraints
-- Previous attempt results (in case of retry)
-- Minimum context needed for the task
-
-What is not passed:
-- The entire goal history
-- Information about unrelated goals
-- Everything PulSeed knows
-
-What is passed to verification sessions:
-- The task's success criteria
-- Means to access the deliverable
-- Reference criteria needed for verification
-
-What is not passed:
-- The execution session's context (to avoid bias)
-- The executor's self-report (to ensure independent judgment)
-
-What is passed to observation sessions:
-- Goal definition and success criteria
-- Information sources to observe
-- Previous observation results (for change detection)
-
-This "minimum necessary context assembly" is how long-term goals are handled with a finite context window. There's no need to remember everything. Only what's needed in this moment needs to be known.
-
-### State Handoff Between Sessions
-
-Sessions are stateless. Then how is consistency maintained across sessions?
-
-Persistent files. All state is written to persistent files.
-
-When a session ends, PulSeed extracts the results and updates the state file. When the next session begins, PulSeed reads the relevant information from the state file and assembles the context for the new session.
-
-When session A's results affect session B, that effect is conveyed through the state file. Session A never directly passes anything to session B. All information flows through persistent files as the relay point.
-
-This design has the side benefit of transparency. State files are human-readable. They can be managed with git. What PulSeed knows and what it bases its decisions on can be confirmed at any time.
-
-### Context Isolation for Multiple Goals
-
-When PulSeed is pursuing multiple goals simultaneously, the context for each goal is completely isolated.
-
-Session A's execution session contains no information about goal B. Session A's failure doesn't affect goal B's judgment either (because they are isolated at the state file level).
-
-This is not mere housekeeping. It's prevention of context pollution. It structurally prevents information obtained in one goal's context from biasing judgments about an unrelated goal.
-
-However, when there are dependencies between goals, exceptions apply. When goal A's results are a prerequisite for goal B, that dependency is explicitly managed by PulSeed, and only the necessary information is included in goal B's context.
-
-### Memory Hierarchy
-
-PulSeed's information is divided into three layers.
-
-**Working Memory**: The context window of the current session. Capacity is limited but processing speed is fast. Only information needed for the task at this moment is here.
-
-**Goal State**: The goal tree, state vectors, and progress records saved in persistent files. Maintains consistency across sessions. Loaded into the session's working memory as needed. This is PulSeed's "medium-term memory."
-
-**Experience Log**: Records of state → action → result. The data that serves as the foundation for learning. Recent raw logs are kept as Short-term Memory in `~/.pulseed/memory/short-term/`, and when they exceed the retention period, they are compressed into patterns and lessons in Long-term Memory (`~/.pulseed/memory/long-term/`) via LLM summarization. Long-term lessons can be referenced across goals and are selectively injected into Working Memory as priority 6 in `design/execution/session-and-context.md` §4. Therefore, "not referenced in individual sessions" applies only to raw logs (Short-term raw JSON); compressed lessons do enter session context. See `design/knowledge/memory-lifecycle.md` for details.
-
-The key point of this hierarchy is that most information lives outside the context window. The context window is a window that holds only "what's needed right now" — it is not the place to store all of PulSeed's knowledge.
-
-### Memory Lifecycle
-
-`design/knowledge/memory-lifecycle.md` defines the specific implementation of the 3-layer memory model.
-
-```
-~/.pulseed/memory/
-├── short-term/
-│   └── goals/<goal_id>/
-│       ├── experience-log.json   # Experience log (raw JSON)
-│       ├── observations.json     # Observation history
-│       ├── strategies.json       # Strategy history
-│       └── tasks.json            # Task history
-├── long-term/
-│   ├── lessons/
-│   │   ├── by-goal/<goal_id>.json       # Per-goal lessons
-│   │   ├── by-dimension/<name>.json     # Per-dimension lessons
-│   │   └── global.json                  # Cross-goal lessons
-│   └── statistics/<goal_id>.json        # Per-goal statistics
-└── archive/<goal_id>/            # Archive for completed/cancelled goals
+```bash
+pulseed start --goal <id>
+pulseed stop
 ```
 
-Short-term raw data is compressed into Long-term lesson entries via LLM summarization when it exceeds a configurable retention loop count (default: 50–200 loops depending on goal type). Long-term lessons are retained indefinitely after goal completion and are used to improve the quality of future strategy selection and task generation. Retention of failure patterns takes priority over success patterns, so as not to repeat the same mistakes.
+Cron is still available for users who do not want a resident daemon:
 
----
-
-## Overview
-
-The four areas are not independent — they work together.
-
-```
-Process Model (CLI / TUI / Daemon / cron)
-  Core loop startup wrapper
-    │
-    │ Launch
-    ↓
-Drive Method
-  "Is there a goal that needs attention right now?"
-    │
-    │ Yes
-    ↓
-Task Discovery Engine (mechanism.md)
-  Observe → Gap recognition → Strategy selection → Task concretization
-    │
-    │ Task determined
-    ↓
-Orchestration
-  Session launch → Execute → Verify → Collect results
-    │
-    │ Results obtained
-    ↓
-Context Management
-  Write results to state file → Assemble context for next session
-    │
-    │ State updated
-    ↓
-Return to Drive Method
+```bash
+pulseed cron --goal <id>
 ```
 
-The process model defines "how it's started," the drive method decides "when it runs," the task discovery engine decides "what to do," orchestration controls "how to execute," and context management organizes "what to remember."
+Both paths ultimately drive the same CoreLoop and TaskLifecycle.
 
-This infrastructure is built by PulSeed itself. Precisely because existing tools are insufficient, PulSeed itself needs this foundation. So that the task discovery engine — its brain — can operate stably over the long term, for multiple goals.
+## 6. Native AgentLoop runtime
+
+PulSeed has a first-class native `agent_loop` adapter.
+
+This adapter is not a separate external executable. It is a selection marker that routes task execution through PulSeed's internal AgentLoop runtime.
+
+Current AgentLoop runtime properties:
+
+- bounded turns
+- bounded tool calls
+- bounded wall-clock time
+- repeated tool-loop detection
+- schema-validated completion
+- context compaction
+- trace and session state capture
+- optional worktree preparation for task execution
+
+This is the path intended to close the gap with Codex-style tool-using execution while keeping PulSeed's persistent architecture.
+
+## 7. CoreLoop inside the runtime
+
+Runtime surfaces do not replace CoreLoop. They host it.
+
+CoreLoop currently coordinates:
+
+- observation
+- gap calculation
+- drive scoring
+- task lifecycle execution
+- tree mode
+- multi-goal mode
+- stall handling
+- completion
+- agentic core phases
+
+Agentic core phases currently include:
+
+- `observe_evidence`
+- `knowledge_refresh`
+- `replanning_options`
+- `stall_investigation`
+- `verification_evidence`
+
+These are bounded sub-runs, not unbounded inner loops.
+
+## 8. Scheduling and directives
+
+CoreLoop can emit next-iteration directives from bounded agentic phases.
+
+Those directives are now consumed by runtime scheduling:
+
+- tree mode can prioritize a child node with a pending directive
+- multi-goal mode can prioritize a goal with a pending directive
+
+This is the current bridge between local bounded agent reasoning and long-lived control.
+
+## 9. Tools in the runtime
+
+Tools are part of the runtime substrate.
+
+Important examples:
+
+- filesystem and git inspection
+- shell command execution
+- test execution
+- task and goal state queries
+- knowledge and memory recall
+- Soil query and maintenance tools
+- schedule management tools
+
+Both CoreLoop phases and AgentLoop sessions run on top of this tool layer with explicit policy.
+
+## 10. Soil and memory in runtime behavior
+
+The runtime exposes long-lived knowledge to bounded runs through:
+
+- state manager data
+- task and session history
+- knowledge manager
+- memory recall
+- `soil_query`
+
+This matters because PulSeed is designed to survive beyond one prompt window.
+
+## 11. Persistence
+
+PulSeed persists local runtime state under `~/.pulseed/`.
+
+Important runtime areas include:
+
+- goals
+- tasks
+- reports
+- schedules
+- runtime health and queue state
+- approvals
+- checkpoints
+- memory
+- Soil projections
+
+The runtime also uses write-ahead-log style durability for parts of state management and health tracking.
+
+## 12. Provider and adapter defaults
+
+The public default direction is now:
+
+- provider selected through `pulseed setup`
+- adapter set to `agent_loop` when the chosen model supports native tool calling
+
+External adapters still matter, but they are no longer the only story for execution.
+
+## 13. Reading order
+
+For the public runtime picture:
+
+1. [README](../README.md)
+2. [Getting Started](getting-started.md)
+3. [Mechanism](mechanism.md)
+4. [Configuration](configuration.md)
+5. [Architecture Map](architecture-map.md)

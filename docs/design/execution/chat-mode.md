@@ -2,6 +2,8 @@
 
 > Defines Tier 1: an interactive, 1-shot execution mode where users give tasks directly and optionally escalate to Tier 2 via `/track`.
 
+> Current implementation note: chat mode is no longer just a thin `adapter.execute()` wrapper. The current runtime can route chat through the native AgentLoop with tool use, bounded turns, approvals, and context compaction. Read older sections in this document as design intent; the runtime truth lives in `src/interface/chat/` and `src/orchestrator/execution/agent-loop/`.
+
 ---
 
 ## 1. Problem Statement
@@ -14,7 +16,7 @@ Without a Tier 1 entry point, PulSeed forces users into one of two bad options:
 - Define a formal goal for every small task (high overhead, wrong abstraction)
 - Use an agent directly, bypassing PulSeed entirely (PulSeed adds no value)
 
-Chat mode solves this by making PulSeed the default entry point for all agent interaction, with organic escalation to heavier tiers when the work grows.
+Chat mode solves this by making PulSeed the default entry point for interactive agent work, with escalation paths into long-lived goal execution when the work grows.
 
 ---
 
@@ -34,15 +36,15 @@ Chat mode solves this by making PulSeed the default entry point for all agent in
 ## 3. Tier Model
 
 ```
-Tier 1 — Chat Mode (NEW)
-    1-shot execution
-    User drives: type task → agent executes → result returned
-    Escalation: /track (→ Tier 2)
+Tier 1 — Chat Mode
+    bounded interactive execution
+    User drives: type task -> AgentLoop/tool execution -> result returned
+    Escalation: /track or /tend style handoff into long-lived control paths
 
-Tier 2 — Goal Pursuit (existing)
-    Goal with observation loop. Tree decomposition is auto-determined by GoalRefiner (leaf detection).
-    PulSeed drives: gap → task → execute → verify → loop
-    Entry: pulseed run, or /track from Tier 1
+Tier 2 — Goal Pursuit
+    goal-driven CoreLoop with optional tree decomposition and multi-goal scheduling
+    PulSeed drives long-lived control, while bounded AgentLoop runs tasks and selected core phases
+    Entry: `pulseed run`, daemon scheduling, TUI control, or chat handoff
 ```
 
 All input starts at Tier 1. Tier 2 is an opt-in promotion, not a separate mode that users must select before typing.
@@ -55,26 +57,27 @@ All input starts at Tier 1. Tier 2 is an opt-in promotion, not a separate mode t
 pulseed chat ["task"]
     │
     ▼
-ChatRunner  (src/chat/chat-runner.ts)
+ChatRunner  (`src/interface/chat/chat-runner.ts`)
     │
     ├── Session scoping
     │       git root detection → session ID
     │       ChatSession created or resumed
     │
-    ├── AgentTask construction
-    │       prompt = task description + conversation history
-    │       cwd   = current working directory
-    │       context = buildChatContext(task, cwd)  ← context-provider.ts
+    ├── Turn construction
+    │       prompt = task description + conversation history + system rules
+    │       cwd    = current working directory
+    │       tools  = built from ToolRegistry
     │
-    ├── adapter.execute(task)
-    │       ← AdapterRegistry.getDefault()  (no changes to adapters)
-    │       Claude Code CLI / Claude API / Codex CLI
+    ├── Native AgentLoop execution when available
+    │       bounded turns / tool policy / compaction / approvals
+    │
+    ├── Fallback adapter execution when native AgentLoop is not selected
     │
     ├── AgentResult
     │       output rendered to terminal
     │       appended to ChatHistory
     │
-    ├── ChatHistory  (src/chat/chat-history.ts)
+    ├── ChatHistory  (`src/interface/chat/chat-history.ts`)
     │       ChatMessage[] in-memory
     │       Persisted to StateManager.writeRaw("chat/sessions/<id>.json")
     │       Compaction: summarize old turns when token budget exceeded
@@ -116,7 +119,7 @@ Responsibilities:
 - Append both the user message and the agent response to `ChatHistory`
 - Detect `/commands` before dispatching to the adapter
 
-Why bypass TaskLifecycle? TaskLifecycle is designed for goal-driven work: it expects dimension targets, drive scores, scope boundaries, and 3-layer verification. Chat mode tasks have none of these. Forcing chat tasks through TaskLifecycle would require fabricating inputs that carry no meaning. The adapter interface is the right level of abstraction here.
+Why avoid TaskLifecycle for normal chat turns? TaskLifecycle is goal-centric. It expects target dimensions, drive scores, scope boundaries, and task verification semantics. Free-form chat work does not naturally provide those. The current runtime therefore uses a bounded AgentLoop for chat, while leaving goal-driven execution to CoreLoop and TaskLifecycle.
 
 **Command interception pattern (from Claude Code):** Before dispatching to the adapter, ChatRunner checks if the input starts with `/`. Slash commands (`/track`, `/help`, `/clear`, `/exit`) are handled locally without an API call. Plain text is forwarded to `adapter.execute()`. This mirrors CC's `processUserInput()` pattern — intercept before dispatch, not after.
 
@@ -174,7 +177,11 @@ The command passes conversation history to the LLM as the primary source for goa
 Parses `pulseed chat [task]` and delegates to ChatRunner.
 
 - If `task` argument is present: non-interactive, single turn
+<<<<<<< HEAD
 - If `task` is absent: open interactive REPL backed by TUI chat component (`src/interface/tui/chat.tsx` — no changes needed)
+=======
+- If `task` is absent: open interactive REPL backed by the TUI chat component (`src/interface/tui/chat.tsx`)
+>>>>>>> e49c85c9 (implement native agentloop and coreloop phases)
 - Flags: `--adapter <name>`, `--resume [id]` (Phase 2), `--timeout <ms>`
 
 ### 5.5 Context Provider Extension (`src/observation/context-provider.ts`)

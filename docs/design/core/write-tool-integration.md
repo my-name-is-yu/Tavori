@@ -1,5 +1,7 @@
 # Tool Integration Design
 
+> Current implementation note: much of this integration has already happened. ChatRunner no longer represents the only tool-using path; the native AgentLoop runtime, CoreLoop phases, and task execution all share the built-in tool substrate. Read this document as a migration/design rationale, not as an untouched future plan.
+
 ## 1. Overview
 
 PulSeed has two existing tool systems that need to be unified:
@@ -28,7 +30,7 @@ PulSeed has two existing tool systems that need to be unified:
 
 **AgentLoop** (interactive): ChatRunner exposes ITool instances as ToolDefinition JSON for LLM function calling. LLM freely picks tools.
 
-**CoreLoop** (autonomous): Fixed sequence using ITool instances directly via ToolExecutor.
+**CoreLoop** (autonomous): deterministic control plus bounded agentic phases using tool policy and ToolExecutor-backed execution.
 
 ---
 

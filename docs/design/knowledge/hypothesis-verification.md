@@ -3,6 +3,8 @@
 > Three design improvements inspired by AutoResearchClaw's PIVOT/REFINE decision loop, self-learning, and convergence detection.
 > These make PulSeed's orchestration loop more autonomous and adaptive.
 
+> Current implementation note: PulSeed now already has structured stall analysis, refine/pivot/continue branching, and bounded agentic core phases. This document should be read as the conceptual background and extension space around those implemented mechanisms, not as a description of a missing feature set.
+
 ---
 
 ## Background
@@ -18,7 +20,11 @@
 
 ### PulSeedtion for Applying This to PulSeed
 
+<<<<<<< HEAD
 PulSeed's current `CoreLoop` plus bounded `AgentLoop` execution model is structurally sound, but has the following issues:
+=======
+PulSeed's orchestration runtime is structurally sound, but the following questions remain important:
+>>>>>>> e49c85c9 (implement native agentloop and coreloop phases)
 
 1. **No defined action after stall detection** — Even when StallDetector determines "it has stalled," CoreLoop has only limited branching
 2. **Zero meta-knowledge for strategy decisions** — There is no record of which strategies were effective for similar goals in the past, and no way to look that up

@@ -265,6 +265,41 @@ describe("TaskLifecycle", async () => {
   // ─────────────────────────────────────────────
 
   describe("runTaskCycle", async () => {
+    it("uses target dimension override and prepends replanning directive to the generation prompt", async () => {
+      const llm = createSpyLLMClient([
+        VALID_TASK_RESPONSE,
+        LLM_REVIEW_PASS,
+      ]);
+      const lifecycle = createLifecycle(llm, {
+        approvalFn: async () => true,
+      });
+      const gapVector = makeGapVector("goal-1", [
+        { name: "coverage", gap: 0.5 },
+        { name: "latency", gap: 0.8 },
+      ]);
+      const context = makeDriveContext(["coverage", "latency"]);
+      const adapter = createMockAdapter([{ success: true, output: "done" }]);
+
+      await lifecycle.runTaskCycle(
+        "goal-1",
+        gapVector,
+        context,
+        adapter,
+        "knowledge-body",
+        undefined,
+        undefined,
+        {
+          targetDimensionOverride: "coverage",
+          knowledgeContextPrefix: "Replanning directive:\nPrefer the coverage-first fix.",
+        }
+      );
+
+      const generationPrompt = String(llm.calls[0]!.messages[0]!.content);
+      expect(generationPrompt).toContain('Dimension to improve: "coverage"');
+      expect(generationPrompt).toContain("Replanning directive:");
+      expect(generationPrompt).toContain("knowledge-body");
+    });
+
     it("happy path: select -> generate -> approve -> execute -> verify pass -> completed", async () => {
       // LLM responses: 1) task generation, 2) L2 review (L1 no longer uses LLM)
       const llm = createMockLLMClient([

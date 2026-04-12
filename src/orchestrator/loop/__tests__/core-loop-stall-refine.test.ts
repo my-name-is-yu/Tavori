@@ -400,6 +400,34 @@ describe("detectStallsAndRebalance — reRefineLeaf on observation-failure stall
     expect(result.stallDetected).toBe(true);
   });
 
+  it("honors replanning continue hint and avoids pivoting", async () => {
+    const deps = createBaseDeps(tmpDir);
+    const goal = makeGoal({ id: "goal-1" });
+    await deps.stateManager.saveGoal(goal);
+
+    const gapHistory = makeGapHistoryWithStall("dim1", 5);
+    await deps.stateManager.saveGapHistory("goal-1", gapHistory);
+
+    const stallReport = makeStallReport({
+      goal_id: "goal-1",
+      dimension_name: "dim1",
+    });
+    (deps.stallDetector.checkDimensionStall as ReturnType<typeof vi.fn>).mockReturnValue(stallReport);
+    (deps.stallDetector.analyzeStallCause as ReturnType<typeof vi.fn> | undefined)?.mockReturnValue?.({
+      recommended_action: "pivot",
+      evidence: ["plateau"],
+    });
+
+    const ctx = buildPhaseCtx(deps, { maxIterations: 10, adapterType: "openai_codex_cli" });
+    const result = makeIterationResult();
+
+    await detectStallsAndRebalance(ctx, "goal-1", goal, result, { recommendedAction: "continue" });
+
+    expect(result.stallDetected).toBe(true);
+    expect(result.pivotOccurred).toBe(false);
+    expect(deps.strategyManager.onStallDetected).not.toHaveBeenCalled();
+  });
+
   it("reRefineLeaf() failure is non-fatal — loop continues", async () => {
     const deps = createBaseDeps(tmpDir);
 

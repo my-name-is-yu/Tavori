@@ -1,5 +1,7 @@
 # LLM Fault Tolerance Design
 
+> Current implementation note: the risk model remains relevant, but many file paths below predate the current `src/orchestrator/`, `src/platform/`, and `src/base/` layout. Treat implementation-location bullets as approximate unless they already match the current tree.
+
 ---
 
 ## 1. Overview
@@ -258,7 +260,11 @@ task.intended_direction is assigned by task-generation.ts (not yet implemented â
 **Current limitation**: The `task.intended_direction` field does not exist in the current task schema. Enabling this guard requires a schema addition.
 
 **Implementation locations**:
+<<<<<<< HEAD
 - Add `intended_direction?: "increase" | "decrease" | "neutral"` to `src/base/types/tasks.ts`
+=======
+- Add `intended_direction?: "increase" | "decrease" | "neutral"` to `src/types/tasks.ts`
+>>>>>>> e49c85c9 (implement native agentloop and coreloop phases)
 - Add assignment instructions to the prompt in `src/orchestrator/execution/task/task-generation.ts`
 - Add the check inside the application loop in `src/orchestrator/execution/task/task-verifier.ts`
 

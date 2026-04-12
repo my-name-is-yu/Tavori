@@ -94,7 +94,7 @@ describe("cmdSetup non-interactive", () => {
     const config = await readConfig();
     expect(config.provider).toBe("openai");
     expect(config.model).toBe("gpt-5.4-mini");
-    expect(config.adapter).toBe("openai_codex_cli");
+    expect(config.adapter).toBe("agent_loop");
   });
 
   it("uses default model for anthropic when --model is not provided", async () => {
@@ -108,7 +108,32 @@ describe("cmdSetup non-interactive", () => {
     const config = await readConfig();
     expect(config.provider).toBe("anthropic");
     expect(config.model).toBe("claude-sonnet-4-6");
-    expect(config.adapter).toBe("claude_code_cli");
+    expect(config.adapter).toBe("agent_loop");
+  });
+
+  it("saves native agentloop worktree settings when flags are provided", async () => {
+    process.env["OPENAI_API_KEY"] = "sk-test-key-12345678";
+    const { cmdSetup } = await import("../commands/setup.js");
+
+    const result = await cmdSetup([
+      "--provider", "openai",
+      "--agentloop-worktree", "on",
+      "--agentloop-worktree-base-dir", "/tmp/pulseed-agentloop-worktrees",
+      "--agentloop-worktree-keep-debug", "true",
+      "--agentloop-worktree-cleanup", "never",
+    ]);
+
+    expect(result).toBe(0);
+
+    const config = await readConfig();
+    expect(config.agent_loop).toEqual({
+      worktree: {
+        enabled: true,
+        base_dir: "/tmp/pulseed-agentloop-worktrees",
+        keep_for_debug: true,
+        cleanup_policy: "never",
+      },
+    });
   });
 
   it("returns error for invalid provider", async () => {

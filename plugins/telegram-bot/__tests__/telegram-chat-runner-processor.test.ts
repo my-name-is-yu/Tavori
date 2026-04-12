@@ -14,6 +14,8 @@ const mockBuildAdapterRegistry = vi.hoisted(() => vi.fn().mockResolvedValue({
 }));
 const mockCreateBuiltinTools = vi.hoisted(() => vi.fn().mockReturnValue([]));
 const mockGetGlobalCrossPlatformChatSessionManager = vi.hoisted(() => vi.fn().mockResolvedValue(null));
+const mockShouldUseNativeTaskAgentLoop = vi.hoisted(() => vi.fn().mockReturnValue(false));
+const mockCreateNativeChatAgentLoopRunner = vi.hoisted(() => vi.fn());
 
 vi.mock("pulseed", () => {
   class FakeStateManager {
@@ -55,6 +57,8 @@ vi.mock("pulseed", () => {
     },
     createBuiltinTools: mockCreateBuiltinTools,
     getGlobalCrossPlatformChatSessionManager: mockGetGlobalCrossPlatformChatSessionManager,
+    shouldUseNativeTaskAgentLoop: mockShouldUseNativeTaskAgentLoop,
+    createNativeChatAgentLoopRunner: mockCreateNativeChatAgentLoopRunner,
   };
 });
 
@@ -70,6 +74,9 @@ describe("TelegramChatRunnerProcessor", () => {
     mockCreateBuiltinTools.mockClear();
     mockGetGlobalCrossPlatformChatSessionManager.mockReset();
     mockGetGlobalCrossPlatformChatSessionManager.mockResolvedValue(null);
+    mockShouldUseNativeTaskAgentLoop.mockReset();
+    mockShouldUseNativeTaskAgentLoop.mockReturnValue(false);
+    mockCreateNativeChatAgentLoopRunner.mockReset();
   });
 
   it("reuses one ChatRunner per chatId", async () => {

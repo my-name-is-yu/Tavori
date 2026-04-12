@@ -4,9 +4,11 @@
 **Author:** Auto-generated
 **Date:** 2026-04-05
 
+> Current implementation note: the runtime has evolved beyond the exact TUI/daemon split described below. TUI, chat, daemon, and schedule flows now all sit on top of the shared CoreLoop + AgentLoop runtime stack. Read this document as a direction for daemon/client ownership, not a line-by-line map of the current interface code.
+
 ## Overview
 
-PulSeed's TUI currently creates its own CoreLoop inline — closing the TUI kills the loop. This design makes the daemon the single owner of CoreLoop execution, with TUI (and future Web UI, Telegram) as disposable clients that connect via SSE + REST.
+This design makes the daemon the single owner of long-lived goal execution, with TUI and future clients acting as disposable surfaces over the same runtime state.
 
 ## Architecture
 

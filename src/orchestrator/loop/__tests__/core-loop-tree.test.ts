@@ -519,6 +519,7 @@ describe("CoreLoop tree mode (14C)", async () => {
   function createTreeLoopOrchestratorMock(nodeId = "node-id-1") {
     return {
       selectNextNode: vi.fn().mockReturnValue(nodeId),
+      selectPreferredNode: vi.fn().mockResolvedValue(undefined),
       pauseNodeLoop: vi.fn(),
       resumeNodeLoop: vi.fn(),
       onNodeCompleted: vi.fn(),
@@ -692,6 +693,62 @@ describe("CoreLoop tree mode (14C)", async () => {
     expect(iterResult.goalId).toBe("node-id-1");
   });
 
+  it("runTreeIteration prefers a node with a pending directive", async () => {
+    const orchestratorMock = createTreeLoopOrchestratorMock("node-id-1");
+    orchestratorMock.selectPreferredNode.mockResolvedValue("node-id-2");
+    const { deps, mocks } = createTreeModeDeps(tmpDir, orchestratorMock);
+
+    const rootGoal = makeGoal({ id: "root-1", children_ids: ["node-id-1", "node-id-2"] });
+    const nodeGoal1 = makeGoal({ id: "node-id-1", parent_id: "root-1" });
+    const nodeGoal2 = makeGoal({ id: "node-id-2", parent_id: "root-1" });
+    await mocks.stateManager.saveGoal(rootGoal);
+    await mocks.stateManager.saveGoal(nodeGoal1);
+    await mocks.stateManager.saveGoal(nodeGoal2);
+
+    const loop = new CoreLoop(deps, { treeMode: true, delayBetweenLoopsMs: 0 });
+    (loop as any).pendingIterationDirectives.set("node-id-2", {
+      sourcePhase: "replanning_options",
+      reason: "follow up on replanning candidate",
+      focusDimension: "dim2",
+      preferredAction: "continue",
+      requestedPhase: "normal",
+    });
+
+    const iterResult = await loop.runTreeIteration("root-1", 0, new Map());
+
+    expect(orchestratorMock.selectPreferredNode).toHaveBeenCalledWith("root-1", ["node-id-2"]);
+    expect(orchestratorMock.selectNextNode).not.toHaveBeenCalled();
+    expect(iterResult.goalId).toBe("node-id-2");
+  });
+
+  it("runTreeIteration falls back to selectNextNode when no preferred node is eligible", async () => {
+    const orchestratorMock = createTreeLoopOrchestratorMock("node-id-1");
+    orchestratorMock.selectPreferredNode.mockResolvedValue(undefined);
+    const { deps, mocks } = createTreeModeDeps(tmpDir, orchestratorMock);
+
+    const rootGoal = makeGoal({ id: "root-1", children_ids: ["node-id-1", "node-id-2"] });
+    const nodeGoal1 = makeGoal({ id: "node-id-1", parent_id: "root-1" });
+    const nodeGoal2 = makeGoal({ id: "node-id-2", parent_id: "root-1" });
+    await mocks.stateManager.saveGoal(rootGoal);
+    await mocks.stateManager.saveGoal(nodeGoal1);
+    await mocks.stateManager.saveGoal(nodeGoal2);
+
+    const loop = new CoreLoop(deps, { treeMode: true, delayBetweenLoopsMs: 0 });
+    (loop as any).pendingIterationDirectives.set("node-id-2", {
+      sourcePhase: "knowledge_refresh",
+      reason: "need more evidence",
+      focusDimension: "dim2",
+      preferredAction: "continue",
+      requestedPhase: "knowledge_refresh",
+    });
+
+    const iterResult = await loop.runTreeIteration("root-1", 0, new Map());
+
+    expect(orchestratorMock.selectPreferredNode).toHaveBeenCalledWith("root-1", ["node-id-2"]);
+    expect(orchestratorMock.selectNextNode).toHaveBeenCalledWith("root-1");
+    expect(iterResult.goalId).toBe("node-id-1");
+  });
+
   it("runTreeIteration with null node returns rootId and no task", async () => {
     const orchestratorMock = createTreeLoopOrchestratorMock();
     orchestratorMock.selectNextNode.mockReturnValue(null);
@@ -742,7 +799,7 @@ describe("CoreLoop tree mode (14C)", async () => {
       const memoryLifecycleManager = {
         onGoalClose: vi.fn().mockResolvedValue(undefined),
       };
-      deps.memoryLifecycleManager = memoryLifecycleManager as unknown as import("../../knowledge/memory/memory-lifecycle.js").MemoryLifecycleManager;
+      deps.memoryLifecycleManager = memoryLifecycleManager as unknown as import("../../../platform/knowledge/memory/memory-lifecycle.js").MemoryLifecycleManager;
 
       const loop = new CoreLoop(deps, { maxIterations: 10, delayBetweenLoopsMs: 0 });
       const result = await loop.run("goal-1");

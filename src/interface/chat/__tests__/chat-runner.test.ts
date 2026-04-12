@@ -5,6 +5,7 @@ import type { StateManager } from "../../../base/state/state-manager.js";
 import type { IAdapter, AgentResult } from "../../../orchestrator/execution/adapter-layer.js";
 import type { EscalationHandler, EscalationResult } from "../escalation.js";
 import type { ILLMClient } from "../../../base/llm/llm-client.js";
+import type { ChatAgentLoopRunner } from "../../../orchestrator/execution/agent-loop/chat-agent-loop-runner.js";
 
 // Mock context-provider so tests don't walk the real filesystem
 vi.mock("../../../platform/observation/context-provider.js", () => ({
@@ -193,6 +194,63 @@ describe("ChatRunner", () => {
       expect(result.success).toBe(true);
       expect(result.output).toContain("/help");
       expect(adapter.execute).not.toHaveBeenCalled();
+    });
+
+    it("/resume resumes native agentloop state without writing a new user turn", async () => {
+      const stateManager = makeMockStateManager();
+      const adapter = makeMockAdapter();
+      const savedState = {
+        sessionId: "agent-session",
+        traceId: "trace-1",
+        turnId: "turn-1",
+        goalId: "chat",
+        cwd: "/repo",
+        modelRef: "openai/gpt-5.4-mini",
+        messages: [{ role: "assistant", content: "continuing..." }],
+        modelTurns: 1,
+        toolCalls: 0,
+        compactions: 0,
+        completionValidationAttempts: 0,
+        calledTools: [],
+        lastToolLoopSignature: null,
+        repeatedToolLoopCount: 0,
+        finalText: "continuing...",
+        status: "failed",
+        stopReason: "timeout",
+        updatedAt: new Date().toISOString(),
+      };
+      (stateManager.readRaw as ReturnType<typeof vi.fn>).mockResolvedValue(savedState);
+      const chatAgentLoopRunner = {
+        execute: vi.fn().mockResolvedValue({
+          success: true,
+          output: "Resumed successfully",
+          error: null,
+          exit_code: null,
+          elapsed_ms: 30,
+          stopped_reason: "completed",
+        }),
+      } as unknown as ChatAgentLoopRunner;
+      const runner = new ChatRunner(makeDeps({ stateManager, adapter, chatAgentLoopRunner }));
+
+      runner.startSession("/repo");
+      const result = await runner.execute("/resume", "/repo");
+
+      expect(result.success).toBe(true);
+      expect(result.output).toBe("Resumed successfully");
+      expect(adapter.execute).not.toHaveBeenCalled();
+      expect(chatAgentLoopRunner.execute).toHaveBeenCalledOnce();
+      const input = (chatAgentLoopRunner.execute as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
+        resumeOnly?: boolean;
+        resumeState?: { sessionId: string };
+        resumeStatePath?: string;
+      };
+      expect(input.resumeOnly).toBe(true);
+      expect(input.resumeState?.sessionId).toBe("agent-session");
+      expect(input.resumeStatePath).toMatch(/^chat\/agentloop\//);
+
+      const writeRawMock = stateManager.writeRaw as ReturnType<typeof vi.fn>;
+      expect(writeRawMock).toHaveBeenCalledTimes(1);
+      expect(stateManager.readRaw).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -411,6 +469,83 @@ describe("ChatRunner", () => {
   });
 
   describe("supportsToolCalling routing", () => {
+    it("routes to chatAgentLoopRunner when configured", async () => {
+      const seenEvents: string[] = [];
+      const approvalFn = vi.fn().mockResolvedValue(true);
+      const adapter = makeMockAdapter();
+      const chatAgentLoopRunner = {
+        execute: vi.fn().mockImplementation(async (input: {
+          eventSink?: { emit(event: unknown): Promise<void> | void };
+          approvalFn?: (request: { reason: string }) => Promise<boolean>;
+        }) => {
+          await input.eventSink?.emit({
+            type: "tool_call_started",
+            callId: "call-1",
+            toolName: "shell_command",
+            inputPreview: "{\"command\":\"pwd\"}",
+          });
+          await input.eventSink?.emit({
+            type: "approval_request",
+            callId: "call-approval",
+            turnId: "agent-turn",
+            createdAt: new Date().toISOString(),
+            toolName: "apply_patch",
+            reason: "needs confirmation",
+          });
+          await input.approvalFn?.({ reason: "needs confirmation" });
+          await input.eventSink?.emit({
+            type: "tool_call_finished",
+            callId: "call-1",
+            toolName: "shell_command",
+            success: true,
+            outputPreview: "/repo",
+            durationMs: 12,
+          });
+          await input.eventSink?.emit({
+            type: "context_compaction",
+            turnId: "agent-turn",
+            createdAt: new Date().toISOString(),
+            phase: "mid_turn",
+            reason: "context_limit",
+            inputMessages: 10,
+            outputMessages: 4,
+          });
+          return {
+            success: true,
+            output: "Native agentloop response",
+            error: null,
+            exit_code: null,
+            elapsed_ms: 42,
+            stopped_reason: "completed",
+          };
+        }),
+      } as unknown as ChatAgentLoopRunner;
+      const llmClient = {
+        supportsToolCalling: () => true,
+        sendMessage: vi.fn().mockRejectedValue(new Error("sendMessage must not be called")),
+        parseJSON: vi.fn(),
+      };
+
+      const runner = new ChatRunner(makeDeps({
+        adapter,
+        chatAgentLoopRunner,
+        llmClient: llmClient as never,
+        approvalFn,
+        onEvent: (event) => { seenEvents.push(event.type); },
+      }));
+      const result = await runner.execute("Do something", "/repo");
+
+      expect((chatAgentLoopRunner.execute as ReturnType<typeof vi.fn>)).toHaveBeenCalledOnce();
+      expect(llmClient.sendMessage).not.toHaveBeenCalled();
+      expect(adapter.execute).not.toHaveBeenCalled();
+      expect(result.success).toBe(true);
+      expect(result.output).toBe("Native agentloop response");
+      expect(approvalFn).toHaveBeenCalledWith("needs confirmation");
+      expect(seenEvents).toContain("tool_start");
+      expect(seenEvents).toContain("tool_end");
+      expect(seenEvents).toContain("tool_update");
+    });
+
     it("routes to adapter.execute when supportsToolCalling() returns false", async () => {
       const adapter = makeMockAdapter();
       const llmClient = {

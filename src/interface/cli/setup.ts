@@ -16,6 +16,7 @@ import { FileExistenceDataSourceAdapter } from "../../adapters/datasources/file-
 import { ShellDataSourceAdapter } from "../../adapters/datasources/shell-datasource.js";
 import { createWorkspaceContextProvider } from "../../platform/observation/workspace-context.js";
 import { buildLLMClient, buildAdapterRegistry } from "../../base/llm/provider-factory.js";
+import { loadProviderConfig } from "../../base/llm/provider-config.js";
 import { TrustManager } from "../../platform/traits/trust-manager.js";
 import { CuriosityEngine } from "../../platform/traits/curiosity-engine.js";
 import { DriveSystem } from "../../platform/drive/drive-system.js";
@@ -59,6 +60,12 @@ import { getCliLogger } from "./cli-logger.js";
 import { formatOperationError } from "./utils.js";
 import { ToolRegistry, ToolExecutor, ToolPermissionManager, ConcurrencyController, createBuiltinTools } from "../../tools/index.js";
 import { isSafeBashCommand } from "../tui/bash-mode.js";
+import {
+  createNativeTaskAgentLoopRunner,
+  shouldUseNativeTaskAgentLoop,
+  type SoilPrefetchQuery,
+  type SoilPrefetchResult,
+} from "../../orchestrator/execution/agent-loop/index.js";
 
 export function createCliDataSourceAdapter(
   cfg: DataSourceConfig,
@@ -305,6 +312,41 @@ export async function buildDeps(
     sessionManager,
   });
 
+  const providerConfig = await loadProviderConfig();
+  const soilPrefetch = memoryLifecycleManager
+    ? async (query: SoilPrefetchQuery): Promise<SoilPrefetchResult | null> => {
+        const lessons = await memoryLifecycleManager.searchCrossGoalLessons(query.query, query.limit);
+        if (lessons.length === 0) return null;
+        return {
+          content: [
+            "Soil cross-goal lessons:",
+            ...lessons.map((lesson, index) => `${index + 1}. ${lesson.lesson}`),
+          ].join("\n"),
+          soilIds: lessons.map((lesson) => lesson.lesson_id),
+          retrievalSource: vectorIndex ? "index" : "manifest",
+        };
+      }
+    : undefined;
+  const agentLoopRunner = shouldUseNativeTaskAgentLoop(providerConfig, llmClient)
+    ? createNativeTaskAgentLoopRunner({
+        llmClient,
+      providerConfig,
+      toolRegistry,
+      toolExecutor,
+      cwd: resolvedWorkspacePath,
+      traceBaseDir: stateManager.getBaseDir(),
+      soilPrefetch,
+      defaultWorktreePolicy: providerConfig.agent_loop?.worktree
+        ? {
+            enabled: providerConfig.agent_loop.worktree.enabled,
+            baseDir: providerConfig.agent_loop.worktree.base_dir,
+            keepForDebug: providerConfig.agent_loop.worktree.keep_for_debug,
+            cleanupPolicy: providerConfig.agent_loop.worktree.cleanup_policy,
+          }
+        : undefined,
+    })
+    : undefined;
+
   const taskLifecycle = new TaskLifecycle({
     stateManager,
     llmClient,
@@ -321,6 +363,7 @@ export async function buildDeps(
       knowledgeTransfer,
       memoryLifecycle: memoryLifecycleManager,
       toolExecutor,
+      agentLoopRunner,
       revertCwd: resolvedWorkspacePath,
       healthCheckCwd: resolvedWorkspacePath,
     },

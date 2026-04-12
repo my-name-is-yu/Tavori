@@ -29,6 +29,9 @@ import type { GapVector } from "../../../base/types/gap.js";
 import type { DriveContext, DriveScore } from "../../../base/types/drive.js";
 import type { ToolExecutor } from "../../../tools/executor.js";
 import type { ToolRegistry } from "../../../tools/registry.js";
+import type { CorePhaseRunner } from "../../execution/agent-loop/core-phase-runner.js";
+import type { CorePhasePolicyRegistry } from "./phase-policy.js";
+import type { CoreDecisionEngine } from "./decision-engine.js";
 export type {
   LoopIterationResult,
   LoopResult,
@@ -247,6 +250,12 @@ export interface CoreLoopDeps extends ObservationDeps, TreeDeps, StallDeps, Task
   toolExecutor?: ToolExecutor;
   /** Optional ToolRegistry for context-aware tool assembly. */
   toolRegistry?: ToolRegistry;
+  /** Optional bounded agentloop runner for core phases. */
+  corePhaseRunner?: CorePhaseRunner;
+  /** Optional policy registry for core phase runtime. */
+  corePhasePolicyRegistry?: CorePhasePolicyRegistry;
+  /** Optional deterministic decision engine for iteration/run control. */
+  coreDecisionEngine?: CoreDecisionEngine;
 }
 
 export type ProgressPhase =

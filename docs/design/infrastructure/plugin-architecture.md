@@ -6,6 +6,8 @@
 
 > Related: `data-source.md`, `trust-and-safety.md`, `task-lifecycle.md`, `knowledge-acquisition.md`, `execution-boundary.md`
 
+> Current implementation note: this document predates the stronger native AgentLoop/tooling path. Plugins are still important, but they now sit beside built-in tools and native `agent_loop` execution rather than being the only way PulSeed can act beyond pure orchestration.
+
 ---
 
 ## §1 Overview and PulSeedtion
@@ -14,7 +16,11 @@
 
 In Claude Code and OpenClaw, plugins are "tools the user explicitly calls." The user runs a command and the tool responds. The user is the active agent.
 
+<<<<<<< HEAD
 PulSeed plugins are different. PulSeed's runtime is driven by an autonomous `CoreLoop` and bounded `AgentLoop` executions, not only by direct user instructions. Therefore, plugins must also be things **PulSeed autonomously selects and integrates into the runtime**. Not requiring user instructions like "please call this plugin" is the starting point of PulSeed's plugin design.
+=======
+PulSeed plugins are different. PulSeed's long-lived control runtime runs autonomously without user instructions. Therefore, plugins must also be things **PulSeed autonomously selects and integrates into CoreLoop, AgentLoop, or runtime services**. Not requiring user instructions like "please call this plugin" is the starting point of PulSeed's plugin design.
+>>>>>>> e49c85c9 (implement native agentloop and coreloop phases)
 
 ```
 Claude Code / OpenClaw:
@@ -33,7 +39,7 @@ What belongs in PulSeed's core should be minimal. Use the following criteria:
 
 | Criterion | Location | Example |
 |-----------|----------|----|
-| Essential to the core loop (observe/gap/score/task/execute/verify) | Core | GapCalculator, DriveScorer |
+| Essential to the core control/execution substrate | Core | CoreLoop, AgentLoop, ToolRegistry, GapCalculator, DriveScorer |
 | Zero external dependencies, highly generic | Can be bundled with core | FileDataSourceAdapter, FileExistenceDataSourceAdapter |
 | Depends on specific external services or SaaS | Plugin | JiraAdapter, SlackNotifier, LinearDataSource |
 | Future expansion expected but not currently needed | Plugin candidate | Webhook adapter, custom LLM backend |

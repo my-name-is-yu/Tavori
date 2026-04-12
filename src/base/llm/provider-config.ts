@@ -51,12 +51,12 @@ export async function readCodexOAuthToken(): Promise<string | undefined> {
  * Ollama models are dynamic and not listed here.
  */
 export const MODEL_REGISTRY: Record<string, { provider: string; adapters: string[] }> = {
-  "gpt-5.4-mini": { provider: "openai", adapters: ["openai_codex_cli", "openai_api"] },
-  "gpt-4.1": { provider: "openai", adapters: ["openai_codex_cli", "openai_api"] },
-  "gpt-4o-mini": { provider: "openai", adapters: ["openai_api"] },
-  "o3-mini": { provider: "openai", adapters: ["openai_api"] },
-  "claude-sonnet-4-6": { provider: "anthropic", adapters: ["claude_code_cli", "claude_api"] },
-  "claude-haiku-4-5": { provider: "anthropic", adapters: ["claude_code_cli", "claude_api"] },
+  "gpt-5.4-mini": { provider: "openai", adapters: ["openai_codex_cli", "openai_api", "agent_loop"] },
+  "gpt-4.1": { provider: "openai", adapters: ["openai_codex_cli", "openai_api", "agent_loop"] },
+  "gpt-4o-mini": { provider: "openai", adapters: ["openai_api", "agent_loop"] },
+  "o3-mini": { provider: "openai", adapters: ["openai_api", "agent_loop"] },
+  "claude-sonnet-4-6": { provider: "anthropic", adapters: ["claude_code_cli", "claude_api", "agent_loop"] },
+  "claude-haiku-4-5": { provider: "anthropic", adapters: ["claude_code_cli", "claude_api", "agent_loop"] },
 };
 
 // ─── Types ───
@@ -73,7 +73,7 @@ export interface ProviderConfig {
   light_model?: string;
 
   /** Which adapter to use by default for task execution */
-  adapter: "claude_code_cli" | "claude_api" | "openai_codex_cli" | "openai_api";
+  adapter: "claude_code_cli" | "claude_api" | "openai_codex_cli" | "openai_api" | "agent_loop";
 
   /** API key (for openai or anthropic) */
   api_key?: string;
@@ -103,12 +103,22 @@ export interface ProviderConfig {
     model?: string;
     work_dir?: string;
   };
+
+  /** Native agentloop runtime settings */
+  agent_loop?: {
+    worktree?: {
+      enabled?: boolean;
+      base_dir?: string;
+      keep_for_debug?: boolean;
+      cleanup_policy?: "on_success" | "always" | "never";
+    };
+  };
 }
 
 /** Old nested provider config format (for migration) */
 interface LegacyProviderConfig {
   llm_provider: "anthropic" | "openai" | "ollama" | "codex";
-  default_adapter: "claude_code_cli" | "claude_api" | "openai_codex_cli" | "openai_api";
+  default_adapter: "claude_code_cli" | "claude_api" | "openai_codex_cli" | "openai_api" | "agent_loop";
   anthropic?: { api_key?: string; model?: string };
   openai?: { api_key?: string; model?: string; base_url?: string };
   ollama?: { base_url?: string; model?: string };
@@ -258,7 +268,8 @@ function resolveAdapter(
     envAdapter === "claude_code_cli" ||
     envAdapter === "claude_api" ||
     envAdapter === "openai_codex_cli" ||
-    envAdapter === "openai_api"
+    envAdapter === "openai_api" ||
+    envAdapter === "agent_loop"
   ) {
     return envAdapter;
   }
@@ -382,6 +393,7 @@ export async function loadProviderConfig(): Promise<ProviderConfig> {
   if (fileConfig.a2a !== undefined) config.a2a = fileConfig.a2a;
   if (fileConfig.light_model !== undefined) config.light_model = fileConfig.light_model;
   if (fileConfig.openclaw !== undefined) config.openclaw = fileConfig.openclaw;
+  if (fileConfig.agent_loop !== undefined) config.agent_loop = fileConfig.agent_loop;
 
   // Validate and log warnings (only once per process)
   const validation = validateProviderConfig(config);
@@ -404,6 +416,7 @@ export async function loadProviderConfig(): Promise<ProviderConfig> {
       if (fileConfig.base_url !== undefined) fileOnly.base_url = fileConfig.base_url;
       if (fileConfig.codex_cli_path !== undefined) fileOnly.codex_cli_path = fileConfig.codex_cli_path;
       if (fileConfig.a2a !== undefined) fileOnly.a2a = fileConfig.a2a;
+      if (fileConfig.agent_loop !== undefined) fileOnly.agent_loop = fileConfig.agent_loop;
       await saveProviderConfig(fileOnly);
     } catch {
       // Best-effort — don't fail if we can't save
@@ -427,6 +440,7 @@ export async function getProviderRuntimeFingerprint(): Promise<string> {
       : null,
     a2a: config.a2a ?? null,
     openclaw: config.openclaw ?? null,
+    agent_loop: config.agent_loop ?? null,
   };
 
   return JSON.stringify(fingerprintSource);

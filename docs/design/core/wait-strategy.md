@@ -6,6 +6,8 @@
 > the integration seams. For schema details see portfolio-management.md §7; for
 > stall suppression see stall-detection.md §2.5.
 
+> Current implementation note: file paths and loop-phase names in this document predate parts of the CoreLoop redesign. Read the intent as current, but verify exact ownership against `src/orchestrator/strategy/`, `src/orchestrator/loop/`, and `src/platform/drive/`.
+
 ---
 
 ## 1. Why WaitStrategy Exists

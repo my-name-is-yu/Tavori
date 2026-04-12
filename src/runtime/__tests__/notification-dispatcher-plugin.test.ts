@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { NotificationDispatcher } from "../notification-dispatcher.js";
 import { NotifierRegistry } from "../notifier-registry.js";
 import type { INotifier, NotificationEvent, NotificationEventType } from "../../base/types/plugin.js";
@@ -41,6 +41,10 @@ describe("NotificationDispatcher — NotifierRegistry integration", () => {
     registry = new NotifierRegistry();
     // No channels configured — we only test plugin routing here
     dispatcher = new NotificationDispatcher({}, registry);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("routes a mapped report type to a matching notifier", async () => {
@@ -186,6 +190,9 @@ describe("NotificationDispatcher — NotifierRegistry integration", () => {
   });
 
   it("applies DND suppression to plugin notifiers", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-14T02:00:00.000Z"));
+
     dispatcher = new NotificationDispatcher(
       {
         do_not_disturb: {

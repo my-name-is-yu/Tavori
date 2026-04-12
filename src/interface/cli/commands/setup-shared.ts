@@ -28,9 +28,9 @@ export const RECOMMENDED_MODELS: Record<string, string> = {
 };
 
 export const RECOMMENDED_ADAPTERS: Partial<Record<Provider, string>> = {
-  openai: "openai_codex_cli",
-  anthropic: "claude_code_cli",
-  ollama: "openai_api",
+  openai: "agent_loop",
+  anthropic: "agent_loop",
+  ollama: "agent_loop",
 };
 
 // ─── Shared helper functions ───
@@ -62,9 +62,9 @@ export function getAdaptersForModel(model: string, provider: string): string[] {
   const entry = MODEL_REGISTRY[model];
   if (entry) return entry.adapters;
   // For unknown/custom models, return all adapters for the provider
-  if (provider === "openai") return ["openai_codex_cli", "openai_api"];
-  if (provider === "anthropic") return ["claude_code_cli", "claude_api"];
-  if (provider === "ollama") return ["openai_api"];
+  if (provider === "openai") return ["agent_loop", "openai_codex_cli", "openai_api"];
+  if (provider === "anthropic") return ["agent_loop", "claude_code_cli", "claude_api"];
+  if (provider === "ollama") return ["agent_loop", "openai_api"];
   return [];
 }
 

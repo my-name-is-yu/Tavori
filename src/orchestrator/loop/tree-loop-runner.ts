@@ -2,6 +2,58 @@ import type { CoreLoopDeps, ResolvedLoopConfig, LoopIterationResult } from "./co
 import { makeEmptyIterationResult } from "./core-loop/contracts.js";
 import type { Logger } from "../../runtime/logger.js";
 import type { IterationBudget } from "./iteration-budget.js";
+import type { NextIterationDirective } from "./loop-result-types.js";
+
+export interface LoopSchedulerOptions {
+  getPendingDirective?: (goalId: string) => NextIterationDirective | undefined;
+}
+
+function prioritizeGoalIdsWithDirectives(
+  goalIds: string[],
+  schedulerOptions?: LoopSchedulerOptions
+): string[] {
+  const getPendingDirective = schedulerOptions?.getPendingDirective;
+  if (!getPendingDirective) return [...goalIds];
+
+  const scored = goalIds.map((goalId, index) => {
+    const directive = getPendingDirective(goalId);
+    const priority = directive
+      ? (directive.requestedPhase === "knowledge_refresh" ? 0 : 1)
+      : 2;
+    return { goalId, index, priority };
+  });
+
+  scored.sort((a, b) => a.priority - b.priority || a.index - b.index);
+  return scored.map((entry) => entry.goalId);
+}
+
+async function collectDirectivePreferredTreeNodeIds(
+  rootId: string,
+  deps: CoreLoopDeps,
+  schedulerOptions?: LoopSchedulerOptions
+): Promise<string[]> {
+  const getPendingDirective = schedulerOptions?.getPendingDirective;
+  if (!getPendingDirective) return [];
+
+  const root = await deps.stateManager.loadGoal(rootId);
+  if (!root) return [];
+
+  const collected: string[] = [];
+  const queue = [rootId];
+  while (queue.length > 0) {
+    const currentId = queue.shift()!;
+    const goal = currentId === rootId ? root : await deps.stateManager.loadGoal(currentId);
+    if (!goal) continue;
+
+    if (getPendingDirective(currentId)) {
+      collected.push(currentId);
+    }
+
+    queue.push(...goal.children_ids);
+  }
+
+  return collected;
+}
 
 /**
  * Standalone function extracted from CoreLoop.runTreeIteration.
@@ -16,7 +68,8 @@ export async function runTreeIteration(
   config: ResolvedLoopConfig,
   logger: Logger | undefined,
   runOneIteration: (goalId: string, loopIndex: number) => Promise<LoopIterationResult>,
-  nodeConsumedMap: Map<string, number>
+  nodeConsumedMap: Map<string, number>,
+  schedulerOptions?: LoopSchedulerOptions
 ): Promise<LoopIterationResult> {
   const orchestrator = deps.treeLoopOrchestrator!;
 
@@ -72,7 +125,18 @@ export async function runTreeIteration(
   }
 
   // 1. Select next node to iterate
-  const selectedNodeId = await orchestrator.selectNextNode(rootId);
+  let selectedNodeId: string | null;
+  const preferredNodeIds = await collectDirectivePreferredTreeNodeIds(rootId, deps, schedulerOptions);
+  if (preferredNodeIds.length > 0 && "selectPreferredNode" in orchestrator && typeof orchestrator.selectPreferredNode === "function") {
+    const preferredSelection = await orchestrator.selectPreferredNode(rootId, preferredNodeIds);
+    if (preferredSelection === undefined) {
+      selectedNodeId = await orchestrator.selectNextNode(rootId);
+    } else {
+      selectedNodeId = preferredSelection;
+    }
+  } else {
+    selectedNodeId = await orchestrator.selectNextNode(rootId);
+  }
 
   // 2. If null, all nodes are completed/paused — check root completion
   if (selectedNodeId === null) {
@@ -156,7 +220,8 @@ export async function runMultiGoalIteration(
   loopIndex: number,
   deps: CoreLoopDeps,
   config: ResolvedLoopConfig,
-  runOneIteration: (goalId: string, loopIndex: number) => Promise<LoopIterationResult>
+  runOneIteration: (goalId: string, loopIndex: number) => Promise<LoopIterationResult>,
+  schedulerOptions?: LoopSchedulerOptions
 ): Promise<LoopIterationResult> {
   if (!config.multiGoalMode || !config.goalIds || config.goalIds.length === 0) {
     throw new Error(
@@ -165,6 +230,8 @@ export async function runMultiGoalIteration(
   }
 
   const goalIds = config.goalIds;
+  const prioritizedGoalIds = prioritizeGoalIdsWithDirectives(goalIds, schedulerOptions);
+  const directiveGoalIds = prioritizedGoalIds.filter((goalId) => schedulerOptions?.getPendingDirective?.(goalId));
 
   // Build allocation map
   let allocationMap: Map<string, number>;
@@ -180,18 +247,32 @@ export async function runMultiGoalIteration(
   // Select next goal + strategy using PortfolioManager
   if (!deps.portfolioManager) {
     // Without a portfolio manager, round-robin by loopIndex
-    const selectedGoalId = goalIds[loopIndex % goalIds.length]!;
+    const selectedGoalId = directiveGoalIds[0] ?? prioritizedGoalIds[loopIndex % prioritizedGoalIds.length]!;
     return runOneIteration(selectedGoalId, loopIndex);
   }
 
-  const selection = await deps.portfolioManager.selectNextStrategyAcrossGoals(
-    goalIds,
-    allocationMap
-  );
+  let selection: {
+    goal_id: string;
+    strategy_id: string | null;
+    selection_reason: string;
+  } | null = null;
+  if (directiveGoalIds.length > 0) {
+    selection = await deps.portfolioManager.selectNextStrategyAcrossGoals(
+      directiveGoalIds,
+      allocationMap
+    );
+  }
+
+  if (selection === null) {
+    selection = await deps.portfolioManager.selectNextStrategyAcrossGoals(
+      prioritizedGoalIds,
+      allocationMap
+    );
+  }
 
   if (selection === null) {
     // No strategies available — return a no-op result for the first goal
-    const fallbackGoalId = goalIds[0]!;
+    const fallbackGoalId = prioritizedGoalIds[0]!;
     return runOneIteration(fallbackGoalId, loopIndex);
   }
 

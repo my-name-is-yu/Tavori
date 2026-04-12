@@ -4,6 +4,8 @@
 > Source: Claude Code source analysis (KAIROS, orchestration, autonomous features, tool/plugin system)
 > Goal: "常駐AIエージェントはPulSeedだけと対話すれば十分"
 
+> Current implementation note: this document is an improvement backlog, not a precise description of the current runtime. PulSeed already has a dual-loop architecture (`CoreLoop` + bounded `AgentLoop`) and native tool execution paths, so references here to a single flat loop should be read as shorthand.
+
 ## Executive Summary
 
 Claude Code's KAIROS subsystem is a proactive "assistant mode" that transforms a reactive CLI into an always-on autonomous agent — exactly what PulSeed aspires to be at a higher level. Key adoptable patterns: (1) **Proactive Tick Loop** for idle-time initiative, (2) **MCP dual-role** (client+server) for universal tool integration, (3) **Hook lifecycle events** for deep extensibility, (4) **Dream/catch-up/morning-checkin** scheduled self-reflection, and (5) **BriefTool** pattern for unsolicited user updates. PulSeed's unique strength — the goal→gap→drive→satisfice loop — has no equivalent in Claude Code and should remain the core differentiator.
@@ -22,7 +24,11 @@ Claude Code's KAIROS subsystem is a proactive "assistant mode" that transforms a
 - `sleep_progress` is ephemeral (not sent to API) to avoid context pollution
 
 **What PulSeed should do:**
+<<<<<<< HEAD
 - PulSeed already has a structured `CoreLoop` plus a bounded `AgentLoop` for tool-using execution
+=======
+- PulSeed already has a long-lived CoreLoop with observation, scoring, task lifecycle, and bounded agentic phases
+>>>>>>> e49c85c9 (implement native agentloop and coreloop phases)
 - **Add idle-tick injection** between CoreLoop cycles: when no active tasks exist, inject a `<tick>` to the LLM asking "given current goals and state, what should I proactively work on?"
 - This bridges the gap between PulSeed's structured loop and CC's freeform initiative
 - Implement `SleepScheduler` — adaptive sleep duration based on:
@@ -173,7 +179,11 @@ Claude Code's KAIROS subsystem is a proactive "assistant mode" that transforms a
 
 | Capability | Claude Code | PulSeed | Comparison |
 |-----------|-------------|---------|------------|
+<<<<<<< HEAD
 | Core loop | Reactive (user→response) + KAIROS tick | CoreLoop + AgentLoop + bounded core phases | **PulSeed stronger** — structured, goal-driven |
+=======
+| Core runtime | Reactive (user→response) + KAIROS tick | CoreLoop + AgentLoop + bounded core phases | **PulSeed stronger** — structured, goal-driven |
+>>>>>>> e49c85c9 (implement native agentloop and coreloop phases)
 | Multi-agent | Coordinator/Swarm/Fork patterns | AdapterLayer + multi-strategy portfolio | **Comparable** — different abstraction level |
 | Session persistence | `~/.claude/sessions/` | `~/.pulseed/` state files | **Comparable** |
 | Knowledge/Memory | Auto-memory + MEMORY.md + dream | KnowledgeManager + VectorIndex + hierarchical memory | **PulSeed stronger** — semantic, hierarchical |

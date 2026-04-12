@@ -27,6 +27,7 @@ import {
   mergeWorkingMemorySelections,
 } from "../../execution/context/context-builder.js";
 import type { CapabilityAcquisitionOutcome } from "./capability.js";
+import type { CoreLoopEvidenceLedger } from "./evidence-ledger.js";
 
 // ─── Phase 5 ───
 
@@ -124,7 +125,8 @@ export async function detectStallsAndRebalance(
   ctx: PhaseCtx,
   goalId: string,
   goal: Goal,
-  result: LoopIterationResult
+  result: LoopIterationResult,
+  stallActionHints?: StallActionHints
 ): Promise<void> {
   try {
     const gapHistory = await ctx.deps.stateManager.loadGapHistory(goalId);
@@ -210,14 +212,14 @@ export async function detectStallsAndRebalance(
         }
 
         const escalationLevel = await ctx.deps.stallDetector.getEscalationLevel(goalId, dim.name);
-        await applyStallAction(ctx, goalId, goal, dimGapHistory, stallReport, escalationLevel, dim.name, result, "");
+        await applyStallAction(ctx, goalId, goal, dimGapHistory, stallReport, escalationLevel, dim.name, result, "", stallActionHints);
         break;
       }
     }
 
     // Global stall check
     if (!result.stallDetected) {
-      await checkGlobalStall(ctx, goalId, goal, result, gapHistoryByDimension);
+      await checkGlobalStall(ctx, goalId, goal, result, gapHistoryByDimension, stallActionHints);
     }
 
     // Portfolio: check rebalance after stall detection
@@ -276,7 +278,8 @@ async function applyStallAction(
   escalationLevel: number,
   incrementDimName: string,
   result: LoopIterationResult,
-  logPrefix: string
+  logPrefix: string,
+  stallActionHints?: StallActionHints
 ): Promise<void> {
   if (ctx.deps.learningPipeline) {
     try {
@@ -293,12 +296,14 @@ async function applyStallAction(
   // Falls back to PIVOT behavior when analyzeStallCause is unavailable
   const analysis = ctx.deps.stallDetector.analyzeStallCause?.(dimHistory);
   result.stallAnalysis = analysis;
+  const selectedAction = analysis?.recommended_action === "escalate"
+    ? "escalate"
+    : stallActionHints?.recommendedAction ?? analysis?.recommended_action ?? "pivot";
 
-  if (analysis?.recommended_action === "refine") {
-    // REFINE: keep current strategy, just log and continue
-    ctx.logger?.info(`CoreLoop: ${logPrefix}stall REFINE — parameter_issue detected, keeping strategy`, {
+  if (selectedAction === "continue") {
+    ctx.logger?.info(`CoreLoop: ${logPrefix}stall CONTINUE — replanning evidence prefers continuing current strategy`, {
       goalId,
-      evidence: analysis.evidence,
+      evidence: analysis?.evidence,
     });
   } else if (stallReport.suggested_cause === "information_deficit" && ctx.deps.goalRefiner) {
     // Observation-failure stall: re-refine the leaf to get better dimensions
@@ -311,11 +316,17 @@ async function applyStallAction(
         err: reRefineErr instanceof Error ? reRefineErr.message : String(reRefineErr),
       });
     }
-  } else if (analysis?.recommended_action === "escalate") {
+  } else if (selectedAction === "refine") {
+    // REFINE: keep current strategy, just log and continue
+    ctx.logger?.info(`CoreLoop: ${logPrefix}stall REFINE — parameter_issue detected, keeping strategy`, {
+      goalId,
+      evidence: analysis?.evidence,
+    });
+  } else if (selectedAction === "escalate") {
     // ESCALATE: set escalation level to max to trigger loop exit
     ctx.logger?.warn(`CoreLoop: ${logPrefix}stall ESCALATE — goal_unreachable detected`, {
       goalId,
-      evidence: analysis.evidence,
+      evidence: analysis?.evidence,
     });
     await ctx.deps.strategyManager.onStallDetected(goalId, 3, goal.origin ?? "general");
     result.pivotOccurred = true;
@@ -358,13 +369,14 @@ async function applyStallAction(
   if (ctx.deps.knowledgeManager) {
     try {
       const latestGap = dimHistory[dimHistory.length - 1]?.normalized_gap ?? 1;
+      const recordedDecision = selectedAction === "continue" ? "proceed" : selectedAction;
       await ctx.deps.knowledgeManager.recordDecision({
         id: randomUUID(),
         goal_id: goalId,
         goal_type: goal.origin ?? "general",
         strategy_id: strategyIdForRecord,
         hypothesis: activeStrategyForRecord?.hypothesis,
-        decision: analysis?.recommended_action ?? "pivot",
+        decision: recordedDecision,
         context: {
           gap_value: latestGap,
           stall_count: stallReport.escalation_level,
@@ -393,7 +405,8 @@ async function checkGlobalStall(
   goalId: string,
   goal: Goal,
   result: LoopIterationResult,
-  gapHistoryByDimension: Map<string, Array<{ normalized_gap: number }>>
+  gapHistoryByDimension: Map<string, Array<{ normalized_gap: number }>>,
+  stallActionHints?: StallActionHints
 ): Promise<void> {
   const globalStall = ctx.deps.stallDetector.checkGlobalStall(goalId, gapHistoryByDimension);
   if (!globalStall) return;
@@ -405,7 +418,7 @@ async function checkGlobalStall(
   const firstDimName = goal.dimensions[0]?.name ?? "";
 
   // Pass escalationLevel=1 so that escalationLevel+1=2, preserving the original global PIVOT level
-  await applyStallAction(ctx, goalId, goal, firstDimHistory, globalStall, 1, firstDimName, result, "global ");
+  await applyStallAction(ctx, goalId, goal, firstDimHistory, globalStall, 1, firstDimName, result, "global ", stallActionHints);
 }
 
 /** Portfolio rebalance: check for rebalance triggers and handle wait strategy expiry. */
@@ -484,6 +497,15 @@ export interface LoopCallbacks {
   tryGenerateReport: (goalId: string, loopIndex: number, result: LoopIterationResult, goal: Goal) => void;
 }
 
+export interface TaskGenerationHints {
+  targetDimensionOverride?: string;
+  knowledgeContextPrefix?: string;
+}
+
+export interface StallActionHints {
+  recommendedAction?: "continue" | "refine" | "pivot";
+}
+
 /** Collect context, run task cycle, handle capability acquisition,
  * transfer detection, and post-task completion re-check.
  * Returns true on success, false if the caller should return result early.
@@ -498,7 +520,9 @@ export async function runTaskCycleWithContext(
   loopIndex: number,
   result: LoopIterationResult,
   startTime: number,
-  callbacks: LoopCallbacks
+  callbacks: LoopCallbacks,
+  evidenceLedger?: CoreLoopEvidenceLedger,
+  taskGenerationHints?: TaskGenerationHints,
 ): Promise<boolean> {
   const { handleCapabilityAcquisition, incrementTransferCounter, tryGenerateReport } = callbacks;
   try {
@@ -699,6 +723,9 @@ export async function runTaskCycleWithContext(
       }
     }
 
+    knowledgeContext = evidenceLedger?.augmentKnowledgeContext(knowledgeContext) ?? knowledgeContext;
+    workspaceContext = evidenceLedger?.augmentWorkspaceContext(workspaceContext) ?? workspaceContext;
+
     ctx.logger?.debug("CoreLoop: running task cycle", { adapter: adapter.adapterType, goalId });
     ctx.deps.onProgress?.({
       iteration: loopIndex + 1,
@@ -713,7 +740,8 @@ export async function runTaskCycleWithContext(
       adapter,
       knowledgeContext,
       existingTasks,
-      workspaceContext
+      workspaceContext,
+      taskGenerationHints,
     );
     ctx.logger?.info("CoreLoop: task cycle result", { action: taskResult.action, taskId: taskResult.task.id });
     result.taskResult = taskResult;

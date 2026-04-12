@@ -4,6 +4,8 @@
 > Design philosophy: **"Calm Control Room"** — a dense but organized, control-room-like calm UI.
 > Related: `plugin-architecture.md`, `multi-agent-delegation.md`, `reporting.md`, `knowledge-transfer.md`
 
+> Current implementation note: the Web UI remains a design target. The runtime model it should sit on has changed: live state should be understood as CoreLoop + AgentLoop + shared runtime store, not only the older single-loop/TUI picture.
+
 ---
 
 ## 1. Overview
@@ -97,7 +99,11 @@ Common layout: left sidebar (nav, 120px fixed) + main area
 
 **Top — Goal list table**: Goal name (link), Gap % (progress bar, background `#1a1a1a`), Trust score (number + color: red <0, gray 0-20, green >20), strategy status badge, last updated
 
+<<<<<<< HEAD
 **Middle — Active sessions**: Adapter name + runtime type (`core_loop` / `agent_loop`) + phase or step label, elapsed time
+=======
+**Middle — Active sessions**: runtime type, goal/task, adapter or native agent loop, bounded execution status, elapsed time
+>>>>>>> e49c85c9 (implement native agentloop and coreloop phases)
 
 **Bottom — Decision timeline (last 10 items)**: Timestamp + goal name + decision type (PIVOT/REFINE/ESCALATE) + one-line summary
 

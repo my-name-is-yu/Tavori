@@ -54,6 +54,24 @@ import {
 import { runLLMReview } from "./task-verifier-llm.js";
 import { appendTaskOutcomeEvent } from "./task-outcome-ledger.js";
 
+function formatSelfReportEvidence(executorReport: import("./task-verifier-types.js").ExecutorReport): string {
+  const segments = [
+    executorReport.summary.trim(),
+    executorReport.stop_reason ? `stop reason: ${executorReport.stop_reason}` : "",
+    executorReport.completion_evidence.length > 0
+      ? `completion evidence: ${executorReport.completion_evidence.join("; ")}`
+      : "",
+    executorReport.verification_hints.length > 0
+      ? `verification hints: ${executorReport.verification_hints.join("; ")}`
+      : "",
+    executorReport.blockers.length > 0
+      ? `blockers: ${executorReport.blockers.join("; ")}`
+      : "",
+  ].filter((segment) => segment.length > 0);
+
+  return segments.join("\n");
+}
+
 // ─── verifyTask ───
 
 /**
@@ -222,7 +240,7 @@ export async function verifyTask(
     },
     {
       layer: "self_report" as const,
-      description: executorReport.summary,
+      description: formatSelfReportEvidence(executorReport),
       confidence: 0.3, // self-report has lowest confidence
     },
   ];
@@ -328,6 +346,8 @@ export async function verifyTask(
       ...verificationResult,
       criteria_met: effectiveL2.criteria_met,
       criteria_total: effectiveL2.criteria_total,
+      executor_report: executorReport,
+      agent_loop: executionResult.agentLoop ?? null,
       impact_analysis: impactAnalysis,
     }
   );

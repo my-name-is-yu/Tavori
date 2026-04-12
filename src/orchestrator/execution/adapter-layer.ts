@@ -24,6 +24,24 @@ export interface AgentTask {
   system_prompt?: string;
 }
 
+export interface AgentLoopExecutionInfo {
+  traceId: string;
+  sessionId: string;
+  turnId: string;
+  stopReason: string;
+  modelTurns: number;
+  toolCalls: number;
+  compactions: number;
+  completionEvidence?: string[];
+  verificationHints?: string[];
+  filesChangedPaths?: string[];
+  requestedCwd?: string;
+  executionCwd?: string;
+  isolatedWorkspace?: boolean;
+  workspaceCleanupStatus?: "not_requested" | "cleaned_up" | "kept";
+  workspaceCleanupReason?: string;
+}
+
 export interface AgentResult {
   /** Whether the task completed without error or timeout */
   success: boolean;
@@ -43,6 +61,8 @@ export interface AgentResult {
    * true = files were changed; false = adapter reported success but no files changed.
    */
   filesChanged?: boolean;
+  /** Native agentloop execution metadata when the task ran through the in-process loop. */
+  agentLoop?: AgentLoopExecutionInfo;
 }
 
 // ─── Interface ───

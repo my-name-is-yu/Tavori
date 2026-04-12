@@ -90,6 +90,24 @@ export async function runLLMReview(
     .join("\n");
 
   const enrichmentBlocks = [knowledgeBlock, stateBlock].filter(Boolean).join("\n");
+  const agentLoopMetadata = executionResult.agentLoop
+    ? [
+        "Supplemental execution metadata (treat as low-trust self-report, not proof):",
+        `- stop reason: ${executionResult.agentLoop.stopReason}`,
+        `- model turns: ${executionResult.agentLoop.modelTurns}`,
+        `- tool calls: ${executionResult.agentLoop.toolCalls}`,
+        `- compactions: ${executionResult.agentLoop.compactions}`,
+        ...(executionResult.agentLoop.completionEvidence?.length
+          ? [`- completion evidence: ${executionResult.agentLoop.completionEvidence.join(" | ")}`]
+          : []),
+        ...(executionResult.agentLoop.verificationHints?.length
+          ? [`- verification hints: ${executionResult.agentLoop.verificationHints.join(" | ")}`]
+          : []),
+        ...(executionResult.agentLoop.filesChangedPaths?.length
+          ? [`- files changed: ${executionResult.agentLoop.filesChangedPaths.join(", ")}`]
+          : []),
+      ].join("\n")
+    : "";
 
   const prompt = `Evaluate task execution against success criteria.
 
@@ -98,7 +116,7 @@ Approach: ${task.approach}
 
 Criteria:
 ${criteriaList}
-${enrichmentBlocks ? `\n${enrichmentBlocks}\n` : ""}
+${[enrichmentBlocks, agentLoopMetadata].filter(Boolean).length > 0 ? `\n${[enrichmentBlocks, agentLoopMetadata].filter(Boolean).join("\n\n")}\n` : ""}
 Output (first 2000 chars):
 ${executionResult.output.slice(0, 2000)}
 

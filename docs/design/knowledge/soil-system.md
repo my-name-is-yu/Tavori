@@ -4,6 +4,8 @@
 
 > Related: `memory-lifecycle.md`, `learning-pipeline.md`, `knowledge-acquisition.md`, `reporting.md`, `schedule-engine.md`
 
+> Current implementation note: Soil is not just a documentation surface. `soil_query` is now available to the native AgentLoop and to selected CoreLoop phases such as `knowledge_refresh`, `replanning_options`, and `verification_evidence`, making Soil part of live execution rather than a passive export.
+
 ---
 
 ## 1. Contract

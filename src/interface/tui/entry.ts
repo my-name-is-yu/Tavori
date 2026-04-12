@@ -95,6 +95,11 @@ async function buildDeps() {
   const { CharacterConfigManager } = await import("../../platform/traits/character-config.js");
   const { ChatRunner } = await import("../../interface/chat/chat-runner.js");
   const { ToolRegistry, ToolExecutor, ToolPermissionManager, ConcurrencyController, createBuiltinTools } = await import("../../tools/index.js");
+  const {
+    createNativeChatAgentLoopRunner,
+    createNativeTaskAgentLoopRunner,
+    shouldUseNativeTaskAgentLoop,
+  } = await import("../../orchestrator/execution/agent-loop/index.js");
   const { ActionHandler } = await import("./actions.js");
   const { IntentRecognizer } = await import("./intent-recognizer.js");
   const GapCalculator = await import("../../platform/drive/gap-calculator.js");
@@ -104,6 +109,7 @@ async function buildDeps() {
   const characterConfigManager = new CharacterConfigManager(stateManager);
   const characterConfig = await characterConfigManager.load();
   const llmClient = await buildLLMClient();
+  const providerConfig = await loadProviderConfig();
   const trustManager = new TrustManager(stateManager);
   const driveSystem = new DriveSystem(stateManager);
   const scheduleEngine = new ScheduleEngine({ baseDir: stateManager.getBaseDir() });
@@ -220,16 +226,6 @@ async function buildDeps() {
     });
   };
 
-  const taskLifecycle = new TaskLifecycle({
-    stateManager,
-    llmClient,
-    sessionManager,
-    trustManager,
-    strategyManager,
-    stallDetector,
-    options: { approvalFn },
-  });
-
   const reportingEngine = new ReportingEngine(stateManager, undefined, characterConfig);
 
   const goalTreeManager = new GoalTreeManager(
@@ -259,6 +255,56 @@ async function buildDeps() {
     memoryLifecycleManager = undefined;
     driveScoreAdapter = undefined;
   }
+
+  const soilPrefetch = memoryLifecycleManager
+    ? async (query: { query: string; rootDir: string; limit: number }) => {
+        const lessons = await memoryLifecycleManager!.searchCrossGoalLessons(query.query, query.limit);
+        if (lessons.length === 0) return null;
+        return {
+          content: [
+            "Soil cross-goal lessons:",
+            ...lessons.map((lesson, index) => `${index + 1}. ${lesson.lesson}`),
+          ].join("\n"),
+          soilIds: lessons.map((lesson) => lesson.lesson_id),
+          retrievalSource: "manifest" as const,
+        };
+      }
+    : undefined;
+  const agentLoopRunner = shouldUseNativeTaskAgentLoop(providerConfig, llmClient)
+      ? createNativeTaskAgentLoopRunner({
+          llmClient,
+          providerConfig,
+          toolRegistry,
+          toolExecutor,
+          cwd: process.cwd(),
+          traceBaseDir: stateManager.getBaseDir(),
+          soilPrefetch,
+          defaultWorktreePolicy: providerConfig.agent_loop?.worktree
+            ? {
+                enabled: providerConfig.agent_loop.worktree.enabled,
+                baseDir: providerConfig.agent_loop.worktree.base_dir,
+                keepForDebug: providerConfig.agent_loop.worktree.keep_for_debug,
+                cleanupPolicy: providerConfig.agent_loop.worktree.cleanup_policy,
+              }
+            : undefined,
+        })
+    : undefined;
+
+  const taskLifecycle = new TaskLifecycle({
+    stateManager,
+    llmClient,
+    sessionManager,
+    trustManager,
+    strategyManager,
+    stallDetector,
+    options: {
+      approvalFn,
+      toolExecutor,
+      agentLoopRunner,
+      revertCwd: process.cwd(),
+      healthCheckCwd: process.cwd(),
+    },
+  });
 
   const gapCalculator = {
     calculateGapVector: GapCalculator.calculateGapVector,
@@ -313,9 +359,18 @@ async function buildDeps() {
 
   let chatRunner: InstanceType<typeof ChatRunner> | undefined;
   try {
-    const provConfig = await loadProviderConfig();
-    const adapterType = provConfig.adapter ?? "claude_code_cli";
+    const adapterType = providerConfig.adapter ?? "claude_code_cli";
     const adapter = adapterRegistry.getAdapter(adapterType);
+    const chatAgentLoopRunner = shouldUseNativeTaskAgentLoop(providerConfig, llmClient)
+      ? createNativeChatAgentLoopRunner({
+          llmClient,
+          providerConfig,
+          toolRegistry,
+          toolExecutor,
+          cwd: process.cwd(),
+          traceBaseDir: stateManager.getBaseDir(),
+        })
+      : undefined;
     chatRunner = new ChatRunner({
       stateManager,
       adapter,
@@ -323,6 +378,7 @@ async function buildDeps() {
       trustManager,
       registry: toolRegistry,
       toolExecutor,
+      chatAgentLoopRunner,
       approvalFn: chatToolApprovalFn,
     });
   } catch (err) {

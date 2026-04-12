@@ -1,12 +1,10 @@
 import { sleep } from "../../base/utils/sleep.js";
-import type { Logger } from "../../runtime/logger.js";
 import type { StateDiffCalculator } from "./state-diff.js";
 import { IterationBudget } from "./iteration-budget.js";
 import { saveLoopCheckpoint, restoreLoopCheckpoint } from "./checkpoint-manager-loop.js";
 import { runPostLoopHooks } from "./post-loop-hooks.js";
 import { generateLoopReport } from "./loop-report-helper.js";
 
-import { makeEmptyIterationResult } from "./loop-result-types.js";
 import type { LoopIterationResult, LoopResult } from "./loop-result-types.js";
 import type {
   LoopConfig,
@@ -17,31 +15,14 @@ import {
   runTreeIteration as runTreeIterationImpl,
   runMultiGoalIteration as runMultiGoalIterationImpl,
 } from "./tree-loop-runner.js";
-import {
-  loadGoalWithAggregation,
-  observeAndReload,
-  calculateGapOrComplete,
-  scoreDrivesAndCheckKnowledge,
-  phaseAutoDecompose,
-  type PhaseCtx,
-} from "./core-loop/preparation.js";
-import {
-  checkCompletionAndMilestones,
-  detectStallsAndRebalance,
-  checkDependencyBlock,
-  runTaskCycleWithContext,
-  type LoopCallbacks,
-} from "./core-loop/task-cycle.js";
-import {
-  runStateDiffCheck,
-  tryParallelExecution,
-  type StateDiffState,
-} from "./core-loop/control.js";
-import { handleCapabilityAcquisition } from "./core-loop/capability.js";
+import { type StateDiffState } from "./core-loop/control.js";
 import type { ITimeHorizonEngine } from "../../platform/time/time-horizon-engine.js";
 import type { PacingResult } from "../../base/types/time-horizon.js";
 import { CoreLoopLearning } from "./core-loop/learning.js";
-import { loadDreamActivationState } from "../../platform/dream/dream-activation.js";
+import { StaticCorePhasePolicyRegistry } from "./core-loop/phase-policy.js";
+import { CoreDecisionEngine } from "./core-loop/decision-engine.js";
+import type { CorePhasePolicyRegistry } from "./core-loop/phase-policy.js";
+import { CoreIterationKernel } from "./core-loop/iteration-kernel.js";
 
 // Re-export types for backward compatibility
 export type {
@@ -92,12 +73,15 @@ export class CoreLoop {
   private readonly deps: CoreLoopDeps;
   /** Mutable config — may be updated mid-run (e.g. treeMode enabled after decomposition). */
   private config: ResolvedLoopConfig;
-  private readonly logger?: Logger;
+  private readonly logger?: import("../../runtime/logger.js").Logger;
   private stopped = false;
   private readonly learning: CoreLoopLearning = new CoreLoopLearning();
+  private readonly corePhasePolicyRegistry: CorePhasePolicyRegistry;
+  private readonly coreDecisionEngine: CoreDecisionEngine;
   /** Optional StateDiffCalculator for loop-skip optimization. */
   private readonly stateDiff?: StateDiffCalculator;
   private stateDiffState = new Map<string, StateDiffState>();
+  private pendingIterationDirectives = new Map<string, import("./loop-result-types.js").NextIterationDirective>();
   /** Tracks goals that have already been through auto-decompose this run. */
   private decomposedGoals = new Set<string>();
   /** Optional TimeHorizonEngine for adaptive observation interval (Gap 4). */
@@ -110,6 +94,8 @@ export class CoreLoop {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.logger = deps.logger;
     this.stateDiff = stateDiff;
+    this.corePhasePolicyRegistry = deps.corePhasePolicyRegistry ?? new StaticCorePhasePolicyRegistry();
+    this.coreDecisionEngine = deps.coreDecisionEngine ?? new CoreDecisionEngine();
 
     // Wire optional StrategyTemplateRegistry into StrategyManager for auto-templating
     if (deps.strategyTemplateRegistry) {
@@ -132,6 +118,7 @@ export class CoreLoop {
     this.stateDiffState.clear();
     // Reset auto-decompose tracking for each run
     this.decomposedGoals.clear();
+    this.pendingIterationDirectives.clear();
 
     // Load and validate goal
     const goal = await this.deps.stateManager.loadGoal(goalId);
@@ -176,9 +163,11 @@ export class CoreLoop {
 
     const iterations: LoopIterationResult[] = [];
     let totalTokens = 0;
-    let consecutiveErrors = 0;
-    let consecutiveDenied = 0;
-    let consecutiveEscalations = 0;
+    let decisionCounters = {
+      consecutiveErrors: 0,
+      consecutiveDenied: 0,
+      consecutiveEscalations: 0,
+    };
     let finalStatus: LoopResult["finalStatus"] = "max_iterations";
 
     // Effective maxIterations: runtime override takes precedence over config.
@@ -212,8 +201,11 @@ export class CoreLoop {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         this.logger?.error(`[CoreLoop] unexpected error in iteration ${loopIndex}: ${msg}`);
-        consecutiveErrors++;
-        if (consecutiveErrors >= this.config.maxConsecutiveErrors) {
+        decisionCounters = {
+          ...decisionCounters,
+          consecutiveErrors: decisionCounters.consecutiveErrors + 1,
+        };
+        if (decisionCounters.consecutiveErrors >= this.config.maxConsecutiveErrors) {
           finalStatus = "error";
           break;
         }
@@ -269,56 +261,19 @@ export class CoreLoop {
         );
       }
 
-      // Check completion (R1-2: must complete at least minIterations before exiting)
-      if (iterationResult.completionJudgment.is_complete &&
-          loopIndex >= (this.config.minIterations ?? 1) - 1) {
-        finalStatus = "completed";
-        void this.deps.hookManager?.emit("GoalStateChange", { goal_id: goalId, data: { newStatus: "completed" } });
-        break;
-      }
-
-      // Check errors
-      if (iterationResult.error !== null) {
-        consecutiveErrors++;
-        if (consecutiveErrors >= this.config.maxConsecutiveErrors) {
-          finalStatus = "error";
-          break;
+      const runDecision = this.coreDecisionEngine.evaluateRunDecision({
+        iterationResult,
+        loopIndex,
+        minIterations: this.config.minIterations ?? 1,
+        maxConsecutiveErrors: this.config.maxConsecutiveErrors,
+        counters: decisionCounters,
+      });
+      decisionCounters = runDecision.counters;
+      if (runDecision.shouldStop && runDecision.finalStatus) {
+        finalStatus = runDecision.finalStatus;
+        if (finalStatus === "completed" || finalStatus === "stalled") {
+          void this.deps.hookManager?.emit("GoalStateChange", { goal_id: goalId, data: { newStatus: finalStatus } });
         }
-      } else {
-        consecutiveErrors = 0;
-      }
-
-      // Check approval_denied and escalate counters
-      const taskAction = iterationResult.taskResult?.action ?? null;
-
-      if (taskAction === "approval_denied") {
-        consecutiveDenied++;
-        if (consecutiveDenied >= 3) {
-          finalStatus = "stopped";
-          break;
-        }
-      } else {
-        consecutiveDenied = 0;
-      }
-
-      if (taskAction === "escalate") {
-        consecutiveEscalations++;
-        if (consecutiveEscalations >= 3) {
-          finalStatus = "stalled";
-          break;
-        }
-      } else {
-        consecutiveEscalations = 0;
-      }
-
-      // Check stall escalation (escalation_level >= 3 means max escalation)
-      if (
-        iterationResult.stallDetected &&
-        iterationResult.stallReport &&
-        iterationResult.stallReport.escalation_level >= 3
-      ) {
-        finalStatus = "stalled";
-        void this.deps.hookManager?.emit("GoalStateChange", { goal_id: goalId, data: { newStatus: "stalled" } });
         break;
       }
 
@@ -400,215 +355,28 @@ export class CoreLoop {
     loopIndex: number,
     isFirstIteration?: boolean
   ): Promise<LoopIterationResult> {
-    const startTime = Date.now();
-    const ctx: PhaseCtx = { deps: this.deps, config: this.config, logger: this.logger, toolExecutor: this.deps.toolExecutor, timeHorizonEngine: this.timeHorizonEngine };
-    const runPhase = async <T>(phase: string, work: () => Promise<T>): Promise<T> => {
-      const phaseStartedAt = Date.now();
-      this.logger?.info(`[CoreLoop] phase ${phase} starting`, { goalId, loopIndex });
-      try {
-        const value = await work();
-        this.logger?.info(`[CoreLoop] phase ${phase} completed`, {
-          goalId,
-          loopIndex,
-          duration_ms: Date.now() - phaseStartedAt,
-        });
-        return value;
-      } catch (err) {
-        this.logger?.warn(`[CoreLoop] phase ${phase} failed`, {
-          goalId,
-          loopIndex,
-          duration_ms: Date.now() - phaseStartedAt,
-          error: err instanceof Error ? err.message : String(err),
-        });
-        throw err;
-      }
-    };
-
-    // Default result (filled in progressively)
-    const result: LoopIterationResult = makeEmptyIterationResult(goalId, loopIndex);
-
-    this.logger?.info(`[CoreLoop] iteration ${loopIndex + 1} starting`, { goalId, loopIndex });
-
-    // 1. Load goal + tree aggregation
-    const loadedGoal = await runPhase("load-goal", () =>
-      loadGoalWithAggregation(ctx, goalId, result, startTime)
-    );
-    if (!loadedGoal) return result;
-    let goal = loadedGoal;
-
-    await runPhase("auto-decompose", () =>
-      phaseAutoDecompose(goalId, goal, this.deps, this.config, this.logger, this.decomposedGoals, isFirstIteration)
-    );
-
-    // After decomposition: if children were created, reload and switch to tree mode.
-    if (!goal.children_ids.length) {
-      const reloadedAfterDecompose = await this.deps.stateManager.loadGoal(goalId);
-      if (reloadedAfterDecompose && reloadedAfterDecompose.children_ids.length > 0) {
-        goal = reloadedAfterDecompose;
-        if (this.deps.treeLoopOrchestrator) {
-          this.config = { ...this.config, treeMode: true };
-          this.logger?.info("[CoreLoop] treeMode enabled after auto-decomposition", { goalId, childrenCount: goal.children_ids.length });
-        }
-      }
-    }
-
-    // 2. Observe + reload
-    goal = await runPhase("observe", () => observeAndReload(ctx, goalId, goal, loopIndex));
-
-    // 2b. State diff check (Pillar 2: State Diff + Loop Skip)
-    if (this.stateDiff) {
-      const { shouldSkip } = await runStateDiffCheck(
-        this.stateDiff, this.stateDiffState, goalId, goal,
-        loopIndex, this.config, this.deps, result, startTime, this.logger
-      );
-      if (shouldSkip) return result;
-    }
-
-    // 3. Gap calculate + zero check
-    const gapResult = await runPhase("gap-analysis", () =>
-      calculateGapOrComplete(ctx, goalId, goal, loopIndex, result, startTime)
-    );
-    if (!gapResult) return result;
-    const { gapVector, gapAggregate, skipTaskGeneration } = gapResult;
-
-    this.logger?.info(`[iter ${loopIndex}] gap: ${gapAggregate.toFixed(2)} | ${(gapVector.gaps ?? []).map((g: any) => `${g.dimension_name}=${g.normalized_weighted_gap.toFixed(2)}`).join(', ')}`);
-
-    // 4. Drive scoring + knowledge gap check (skip when gap=0 — no task needed)
-    let driveScores: import("../../base/types/drive.js").DriveScore[] = [];
-    let highDissatisfactionDimensions: string[] = [];
-    if (!skipTaskGeneration) {
-      const driveResult = await runPhase("drive-scoring", () =>
-        scoreDrivesAndCheckKnowledge(
-          ctx, goalId, goal, gapVector, loopIndex, result, startTime,
-          (id, idx, r, g) => generateLoopReport(id, idx, r, g, this.deps.reportingEngine, this.logger)
-        )
-      );
-      if (!driveResult) return result;
-      driveScores = driveResult.driveScores;
-      highDissatisfactionDimensions = driveResult.highDissatisfactionDimensions;
-    }
-
-    // 5. Completion check + milestones
-    await runPhase("completion-check", () =>
-      checkCompletionAndMilestones(ctx, goalId, goal, result, startTime)
-    );
-    if (result.error) return result;
-
-    // 6. Stall detection + rebalance
-    await runPhase("stall-detection", () => detectStallsAndRebalance(ctx, goalId, goal, result));
-
-    if (result.stallDetected && result.stallReport) {
-      this.logger?.warn(`[iter ${loopIndex}] stall detected: ${result.stallReport.stall_type}`, { escalation: result.stallReport.escalation_level });
-      void this.deps.hookManager?.emit("StallDetected", {
-        goal_id: goalId,
-        dimension: result.stallReport.dimension_name ?? undefined,
-        data: {
-          stall_type: result.stallReport.stall_type,
-          escalation_level: result.stallReport.escalation_level,
-          suggested_cause: result.stallReport.suggested_cause,
-          task_id: result.stallReport.task_id ?? undefined,
-        },
-      });
-    }
-
-    if (
-      result.stallDetected &&
-      this.deps.knowledgeManager &&
-      this.deps.toolExecutor
-    ) {
-      try {
-        const activation = await loadDreamActivationState(this.deps.stateManager.getBaseDir());
-        if (activation.flags.autoAcquireKnowledge) {
-          const portfolio = await Promise.resolve(
-            this.deps.strategyManager.getPortfolio(goalId)
-          ).catch(() => null);
-          const observationContext = {
-            observations: goal.dimensions.map((dimension) => ({
-              name: dimension.name,
-              current_value: dimension.current_value,
-              confidence: dimension.confidence,
-            })),
-            strategies: portfolio?.strategies ?? null,
-            confidence:
-              gapVector.gaps.reduce((sum, gap) => sum + gap.confidence, 0) /
-              Math.max(gapVector.gaps.length, 1),
-          };
-          const gapSignal = await this.deps.knowledgeManager.detectKnowledgeGap(observationContext);
-          if (gapSignal) {
-            const acquired = await this.deps.knowledgeManager.acquireWithTools(
-              gapSignal.missing_knowledge,
-              goalId,
-              this.deps.toolExecutor,
-              {
-                cwd: process.cwd(),
-                goalId,
-                trustBalance: 0,
-                preApproved: true,
-                approvalFn: async () => false,
-              }
-            );
-            for (const entry of acquired) {
-              await this.deps.knowledgeManager.saveKnowledge(goalId, entry);
-            }
-            if (acquired.length > 0) {
-              this.logger?.info("CoreLoop: dream auto-acquired knowledge and skipped execution for context refresh", {
-                goalId,
-                acquiredCount: acquired.length,
-              });
-              await generateLoopReport(goalId, loopIndex, result, goal, this.deps.reportingEngine, this.logger);
-              result.skipped = true;
-              result.skipReason = "dream_auto_acquire_knowledge";
-              result.elapsedMs = Date.now() - startTime;
-              return result;
-            }
-          }
-        }
-      } catch (err) {
-        this.logger?.warn("CoreLoop: autoAcquireKnowledge failed (non-fatal)", {
-          goalId,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
-
-    if (skipTaskGeneration) {
-      await generateLoopReport(goalId, loopIndex, result, goal, this.deps.reportingEngine, this.logger);
-      result.elapsedMs = Date.now() - startTime;
-      return result;
-    }
-
-    // 6b. Dependency block check
-    if (checkDependencyBlock(ctx, goalId, result)) return result;
-
-    // 6c. TaskGroup detection and routing (M15 Phase 2)
-    const tookParallelPath = await tryParallelExecution(
-      goalId, goal, gapAggregate, result, startTime, this.deps, loopIndex, this.logger
-    );
-    if (tookParallelPath) return result;
-
-    // 7. Task cycle with context
-    const loopCallbacks: LoopCallbacks = {
-      handleCapabilityAcquisition: (task, gId, adapter) => handleCapabilityAcquisition(
-        task as Parameters<typeof handleCapabilityAcquisition>[0],
-        gId,
-        adapter as Parameters<typeof handleCapabilityAcquisition>[2],
-        this.deps.capabilityDetector,
-        this.learning.getCapabilityFailures(),
-        this.logger
-      ),
+    const result = await new CoreIterationKernel({
+      deps: this.deps,
+      getConfig: () => this.config,
+      setConfig: (nextConfig) => {
+        this.config = nextConfig;
+      },
+      logger: this.logger,
+      stateDiff: this.stateDiff,
+      stateDiffState: this.stateDiffState,
+      decomposedGoals: this.decomposedGoals,
+      timeHorizonEngine: this.timeHorizonEngine,
+      corePhasePolicyRegistry: this.corePhasePolicyRegistry,
+      coreDecisionEngine: this.coreDecisionEngine,
+      capabilityFailures: this.learning.getCapabilityFailures(),
       incrementTransferCounter: () => this.learning.incrementTransferCounter(),
-      tryGenerateReport: (id, idx, r, g) => generateLoopReport(id, idx, r, g, this.deps.reportingEngine, this.logger),
-    };
-    const taskCycleOk = await runTaskCycleWithContext(
-      ctx, goalId, goal, gapVector, driveScores, highDissatisfactionDimensions, loopIndex, result, startTime,
-      loopCallbacks
-    );
-    if (!taskCycleOk) return result;
-
-    // 8. Report
-    await generateLoopReport(goalId, loopIndex, result, goal, this.deps.reportingEngine, this.logger);
-
-    result.elapsedMs = Date.now() - startTime;
+      getPendingDirective: (id) => this.pendingIterationDirectives.get(id),
+    }).run({ goalId, loopIndex, isFirstIteration });
+    if (result.nextIterationDirective) {
+      this.pendingIterationDirectives.set(goalId, result.nextIterationDirective);
+    } else {
+      this.pendingIterationDirectives.delete(goalId);
+    }
     return result;
   }
 
@@ -618,7 +386,9 @@ export class CoreLoop {
    */
   async runTreeIteration(rootId: string, loopIndex: number, nodeConsumedMap: Map<string, number>): Promise<LoopIterationResult> {
     return runTreeIterationImpl(rootId, loopIndex, this.deps, this.config, this.logger,
-      (id, idx) => this.runOneIteration(id, idx), nodeConsumedMap);
+      (id, idx) => this.runOneIteration(id, idx), nodeConsumedMap, {
+        getPendingDirective: (id) => this.pendingIterationDirectives.get(id),
+      });
   }
 
   /**
@@ -626,7 +396,9 @@ export class CoreLoop {
    */
   async runMultiGoalIteration(loopIndex: number): Promise<LoopIterationResult> {
     return runMultiGoalIterationImpl(loopIndex, this.deps, this.config,
-      (id, idx) => this.runOneIteration(id, idx));
+      (id, idx) => this.runOneIteration(id, idx), {
+        getPendingDirective: (id) => this.pendingIterationDirectives.get(id),
+      });
   }
 
   /**

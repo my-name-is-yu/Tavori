@@ -2,6 +2,8 @@
 
 > Token cost is the primary barrier to PulSeed adoption. A single loop iteration makes 3-7 LLM calls, meaning a goal with 3 dimensions and 10 iterations costs 50-70 API calls before any real work is done. This document defines three independent optimization pillars that together reduce LLM token consumption by an estimated 60-80% without degrading observation quality or loop correctness.
 
+> Current implementation note: this document predates the current dual-loop architecture and the reorganized source tree. Optimizations here now apply across CoreLoop, bounded AgentLoop phases, chat compaction, and native task execution rather than only a single flat loop body.
+
 ---
 
 ## 1. Current State: Where Tokens Go
@@ -218,7 +220,11 @@ After 5 consecutive skips, the full loop runs regardless of state diff. This int
 **Files to change:**
 - `src/loop/state-diff.ts` -- NEW file, implements `StateDiffCalculator`
 - `src/orchestrator/loop/core-loop.ts` -- add diff check after observation phase, before gap calculation
+<<<<<<< HEAD
 - `src/base/types/loop.ts` -- add `IterationSnapshot` and `StateDiffThresholds` schemas
+=======
+- `src/types/loop.ts` -- add `IterationSnapshot` and `StateDiffThresholds` schemas
+>>>>>>> e49c85c9 (implement native agentloop and coreloop phases)
 
 **Integration point in `runOneIteration`:**
 
@@ -351,8 +357,13 @@ This is optional (phase 2). The default static classification is sufficient for 
 **Files to change:**
 - `src/base/llm/provider-config.ts` -- add `light_model` field to provider config schema
 - `src/base/llm/base-llm-client.ts` -- add model selection logic based on `model_tier`
+<<<<<<< HEAD
 - `src/base/types/llm.ts` -- add `ModelTier` type and `model_tier` to `LLMRequestOptions`
 - `src/platform/observation/observation-llm.ts` -- pass `model_tier: 'light'`
+=======
+- `src/types/llm.ts` -- add `ModelTier` type and `model_tier` to `LLMRequestOptions`
+- `src/observation/observation-llm.ts` -- pass `model_tier: 'light'`
+>>>>>>> e49c85c9 (implement native agentloop and coreloop phases)
 - `src/orchestrator/execution/task/task-generation.ts` -- pass `model_tier: 'main'` (default, explicit)
 - `src/orchestrator/execution/task/task-verifier.ts` -- pass `model_tier: 'light'` for L2, `model_tier: 'main'` for re-review
 
