@@ -26,6 +26,16 @@ export interface StateWriteFenceContext {
 
 export type StateWriteFence = (context: StateWriteFenceContext) => Promise<void> | void;
 
+const MAX_HISTORY_ENTRIES = 500;
+
+type GoalLocationKind = "active" | "archive";
+
+interface GoalStorageLocation {
+  kind: GoalLocationKind;
+  dir: string;
+  goalJsonPath: string;
+}
+
 /**
  * StateManager handles persistence of goals, state vectors, observation logs,
  * and gap history under a base directory (default: ~/.pulseed/).
@@ -114,6 +124,123 @@ export class StateManager {
     await this.goalWriteCoordinator.protectedWrite(goalId, op, data, writeFn);
   }
 
+  private isEnoent(error: unknown): boolean {
+    return (error as NodeJS.ErrnoException).code === "ENOENT";
+  }
+
+  private async pathExists(filePath: string): Promise<boolean> {
+    try {
+      await fsp.access(filePath);
+      return true;
+    } catch (e: unknown) {
+      if (!this.isEnoent(e)) throw e;
+      return false;
+    }
+  }
+
+  private goalStorageLocation(goalId: string, kind: GoalLocationKind): GoalStorageLocation {
+    if (kind === "active") {
+      const dir = path.join(this.baseDir, "goals", goalId);
+      return { kind, dir, goalJsonPath: path.join(dir, "goal.json") };
+    }
+
+    const dir = path.join(this.baseDir, "archive", goalId);
+    return { kind, dir, goalJsonPath: path.join(dir, "goal", "goal.json") };
+  }
+
+  private async resolveGoalLocation(goalId: string, includeArchive: boolean): Promise<GoalStorageLocation | null> {
+    const activeLocation = this.goalStorageLocation(goalId, "active");
+    if (await this.pathExists(activeLocation.dir)) return activeLocation;
+
+    if (!includeArchive) return null;
+
+    const archiveLocation = this.goalStorageLocation(goalId, "archive");
+    if (await this.pathExists(archiveLocation.dir)) return archiveLocation;
+    return null;
+  }
+
+  private markGoalVisited(goalId: string, visited: Set<string>): boolean {
+    if (visited.has(goalId)) return false;
+    visited.add(goalId);
+    return true;
+  }
+
+  private async loadGoalForChildTraversal(goalId: string, location: GoalStorageLocation): Promise<Goal | null> {
+    try {
+      if (location.kind === "archive") {
+        const raw = await this.atomicRead<unknown>(location.goalJsonPath);
+        return raw === null ? null : GoalSchema.parse(raw);
+      }
+
+      return this.loadGoal(goalId);
+    } catch (e: unknown) {
+      if (!this.isEnoent(e)) throw e;
+      const archivedLabel = location.kind === "archive" ? " archived" : "";
+      this.logger?.warn(`[StateManager] Skipping children of${archivedLabel} "${goalId}": goal.json unreadable`);
+      return null;
+    }
+  }
+
+  private async visitChildGoals(
+    goalId: string,
+    location: GoalStorageLocation,
+    visited: Set<string>,
+    visit: (childId: string, visited: Set<string>) => Promise<boolean>
+  ): Promise<void> {
+    const goal = await this.loadGoalForChildTraversal(goalId, location);
+    if (goal === null) return;
+
+    for (const childId of goal.children_ids) {
+      await visit(childId, visited);
+    }
+  }
+
+  private capHistoryEntries<T>(entries: T[]): T[] {
+    return entries.slice(-MAX_HISTORY_ENTRIES);
+  }
+
+  private assertObservationGoalId(goalId: string, entry: ObservationLogEntry): void {
+    if (entry.goal_id !== goalId) {
+      throw new StateError(
+        `appendObservation: entry.goal_id ("${entry.goal_id}") does not match goalId ("${goalId}")`
+      );
+    }
+  }
+
+  private async buildAppendedObservationLog(goalId: string, entry: ObservationLogEntry): Promise<ObservationLog> {
+    const log = (await this.loadObservationLog(goalId)) ?? { goal_id: goalId, entries: [] };
+    return {
+      ...log,
+      entries: this.capHistoryEntries([...log.entries, entry]),
+    };
+  }
+
+  private async writeObservationLog(
+    goalId: string,
+    op: string,
+    log: ObservationLog,
+    resolveDirBeforeWrite: boolean
+  ): Promise<void> {
+    const resolvedDir = resolveDirBeforeWrite ? await this.goalDir(goalId) : null;
+    await this.protectedWrite(goalId, op, log, async () => {
+      const dir = resolvedDir ?? await this.goalDir(goalId);
+      await this.atomicWrite(path.join(dir, "observations.json"), log);
+    });
+  }
+
+  private async writeGapHistory(
+    goalId: string,
+    op: string,
+    entries: GapHistoryEntry[],
+    resolveDirBeforeWrite: boolean
+  ): Promise<void> {
+    const resolvedDir = resolveDirBeforeWrite ? await this.goalDir(goalId) : null;
+    await this.protectedWrite(goalId, op, { goalId, entries }, async () => {
+      const dir = resolvedDir ?? await this.goalDir(goalId);
+      await this.atomicWrite(path.join(dir, "gap-history.json"), entries);
+    });
+  }
+
   // ─── Goal CRUD ───
 
   async saveGoal(goal: Goal): Promise<void> {
@@ -138,56 +265,14 @@ export class StateManager {
   }
 
   async deleteGoal(goalId: string, _visited = new Set<string>()): Promise<boolean> {
-    if (_visited.has(goalId)) return false;
-    _visited.add(goalId);
+    if (!this.markGoalVisited(goalId, _visited)) return false;
 
-    const dir = path.join(this.baseDir, "goals", goalId);
-    try {
-      await fsp.access(dir);
-    } catch (e: unknown) {
-      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-      // After the active goals check fails, try archive directory
-      const archiveDir = path.join(this.baseDir, "archive", goalId);
-      try {
-        await fsp.access(archiveDir);
-        // Load archived goal to get children_ids before deleting
-        const archiveGoalPath = path.join(archiveDir, "goal", "goal.json");
-        let archivedGoal: Goal | null = null;
-        try {
-          const raw = await this.atomicRead<unknown>(archiveGoalPath);
-          if (raw !== null) archivedGoal = GoalSchema.parse(raw);
-        } catch (e: unknown) {
-          if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-          this.logger?.warn(`[StateManager] Skipping children of archived "${goalId}": goal.json unreadable`);
-        }
-        if (archivedGoal !== null) {
-          for (const childId of archivedGoal.children_ids) {
-            await this.deleteGoal(childId, _visited);
-          }
-        }
-        await fsp.rm(archiveDir, { recursive: true, force: true });
-        return true;
-      } catch (e: unknown) {
-        if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-        return false;
-      }
-    }
+    const location = await this.resolveGoalLocation(goalId, true);
+    if (location === null) return false;
 
     // Recursively delete children first (depth-first)
-    let goal: Goal | null = null;
-    try {
-      goal = await this.loadGoal(goalId);
-    } catch (e: unknown) {
-      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-      this.logger?.warn(`[StateManager] Skipping children of "${goalId}": goal.json unreadable`);
-    }
-    if (goal !== null) {
-      for (const childId of goal.children_ids) {
-        await this.deleteGoal(childId, _visited);
-      }
-    }
-
-    await fsp.rm(dir, { recursive: true, force: true });
+    await this.visitChildGoals(goalId, location, _visited, (childId, visited) => this.deleteGoal(childId, visited));
+    await fsp.rm(location.dir, { recursive: true, force: true });
     return true;
   }
 
@@ -205,38 +290,21 @@ export class StateManager {
    * Returns true if the goal was archived, false if the goal was not found.
    */
   async archiveGoal(goalId: string, _visited = new Set<string>()): Promise<boolean> {
-    if (_visited.has(goalId)) return false;
-    _visited.add(goalId);
+    if (!this.markGoalVisited(goalId, _visited)) return false;
 
-    const goalDir = path.join(this.baseDir, "goals", goalId);
-    try {
-      await fsp.access(goalDir);
-    } catch (e: unknown) {
-      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-      return false;
-    }
+    const location = await this.resolveGoalLocation(goalId, false);
+    if (location === null) return false;
 
     // Recursively archive children first (depth-first)
-    let goal: Goal | null = null;
-    try {
-      goal = await this.loadGoal(goalId);
-    } catch (e: unknown) {
-      if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-      this.logger?.warn(`[StateManager] Skipping children of "${goalId}": goal.json unreadable`);
-    }
-    if (goal !== null) {
-      for (const childId of goal.children_ids) {
-        await this.archiveGoal(childId, _visited);
-      }
-    }
+    await this.visitChildGoals(goalId, location, _visited, (childId, visited) => this.archiveGoal(childId, visited));
 
     const archiveBase = path.join(this.baseDir, "archive", goalId);
     await fsp.mkdir(archiveBase, { recursive: true });
 
     // Move goals/<goalId>/ → archive/<goalId>/goal/
     const archiveGoalDir = path.join(archiveBase, "goal");
-    await fsp.cp(goalDir, archiveGoalDir, { recursive: true });
-    await fsp.rm(goalDir, { recursive: true, force: true });
+    await fsp.cp(location.dir, archiveGoalDir, { recursive: true });
+    await fsp.rm(location.dir, { recursive: true, force: true });
 
     // Update status to "archived" in the archived goal.json (Bug 5)
     // Use direct JSON merge instead of GoalSchema.parse() to avoid silent failure
@@ -351,10 +419,7 @@ export class StateManager {
 
   async saveObservationLog(log: ObservationLog): Promise<void> {
     const parsed = ObservationLogSchema.parse(log);
-    const dir = await this.goalDir(parsed.goal_id);
-    await this.protectedWrite(parsed.goal_id, "save_observation", parsed, async () => {
-      await this.atomicWrite(path.join(dir, "observations.json"), parsed);
-    });
+    await this.writeObservationLog(parsed.goal_id, "save_observation", parsed, true);
   }
 
   async loadObservationLog(goalId: string): Promise<ObservationLog | null> {
@@ -371,32 +436,16 @@ export class StateManager {
 
   async appendObservation(goalId: string, entry: ObservationLogEntry): Promise<void> {
     const parsed = ObservationLogEntrySchema.parse(entry);
-    if (parsed.goal_id !== goalId) {
-      throw new StateError(
-        `appendObservation: entry.goal_id ("${parsed.goal_id}") does not match goalId ("${goalId}")`
-      );
-    }
-    let log = await this.loadObservationLog(goalId);
-    if (log === null) {
-      log = { goal_id: goalId, entries: [] };
-    }
-    log.entries.push(parsed);
-    log.entries = log.entries.slice(-500);
-    const finalLog = log;
-    await this.protectedWrite(goalId, "append_observation", finalLog, async () => {
-      const dir = await this.goalDir(goalId);
-      await this.atomicWrite(path.join(dir, "observations.json"), finalLog);
-    });
+    this.assertObservationGoalId(goalId, parsed);
+    const log = await this.buildAppendedObservationLog(goalId, parsed);
+    await this.writeObservationLog(goalId, "append_observation", log, false);
   }
 
   // ─── Gap History ───
 
   async saveGapHistory(goalId: string, history: GapHistoryEntry[]): Promise<void> {
     const parsed = history.map((e) => GapHistoryEntrySchema.parse(e));
-    const dir = await this.goalDir(goalId);
-    await this.protectedWrite(goalId, "save_gap_history", { goalId, entries: parsed }, async () => {
-      await this.atomicWrite(path.join(dir, "gap-history.json"), parsed);
-    });
+    await this.writeGapHistory(goalId, "save_gap_history", parsed, true);
   }
 
   async loadGapHistory(goalId: string): Promise<GapHistoryEntry[]> {
@@ -414,12 +463,8 @@ export class StateManager {
   async appendGapHistoryEntry(goalId: string, entry: GapHistoryEntry): Promise<void> {
     const parsed = GapHistoryEntrySchema.parse(entry);
     const history = await this.loadGapHistory(goalId);
-    history.push(parsed);
-    const trimmed = history.slice(-500);
-    const dir = await this.goalDir(goalId);
-    await this.protectedWrite(goalId, "append_gap_entry", { goalId, entries: trimmed }, async () => {
-      await this.atomicWrite(path.join(dir, "gap-history.json"), trimmed);
-    });
+    const trimmed = this.capHistoryEntries([...history, parsed]);
+    await this.writeGapHistory(goalId, "append_gap_entry", trimmed, false);
   }
 
   /**

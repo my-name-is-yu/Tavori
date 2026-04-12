@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { StateManager } from "../state-manager.js";
-import { StateFenceError } from "../../utils/errors.js";
+import { StateError, StateFenceError } from "../../utils/errors.js";
 import {
   getMilestones,
   getOverdueMilestones,
@@ -326,6 +326,26 @@ describe("StateManager", async () => {
       expect(await manager.deleteGoalTree("del-tree")).toBe(true);
       expect(await manager.loadGoalTree("del-tree")).toBeNull();
     });
+
+    it("updates a tree goal while preserving id and parent child link", async () => {
+      const parent = makeGoal({ id: "tree-parent", children_ids: [] });
+      const child = makeGoal({ id: "tree-child", parent_id: "tree-parent", title: "Old title" });
+      await manager.saveGoal(parent);
+      await manager.saveGoal(child);
+
+      await manager.updateGoalInTree("tree-child", { id: "ignored-id", title: "New title" });
+
+      const updatedChild = await manager.loadGoal("tree-child");
+      expect(updatedChild!.id).toBe("tree-child");
+      expect(updatedChild!.title).toBe("New title");
+
+      const updatedParent = await manager.loadGoal("tree-parent");
+      expect(updatedParent!.children_ids).toContain("tree-child");
+    });
+
+    it("throws when updating a missing tree goal", async () => {
+      await expect(manager.updateGoalInTree("missing-tree-goal", { title: "Nope" })).rejects.toThrow(StateError);
+    });
   });
 
   describe("Observation Log", async () => {
@@ -401,6 +421,33 @@ describe("StateManager", async () => {
       expect(loaded!.entries).toHaveLength(2);
       expect(loaded!.entries[0].observation_id).toBe("obs-a");
       expect(loaded!.entries[1].observation_id).toBe("obs-b");
+    });
+
+    it("rejects appendObservation when entry goal_id does not match", async () => {
+      await manager.saveGoal(makeGoal({ id: "append-obs-mismatch" }));
+
+      const entry: ObservationLogEntry = {
+        observation_id: "obs-mismatch",
+        timestamp: new Date().toISOString(),
+        trigger: "periodic",
+        goal_id: "different-goal",
+        dimension_name: "dim1",
+        layer: "mechanical",
+        method: {
+          type: "api_query",
+          source: "api",
+          schedule: null,
+          endpoint: null,
+          confidence_tier: "mechanical",
+        },
+        raw_result: 10,
+        extracted_value: 10,
+        confidence: 0.9,
+        notes: null,
+      };
+
+      await expect(manager.appendObservation("append-obs-mismatch", entry)).rejects.toThrow(StateError);
+      expect(await manager.loadObservationLog("append-obs-mismatch")).toBeNull();
     });
 
     it("returns null for non-existent observation log", async () => {
@@ -743,6 +790,56 @@ describe("StateManager", async () => {
 
       expect(await manager.loadGoal("fenced-goal")).not.toBeNull();
     });
+
+    it("runs goal-scoped raw writes through the write fence", async () => {
+      const fence = vi.fn();
+      manager.setWriteFence("raw-goal", fence);
+
+      await manager.writeRaw("goals/raw-goal/custom.json", { ok: true });
+
+      expect(fence).toHaveBeenCalledWith({
+        goalId: "raw-goal",
+        op: "write_raw",
+        data: { path: "goals/raw-goal/custom.json", payload: { ok: true } },
+      });
+      expect(await manager.readRaw("goals/raw-goal/custom.json")).toEqual({ ok: true });
+    });
+  });
+
+  describe("checkpoint restore", async () => {
+    it("restores dimension values and trust balance from a checkpoint", async () => {
+      const goal = makeGoal({
+        id: "checkpoint-goal",
+        dimensions: [
+          makeDimension({ name: "dim1", current_value: 1 }),
+          makeDimension({ name: "dim2", current_value: 2 }),
+        ],
+      });
+      await manager.saveGoal(goal);
+      await manager.writeRaw("goals/checkpoint-goal/checkpoint.json", {
+        cycle_number: 7,
+        dimension_snapshot: { dim1: 42, unknown: 100 },
+        trust_snapshot: 0.75,
+      });
+
+      const trustManager = { setOverride: vi.fn().mockResolvedValue(undefined) };
+
+      await expect(manager.restoreFromCheckpoint("checkpoint-goal", "adapter-a", trustManager)).resolves.toBe(7);
+
+      const restored = await manager.loadGoal("checkpoint-goal");
+      expect(restored!.dimensions.find((dim) => dim.name === "dim1")!.current_value).toBe(42);
+      expect(restored!.dimensions.find((dim) => dim.name === "dim2")!.current_value).toBe(2);
+      expect(trustManager.setOverride).toHaveBeenCalledWith("adapter-a", 0.75, "checkpoint_restore");
+    });
+
+    it("returns 0 for an invalid checkpoint", async () => {
+      await manager.saveGoal(makeGoal({ id: "invalid-checkpoint-goal" }));
+      await manager.writeRaw("goals/invalid-checkpoint-goal/checkpoint.json", {
+        cycle_number: -1,
+      });
+
+      await expect(manager.restoreFromCheckpoint("invalid-checkpoint-goal", "adapter-a")).resolves.toBe(0);
+    });
   });
 
   describe("archiveGoal", async () => {
@@ -911,6 +1008,22 @@ describe("StateManager", async () => {
 
       expect(await manager.goalExists("del-parent")).toBe(false);
       expect(await manager.goalExists("del-child")).toBe(false);
+    });
+
+    it("deleteGoal cascades through archived children", async () => {
+      const child = makeGoal({ id: "del-archived-child", parent_id: "del-archived-parent" });
+      const parent = makeGoal({ id: "del-archived-parent", children_ids: ["del-archived-child"] });
+      await manager.saveGoal(child);
+      await manager.saveGoal(parent);
+      await manager.archiveGoal("del-archived-parent");
+
+      const result = await manager.deleteGoal("del-archived-parent");
+      expect(result).toBe(true);
+
+      expect(fs.existsSync(path.join(tmpDir, "archive", "del-archived-parent"))).toBe(false);
+      expect(fs.existsSync(path.join(tmpDir, "archive", "del-archived-child"))).toBe(false);
+      expect(await manager.loadGoal("del-archived-parent")).toBeNull();
+      expect(await manager.loadGoal("del-archived-child")).toBeNull();
     });
 
     it("deleteGoal tolerates corrupt child — succeeds without throwing", async () => {
