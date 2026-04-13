@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.6] - 2026-04-13
+
+### Added
+- Added GitHub CLI-backed agent tools for PR, issue, Actions, and draft PR workflows (#655)
+- Added persistent process session tools for dev servers, watchers, and REPL-style agent workflows (#655)
+- Added MCP stdio bridge tools for listing and calling external MCP tools from the native tool registry (#655)
+- Added native AgentLoop dogfood benchmarking and a real-model dogfood runner for tool-using task execution (#655)
+
+### Changed
+- Switched npm publishing workflow to manual dispatch so release tags can be created without automatically publishing to npm
+- Expanded native AgentLoop tool profile and doctor coverage for GitHub, MCP, and process session tools (#655)
+- Bumped the package version to `0.4.6`
+
+### Fixed
+- Fixed OpenAI Responses AgentLoop replay and tool schema handling for native tool calls (#655)
+- Fixed GrepTool cwd handling, Codex-style apply_patch support, and verification command classification for grep (#655)
+- Hardened slow and flaky tests around memory lifecycle, daemon runner, schedules, process sessions, and A2A polling (#655)
+
 ## [0.4.5] - 2026-04-11
 
 ### Added
