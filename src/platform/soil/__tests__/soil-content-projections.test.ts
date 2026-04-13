@@ -7,14 +7,18 @@ import type {
   DomainKnowledge,
   SharedKnowledgeEntry,
 } from "../../../base/types/knowledge.js";
+import type { DreamWorkflowRecord } from "../../dream/dream-event-workflows.js";
 import type { AgentMemoryStore } from "../../knowledge/types/agent-memory.js";
+import type { SoilMemoryHealthSnapshot } from "../health.js";
 import { readSoilMarkdownFile } from "../io.js";
 import {
   projectAgentMemoryToSoil,
   projectDecisionsToSoil,
   projectDomainKnowledgeToSoil,
+  projectDreamKnowledgeToSoil,
   projectIdentityToSoil,
   projectSharedKnowledgeToSoil,
+  projectSoilFeedbackToSoil,
   projectSoilSystemPages,
 } from "../content-projections.js";
 
@@ -196,6 +200,127 @@ describe("Soil content projections", () => {
       expect(seedPage?.body).toContain("Keep growing.");
       expect(rootPage?.body).toContain("Be clear.");
       expect(userPage?.body).toContain("Prefer short answers.");
+    } finally {
+      cleanupTempDir(baseDir);
+    }
+  });
+
+  it("projects empty Dream knowledge and concrete Soil feedback", async () => {
+    const baseDir = makeTempDir("soil-compiled-memory-projection-");
+    try {
+      await projectDreamKnowledgeToSoil({
+        baseDir,
+        learnedPatterns: [],
+        workflowRecords: [],
+        clock: fixedClock,
+      });
+
+      const learnedPage = await readSoilMarkdownFile(path.join(baseDir, "soil", "learning", "learned-patterns", "index.md"));
+      const workflowPage = await readSoilMarkdownFile(path.join(baseDir, "soil", "dream", "workflows", "index.md"));
+      expect(learnedPage?.frontmatter.compiled_memory_schema).toBe("soil-compiled-memory-v1");
+      expect(learnedPage?.body).toContain("No learned patterns.");
+      expect(learnedPage?.body).toContain("- Types: none");
+      expect(workflowPage?.frontmatter.compiled_memory_schema).toBe("soil-compiled-memory-v1");
+      expect(workflowPage?.body).toContain("No Dream workflows.");
+      expect(workflowPage?.body).toContain("- Types: none");
+
+      const taskOnlyWorkflow: DreamWorkflowRecord = {
+        workflow_id: "dream-workflow:task-only",
+        type: "stall_recovery",
+        title: "Recover task-only stall",
+        description: "Change strategy when a task stalls without a goal scope.",
+        applicability: {
+          goal_ids: [],
+          task_ids: ["task-only"],
+          event_types: ["StallDetected"],
+          signals: [],
+          scopes: [],
+        },
+        preconditions: [],
+        steps: [],
+        failure_modes: ["confidence_stall"],
+        recovery_steps: [],
+        evidence_refs: [],
+        evidence_count: 0,
+        success_count: 0,
+        failure_count: 1,
+        confidence: 0.61,
+        created_at: "2026-04-11T08:00:00.000Z",
+        updated_at: "2026-04-11T09:00:00.000Z",
+      };
+      await projectDreamKnowledgeToSoil({
+        baseDir,
+        learnedPatterns: [],
+        workflowRecords: [taskOnlyWorkflow],
+        clock: fixedClock,
+      });
+      const taskWorkflowPage = await readSoilMarkdownFile(path.join(baseDir, "soil", "dream", "workflows", "index.md"));
+      expect(taskWorkflowPage?.body).toContain("global:task-only");
+      expect(taskWorkflowPage?.body).toContain("- none");
+
+      const snapshot: SoilMemoryHealthSnapshot = {
+        generatedAt: "2026-04-11T10:00:00.000Z",
+        rootDir: path.join(baseDir, "soil"),
+        totalPages: 2,
+        findingCount: 1,
+        errorCount: 1,
+        warningCount: 0,
+        compileMissCount: 2,
+        compileMissBuckets: [
+          {
+            key: "stale_route:src/app.ts:route-a",
+            count: 2,
+            reason: "stale_route",
+            targetPath: "src/app.ts",
+            routeIds: ["route-a"],
+          },
+        ],
+        findings: [
+          {
+            schema_version: "soil-memory-lint-finding-v1",
+            finding_id: "finding-route-a",
+            code: "broken_route_target",
+            severity: "error",
+            status: "open",
+            soil_id: "knowledge/missing",
+            record_id: "record-missing",
+            route_id: "route-a",
+            source_path: "src/app.ts",
+            message: "Route points at a missing Soil record.",
+            created_at: "2026-04-11T09:59:00.000Z",
+            resolved_at: null,
+          },
+        ],
+      };
+      await projectSoilFeedbackToSoil({ baseDir, snapshot, clock: fixedClock });
+
+      const feedbackPage = await readSoilMarkdownFile(path.join(baseDir, "soil", "feedback", "context.md"));
+      const healthPage = await readSoilMarkdownFile(path.join(baseDir, "soil", "health.md"));
+      expect(feedbackPage?.frontmatter.compiled_memory_schema).toBe("soil-compiled-memory-v1");
+      expect(feedbackPage?.body).toContain("stale_route:src/app.ts:route-a");
+      expect(feedbackPage?.body).toContain("- Route IDs: `route-a`");
+      expect(feedbackPage?.body).toContain("Route points at a missing Soil record.");
+      expect(healthPage?.frontmatter.summary).toBe("1 errors, 0 warnings");
+      expect(healthPage?.body).toContain("- Route ID: route-a");
+      expect(healthPage?.body).toContain("- Compile misses: 2");
+
+      await projectSoilFeedbackToSoil({
+        baseDir,
+        clock: fixedClock,
+        snapshot: {
+          ...snapshot,
+          findingCount: 0,
+          errorCount: 0,
+          compileMissCount: 0,
+          compileMissBuckets: [],
+          findings: [],
+        },
+      });
+      const emptyFeedbackPage = await readSoilMarkdownFile(path.join(baseDir, "soil", "feedback", "context.md"));
+      const emptyHealthPage = await readSoilMarkdownFile(path.join(baseDir, "soil", "health.md"));
+      expect(emptyFeedbackPage?.body).toContain("No compile miss buckets.");
+      expect(emptyFeedbackPage?.body).toContain("No health findings.");
+      expect(emptyHealthPage?.body).toContain("No health findings.");
     } finally {
       cleanupTempDir(baseDir);
     }

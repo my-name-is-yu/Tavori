@@ -18,6 +18,28 @@ async function waitForFile(filePath: string, timeoutMs = 1000): Promise<void> {
   throw new Error(`Timed out waiting for file: ${filePath}`);
 }
 
+async function waitForBroadcast(
+  broadcast: ReturnType<typeof vi.fn>,
+  eventType: string,
+  requestId: string,
+  timeoutMs = 1000
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (broadcast.mock.calls.some(([type, payload]) =>
+      type === eventType &&
+      typeof payload === "object" &&
+      payload !== null &&
+      "requestId" in payload &&
+      payload.requestId === requestId
+    )) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`Timed out waiting for broadcast: ${eventType}:${requestId}`);
+}
+
 describe("ApprovalBroker", () => {
   let tmpDir: string | null = null;
 
@@ -50,6 +72,7 @@ describe("ApprovalBroker", () => {
     );
     const pending = await store.loadPending("approval-live");
     expect(pending?.state).toBe("pending");
+    await waitForBroadcast(broadcast, "approval_required", "approval-live");
 
     await expect(broker.resolveApproval("approval-live", true, "tui")).resolves.toBe(true);
     await expect(request).resolves.toBe(true);

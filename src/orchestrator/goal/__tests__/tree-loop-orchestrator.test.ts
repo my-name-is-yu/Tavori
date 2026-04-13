@@ -939,7 +939,7 @@ describe("edge cases", async () => {
     await saveGoal({ id: "c2", node_type: "leaf", parent_id: "root", status: "completed" });
     await saveGoal({ id: "c3", node_type: "leaf", parent_id: "root", status: "active", loop_status: "running" });
 
-    orchestrator.onNodeCompleted("c2"); // c2 was already completed but we call it
+    await orchestrator.onNodeCompleted("c2"); // c2 was already completed but we call it
     const root = await stateManager.loadGoal("root");
     // c3 is still active → root not completed
     expect(root?.status).not.toBe("completed");

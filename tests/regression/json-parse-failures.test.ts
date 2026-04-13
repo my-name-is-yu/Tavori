@@ -58,6 +58,17 @@ function makeTask(overrides: Partial<Task> = {}): Task {
   };
 }
 
+async function waitForCondition(condition: () => boolean, message: string, timeoutMs = 2000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (condition()) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error(message);
+}
+
 describe("json parse failure regressions", () => {
   let tmpDir: string;
   let stateManager: StateManager;
@@ -74,35 +85,34 @@ describe("json parse failure regressions", () => {
   it("drive-system watcher skips malformed JSON and still delivers later valid events", async () => {
     const logger = makeLogger();
     const driveSystem = new DriveSystem(stateManager, { baseDir: tmpDir, logger });
-    const received: PulSeedEvent[] = [];
-    driveSystem.startWatcher((event) => {
-      received.push(event);
-    });
+    try {
+      const received: PulSeedEvent[] = [];
+      driveSystem.startWatcher((event) => {
+        received.push(event);
+      });
 
-    // Poll until the watcher is actually active (avoids fixed-timeout flakiness)
-    {
-      const deadline = Date.now() + 2000;
-      while (!(driveSystem as unknown as { watcher: unknown }).watcher && Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, 20));
-      }
+      await waitForCondition(
+        () => Boolean((driveSystem as unknown as { watcher: unknown }).watcher),
+        "Timed out waiting for DriveSystem watcher"
+      );
+
+      const eventsDir = path.join(tmpDir, "events");
+      fs.writeFileSync(path.join(eventsDir, "bad.json"), "{ not valid json", "utf-8");
+      await waitForCondition(
+        () => logger.warn.mock.calls.some(([message]) => String(message).includes("bad.json")),
+        "Timed out waiting for malformed event warning"
+      );
+
+      fs.writeFileSync(path.join(eventsDir, "good.json"), JSON.stringify(makeEvent()), "utf-8");
+      await waitForCondition(() => received.length >= 1, "Timed out waiting for valid event");
+
+      expect(received).toHaveLength(1);
+      expect(received[0]?.source).toBe("regression-test");
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("DriveSystem"));
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("bad.json"));
+    } finally {
+      driveSystem.stopWatcher();
     }
-
-    const eventsDir = path.join(tmpDir, "events");
-    fs.writeFileSync(path.join(eventsDir, "bad.json"), "{ not valid json", "utf-8");
-    fs.writeFileSync(path.join(eventsDir, "good.json"), JSON.stringify(makeEvent()), "utf-8");
-
-    // Poll until the valid event arrives (avoids fixed-timeout flakiness on slow disks)
-    {
-      const deadline = Date.now() + 2000;
-      while (received.length < 1 && Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, 50));
-      }
-    }
-
-    expect(received).toHaveLength(1);
-    expect(received[0]?.source).toBe("regression-test");
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("DriveSystem"));
-    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("bad.json"));
   });
 
   it("observation-llm keeps processing when threshold JSON is malformed", async () => {
