@@ -22,10 +22,6 @@ function upsertMessage(
   return [...next, nextMessage].slice(-maxMessages);
 }
 
-function toolMessageType(success: boolean): StreamChatMessage["messageType"] {
-  return success ? "info" : "error";
-}
-
 export function applyChatEventToMessages(
   messages: StreamChatMessage[],
   event: ChatEvent,
@@ -53,6 +49,16 @@ export function applyChatEventToMessages(
     }, maxMessages);
   }
 
+  if (event.type === "activity") {
+    return upsertMessage(messages, {
+      id: `activity:${event.turnId}`,
+      role: "pulseed",
+      text: event.message,
+      timestamp,
+      messageType: "info",
+    }, maxMessages);
+  }
+
   if (event.type === "lifecycle_error") {
     const messageId = event.partialText ? event.turnId : `error:${event.runId}`;
     const text = event.partialText
@@ -68,33 +74,15 @@ export function applyChatEventToMessages(
   }
 
   if (event.type === "tool_start") {
-    return upsertMessage(messages, {
-      id: `tool:${event.toolCallId}`,
-      role: "pulseed",
-      text: `[tool:${event.toolName}] started`,
-      timestamp,
-      messageType: "info",
-    }, maxMessages);
+    return messages;
   }
 
   if (event.type === "tool_update") {
-    return upsertMessage(messages, {
-      id: `tool:${event.toolCallId}`,
-      role: "pulseed",
-      text: `[tool:${event.toolName}] ${event.status}: ${event.message}`,
-      timestamp,
-      messageType: event.status === "awaiting_approval" ? "warning" : "info",
-    }, maxMessages);
+    return messages;
   }
 
   if (event.type === "tool_end") {
-    return upsertMessage(messages, {
-      id: `tool:${event.toolCallId}`,
-      role: "pulseed",
-      text: `[tool:${event.toolName}] ${event.success ? "done" : "failed"}: ${event.summary}`,
-      timestamp,
-      messageType: toolMessageType(event.success),
-    }, maxMessages);
+    return messages;
   }
 
   return messages;

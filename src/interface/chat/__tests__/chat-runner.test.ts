@@ -78,6 +78,22 @@ describe("ChatRunner", () => {
       expect(result.elapsed_ms).toBeGreaterThanOrEqual(0);
     });
 
+    it("emits lifecycle activity before adapter execution", async () => {
+      const adapter = makeMockAdapter();
+      const events: string[] = [];
+      const runner = new ChatRunner(makeDeps({
+        adapter,
+        onEvent: (event) => {
+          if (event.type === "activity") events.push(`${event.kind}:${event.message}`);
+        },
+      }));
+
+      await runner.execute("Do something", "/repo");
+
+      expect(events[0]).toBe("lifecycle:Preparing context...");
+      expect(events).toContain("lifecycle:Calling adapter...");
+    });
+
     it("propagates adapter failure to ChatRunResult", async () => {
       const failResult: AgentResult = { ...CANNED_RESULT, success: false, output: "Agent failed", error: "boom", exit_code: 1 };
       const runner = new ChatRunner(makeDeps({ adapter: makeMockAdapter(failResult) }));

@@ -4,6 +4,9 @@ import { DiscordAPI } from "./discord-api.js";
 import { dispatchChatInput, type ChatContinuationInput } from "./shared-manager.js";
 import type { DiscordBotConfig } from "./config.js";
 
+const MAX_DISCORD_ACTIVITY_MESSAGES = 8;
+const MAX_DISCORD_ACTIVITY_CHARS = 300;
+
 interface DiscordInteractionOption {
   name: string;
   value?: unknown;
@@ -30,6 +33,12 @@ interface DiscordInteractionPayload {
     name?: string;
     options?: DiscordInteractionOption[];
   };
+}
+
+interface ActivityChatEvent {
+  type: "activity";
+  kind: "lifecycle" | "commentary" | "tool" | "plugin" | "skill";
+  message: string;
 }
 
 export class DiscordWebhookServer {
@@ -143,7 +152,27 @@ export class DiscordWebhookServer {
     payload: DiscordInteractionPayload,
     input: ChatContinuationInput
   ): Promise<void> {
-    const reply = await this.fetchChatReply(input);
+    let sentActivityCount = 0;
+    let lastActivity = "";
+    const reply = await this.fetchChatReply({
+      ...input,
+      onEvent: async (event: unknown) => {
+        if (
+          !isActivityChatEvent(event) ||
+          (event.kind !== "tool" && event.kind !== "plugin" && event.kind !== "skill") ||
+          payload.application_id === undefined ||
+          payload.token === undefined ||
+          sentActivityCount >= MAX_DISCORD_ACTIVITY_MESSAGES
+        ) {
+          return;
+        }
+        const content = truncateDiscordActivity(event.message);
+        if (content === lastActivity) return;
+        lastActivity = content;
+        sentActivityCount++;
+        await this.api.sendInteractionFollowUp(payload.application_id, payload.token, content);
+      },
+    });
     const content = reply ?? "Received.";
 
     if (payload.application_id !== undefined && payload.token !== undefined) {
@@ -208,4 +237,18 @@ export class DiscordWebhookServer {
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify(payload));
   }
+}
+
+function truncateDiscordActivity(message: string): string {
+  const normalized = message.replace(/\s+/g, " ").trim();
+  if (normalized.length <= MAX_DISCORD_ACTIVITY_CHARS) return normalized;
+  return `${normalized.slice(0, MAX_DISCORD_ACTIVITY_CHARS)}...`;
+}
+
+function isActivityChatEvent(event: unknown): event is ActivityChatEvent {
+  return typeof event === "object"
+    && event !== null
+    && (event as Record<string, unknown>)["type"] === "activity"
+    && typeof (event as Record<string, unknown>)["kind"] === "string"
+    && typeof (event as Record<string, unknown>)["message"] === "string";
 }

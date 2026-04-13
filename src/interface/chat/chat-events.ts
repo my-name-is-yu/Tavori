@@ -21,6 +21,16 @@ export interface AssistantFinalEvent extends ChatEventBase {
   persisted: boolean;
 }
 
+export type ActivityKind = "lifecycle" | "commentary" | "tool" | "plugin" | "skill";
+
+export interface ActivityEvent extends ChatEventBase {
+  type: "activity";
+  kind: ActivityKind;
+  message: string;
+  sourceId?: string;
+  transient?: boolean;
+}
+
 export interface ToolStartEvent extends ChatEventBase {
   type: "tool_start";
   toolCallId: string;
@@ -63,6 +73,7 @@ export type ChatEvent =
   | LifecycleStartEvent
   | AssistantDeltaEvent
   | AssistantFinalEvent
+  | ActivityEvent
   | ToolStartEvent
   | ToolUpdateEvent
   | ToolEndEvent

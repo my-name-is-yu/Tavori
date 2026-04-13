@@ -86,6 +86,8 @@ export type {
   LifecycleStartEvent,
   AssistantDeltaEvent,
   AssistantFinalEvent,
+  ActivityEvent,
+  ActivityKind,
   ToolStartEvent,
   ToolUpdateEvent,
   ToolEndEvent,
