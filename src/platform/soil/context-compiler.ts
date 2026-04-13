@@ -152,12 +152,13 @@ function routeStaleWarning(route: SoilContextRoute, timestamp: string, staleAfte
   return null;
 }
 
-export function compileSoilContext(input: SoilContextCompilerInput): SoilCompiledContext {
-  const timestamp = nowIso(input.now);
-  const retrievalId = input.retrievalId ?? `soil-retrieval:${randomUUID()}`;
-  const warnings: string[] = [];
+interface RouteSelectionResult {
+  routes: SoilContextRoute[];
+  decisions: SoilRetrievalDecision[];
+}
+
+function selectMatchingRoutes(input: SoilContextCompilerInput): RouteSelectionResult {
   const decisions: SoilRetrievalDecision[] = [];
-  const items: SoilCompiledContextItem[] = [];
   const routes = (input.routes ?? [])
     .map((route) => SoilContextRouteSchema.parse(route))
     .filter((route) => {
@@ -176,9 +177,24 @@ export function compileSoilContext(input: SoilContextCompilerInput): SoilCompile
       return matched;
     })
     .sort((left, right) => right.priority - left.priority || left.route_id.localeCompare(right.route_id));
+  return { routes, decisions };
+}
+
+function compileRouteItems(
+  routes: SoilContextRoute[],
+  timestamp: string,
+  staleAfterMs: number
+): {
+  warnings: string[];
+  decisions: SoilRetrievalDecision[];
+  items: SoilCompiledContextItem[];
+} {
+  const warnings: string[] = [];
+  const decisions: SoilRetrievalDecision[] = [];
+  const items: SoilCompiledContextItem[] = [];
 
   for (const route of routes) {
-    const staleWarning = routeStaleWarning(route, timestamp, input.staleRouteAfterMs ?? DEFAULT_STALE_ROUTE_AFTER_MS);
+    const staleWarning = routeStaleWarning(route, timestamp, staleAfterMs);
     if (staleWarning) {
       warnings.push(staleWarning);
     }
@@ -222,22 +238,34 @@ export function compileSoilContext(input: SoilContextCompilerInput): SoilCompile
     }
   }
 
-  if (routes.length === 0 && input.fallbackQuery) {
-    warnings.push("No active context route matched; fallback search candidates were evaluated.");
-  }
+  return { warnings, decisions, items };
+}
 
-  const minScore = input.minFallbackScore ?? DEFAULT_MIN_FALLBACK_SCORE;
-  const maxFallbackAdmitted = input.maxFallbackAdmitted ?? DEFAULT_MAX_FALLBACK_ADMITTED;
-  let admittedFallback = 0;
+function fallbackCandidatesFor(input: SoilContextCompilerInput, routes: SoilContextRoute[]): SoilCandidate[] {
   const shouldEvaluateFallback = routes.length === 0 || input.includeFallbackWhenRouteMatched === true;
-  const fallbackCandidates = shouldEvaluateFallback
-    ? (input.fallbackCandidates ?? []).map((candidate) => SoilCandidateSchema.parse(candidate))
-    : [];
+  if (!shouldEvaluateFallback) {
+    return [];
+  }
+  return (input.fallbackCandidates ?? []).map((candidate) => SoilCandidateSchema.parse(candidate));
+}
+
+function compileFallbackItems(
+  fallbackCandidates: SoilCandidate[],
+  minScore: number,
+  maxFallbackAdmitted: number
+): {
+  decisions: SoilRetrievalDecision[];
+  items: SoilCompiledContextItem[];
+  admittedFallbackCount: number;
+} {
+  const decisions: SoilRetrievalDecision[] = [];
+  const items: SoilCompiledContextItem[] = [];
+  let admittedFallbackCount = 0;
 
   for (const candidate of fallbackCandidates) {
     const candidateId = `candidate:${candidate.chunk_id}`;
     const rejectionReason = fallbackRejectionReason(candidate, minScore);
-    if (rejectionReason || admittedFallback >= maxFallbackAdmitted) {
+    if (rejectionReason || admittedFallbackCount >= maxFallbackAdmitted) {
       decisions.push({
         candidate_id: candidateId,
         decision: "rejected",
@@ -269,41 +297,106 @@ export function compileSoilContext(input: SoilContextCompilerInput): SoilCompile
       score: candidate.score,
       candidate,
     });
-    admittedFallback += 1;
+    admittedFallbackCount += 1;
   }
 
-  const trace = SoilRetrievalTraceSchema.parse({
-    retrieval_id: retrievalId,
+  return { decisions, items, admittedFallbackCount };
+}
+
+function buildRetrievalTrace(input: {
+  source: SoilContextCompilerInput;
+  retrievalId: string;
+  timestamp: string;
+  decisions: SoilRetrievalDecision[];
+  warnings: string[];
+}): SoilRetrievalTrace {
+  return SoilRetrievalTraceSchema.parse({
+    retrieval_id: input.retrievalId,
+    timestamp: input.timestamp,
+    task_id: input.source.taskId ?? null,
+    goal_id: input.source.goalId ?? null,
+    phase: input.source.phase ?? null,
+    task_category: input.source.taskCategory ?? null,
+    target_paths: input.source.targetPaths ?? [],
+    fallback_query: input.source.fallbackQuery ?? null,
+    decisions: input.decisions,
+    warnings: input.warnings,
+  });
+}
+
+function compileMissObservationsFor(input: {
+  source: SoilContextCompilerInput;
+  routes: SoilContextRoute[];
+  fallbackCandidates: SoilCandidate[];
+  admittedFallbackCount: number;
+  rejectedCandidateIds: string[];
+  retrievalId: string;
+  timestamp: string;
+}): SoilCompileMissObservation[] {
+  if (input.routes.length > 0) {
+    return [];
+  }
+  return [
+    SoilCompileMissObservationSchema.parse({
+      observation_id: `${input.retrievalId}:compile-miss:no-route`,
+      retrieval_id: input.retrievalId,
+      reason: input.fallbackCandidates.length > 0 && input.admittedFallbackCount === 0 ? "low_confidence_search" : "no_route",
+      target_paths: input.source.targetPaths ?? [],
+      route_ids: [],
+      rejected_candidate_ids: input.rejectedCandidateIds,
+      created_at: input.timestamp,
+      notes: input.fallbackCandidates.length > 0
+        ? "No active context route matched; fallback candidates were evaluated with the admission gate."
+        : "No active context route matched and no fallback candidates were available.",
+    }),
+  ];
+}
+
+export function compileSoilContext(input: SoilContextCompilerInput): SoilCompiledContext {
+  const timestamp = nowIso(input.now);
+  const retrievalId = input.retrievalId ?? `soil-retrieval:${randomUUID()}`;
+  const routeSelection = selectMatchingRoutes(input);
+  const routeCompilation = compileRouteItems(
+    routeSelection.routes,
     timestamp,
-    task_id: input.taskId ?? null,
-    goal_id: input.goalId ?? null,
-    phase: input.phase ?? null,
-    task_category: input.taskCategory ?? null,
-    target_paths: input.targetPaths ?? [],
-    fallback_query: input.fallbackQuery ?? null,
+    input.staleRouteAfterMs ?? DEFAULT_STALE_ROUTE_AFTER_MS
+  );
+  const fallbackCandidates = fallbackCandidatesFor(input, routeSelection.routes);
+
+  const warnings = [...routeCompilation.warnings];
+  if (routeSelection.routes.length === 0 && input.fallbackQuery) {
+    warnings.push("No active context route matched; fallback search candidates were evaluated.");
+  }
+
+  const minScore = input.minFallbackScore ?? DEFAULT_MIN_FALLBACK_SCORE;
+  const maxFallbackAdmitted = input.maxFallbackAdmitted ?? DEFAULT_MAX_FALLBACK_ADMITTED;
+  const fallbackCompilation = compileFallbackItems(fallbackCandidates, minScore, maxFallbackAdmitted);
+  const decisions = [
+    ...routeSelection.decisions,
+    ...routeCompilation.decisions,
+    ...fallbackCompilation.decisions,
+  ];
+  const items = [...routeCompilation.items, ...fallbackCompilation.items];
+
+  const trace = buildRetrievalTrace({
+    source: input,
+    retrievalId,
+    timestamp,
     decisions,
     warnings,
   });
   const rejectedCandidateIds = decisions
     .filter((decision) => decision.decision === "rejected" && decision.candidate_id.startsWith("candidate:"))
     .map((decision) => decision.candidate_id);
-  const admittedFallbackCount = decisions.filter((decision) => decision.decision === "admitted").length;
-  const compileMissObservations = routes.length === 0
-    ? [
-        SoilCompileMissObservationSchema.parse({
-          observation_id: `${retrievalId}:compile-miss:no-route`,
-          retrieval_id: retrievalId,
-          reason: fallbackCandidates.length > 0 && admittedFallbackCount === 0 ? "low_confidence_search" : "no_route",
-          target_paths: input.targetPaths ?? [],
-          route_ids: [],
-          rejected_candidate_ids: rejectedCandidateIds,
-          created_at: timestamp,
-          notes: fallbackCandidates.length > 0
-            ? "No active context route matched; fallback candidates were evaluated with the admission gate."
-            : "No active context route matched and no fallback candidates were available.",
-        }),
-      ]
-    : [];
+  const compileMissObservations = compileMissObservationsFor({
+    source: input,
+    routes: routeSelection.routes,
+    fallbackCandidates,
+    admittedFallbackCount: fallbackCompilation.admittedFallbackCount,
+    rejectedCandidateIds,
+    retrievalId,
+    timestamp,
+  });
 
   return {
     items: dedupeItems(items),

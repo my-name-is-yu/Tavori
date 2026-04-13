@@ -183,9 +183,49 @@ describe("Soil context compiler", () => {
     });
   });
 
-  it("warns when a matched route has stale evaluation metadata", () => {
+  it("keeps inactive route rejections before fallback admission decisions", () => {
     const compiled = compileSoilContext({
       retrievalId: "retrieval-5",
+      now: () => new Date("2026-04-13T00:00:00.000Z"),
+      targetPaths: ["src/app/bookmark.ts"],
+      fallbackQuery: "bookmark sort",
+      maxFallbackAdmitted: 1,
+      fallbackCandidates: [
+        candidate({ chunk_id: "first", record_id: "first-record", soil_id: "knowledge/first" }),
+        candidate({ chunk_id: "second", record_id: "second-record", soil_id: "knowledge/second" }),
+      ],
+      routes: [
+        {
+          route_id: "route-archived",
+          status: "archived",
+          path_globs: ["src/app/*"],
+          soil_ids: ["knowledge/archived-route"],
+          reason: "Archived route should not compile into context.",
+          created_at: "2026-04-13T00:00:00.000Z",
+          updated_at: "2026-04-13T00:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(compiled.items.map((item) => [item.source, item.soilId, item.recordId])).toEqual([
+      ["fallback", "knowledge/first", "first-record"],
+    ]);
+    expect(compiled.trace.decisions.map((decision) => [decision.candidate_id, decision.decision, decision.reason])).toEqual([
+      ["route:route-archived", "rejected", "route status archived is excluded from default context"],
+      ["candidate:first", "admitted", "fallback search admitted lexical candidate with score 0.5"],
+      ["candidate:second", "rejected", "fallback admission cap 1 reached"],
+    ]);
+    expect(compiled.compileMissObservations).toEqual([
+      expect.objectContaining({
+        reason: "no_route",
+        rejected_candidate_ids: ["candidate:second"],
+      }),
+    ]);
+  });
+
+  it("warns when a matched route has stale evaluation metadata", () => {
+    const compiled = compileSoilContext({
+      retrievalId: "retrieval-6",
       now: () => new Date("2026-04-13T00:00:00.000Z"),
       targetPaths: ["src/platform/soil/context-compiler.ts"],
       staleRouteAfterMs: 24 * 60 * 60 * 1000,
