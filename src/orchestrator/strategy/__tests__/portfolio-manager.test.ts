@@ -450,7 +450,14 @@ describe("PortfolioManager", () => {
         gap_snapshot_at_start: 0.8,
         effectiveness_score: 0.1, // previous score stored in strategy
       });
-      const portfolio = makePortfolio([s1]);
+      const s2 = makeStrategy({
+        id: "s2",
+        state: "active",
+        tasks_generated: ["t4", "t5"], // below threshold, should not trigger
+        target_dimensions: ["speed"],
+        gap_snapshot_at_start: 0.7,
+      });
+      const portfolio = makePortfolio([s1, s2]);
       (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockReturnValue(portfolio);
 
       // Current gap = 0.2, delta = 0.8 - 0.2 = 0.6, score = 0.6/3 = 0.2
@@ -464,10 +471,12 @@ describe("PortfolioManager", () => {
         details: "initial",
       };
       await pm.rebalance("goal-1", trigger);
+      (mockStrategyManager.getPortfolio as ReturnType<typeof vi.fn>).mockClear();
 
       const result = await pm.shouldRebalance("goal-1");
       expect(result).not.toBeNull();
       expect(result!.type).toBe("score_change");
+      expect(mockStrategyManager.getPortfolio).toHaveBeenCalledTimes(2);
     });
 
     it("returns null when no trigger conditions met", async () => {

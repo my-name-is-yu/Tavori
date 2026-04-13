@@ -414,6 +414,31 @@ export class SatisficingJudge {
     const satisfiedSet = new Set(
       satisfactions.filter((s) => s.is_satisfied).map((s) => s.dimension_name)
     );
+    const rawHistory = await this.stateManager.readRaw(`tasks/${goal.id}/task-history.json`);
+    const taskHistory = Array.isArray(rawHistory) ? rawHistory : [];
+    const historyByDimension = new Map<
+      string,
+      Array<{ actual_elapsed_ms: number; estimated_duration_ms: number }>
+    >();
+
+    for (const h of taskHistory) {
+      const record = h as Record<string, unknown>;
+      if (
+        typeof h === "object" &&
+        h !== null &&
+        typeof record.primary_dimension === "string" &&
+        typeof record.actual_elapsed_ms === "number" &&
+        typeof record.estimated_duration_ms === "number" &&
+        record.estimated_duration_ms > 0
+      ) {
+        const entries = historyByDimension.get(record.primary_dimension) ?? [];
+        entries.push({
+          actual_elapsed_ms: record.actual_elapsed_ms,
+          estimated_duration_ms: record.estimated_duration_ms,
+        });
+        historyByDimension.set(record.primary_dimension, entries);
+      }
+    }
 
     for (const dim of dims) {
       const failures = failureCounts.get(dim.name) ?? 0;
@@ -439,16 +464,7 @@ export class SatisficingJudge {
       // but goal progress is stagnant, suggesting the threshold may be too ambitious.
       // Requires task cost history (actual_elapsed_ms + estimated_duration_ms fields).
       {
-        const rawHistory = await this.stateManager.readRaw(`tasks/${goal.id}/task-history.json`);
-        const taskHistory = Array.isArray(rawHistory) ? rawHistory : [];
-
-        const dimHistory = taskHistory.filter(
-          (h: Record<string, unknown>) =>
-            h.primary_dimension === dim.name &&
-            typeof h.actual_elapsed_ms === "number" &&
-            typeof h.estimated_duration_ms === "number" &&
-            (h.estimated_duration_ms as number) > 0
-        ) as Array<{ actual_elapsed_ms: number; estimated_duration_ms: number }>;
+        const dimHistory = historyByDimension.get(dim.name) ?? [];
 
         if (dimHistory.length >= 3) {
           const avgEstimated =

@@ -750,9 +750,10 @@ export class KnowledgeManager {
     const store = await this._loadAgentMemoryStore();
     const now = new Date().toISOString();
     let count = 0;
+    const idSet = new Set(ids);
 
     for (const entry of store.entries) {
-      if (ids.includes(entry.id) && entry.status !== "archived") {
+      if (idSet.has(entry.id) && entry.status !== "archived") {
         entry.status = "archived";
         entry.updated_at = now;
         count++;

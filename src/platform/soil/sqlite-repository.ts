@@ -754,11 +754,66 @@ export class SqliteSoilRepository implements SoilRepository {
       LIMIT ?
     `).all(...recordParams) as SoilRowRecord[];
 
+    const pageIdBySoilId = new Map<string, string>();
+    for (const page of pageMatches) {
+      if (!pageIdBySoilId.has(page.soil_id)) {
+        pageIdBySoilId.set(page.soil_id, page.page_id);
+      }
+    }
+
+    const firstChunkByRecordId = new Map<string, SoilRowChunk>();
+    const recordIds = unique(recordRows.map((row) => row.record_id));
+    if (recordIds.length > 0) {
+      const chunkRows = this.db
+        .prepare(`
+          SELECT *
+          FROM soil_chunks
+          WHERE record_id IN (${recordIds.map(() => "?").join(", ")})
+          ORDER BY record_id, chunk_index
+        `)
+        .all(...recordIds) as SoilRowChunk[];
+      for (const chunk of chunkRows) {
+        if (!firstChunkByRecordId.has(chunk.record_id)) {
+          firstChunkByRecordId.set(chunk.record_id, chunk);
+        }
+      }
+    }
+
+    const firstPageMemberByPageId = new Map<
+      string,
+      { record_id: string | null; chunk_id: string | null; chunk_text: string | null }
+    >();
+    const pageIds = unique(pageMatches.map((page) => page.page_id));
+    if (pageIds.length > 0) {
+      const pageMemberRows = this.db
+        .prepare(`
+          SELECT spm.page_id, spm.record_id, sc.chunk_id, sc.chunk_text
+          FROM soil_page_members spm
+          LEFT JOIN soil_chunks sc ON sc.record_id = spm.record_id
+          WHERE spm.page_id IN (${pageIds.map(() => "?").join(", ")})
+          ORDER BY spm.page_id, spm.ordinal, sc.chunk_index
+        `)
+        .all(...pageIds) as Array<{
+        page_id: string;
+        record_id: string | null;
+        chunk_id: string | null;
+        chunk_text: string | null;
+      }>;
+      for (const row of pageMemberRows) {
+        if (!firstPageMemberByPageId.has(row.page_id)) {
+          firstPageMemberByPageId.set(row.page_id, row);
+        }
+      }
+    }
+
     const candidates: SoilCandidate[] = [];
+    const representedPageIds = new Set<string>();
     for (const row of recordRows) {
-      const chunk = this.db
-        .prepare("SELECT * FROM soil_chunks WHERE record_id = ? ORDER BY chunk_index LIMIT 1")
-        .get(row.record_id) as SoilRowChunk | undefined;
+      const chunk = firstChunkByRecordId.get(row.record_id);
+      const page_id = pageIdBySoilId.get(row.soil_id) ?? null;
+      if (page_id) {
+        representedPageIds.add(page_id);
+      }
       candidates.push({
         chunk_id: chunk?.chunk_id ?? `record:${row.record_id}`,
         record_id: row.record_id,
@@ -767,23 +822,15 @@ export class SqliteSoilRepository implements SoilRepository {
         rank: candidates.length + 1,
         score: 1,
         snippet: chunk ? buildSnippet(chunk.chunk_text, request.query) : row.summary ?? row.title,
-        page_id: pageMatches.find((page) => page.soil_id === row.soil_id)?.page_id ?? null,
+        page_id,
         metadata_json: parseJsonObject(row.metadata_json),
       });
     }
 
     for (const page of pageMatches) {
-      if (candidates.some((candidate) => candidate.page_id === page.page_id)) continue;
-      const member = this.db
-        .prepare(`
-          SELECT spm.record_id, sc.chunk_id, sc.chunk_text
-          FROM soil_page_members spm
-          LEFT JOIN soil_chunks sc ON sc.record_id = spm.record_id
-          WHERE spm.page_id = ?
-          ORDER BY spm.ordinal, sc.chunk_index
-          LIMIT 1
-        `)
-        .get(page.page_id) as { record_id: string | null; chunk_id: string | null; chunk_text: string | null } | undefined;
+      if (representedPageIds.has(page.page_id)) continue;
+      representedPageIds.add(page.page_id);
+      const member = firstPageMemberByPageId.get(page.page_id);
       candidates.push({
         chunk_id: member?.chunk_id ?? `page:${page.page_id}`,
         record_id: member?.record_id ?? `page:${page.page_id}`,

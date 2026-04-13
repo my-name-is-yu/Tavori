@@ -76,14 +76,33 @@ export async function searchKnowledge(
   }
 
   const results = await deps.vectorIndex.search(query, topK);
+  const goalKnowledgeById = new Map<string, Map<string, KnowledgeEntry>>();
+  const goalIds = new Set<string>();
+
+  for (const result of results) {
+    const goalId = result.metadata["goal_id"] as string | undefined;
+    if (goalId) {
+      goalIds.add(goalId);
+    }
+  }
+
+  await Promise.all(
+    [...goalIds].map(async (goalId) => {
+      const domainKnowledge = await loadDomainKnowledge(deps.stateManager, goalId);
+      goalKnowledgeById.set(
+        goalId,
+        new Map(domainKnowledge.entries.map((entry) => [entry.entry_id, entry]))
+      );
+    })
+  );
+
   const entries: KnowledgeEntry[] = [];
 
   for (const result of results) {
     const goalId = result.metadata["goal_id"] as string | undefined;
     if (!goalId) continue;
 
-    const domainKnowledge = await loadDomainKnowledge(deps.stateManager, goalId);
-    const entry = domainKnowledge.entries.find((e) => e.entry_id === result.id);
+    const entry = goalKnowledgeById.get(goalId)?.get(result.id);
     if (entry) {
       entries.push(entry);
     }
@@ -143,10 +162,11 @@ export async function searchByEmbedding(
 
   const results = await deps.vectorIndex.search(query, topK);
   const all = await loadSharedEntries(deps.stateManager);
+  const entryById = new Map(all.map((entry) => [entry.entry_id, entry]));
   const output: { entry: SharedKnowledgeEntry; similarity: number }[] = [];
 
   for (const result of results) {
-    const entry = all.find((e) => e.entry_id === result.id);
+    const entry = entryById.get(result.id);
     if (entry) {
       output.push({ entry, similarity: result.similarity });
     }

@@ -88,6 +88,8 @@ export async function extractCrossGoalPatterns(
     // Group entries by similar delta values (within ±0.2)
     const clustered: Array<{
       representative: number;
+      sum: number;
+      count: number;
       members: Array<{ goalId: string; feedback: StructuralFeedback }>;
     }> = [];
 
@@ -97,18 +99,15 @@ export async function extractCrossGoalPatterns(
       for (const cluster of clustered) {
         if (Math.abs(cluster.representative - delta) <= 0.2) {
           cluster.members.push(entry);
-          // Update representative as mean
-          cluster.representative =
-            cluster.members.reduce(
-              (sum, m) => sum + m.feedback.delta,
-              0
-            ) / cluster.members.length;
+          cluster.sum += delta;
+          cluster.count++;
+          cluster.representative = cluster.sum / cluster.count;
           placed = true;
           break;
         }
       }
       if (!placed) {
-        clustered.push({ representative: delta, members: [entry] });
+        clustered.push({ representative: delta, sum: delta, count: 1, members: [entry] });
       }
     }
 
@@ -177,6 +176,9 @@ export async function sharePatternsAcrossGoals(
   let patternsShared = 0;
   const newPatterns: CrossGoalPattern[] = [];
   const affectedGoals = new Set<string>();
+  const sourceGoalIdsByPattern = new Map(
+    patterns.map((pattern) => [pattern.id, new Set(pattern.sourceGoalIds)] as const)
+  );
 
   for (const targetGoalId of targetGoalIds) {
     // Gather context keys from existing structural feedback
@@ -190,7 +192,9 @@ export async function sharePatternsAcrossGoals(
 
     for (const pattern of patterns) {
       // Skip if target goal is already a source
-      if (pattern.sourceGoalIds.includes(targetGoalId)) {
+      const sourceGoalIds = sourceGoalIdsByPattern.get(pattern.id);
+      if (!sourceGoalIds) continue;
+      if (sourceGoalIds.has(targetGoalId)) {
         continue;
       }
 

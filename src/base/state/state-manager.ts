@@ -496,8 +496,8 @@ export class StateManager {
     const queue: string[] = [rootId];
     const visited = new Set<string>();
 
-    while (queue.length > 0) {
-      const currentId = queue.shift()!;
+    for (let index = 0; index < queue.length; index++) {
+      const currentId = queue[index];
       if (visited.has(currentId)) continue;
       visited.add(currentId);
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { StateManager } from "../../../base/state/state-manager.js";
@@ -213,6 +213,33 @@ describe("Condition 3: resource undershoot", () => {
     const proposals = await judge.detectThresholdAdjustmentNeeded(goal, new Map());
     const undershootProposals = proposals.filter((p) => p.reason === "resource_undershoot");
     expect(undershootProposals).toHaveLength(0);
+  });
+
+  it("reads task history once and groups it by primary_dimension", async () => {
+    const goal = makeGoal({
+      dimensions: [
+        makeDimension({ name: "dim_a", current_value: 30, threshold: { type: "min", value: 100 } }),
+        makeDimension({ name: "dim_b", current_value: 30, threshold: { type: "min", value: 100 } }),
+      ],
+    });
+    await stateManager.saveGoal(goal);
+
+    await writeTaskHistory(stateManager, goal.id, [
+      { primary_dimension: "dim_a", actual_elapsed_ms: 10 * 60_000, estimated_duration_ms: 60 * 60_000 },
+      { primary_dimension: "dim_a", actual_elapsed_ms: 11 * 60_000, estimated_duration_ms: 60 * 60_000 },
+      { primary_dimension: "dim_a", actual_elapsed_ms: 9 * 60_000, estimated_duration_ms: 60 * 60_000 },
+      { primary_dimension: "dim_b", actual_elapsed_ms: 12 * 60_000, estimated_duration_ms: 60 * 60_000 },
+      { primary_dimension: "dim_b", actual_elapsed_ms: 13 * 60_000, estimated_duration_ms: 60 * 60_000 },
+      { primary_dimension: "dim_b", actual_elapsed_ms: 14 * 60_000, estimated_duration_ms: 60 * 60_000 },
+    ]);
+
+    const readRawSpy = vi.spyOn(stateManager, "readRaw");
+    const proposals = await judge.detectThresholdAdjustmentNeeded(goal, new Map());
+
+    expect(readRawSpy).toHaveBeenCalledTimes(1);
+    expect(readRawSpy).toHaveBeenCalledWith(`tasks/${goal.id}/task-history.json`);
+    expect(proposals.filter((p) => p.reason === "resource_undershoot")).toHaveLength(2);
+    expect(proposals.map((p) => p.dimension_name)).toEqual(expect.arrayContaining(["dim_a", "dim_b"]));
   });
 });
 

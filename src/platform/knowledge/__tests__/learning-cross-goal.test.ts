@@ -126,6 +126,29 @@ describe("LearningPipeline — extractCrossGoalPatterns", () => {
     expect(negativePattern!.confidence).toBeCloseTo(2 / 3, 5);
   });
 
+  it("should keep the cluster representative as the running mean", async () => {
+    await pipeline.recordStructuralFeedback(
+      makeFeedback("goal-A", "scope_sizing", -0.3)
+    );
+    await pipeline.recordStructuralFeedback(
+      makeFeedback("goal-B", "scope_sizing", -0.1)
+    );
+    await pipeline.recordStructuralFeedback(
+      makeFeedback("goal-C", "scope_sizing", -0.2)
+    );
+
+    const patterns = await pipeline.extractCrossGoalPatterns([
+      "goal-A",
+      "goal-B",
+      "goal-C",
+    ]);
+
+    const pattern = patterns.find((p) => p.feedbackType === "scope_sizing");
+    expect(pattern).toBeDefined();
+    expect(pattern!.occurrenceCount).toBe(3);
+    expect(pattern!.description).toContain("avg delta=-0.20");
+  });
+
   it("should return no patterns for single-goal input", async () => {
     await pipeline.recordStructuralFeedback(
       makeFeedback("goal-A", "scope_sizing", -0.3)

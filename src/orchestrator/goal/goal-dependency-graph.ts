@@ -163,22 +163,31 @@ export class GoalDependencyGraph {
   detectCycle(fromGoalId: string, toGoalId: string): boolean {
     const visited = new Set<string>();
     const queue: string[] = [toGoalId];
+    const activePrerequisiteAdjacency = new Map<string, string[]>();
 
-    while (queue.length > 0) {
-      const current = queue.shift()!;
+    for (const edge of this.graph.edges) {
+      if (edge.type !== "prerequisite" || edge.status !== "active") continue;
+      const outgoing = activePrerequisiteAdjacency.get(edge.from_goal_id);
+      if (outgoing) {
+        outgoing.push(edge.to_goal_id);
+      } else {
+        activePrerequisiteAdjacency.set(edge.from_goal_id, [edge.to_goal_id]);
+      }
+    }
+
+    for (let index = 0; index < queue.length; index++) {
+      const current = queue[index]!;
 
       if (current === fromGoalId) return true;
       if (visited.has(current)) continue;
       visited.add(current);
 
-      // Follow active prerequisite edges where current is the from_goal_id
-      for (const edge of this.graph.edges) {
-        if (
-          edge.type === "prerequisite" &&
-          edge.from_goal_id === current &&
-          edge.status === "active"
-        ) {
-          queue.push(edge.to_goal_id);
+      const nextGoals = activePrerequisiteAdjacency.get(current);
+      if (!nextGoals) continue;
+
+      for (const nextGoalId of nextGoals) {
+        if (!visited.has(nextGoalId)) {
+          queue.push(nextGoalId);
         }
       }
     }

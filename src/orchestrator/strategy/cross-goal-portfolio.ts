@@ -91,6 +91,25 @@ export class CrossGoalPortfolio {
 
     const totalGoals = goalIds.length;
     const now = new Date();
+    const goalIdSet = new Set(goalIds);
+    const graph = this.goalDependencyGraph.getGraph();
+    const dependentCountByGoalId = new Map<string, number>();
+
+    for (const edge of graph.edges) {
+      if (
+        edge.type !== "prerequisite" ||
+        edge.status !== "active" ||
+        !goalIdSet.has(edge.from_goal_id) ||
+        !goalIdSet.has(edge.to_goal_id)
+      ) {
+        continue;
+      }
+
+      dependentCountByGoalId.set(
+        edge.from_goal_id,
+        (dependentCountByGoalId.get(edge.from_goal_id) ?? 0) + 1
+      );
+    }
 
     // --- Step 1: collect raw factors for each goal ---
     type RawFactors = {
@@ -138,14 +157,7 @@ export class CrossGoalPortfolio {
       gapSeverity = clamp(gapSeverity, 0, 1);
 
       // dependency_weight — how many goals in the provided list depend on this goal
-      const graph = this.goalDependencyGraph.getGraph();
-      const dependentCount = graph.edges.filter(
-        (e) =>
-          e.from_goal_id === goalId &&
-          e.type === "prerequisite" &&
-          e.status === "active" &&
-          goalIds.includes(e.to_goal_id)
-      ).length;
+      const dependentCount = dependentCountByGoalId.get(goalId) ?? 0;
       const dependencyWeight = totalGoals > 1 ? dependentCount / (totalGoals - 1) : 0;
 
       // user_priority — extract from goal constraints or metadata
@@ -191,7 +203,7 @@ export class CrossGoalPortfolio {
     const synergyBonus = this.config.synergy_bonus / 2; // split the config bonus equally
     const CONFLICT_PENALTY = 0.15;
 
-    const goalIdSet = new Set(rawList.map((r) => r.goalId));
+    const loadedGoalIdSet = new Set(rawList.map((r) => r.goalId));
 
     // Build a lookup: goalId → index in withBase
     const indexMap = new Map<string, number>();
@@ -199,12 +211,13 @@ export class CrossGoalPortfolio {
 
     // Adjust scores based on dependency edges between goals in the set
     const adjustments = new Array<number>(withBase.length).fill(0);
-    const graph = this.goalDependencyGraph.getGraph();
+    const edgeGraph = this.goalDependencyGraph.getGraph();
     const seenPairs = new Set<string>();
 
-    for (const edge of graph.edges) {
+    for (const edge of edgeGraph.edges) {
       if (edge.status !== "active") continue;
-      if (!goalIdSet.has(edge.from_goal_id) || !goalIdSet.has(edge.to_goal_id)) continue;
+      if (!loadedGoalIdSet.has(edge.from_goal_id) || !loadedGoalIdSet.has(edge.to_goal_id))
+        continue;
 
       const pairKey = [edge.from_goal_id, edge.to_goal_id].sort().join("||");
 
@@ -339,7 +352,7 @@ export class CrossGoalPortfolio {
     if (searchResults.length === 0) return [];
 
     // Derive goal domain tags from constraints (format "domain:tag") or title words
-    const goalDomainTags = this._extractDomainTags(goal);
+    const goalDomainTags = new Set(this._extractDomainTags(goal));
 
     // Filter and score
     const scored: Array<{ template: StrategyTemplate; finalScore: number }> = [];
@@ -361,8 +374,8 @@ export class CrossGoalPortfolio {
       const effectivenessScore = meta["effectiveness_score"] as number;
 
       // Require at least 1 domain tag overlap — unless goal has no tags (then include all)
-      if (goalDomainTags.length > 0) {
-        const overlap = domainTags.filter((t) => goalDomainTags.includes(t)).length;
+      if (goalDomainTags.size > 0) {
+        const overlap = domainTags.filter((t) => goalDomainTags.has(t)).length;
         if (overlap < 1) continue;
       }
 

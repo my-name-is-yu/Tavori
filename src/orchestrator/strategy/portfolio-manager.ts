@@ -190,15 +190,18 @@ export class PortfolioManager {
     const history = this.rebalanceHistory.get(goalId) ?? [];
     if (history.length === 0) return null;
 
+    const portfolio = await this.strategyManager.getPortfolio(goalId);
+    if (!portfolio) return null;
+
+    const strategyById = new Map(portfolio.strategies.map((strategy: Strategy) => [
+      strategy.id,
+      strategy,
+    ]));
+
     for (const record of currentRecords) {
       if (record.effectiveness_score === null) continue;
 
-      const portfolio = await this.strategyManager.getPortfolio(goalId);
-      if (!portfolio) continue;
-
-      const strategy = portfolio.strategies.find(
-        (s: Strategy) => s.id === record.strategy_id
-      );
+      const strategy = strategyById.get(record.strategy_id);
       if (!strategy || strategy.effectiveness_score === null) continue;
 
       const previousScore = strategy.effectiveness_score;

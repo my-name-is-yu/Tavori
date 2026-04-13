@@ -511,9 +511,18 @@ export async function querySoilIndexSnapshot(
   }
   const queryTokens = tokenize(query);
   const sortedPages = [...snapshot.pages].sort((left, right) => left.relative_path.localeCompare(right.relative_path));
+  const chunksBySoilId = new Map<string, SoilIndexChunkSnapshot[]>();
+  for (const chunk of snapshot.chunks) {
+    const pageChunks = chunksBySoilId.get(chunk.soil_id);
+    if (pageChunks === undefined) {
+      chunksBySoilId.set(chunk.soil_id, [chunk]);
+      continue;
+    }
+    pageChunks.push(chunk);
+  }
   const hits = sortedPages
     .map((page) => {
-      const pageChunks = snapshot.chunks.filter((chunk) => chunk.soil_id === page.soil_id);
+      const pageChunks = chunksBySoilId.get(page.soil_id) ?? [];
       const score = scorePage(queryTokens, page, pageChunks);
       return {
         page,

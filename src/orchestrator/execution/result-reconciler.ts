@@ -6,6 +6,7 @@
 import { z } from "zod";
 import type { ILLMClient } from "../../base/llm/llm-client.js";
 import type { IPromptGateway } from "../../prompt/gateway.js";
+import { RESULT_RECONCILIATION_SYSTEM_PROMPT } from "../../prompt/purposes/final-migration.js";
 import type { Logger } from "../../runtime/logger.js";
 import type { SubtaskResult } from "./parallel-execution-types.js";
 
@@ -62,75 +63,48 @@ Respond with JSON only (no markdown):
 If there are no contradictions, return: { "contradictions": [] }`;
 }
 
-// ─── Pairwise Check ───
-
 interface LLMContradictionItem {
+  task_a_id: string;
+  task_b_id: string;
   description: string;
   severity: string;
 }
 
 const ReconciliationResponseSchema = z.object({
-  contradictions: z.array(z.object({
-    description: z.string(),
-    severity: z.string(),
-  })),
+  contradictions: z.unknown().transform((value) => (Array.isArray(value) ? value : [])),
 });
 
-async function checkPair(
-  deps: ReconcilerDeps,
-  resultA: SubtaskResult,
-  resultB: SubtaskResult
-): Promise<Contradiction[]> {
-  const prompt = buildReconciliationPrompt(resultA, resultB);
+function serializeResults(results: SubtaskResult[]): string {
+  return JSON.stringify(
+    results.map((result) => ({
+      task_id: result.task_id,
+      verdict: result.verdict,
+      output: result.output || "(no output)",
+    })),
+    null,
+    2
+  );
+}
 
-  let parsed: { contradictions: LLMContradictionItem[] };
-  if (deps.gateway) {
-    try {
-      parsed = await deps.gateway.execute({
-        purpose: "result_reconciliation",
-        additionalContext: { reconciliation_prompt: prompt },
-        responseSchema: ReconciliationResponseSchema,
-        maxTokens: 512,
-        temperature: 0,
-      });
-    } catch {
-      deps.logger?.warn("[ResultReconciler] gateway call failed", {
-        taskAId: resultA.task_id,
-        taskBId: resultB.task_id,
-      });
-      return [];
+function buildBatchReconciliationPrompt(results: SubtaskResult[]): string {
+  return `Review these parallel task results and identify every semantic contradiction between any pair of tasks.
+
+Task results:
+${serializeResults(results)}
+
+Return JSON only (no markdown) with this shape:
+{
+  "contradictions": [
+    {
+      "task_a_id": "task-1",
+      "task_b_id": "task-2",
+      "description": "brief description of the contradiction",
+      "severity": "critical" | "warning" | "info"
     }
-  } else {
-    const response = await deps.llmClient.sendMessage(
-      [{ role: "user", content: prompt }],
-      { max_tokens: 512, temperature: 0 }
-    );
+  ]
+}
 
-    try {
-      parsed = JSON.parse(response.content);
-    } catch {
-      deps.logger?.warn("[ResultReconciler] Failed to parse LLM response as JSON", {
-        taskAId: resultA.task_id,
-        taskBId: resultB.task_id,
-      });
-      return [];
-    }
-  }
-
-  const items: LLMContradictionItem[] = Array.isArray(parsed?.contradictions)
-    ? parsed.contradictions
-    : [];
-
-  const validSeverities = new Set(["critical", "warning", "info"]);
-
-  return items
-    .filter((c) => c.description && validSeverities.has(c.severity))
-    .map((c) => ({
-      task_a_id: resultA.task_id,
-      task_b_id: resultB.task_id,
-      description: c.description,
-      severity: c.severity as Contradiction["severity"],
-    }));
+Use only task IDs that appear in the input. If there are no contradictions, return: { "contradictions": [] }`;
 }
 
 // ─── Main Export ───
@@ -146,15 +120,77 @@ export async function reconcileResults(
   const allContradictions: Contradiction[] = [];
 
   try {
-    for (let i = 0; i < results.length; i++) {
-      for (let j = i + 1; j < results.length; j++) {
-        const found = await checkPair(deps, results[i], results[j]);
-        allContradictions.push(...found);
+    const prompt = buildBatchReconciliationPrompt(results);
+    const parsed = deps.gateway
+      ? await deps.gateway.execute({
+          purpose: "result_reconciliation",
+          additionalContext: { recentTaskResults: prompt },
+          responseSchema: ReconciliationResponseSchema,
+          maxTokens: 512,
+          temperature: 0,
+        })
+      : await deps.llmClient.parseJSON(
+          (
+            await deps.llmClient.sendMessage(
+              [{ role: "user", content: prompt }],
+              {
+                system: RESULT_RECONCILIATION_SYSTEM_PROMPT,
+                max_tokens: 512,
+                temperature: 0,
+              }
+            )
+          ).content,
+          ReconciliationResponseSchema
+        );
+
+    const validTaskIds = new Set(results.map((result) => result.task_id));
+    const validSeverities = new Set(["critical", "warning", "info"]);
+    const seen = new Set<string>();
+
+    const rawContradictions = Array.isArray(parsed.contradictions)
+      ? parsed.contradictions
+      : [];
+
+    for (const rawContradiction of rawContradictions) {
+      if (!rawContradiction || typeof rawContradiction !== "object") {
+        continue;
       }
+
+      const contradiction = rawContradiction as Partial<LLMContradictionItem>;
+      if (
+        typeof contradiction.task_a_id !== "string" ||
+        typeof contradiction.task_b_id !== "string" ||
+        typeof contradiction.description !== "string" ||
+        typeof contradiction.severity !== "string" ||
+        !validTaskIds.has(contradiction.task_a_id) ||
+        !validTaskIds.has(contradiction.task_b_id) ||
+        contradiction.task_a_id === contradiction.task_b_id ||
+        !validSeverities.has(contradiction.severity) ||
+        !contradiction.description
+      ) {
+        continue;
+      }
+
+      const taskIds = [contradiction.task_a_id, contradiction.task_b_id].sort();
+      const key = [
+        taskIds[0],
+        taskIds[1],
+        contradiction.severity,
+        contradiction.description,
+      ].join("|");
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      allContradictions.push({
+        task_a_id: contradiction.task_a_id,
+        task_b_id: contradiction.task_b_id,
+        description: contradiction.description,
+        severity: contradiction.severity as Contradiction["severity"],
+      });
     }
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err);
-    deps.logger?.warn("[ResultReconciler] LLM call failed, failing open", { error });
+    deps.logger?.warn("[ResultReconciler] reconciliation call failed, failing open", { error });
     return { has_contradictions: false, contradictions: [], confidence: 0.0 };
   }
 

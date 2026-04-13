@@ -17,18 +17,35 @@ function makeResult(overrides: Partial<SubtaskResult> = {}): SubtaskResult {
   };
 }
 
-function makeDeps(llmResponse: string | Error): ReconcilerDeps {
+function makeDeps(
+  llmResponse: string | Error,
+  options: { gatewayResponse?: unknown } = {}
+): ReconcilerDeps {
+  const sendMessage = vi.fn(async () => {
+    if (llmResponse instanceof Error) throw llmResponse;
+    return {
+      content: llmResponse,
+      usage: { input_tokens: 10, output_tokens: 20 },
+      stop_reason: "end_turn",
+    };
+  });
+  const parseJSON = vi.fn(
+    (content: string, schema: { parse: (value: unknown) => unknown }) =>
+      schema.parse(JSON.parse(content))
+  ) as unknown as ReconcilerDeps["llmClient"]["parseJSON"];
+  const gateway =
+    options.gatewayResponse === undefined
+      ? undefined
+      : ({
+          execute: vi.fn(async () => options.gatewayResponse) as unknown as NonNullable<
+            ReconcilerDeps["gateway"]
+          >["execute"],
+        } satisfies NonNullable<ReconcilerDeps["gateway"]>);
+
   return {
     llmClient: {
-      sendMessage: vi.fn(async () => {
-        if (llmResponse instanceof Error) throw llmResponse;
-        return {
-          content: llmResponse,
-          usage: { input_tokens: 10, output_tokens: 20 },
-          stop_reason: "end_turn",
-        };
-      }),
-      parseJSON: vi.fn(),
+      sendMessage,
+      parseJSON,
     },
     logger: {
       info: vi.fn(),
@@ -36,6 +53,7 @@ function makeDeps(llmResponse: string | Error): ReconcilerDeps {
       error: vi.fn(),
       debug: vi.fn(),
     } as unknown as ReconcilerDeps["logger"],
+    ...(gateway ? { gateway } : {}),
   };
 }
 
@@ -71,6 +89,8 @@ describe("reconcileResults", () => {
     const llmResponse = JSON.stringify({
       contradictions: [
         {
+          task_a_id: "task-a",
+          task_b_id: "task-b",
           description: "Task A disables caching while Task B enables it",
           severity: "critical",
         },
@@ -106,7 +126,7 @@ describe("reconcileResults", () => {
     expect(report.confidence).toBe(0.0);
   });
 
-  it("pairwise comparison count is correct for 3 results (3 pairs)", async () => {
+  it("multiple results still use a single LLM call", async () => {
     const deps = makeDeps('{"contradictions":[]}');
     const results = [
       makeResult({ task_id: "task-1" }),
@@ -116,8 +136,92 @@ describe("reconcileResults", () => {
 
     await reconcileResults(deps, results);
 
-    // n*(n-1)/2 = 3*(3-1)/2 = 3 pairs
-    expect(deps.llmClient.sendMessage).toHaveBeenCalledTimes(3);
+    expect(deps.llmClient.sendMessage).toHaveBeenCalledTimes(1);
+  });
+
+  it("gateway path also uses a single call", async () => {
+    const deps = makeDeps('{"contradictions":[]}', {
+      gatewayResponse: {
+        contradictions: [
+          {
+            task_a_id: "task-1",
+            task_b_id: "task-2",
+            description: "Conflicting outcomes",
+            severity: "warning",
+          },
+        ],
+      },
+    });
+    const results = [
+      makeResult({ task_id: "task-1", output: "Enabled caching" }),
+      makeResult({ task_id: "task-2", output: "Disabled caching" }),
+    ];
+
+    const report = await reconcileResults(deps, results);
+
+    expect(report.has_contradictions).toBe(true);
+    expect(report.contradictions).toHaveLength(1);
+    expect(deps.llmClient.sendMessage).not.toHaveBeenCalled();
+    expect(deps.gateway?.execute).toHaveBeenCalledTimes(1);
+    expect(deps.gateway?.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        additionalContext: {
+          recentTaskResults: expect.stringContaining("Task results:"),
+        },
+      })
+    );
+  });
+
+  it("filters invalid task references, severities, and reversed duplicates", async () => {
+    const deps = makeDeps(JSON.stringify({
+      contradictions: [
+        {
+          task_a_id: "task-1",
+          task_b_id: "task-2",
+          description: "Same conflict",
+          severity: "warning",
+        },
+        {
+          task_a_id: "task-2",
+          task_b_id: "task-1",
+          description: "Same conflict",
+          severity: "warning",
+        },
+        {
+          task_a_id: "task-1",
+          task_b_id: "missing",
+          description: "Unknown task",
+          severity: "warning",
+        },
+        {
+          task_a_id: "task-1",
+          task_b_id: "task-2",
+          description: "Bad severity",
+          severity: "urgent",
+        },
+        {
+          task_a_id: "task-1",
+          description: "Missing task B",
+          severity: "warning",
+        },
+        "not an object",
+      ],
+    }));
+    const results = [
+      makeResult({ task_id: "task-1" }),
+      makeResult({ task_id: "task-2" }),
+    ];
+
+    const report = await reconcileResults(deps, results);
+
+    expect(report.contradictions).toEqual([
+      {
+        task_a_id: "task-1",
+        task_b_id: "task-2",
+        description: "Same conflict",
+        severity: "warning",
+      },
+    ]);
   });
 });
 

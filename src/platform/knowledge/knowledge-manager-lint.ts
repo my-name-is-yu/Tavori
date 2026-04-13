@@ -98,6 +98,7 @@ export async function lintAgentMemory(opts: {
   // 3. Apply repairs if autoRepair is enabled
   let repairsApplied = 0;
   const flaggedIds = new Set<string>();
+  const entriesById = new Map(entries.map((entry) => [entry.id, entry] as const));
 
   for (const finding of allFindings) {
     if (!autoRepair || finding.confidence < minAutoRepairConfidence || !actionMatchesAutoRepair(finding)) {
@@ -110,7 +111,10 @@ export async function lintAgentMemory(opts: {
     switch (finding.type) {
       case "contradiction": {
         // Keep the most recently updated entry, archive others
-        const involved = entries.filter((e) => finding.entry_ids.includes(e.id));
+        const involved = Array.from(
+          new Set(finding.entry_ids),
+          (id) => entriesById.get(id)
+        ).filter((entry): entry is AgentMemoryEntry => Boolean(entry));
         if (involved.length < 2) break;
         involved.sort(
           (a, b) =>
@@ -126,7 +130,7 @@ export async function lintAgentMemory(opts: {
         // Mark stale entries as raw so they re-enter consolidation pipeline:
         // delete existing entry + re-save with "needs-reverification" tag (new entries default to "raw")
         for (const id of finding.entry_ids) {
-          const entry = entries.find((e) => e.id === id);
+          const entry = entriesById.get(id);
           if (entry) {
             await km.deleteAgentMemory(entry.key);
             await km.saveAgentMemory({
@@ -143,7 +147,10 @@ export async function lintAgentMemory(opts: {
       }
       case "redundancy": {
         // Keep the first (richest by value length), archive others
-        const involved = entries.filter((e) => finding.entry_ids.includes(e.id));
+        const involved = Array.from(
+          new Set(finding.entry_ids),
+          (id) => entriesById.get(id)
+        ).filter((entry): entry is AgentMemoryEntry => Boolean(entry));
         if (involved.length < 2) break;
         involved.sort((a, b) => b.value.length - a.value.length);
         const toArchive = involved.slice(1);

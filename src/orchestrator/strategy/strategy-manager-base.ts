@@ -302,39 +302,45 @@ export class StrategyManagerBase {
 
     // Score candidates by tool availability when registry is present
     let best: typeof candidates[0];
+    const executionStats = new Map<string, { total: number; success: number }>();
+    for (const feedback of this.executionHistory) {
+      const stats = executionStats.get(feedback.strategyId);
+      if (stats) {
+        stats.total += 1;
+        if (feedback.success) stats.success += 1;
+      } else {
+        executionStats.set(feedback.strategyId, {
+          total: 1,
+          success: feedback.success ? 1 : 0,
+        });
+      }
+    }
+    const getHistoryPenalty = (strategyId: string): number => {
+      const stats = executionStats.get(strategyId);
+      if (!stats || stats.total < 3) {
+        return 0;
+      }
+
+      const successRate = stats.success / stats.total;
+      return successRate < 0.3 ? -0.2 : 0;
+    };
+
     if (this.toolRegistry && candidates.some((c) => c.required_tools.length > 0)) {
       const availableNames = new Set(this.toolRegistry.listAll().map((t) => t.metadata.name));
       const scored = candidates.map((c) => {
         const missing = c.required_tools.filter((name) => !availableNames.has(name)).length;
-        return { candidate: c, score: -missing };
+        return { candidate: c, score: -missing + getHistoryPenalty(c.hypothesis) };
       });
-      // Penalize strategies with high failure rate from execution history
-      if (this.executionHistory.length > 0) {
-        for (const s of scored) {
-          const history = this.executionHistory.filter(h => h.strategyId === s.candidate.hypothesis);
-          if (history.length >= 3) {
-            const successRate = history.filter(h => h.success).length / history.length;
-            if (successRate < 0.3) {
-              s.score -= 0.2;
-            }
-          }
-        }
-      }
       // Stable sort: higher score (fewer missing tools) first
       scored.sort((a, b) => b.score - a.score);
       best = scored[0]!.candidate;
     } else {
       // Fallback: pick first candidate (apply failure-rate penalty for ordering)
-      if (this.executionHistory.length > 0) {
-        const scored2 = candidates.map((c) => {
-          const history = this.executionHistory.filter(h => h.strategyId === c.hypothesis);
-          let score = 0;
-          if (history.length >= 3) {
-            const successRate = history.filter(h => h.success).length / history.length;
-            if (successRate < 0.3) score -= 0.2;
-          }
-          return { candidate: c, score };
-        });
+      if (executionStats.size > 0) {
+        const scored2 = candidates.map((c) => ({
+          candidate: c,
+          score: getHistoryPenalty(c.hypothesis),
+        }));
         scored2.sort((a, b) => b.score - a.score);
         best = scored2[0]!.candidate;
       } else {
