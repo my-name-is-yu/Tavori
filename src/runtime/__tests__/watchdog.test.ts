@@ -6,7 +6,7 @@ import { EventEmitter } from "node:events";
 import { makeTempDir, cleanupTempDir } from "../../../tests/helpers/temp-dir.js";
 import { PIDManager } from "../pid-manager.js";
 import { RuntimeWatchdog } from "../watchdog.js";
-import { RuntimeHealthStore } from "../store/index.js";
+import { RuntimeHealthStore, type RuntimeDaemonHealth } from "../store/index.js";
 import { LeaderLockManager } from "../leader-lock-manager.js";
 
 class FakeChildProcess extends EventEmitter {
@@ -54,6 +54,32 @@ async function writeLeaderRecord(runtimeRoot: string, pid: number, leaseUntil: n
   );
 }
 
+async function writeDaemonHealth(
+  healthStore: RuntimeHealthStore,
+  pid: number,
+  checkedAt: number,
+  commandStatus: "ok" | "degraded" = "ok",
+  taskStatus: "ok" | "degraded" = "ok"
+): Promise<RuntimeDaemonHealth> {
+  return healthStore.saveDaemonHealth({
+    status: "ok",
+    leader: true,
+    checked_at: checkedAt,
+    kpi: {
+      process_alive: { status: "ok", checked_at: checkedAt, last_ok_at: checkedAt },
+      command_acceptance:
+        commandStatus === "ok"
+          ? { status: "ok", checked_at: checkedAt, last_ok_at: checkedAt }
+          : { status: "degraded", checked_at: checkedAt, last_degraded_at: checkedAt },
+      task_execution:
+        taskStatus === "ok"
+          ? { status: "ok", checked_at: checkedAt, last_ok_at: checkedAt }
+          : { status: "degraded", checked_at: checkedAt, last_degraded_at: checkedAt },
+    },
+    details: { pid },
+  });
+}
+
 describe("RuntimeWatchdog", () => {
   let tmpDir: string;
 
@@ -88,7 +114,7 @@ describe("RuntimeWatchdog", () => {
       },
       pollIntervalMs: 20,
       heartbeatTimeoutMs: 50,
-      startupGraceMs: 40,
+      startupGraceMs: 0,
       restartBackoffMs: 10,
       maxRestartBackoffMs: 20,
       childShutdownGraceMs: 10,
@@ -97,34 +123,16 @@ describe("RuntimeWatchdog", () => {
     const startPromise = watchdog.start();
 
     await waitFor(() => children.length === 1);
-    await writeLeaderRecord(runtimeRoot, children[0]!.pid, Date.now() + 100);
-    await healthStore.saveDaemonHealth({
-      status: "ok",
-      leader: true,
-      checked_at: Date.now(),
-      kpi: {
-        process_alive: { status: "ok", checked_at: Date.now(), last_ok_at: Date.now() },
-        command_acceptance: { status: "degraded", checked_at: Date.now(), last_degraded_at: Date.now() },
-        task_execution: { status: "degraded", checked_at: Date.now(), last_degraded_at: Date.now() },
-      },
-      details: { pid: children[0]!.pid },
-    });
+    const staleAt = Date.now() - 1_000;
+    await writeLeaderRecord(runtimeRoot, children[0]!.pid, staleAt);
+    await writeDaemonHealth(healthStore, children[0]!.pid, staleAt, "degraded", "degraded");
 
-    await waitFor(() => children.length === 2, 20_000, 20);
+    await waitFor(() => children.length === 2, 2_000, 20);
     expect(children[0]!.kills).toContain("SIGTERM");
 
-    await writeLeaderRecord(runtimeRoot, children[1]!.pid, Date.now() + 100);
-    await healthStore.saveDaemonHealth({
-      status: "ok",
-      leader: true,
-      checked_at: Date.now(),
-      kpi: {
-        process_alive: { status: "ok", checked_at: Date.now(), last_ok_at: Date.now() },
-        command_acceptance: { status: "ok", checked_at: Date.now(), last_ok_at: Date.now() },
-        task_execution: { status: "ok", checked_at: Date.now(), last_ok_at: Date.now() },
-      },
-      details: { pid: children[1]!.pid },
-    });
+    const healthyAt = Date.now();
+    await writeLeaderRecord(runtimeRoot, children[1]!.pid, healthyAt + 60_000);
+    await writeDaemonHealth(healthStore, children[1]!.pid, healthyAt);
 
     watchdog.stop();
     await startPromise;
@@ -158,7 +166,7 @@ describe("RuntimeWatchdog", () => {
       },
       pollIntervalMs: 20,
       heartbeatTimeoutMs: 50,
-      startupGraceMs: 40,
+      startupGraceMs: 0,
       restartBackoffMs: 10,
       maxRestartBackoffMs: 20,
       childShutdownGraceMs: 10,
@@ -179,18 +187,9 @@ describe("RuntimeWatchdog", () => {
       watchdog_pid: process.pid,
     });
 
-    await writeLeaderRecord(runtimeRoot, children[0]!.pid, Date.now() + 100);
-    await healthStore.saveDaemonHealth({
-      status: "ok",
-      leader: true,
-      checked_at: Date.now(),
-      kpi: {
-        process_alive: { status: "ok", checked_at: Date.now(), last_ok_at: Date.now() },
-        command_acceptance: { status: "degraded", checked_at: Date.now(), last_degraded_at: Date.now() },
-        task_execution: { status: "degraded", checked_at: Date.now(), last_degraded_at: Date.now() },
-      },
-      details: { pid: children[0]!.pid },
-    });
+    const staleAt = Date.now() - 1_000;
+    await writeLeaderRecord(runtimeRoot, children[0]!.pid, staleAt);
+    await writeDaemonHealth(healthStore, children[0]!.pid, staleAt, "degraded", "degraded");
 
     await waitFor(() => children.length === 2, 2_000, 20);
     await waitFor(async () => {
@@ -239,18 +238,9 @@ describe("RuntimeWatchdog", () => {
       childShutdownGraceMs: 10,
     });
 
-    await writeLeaderRecord(runtimeRoot, child.pid, Date.now() + 60_000);
-    await healthStore.saveDaemonHealth({
-      status: "ok",
-      leader: true,
-      checked_at: Date.now(),
-      kpi: {
-        process_alive: { status: "ok", checked_at: Date.now(), last_ok_at: Date.now() },
-        command_acceptance: { status: "ok", checked_at: Date.now(), last_ok_at: Date.now() },
-        task_execution: { status: "ok", checked_at: Date.now(), last_ok_at: Date.now() },
-      },
-      details: { pid: child.pid },
-    });
+    const healthyAt = Date.now();
+    await writeLeaderRecord(runtimeRoot, child.pid, healthyAt + 60_000);
+    await writeDaemonHealth(healthStore, child.pid, healthyAt);
 
     const result = await (watchdog as unknown as {
       monitorChild(child: FakeChildProcess): Promise<{ reason: string; healthy: boolean }>;
