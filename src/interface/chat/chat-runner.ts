@@ -23,7 +23,7 @@ import type { TendDeps } from "./tend-command.js";
 import { EventSubscriber } from "./event-subscriber.js";
 import type { DaemonClient } from "../../runtime/daemon/client.js";
 import type { GoalNegotiator } from "../../orchestrator/goal/goal-negotiator.js";
-import type { ChatEvent, ChatEventContext } from "./chat-events.js";
+import type { ActivityKind, ChatEvent, ChatEventContext } from "./chat-events.js";
 import type { ChatAgentLoopRunner } from "../../orchestrator/execution/agent-loop/chat-agent-loop-runner.js";
 import type {
   AgentLoopEvent,
@@ -105,6 +105,7 @@ interface AssistantBuffer {
 const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_VERIFY_RETRIES = 2;
 const MAX_TOOL_LOOPS = 5;
+const ACTIVITY_PREVIEW_CHARS = 40;
 
 // ─── Command help text ───
 
@@ -124,6 +125,16 @@ function checkGitChanges(cwd: string): Promise<string | null> {
       resolve(err ? null : (stdout + stderr).trim());
     });
   });
+}
+
+function previewActivityText(value: string, maxChars = ACTIVITY_PREVIEW_CHARS): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized.length > maxChars ? `${normalized.slice(0, maxChars)}...` : normalized;
+}
+
+function formatToolActivity(action: "Running" | "Finished" | "Failed", toolName: string, detail?: string): string {
+  const preview = detail ? previewActivityText(detail) : "";
+  return preview ? `${action} tool: ${toolName} - ${preview}` : `${action} tool: ${toolName}`;
 }
 
 // ─── ChatRunner ───
@@ -440,15 +451,16 @@ export class ChatRunner {
     // history is always assigned by this point (either by startSession or the block above)
     const history = this.history!;
 
-    // Persist-before-execute: user message written to disk first
-    if (!resumeOnly) {
-      await history.appendUserMessage(input);
-    }
     this.emitEvent({
       type: "lifecycle_start",
       input,
       ...this.eventBase(eventContext),
     });
+
+    // Persist-before-execute: user message written to disk before model or adapter execution.
+    if (!resumeOnly) {
+      await history.appendUserMessage(input);
+    }
 
     // Build static grounding once per session; dynamic context is rebuilt each turn.
     if (this.cachedStaticSystemPrompt === null) {
@@ -461,6 +473,7 @@ export class ChatRunner {
 
     let dynamicSystemPrompt = "";
     try {
+      this.emitActivity("lifecycle", "Preparing context...", eventContext, "lifecycle:context");
       dynamicSystemPrompt = await buildDynamicContextPrompt({ stateManager: this.deps.stateManager });
     } catch {
       dynamicSystemPrompt = "";
@@ -525,6 +538,7 @@ export class ChatRunner {
             elapsed_ms,
           };
         }
+        this.emitActivity("lifecycle", "Calling model...", eventContext, "lifecycle:model");
         const result = await this.deps.chatAgentLoopRunner.execute({
           message: basePrompt,
           cwd,
@@ -551,6 +565,7 @@ export class ChatRunner {
         }
         if (result.success) {
           await history.appendAssistantMessage(result.output);
+          this.emitActivity("lifecycle", "Finalizing response...", eventContext, "lifecycle:finalizing");
           this.emitEvent({
             type: "assistant_final",
             text: result.output,
@@ -588,6 +603,7 @@ export class ChatRunner {
         const toolResult = await this.executeWithTools(prompt, eventContext, assistantBuffer, systemPrompt || undefined);
         const elapsed_ms = Date.now() - start;
         await history.appendAssistantMessage(toolResult);
+        this.emitActivity("lifecycle", "Finalizing response...", eventContext, "lifecycle:finalizing");
         this.emitEvent({
           type: "assistant_final",
           text: toolResult,
@@ -618,6 +634,7 @@ export class ChatRunner {
       ...(systemPrompt ? { system_prompt: systemPrompt } : {}),
     };
     const resolvedTimeoutMs = task.timeout_ms ?? DEFAULT_TIMEOUT_MS;
+    this.emitActivity("lifecycle", "Calling adapter...", eventContext, "lifecycle:adapter");
     const adapterPromise = this.deps.adapter.execute(task);
     const timeoutPromise = new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error(`Chat adapter timed out after ${resolvedTimeoutMs}ms`)), resolvedTimeoutMs)
@@ -637,6 +654,7 @@ export class ChatRunner {
     if (gitChanges !== null && gitChanges !== "") {
       let retries = 0;
       const VERIFY_TIMEOUT_MS = 30_000;
+      this.emitActivity("lifecycle", "Checking result...", eventContext, "lifecycle:checking");
       let verification = await Promise.race([
         verifyChatAction(gitRoot, this.deps.toolExecutor),
         new Promise<{ passed: true }>((resolve) =>
@@ -669,6 +687,7 @@ export class ChatRunner {
 
     if (result.success) {
       await history.appendAssistantMessage(result.output);
+      this.emitActivity("lifecycle", "Finalizing response...", eventContext, "lifecycle:finalizing");
       this.emitEvent({
         type: "assistant_final",
         text: result.output,
@@ -751,6 +770,7 @@ export class ChatRunner {
         : [];
       let response: LLMResponse;
       try {
+        this.emitActivity("lifecycle", "Calling model...", eventContext, "lifecycle:model");
         response = await this.sendLLMMessage(llmClient, messages, {
           tools,
           ...(systemPrompt ? { system: systemPrompt } : {}),
@@ -820,6 +840,8 @@ export class ChatRunner {
     return {
       emit: async (event: AgentLoopEvent) => {
         if (event.type === "tool_call_started") {
+          const detail = event.inputPreview ? previewActivityText(event.inputPreview) : undefined;
+          this.emitActivity("tool", formatToolActivity("Running", event.toolName, detail), eventContext, event.callId);
           this.emitEvent({
             type: "tool_start",
             toolCallId: event.callId,
@@ -839,6 +861,12 @@ export class ChatRunner {
         }
 
         if (event.type === "tool_call_finished") {
+          this.emitActivity(
+            "tool",
+            formatToolActivity(event.success ? "Finished" : "Failed", event.toolName, event.outputPreview),
+            eventContext,
+            event.callId
+          );
           this.emitEvent({
             type: "tool_end",
             toolCallId: event.callId,
@@ -852,11 +880,12 @@ export class ChatRunner {
         }
 
         if (event.type === "assistant_message" && event.phase === "commentary" && event.contentPreview) {
-          this.pushAssistantDelta(event.contentPreview, { text: "" }, eventContext);
+          this.emitActivity("commentary", previewActivityText(event.contentPreview, 120), eventContext, `commentary:${event.eventId}`);
           return;
         }
 
         if (event.type === "plan_update") {
+          this.emitActivity("tool", `Updated plan: ${previewActivityText(event.summary)}`, eventContext, `plan:${event.turnId}`);
           this.emitEvent({
             type: "tool_update",
             toolCallId: `plan:${event.turnId}:${event.createdAt}`,
@@ -869,6 +898,7 @@ export class ChatRunner {
         }
 
         if (event.type === "approval_request") {
+          this.emitActivity("tool", formatToolActivity("Running", event.toolName, `awaiting approval: ${event.reason}`), eventContext, event.callId);
           this.emitEvent({
             type: "tool_update",
             toolCallId: event.callId,
@@ -881,6 +911,7 @@ export class ChatRunner {
         }
 
         if (event.type === "approval") {
+          this.emitActivity("tool", formatToolActivity("Finished", event.toolName, `approval ${event.status}: ${event.reason}`), eventContext);
           this.emitEvent({
             type: "tool_update",
             toolCallId: `approval:${event.turnId}:${event.createdAt}`,
@@ -969,16 +1000,19 @@ export class ChatRunner {
     eventContext: ChatEventContext,
   ): Promise<string> {
     if (!this.deps.registry) {
+      this.emitActivity("tool", formatToolActivity("Failed", name, "No tool registry configured"), eventContext, toolCallId);
       return JSON.stringify({ error: `No tool registry configured` });
     }
     const tool = this.deps.registry.get(name);
     if (!tool) {
+      this.emitActivity("tool", formatToolActivity("Failed", name, `Unknown tool: ${name}`), eventContext, toolCallId);
       return JSON.stringify({ error: `Unknown tool: ${name}` });
     }
     const startTime = Date.now();
     try {
       const parsed = tool.inputSchema.safeParse(args);
       if (!parsed.success) {
+        this.emitActivity("tool", formatToolActivity("Failed", name, `Invalid input: ${parsed.error.message}`), eventContext, toolCallId);
         this.emitEvent({
           type: "tool_end",
           toolCallId,
@@ -998,6 +1032,7 @@ export class ChatRunner {
         args,
         ...this.eventBase(eventContext),
       });
+      this.emitActivity("tool", formatToolActivity("Running", name, JSON.stringify(args)), eventContext, toolCallId);
 
       let result: { success: boolean; summary: string; data?: unknown; error?: string };
       if (this.deps.toolExecutor) {
@@ -1027,6 +1062,7 @@ export class ChatRunner {
           return `Tool ${name} denied: ${permResult.reason}`;
         }
         if (permResult.status === "needs_approval") {
+          this.emitActivity("tool", formatToolActivity("Running", name, `awaiting approval: ${permResult.reason}`), eventContext, toolCallId);
           this.emitEvent({
             type: "tool_update",
             toolCallId,
@@ -1070,6 +1106,12 @@ export class ChatRunner {
 
       const durationMs = Date.now() - startTime;
       this.deps.onToolEnd?.(name, { success: result.success, summary: result.summary || '...', durationMs });
+      this.emitActivity(
+        "tool",
+        formatToolActivity(result.success ? "Finished" : "Failed", name, result.summary || "..."),
+        eventContext,
+        toolCallId
+      );
       this.emitEvent({
         type: "tool_update",
         toolCallId,
@@ -1093,6 +1135,7 @@ export class ChatRunner {
       const message = err instanceof Error ? err.message : String(err);
       const durationMs = Date.now() - startTime;
       this.deps.onToolEnd?.(name, { success: false, summary: message, durationMs });
+      this.emitActivity("tool", formatToolActivity("Failed", name, message), eventContext, toolCallId);
       this.emitEvent({
         type: "tool_end",
         toolCallId,
@@ -1148,6 +1191,23 @@ export class ChatRunner {
   private emitEvent(event: ChatEvent): void {
     const handler = this.onEvent ?? this.deps.onEvent;
     handler?.(event);
+  }
+
+  private emitActivity(
+    kind: ActivityKind,
+    message: string,
+    eventContext: ChatEventContext,
+    sourceId?: string
+  ): void {
+    if (!message.trim()) return;
+    this.emitEvent({
+      type: "activity",
+      kind,
+      message,
+      ...(sourceId ? { sourceId } : {}),
+      transient: true,
+      ...this.eventBase(eventContext),
+    });
   }
 
   private pushAssistantDelta(

@@ -755,6 +755,38 @@ describe("TelegramChatEventAdapter", () => {
     expect(editMessageText.mock.calls[0]![2]).toContain("done");
   });
 
+  it("renders plugin activity but ignores lifecycle activity", async () => {
+    const sendPlainMessage = vi.fn().mockResolvedValue(13);
+    const editMessageText = vi.fn().mockResolvedValue(undefined);
+    const api = {
+      sendPlainMessage,
+      editMessageText,
+    } as unknown as TelegramAPI;
+
+    const adapter = new TelegramChatEventAdapter(api, 777);
+
+    await adapter.handle({
+      type: "activity",
+      runId: "run-1",
+      turnId: "turn-1",
+      createdAt: "2026-04-08T00:00:00.000Z",
+      kind: "lifecycle",
+      message: "Received. Starting work...",
+    });
+    await adapter.handle({
+      type: "activity",
+      runId: "run-1",
+      turnId: "turn-1",
+      createdAt: "2026-04-08T00:00:01.000Z",
+      kind: "plugin",
+      message: "Plugin completed",
+      sourceId: "plugin-1",
+    });
+
+    expect(sendPlainMessage).toHaveBeenCalledOnce();
+    expect(sendPlainMessage).toHaveBeenCalledWith(777, "[plugin] Plugin completed");
+  });
+
   it("edits the assistant message to show lifecycle_error partial text", async () => {
     const sendPlainMessage = vi.fn().mockResolvedValue(12);
     const editMessageText = vi.fn().mockResolvedValue(undefined);

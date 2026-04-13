@@ -82,4 +82,40 @@ describe("DiscordWebhookServer", () => {
       );
     });
   });
+
+  it("sends only tool activity as Discord follow-up progress", async () => {
+    const fetchChatReply = vi.fn().mockImplementation(async (input) => {
+      await input.onEvent?.({ type: "activity", kind: "lifecycle", message: "Received. Starting work..." });
+      await input.onEvent?.({ type: "activity", kind: "commentary", message: "Thinking about it" });
+      await input.onEvent?.({ type: "activity", kind: "tool", message: "Running tool: grep - ChatEvent" });
+      return "final reply";
+    });
+    const server = new DiscordWebhookServer(config, api as DiscordAPI, fetchChatReply);
+    const { res, done } = createMockServerResponse();
+
+    await server.handleRequest(
+      createJsonPostRequest({
+        id: "interaction-3",
+        type: 2,
+        token: "token-3",
+        application_id: "app-1",
+        channel_id: "channel-1",
+        member: { user: { id: "user-2" } },
+        data: { name: "pulseed", options: [{ name: "message", value: "check events" }] },
+      }),
+      res
+    );
+    await done;
+
+    await vi.waitFor(() => {
+      expect(api.sendInteractionFollowUp).toHaveBeenCalledTimes(2);
+    });
+    expect(api.sendInteractionFollowUp).toHaveBeenNthCalledWith(
+      1,
+      "app-1",
+      "token-3",
+      "Running tool: grep - ChatEvent"
+    );
+    expect(api.sendInteractionFollowUp).toHaveBeenNthCalledWith(2, "app-1", "token-3", "final reply");
+  });
 });

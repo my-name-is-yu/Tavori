@@ -15,6 +15,7 @@ export class TelegramChatEventAdapter {
   private readonly chatId: number;
   private assistantMessage: RenderedMessage | null = null;
   private readonly toolMessages = new Map<string, RenderedMessage>();
+  private readonly activityMessages = new Map<string, RenderedMessage>();
   private hasAssistantOutput = false;
 
   constructor(api: TelegramAPI, chatId: number) {
@@ -31,6 +32,7 @@ export class TelegramChatEventAdapter {
       case "lifecycle_start":
         this.assistantMessage = null;
         this.toolMessages.clear();
+        this.activityMessages.clear();
         this.hasAssistantOutput = false;
         return;
 
@@ -40,6 +42,12 @@ export class TelegramChatEventAdapter {
 
       case "assistant_final":
         await this.upsertAssistantMessage(event.text);
+        return;
+
+      case "activity":
+        if (event.kind === "plugin" || event.kind === "skill") {
+          await this.upsertActivityMessage(event.sourceId ?? event.kind, `[${event.kind}] ${event.message}`);
+        }
         return;
 
       case "tool_start":
@@ -104,6 +112,18 @@ export class TelegramChatEventAdapter {
     if (!existing) {
       const messageId = await this.api.sendPlainMessage(this.chatId, text);
       this.toolMessages.set(toolCallId, { messageId, text });
+      return;
+    }
+
+    await this.api.editMessageText(this.chatId, existing.messageId, text);
+    existing.text = text;
+  }
+
+  private async upsertActivityMessage(activityId: string, text: string): Promise<void> {
+    const existing = this.activityMessages.get(activityId);
+    if (!existing) {
+      const messageId = await this.api.sendPlainMessage(this.chatId, text);
+      this.activityMessages.set(activityId, { messageId, text });
       return;
     }
 
