@@ -28,6 +28,12 @@ For broader navigation, see [Architecture Map](architecture-map.md).
 - native AgentLoop quality and policy
 - design notes under `docs/design/`
 
+## Safety Boundary
+
+PulSeed has software-level approval and verification gates, but it does not provide
+OS-level sandboxing for delegated agent subprocesses. For high-risk or untrusted
+goals, use an external container or VM boundary. See [Security](../SECURITY.md).
+
 ## Source of truth
 
 When public docs disagree, prefer the more specific page:

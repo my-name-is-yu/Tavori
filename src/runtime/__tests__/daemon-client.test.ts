@@ -1,7 +1,12 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DaemonClient, isDaemonRunning, probeDaemonHealth } from "../daemon-client.js";
+import {
+  DaemonClient,
+  isDaemonRunning,
+  probeDaemonHealth,
+  readDaemonAuthToken,
+} from "../daemon-client.js";
 import { EventServer } from "../event-server.js";
 import { DEFAULT_PORT } from "../port-utils.js";
 import { OutboxStore } from "../store/outbox-store.js";
@@ -121,6 +126,40 @@ describe("DaemonClient snapshot + replay", () => {
       client.disconnect();
     }
   });
+
+  it("sends runtime control requests as daemon command envelopes", async () => {
+    const envelopes: unknown[] = [];
+    server.setCommandEnvelopeHook((envelope) => {
+      envelopes.push(envelope);
+    });
+    await server.start();
+
+    const client = new DaemonClient({
+      host: "127.0.0.1",
+      port: server.getPort(),
+      authToken: server.getAuthToken(),
+    });
+
+    await expect(client.requestRuntimeControl({
+      operationId: "op-restart-1",
+      kind: "restart_daemon",
+      reason: "PulSeed を再起動して",
+    })).resolves.toEqual(expect.objectContaining({ ok: true }));
+
+    expect(envelopes).toHaveLength(1);
+    expect(envelopes[0]).toMatchObject({
+      type: "command",
+      name: "runtime_control",
+      source: "http",
+      priority: "critical",
+      dedupe_key: "runtime_control:op-restart-1",
+      payload: {
+        operationId: "op-restart-1",
+        kind: "restart_daemon",
+        reason: "PulSeed を再起動して",
+      },
+    });
+  });
 });
 
 describe("isDaemonRunning", () => {
@@ -132,6 +171,7 @@ describe("isDaemonRunning", () => {
 
   afterEach(() => {
     cleanupTempDir(tmpDir);
+    delete process.env["PULSEED_DAEMON_TOKEN"];
     vi.restoreAllMocks();
   });
 
@@ -147,6 +187,17 @@ describe("isDaemonRunning", () => {
       running: true,
       port: DEFAULT_PORT,
     });
+  });
+
+  it("prefers the daemon token file over stale process env tokens", () => {
+    fs.writeFileSync(
+      path.join(tmpDir, "daemon-token.json"),
+      JSON.stringify({ token: "fresh-token", port: 41700 }),
+      "utf-8"
+    );
+    process.env["PULSEED_DAEMON_TOKEN"] = "stale-token";
+
+    expect(readDaemonAuthToken(tmpDir, 41700)).toBe("fresh-token");
   });
 });
 

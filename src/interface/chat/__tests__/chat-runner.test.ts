@@ -1,3 +1,6 @@
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { ChatRunner } from "../chat-runner.js";
 import type { ChatRunnerDeps } from "../chat-runner.js";
@@ -6,6 +9,8 @@ import type { IAdapter, AgentResult } from "../../../orchestrator/execution/adap
 import type { EscalationHandler, EscalationResult } from "../escalation.js";
 import type { ILLMClient } from "../../../base/llm/llm-client.js";
 import type { ChatAgentLoopRunner } from "../../../orchestrator/execution/agent-loop/chat-agent-loop-runner.js";
+import { RuntimeControlService } from "../../../runtime/control/index.js";
+import { RuntimeOperationStore } from "../../../runtime/store/runtime-operation-store.js";
 
 // Mock context-provider so tests don't walk the real filesystem
 vi.mock("../../../platform/observation/context-provider.js", () => ({
@@ -251,6 +256,227 @@ describe("ChatRunner", () => {
       const writeRawMock = stateManager.writeRaw as ReturnType<typeof vi.fn>;
       expect(writeRawMock).toHaveBeenCalledTimes(1);
       expect(stateManager.readRaw).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("natural-language runtime control", () => {
+    it("handles daemon restart through durable runtime control without calling the adapter", async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pulseed-runtime-control-chat-"));
+      try {
+        const adapter = makeMockAdapter();
+        const stateManager = makeMockStateManager();
+        const operationStore = new RuntimeOperationStore(path.join(tmpDir, "runtime"));
+        const executor = vi.fn().mockResolvedValue({
+          ok: true,
+          message: "restart queued",
+          state: "acknowledged",
+        });
+        const runtimeControlService = new RuntimeControlService({
+          operationStore,
+          executor,
+        });
+        const approvalFn = vi.fn().mockResolvedValue(true);
+        const runner = new ChatRunner(makeDeps({
+          adapter,
+          stateManager,
+          approvalFn,
+          runtimeControlService,
+          runtimeReplyTarget: {
+            surface: "gateway",
+            platform: "telegram",
+            conversation_id: "chat-123",
+            identity_key: "owner",
+            user_id: "user-1",
+          },
+        }));
+
+        const result = await runner.execute("PulSeed を再起動して", "/repo");
+
+        expect(result.success).toBe(true);
+        expect(result.output).toBe("restart queued");
+        expect(adapter.execute).not.toHaveBeenCalled();
+        expect(approvalFn).toHaveBeenCalledWith(
+          expect.stringContaining("restart_daemon")
+        );
+        expect(executor).toHaveBeenCalledOnce();
+
+        const pending = await operationStore.listPending();
+        expect(pending).toHaveLength(1);
+        expect(pending[0]).toMatchObject({
+          kind: "restart_daemon",
+          state: "acknowledged",
+          reason: "PulSeed を再起動して",
+          requested_by: {
+            surface: "gateway",
+            platform: "telegram",
+            conversation_id: "chat-123",
+            identity_key: "owner",
+            user_id: "user-1",
+          },
+          reply_target: {
+            surface: "gateway",
+            platform: "telegram",
+            conversation_id: "chat-123",
+            identity_key: "owner",
+            user_id: "user-1",
+          },
+        });
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it("does not route recognized runtime control text to the adapter when service is unavailable", async () => {
+      const adapter = makeMockAdapter();
+      const runner = new ChatRunner(makeDeps({ adapter }));
+
+      const result = await runner.execute("PulSeed 自身を更新して", "/repo");
+
+      expect(result.success).toBe(false);
+      expect(result.output).toContain("Runtime control is not available");
+      expect(adapter.execute).not.toHaveBeenCalled();
+    });
+
+    it("does not claim restart started when no runtime control executor is configured", async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pulseed-runtime-control-no-executor-"));
+      try {
+        const adapter = makeMockAdapter();
+        const operationStore = new RuntimeOperationStore(path.join(tmpDir, "runtime"));
+        const runtimeControlService = new RuntimeControlService({ operationStore });
+        const runner = new ChatRunner(makeDeps({
+          adapter,
+          approvalFn: vi.fn().mockResolvedValue(true),
+          runtimeControlService,
+          runtimeReplyTarget: { surface: "cli" },
+        }));
+
+        const result = await runner.execute("PulSeed を再起動して", "/repo");
+
+        expect(result.success).toBe(false);
+        expect(result.output).toContain("not configured");
+        expect(result.output).not.toContain("再起動を開始します");
+        expect(adapter.execute).not.toHaveBeenCalled();
+        expect(await operationStore.listPending()).toHaveLength(0);
+        const completed = await operationStore.listCompleted();
+        expect(completed).toHaveLength(1);
+        expect(completed[0]).toMatchObject({
+          kind: "restart_daemon",
+          state: "failed",
+        });
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it("marks runtime control failed when the executor throws", async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pulseed-runtime-control-executor-throws-"));
+      try {
+        const adapter = makeMockAdapter();
+        const operationStore = new RuntimeOperationStore(path.join(tmpDir, "runtime"));
+        const runtimeControlService = new RuntimeControlService({
+          operationStore,
+          executor: vi.fn().mockRejectedValue(new Error("daemon auth failed")),
+        });
+        const runner = new ChatRunner(makeDeps({
+          adapter,
+          approvalFn: vi.fn().mockResolvedValue(true),
+          runtimeControlService,
+          runtimeReplyTarget: { surface: "cli" },
+        }));
+
+        const result = await runner.execute("PulSeed を再起動して", "/repo");
+
+        expect(result.success).toBe(false);
+        expect(result.output).toContain("daemon auth failed");
+        expect(adapter.execute).not.toHaveBeenCalled();
+        expect(await operationStore.listPending()).toHaveLength(0);
+        const completed = await operationStore.listCompleted();
+        expect(completed).toHaveLength(1);
+        expect(completed[0]).toMatchObject({
+          kind: "restart_daemon",
+          state: "failed",
+          result: {
+            ok: false,
+            message: "daemon auth failed",
+          },
+        });
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it("marks runtime control failed when approval throws", async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pulseed-runtime-control-approval-throws-"));
+      try {
+        const adapter = makeMockAdapter();
+        const operationStore = new RuntimeOperationStore(path.join(tmpDir, "runtime"));
+        const executor = vi.fn().mockResolvedValue({ ok: true });
+        const runtimeControlService = new RuntimeControlService({
+          operationStore,
+          executor,
+        });
+        const runner = new ChatRunner(makeDeps({
+          adapter,
+          approvalFn: vi.fn().mockRejectedValue(new Error("approval store unavailable")),
+          runtimeControlService,
+          runtimeReplyTarget: { surface: "cli" },
+        }));
+
+        const result = await runner.execute("PulSeed を再起動して", "/repo");
+
+        expect(result.success).toBe(false);
+        expect(result.output).toContain("approval store unavailable");
+        expect(adapter.execute).not.toHaveBeenCalled();
+        expect(executor).not.toHaveBeenCalled();
+        expect(await operationStore.listPending()).toHaveLength(0);
+        const completed = await operationStore.listCompleted();
+        expect(completed).toHaveLength(1);
+        expect(completed[0]).toMatchObject({
+          kind: "restart_daemon",
+          state: "failed",
+          result: {
+            ok: false,
+            message: "approval store unavailable",
+          },
+        });
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it("uses runtime-control approval without reusing general tool approval", async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pulseed-runtime-control-scoped-approval-"));
+      try {
+        const adapter = makeMockAdapter();
+        const operationStore = new RuntimeOperationStore(path.join(tmpDir, "runtime"));
+        const runtimeControlService = new RuntimeControlService({
+          operationStore,
+          executor: vi.fn().mockResolvedValue({
+            ok: true,
+            state: "restarting",
+            message: "restart requested",
+          }),
+        });
+        const approvalFn = vi.fn().mockResolvedValue(false);
+        const runtimeControlApprovalFn = vi.fn().mockResolvedValue(true);
+        const runner = new ChatRunner(makeDeps({
+          adapter,
+          approvalFn,
+          runtimeControlApprovalFn,
+          runtimeControlService,
+          runtimeReplyTarget: { surface: "gateway", platform: "telegram" },
+        }));
+
+        const result = await runner.execute("PulSeed を再起動して", "/repo");
+
+        expect(result.success).toBe(true);
+        expect(result.output).toBe("restart requested");
+        expect(runtimeControlApprovalFn).toHaveBeenCalledOnce();
+        expect(approvalFn).not.toHaveBeenCalled();
+        expect(adapter.execute).not.toHaveBeenCalled();
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
     });
   });
 

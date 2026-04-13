@@ -342,6 +342,55 @@ describe("M16.6: Incremental Meta-Pattern Update + Transfer Effect Report", () =
       expect(mockKT.updateMetaPatternsIncremental).toHaveBeenCalledOnce();
     });
 
+    it("goal completion persists learned feedback and triggers incremental meta-pattern update", async () => {
+      const tripletsResponse = JSON.stringify({
+        triplets: [
+          {
+            state_context: "Large task repeatedly stalled near verification",
+            action_taken: "Reduced scope to a single verifiable step",
+            outcome: "Task completed and verification evidence was collected",
+            gap_delta: -0.35,
+          },
+        ],
+      });
+      const patternsResponse = JSON.stringify({
+        patterns: [
+          {
+            description: "Reduce stalled tasks to a single verifiable step before retrying",
+            pattern_type: "scope_sizing",
+            action_group: "scope_reduction",
+            applicable_domains: ["agent_loop", "verification"],
+            occurrence_count: 3,
+            consistent_count: 3,
+            total_count: 3,
+            is_specific: true,
+          },
+        ],
+      });
+      const llmClient = createMockLLMClient([tripletsResponse, patternsResponse]);
+      const pipeline = new LearningPipeline(llmClient, null, stateManager);
+      const mockKT = { updateMetaPatternsIncremental: vi.fn().mockResolvedValue(1) };
+      pipeline.setKnowledgeTransfer(mockKT);
+      await stateManager.writeRaw("learning/goal_complete_logs.json", [
+        { loop: 1, action: "reduced scope", result: "verified" },
+      ]);
+
+      const learned = await pipeline.onGoalCompleted("goal_complete");
+
+      expect(learned).toHaveLength(1);
+      expect(mockKT.updateMetaPatternsIncremental).toHaveBeenCalledOnce();
+      await expect(pipeline.getPatterns("goal_complete")).resolves.toHaveLength(1);
+      const feedback = await pipeline.getFeedbackEntries("goal_complete");
+      expect(feedback).toHaveLength(1);
+      expect(feedback[0]).toMatchObject({
+        target_step: "task",
+        adjustment: "Reduce stalled tasks to a single verifiable step before retrying",
+      });
+      await expect(pipeline.applyFeedback("goal_complete", "task")).resolves.toEqual([
+        "Reduce stalled tasks to a single verifiable step before retrying",
+      ]);
+    });
+
     it("does not call updateMetaPatternsIncremental when analyzeLogs produces no patterns", async () => {
       const llmClient = createMockLLMClient([]);
       const pipeline = new LearningPipeline(llmClient, null, stateManager);

@@ -114,6 +114,8 @@ export class DiscordWebhookServer {
 
     const senderId = payload.member?.user?.id ?? payload.user?.id ?? "discord-user";
     const conversationId = payload.channel_id ?? payload.guild_id ?? payload.id ?? senderId;
+    const runtimeControlApproved =
+      this.config.runtime_control_allowed_sender_ids.includes(senderId);
     const input: ChatContinuationInput = {
       platform: "discord",
       identity_key: this.config.identity_key,
@@ -126,6 +128,7 @@ export class DiscordWebhookServer {
         command_name: payload.data?.name,
         channel_id: payload.channel_id,
         guild_id: payload.guild_id,
+        ...(runtimeControlApproved ? { runtime_control_approved: true } : {}),
       },
     };
 

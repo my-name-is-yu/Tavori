@@ -56,7 +56,12 @@ export class SignalBridgePoller {
         sender_id: normalized.senderId,
         message_id: normalized.messageId,
         text: normalized.text,
-        metadata: normalized.metadata,
+        metadata: {
+          ...normalized.metadata,
+          ...(this.config.runtime_control_allowed_sender_ids.includes(normalized.senderId)
+            ? { runtime_control_approved: true }
+            : {}),
+        },
       });
 
       if (reply !== null) {

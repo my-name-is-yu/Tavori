@@ -6,7 +6,12 @@ import { TelegramChatEventAdapter } from "./telegram-chat-event-adapter.js";
 // Thin adapter between the Telegram polling loop and the message processor.
 // Processors may emit chat events via the provided handler.
 
-type ProcessMessageFn = (text: string, chatId: number, emit: ChatEventHandler) => Promise<string | void> | string | void;
+type ProcessMessageFn = (
+  text: string,
+  chatId: number,
+  emit: ChatEventHandler,
+  fromUserId?: number
+) => Promise<string | void> | string | void;
 
 export class ChatBridge {
   private processMessage: ProcessMessageFn;
@@ -25,8 +30,6 @@ export class ChatBridge {
   }
 
   async handleMessage(text: string, fromUserId: number, chatId: number): Promise<void> {
-    // fromUserId and chatId are available for future routing/logging
-    void fromUserId;
     const adapter = this.apiFactory(chatId);
     let eventQueue = Promise.resolve();
     const emit: ChatEventHandler = (event) => {
@@ -41,7 +44,7 @@ export class ChatBridge {
     let response: string | void = undefined;
     let processError: unknown = null;
     try {
-      response = await this.processMessage(text, chatId, emit);
+      response = await this.processMessage(text, chatId, emit, fromUserId);
     } catch (err) {
       processError = err;
     }

@@ -108,6 +108,33 @@ export { EventServer } from "./runtime/event-server.js";
 export type { EventServerConfig } from "./runtime/event-server.js";
 export { NotificationDispatcher } from "./runtime/notification-dispatcher.js";
 export type { INotificationDispatcher } from "./runtime/notification-dispatcher.js";
+export {
+  RuntimeControlService,
+  recognizeRuntimeControlIntent,
+} from "./runtime/control/index.js";
+export type {
+  RuntimeControlExecutor,
+  RuntimeControlExecutorResult,
+  RuntimeControlIntent,
+  RuntimeControlRequest,
+  RuntimeControlResult,
+  RuntimeControlServiceOptions,
+} from "./runtime/control/index.js";
+export { RuntimeOperationStore } from "./runtime/store/runtime-operation-store.js";
+export {
+  RuntimeControlActorSchema,
+  RuntimeControlOperationKindSchema,
+  RuntimeControlOperationSchema,
+  RuntimeControlOperationStateSchema,
+  RuntimeControlReplyTargetSchema,
+} from "./runtime/store/runtime-operation-schemas.js";
+export type {
+  RuntimeControlActor,
+  RuntimeControlOperation,
+  RuntimeControlOperationKind,
+  RuntimeControlOperationState,
+  RuntimeControlReplyTarget,
+} from "./runtime/store/runtime-operation-schemas.js";
 export { MemoryLifecycleManager } from "./platform/knowledge/memory/memory-lifecycle.js";
 export { CharacterConfigManager } from "./platform/traits/character-config.js";
 export { CharacterConfigSchema, DEFAULT_CHARACTER_CONFIG } from "./base/types/character.js";

@@ -57,7 +57,24 @@ export type {
   RuntimeHealthSnapshot,
 } from "./runtime-schemas.js";
 
+export {
+  RuntimeControlOperationKindSchema,
+  RuntimeControlOperationStateSchema,
+  RuntimeControlActorSchema,
+  RuntimeControlReplyTargetSchema,
+  RuntimeControlOperationSchema,
+  isTerminalRuntimeControlState,
+} from "./runtime-operation-schemas.js";
+export type {
+  RuntimeControlOperationKind,
+  RuntimeControlOperationState,
+  RuntimeControlActor,
+  RuntimeControlReplyTarget,
+  RuntimeControlOperation,
+} from "./runtime-operation-schemas.js";
+
 export { ApprovalStore } from "./approval-store.js";
 export type { ApprovalResolutionInput } from "./approval-store.js";
 export { OutboxStore } from "./outbox-store.js";
 export { RuntimeHealthStore } from "./health-store.js";
+export { RuntimeOperationStore } from "./runtime-operation-store.js";

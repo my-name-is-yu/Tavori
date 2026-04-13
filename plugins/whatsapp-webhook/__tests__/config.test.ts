@@ -31,6 +31,42 @@ describe("whatsapp-webhook config loader", () => {
     const cfg = loadConfig(tmpDir);
     expect(cfg.path).toBe("/webhook");
     expect(cfg.port).toBe(8788);
+    expect(cfg.runtime_control_allowed_sender_ids).toEqual([]);
+  });
+
+  it("loads runtime control sender allowlist", () => {
+    fs.writeFileSync(
+      path.join(tmpDir, "config.json"),
+      JSON.stringify({
+        phone_number_id: "phone-1",
+        access_token: "token-1",
+        verify_token: "verify-1",
+        recipient_id: "15551234567",
+        identity_key: "whatsapp:alpha",
+        runtime_control_allowed_sender_ids: ["15557654321"],
+      }),
+      "utf-8"
+    );
+
+    const cfg = loadConfig(tmpDir);
+    expect(cfg.runtime_control_allowed_sender_ids).toEqual(["15557654321"]);
+  });
+
+  it("rejects invalid runtime control sender allowlist", () => {
+    fs.writeFileSync(
+      path.join(tmpDir, "config.json"),
+      JSON.stringify({
+        phone_number_id: "phone-1",
+        access_token: "token-1",
+        verify_token: "verify-1",
+        recipient_id: "15551234567",
+        identity_key: "whatsapp:alpha",
+        runtime_control_allowed_sender_ids: [123],
+      }),
+      "utf-8"
+    );
+
+    expect(() => loadConfig(tmpDir)).toThrow("runtime_control_allowed_sender_ids");
   });
 
   it("requires verify_token", () => {

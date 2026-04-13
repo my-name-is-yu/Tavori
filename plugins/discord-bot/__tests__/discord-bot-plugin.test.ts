@@ -53,6 +53,7 @@ describe("DiscordBotPlugin", () => {
       bot_token: "bot-1",
       channel_id: "channel-1",
       identity_key: "discord:alpha",
+      runtime_control_allowed_sender_ids: [],
       command_name: "pulseed",
       host: "127.0.0.1",
       port: 8787,

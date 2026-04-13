@@ -24,7 +24,15 @@ config_schema:
   allowed_user_ids:
     type: array
     required: false
-    description: "Telegram user IDs allowed to send commands (empty = all)"
+    description: "Telegram user IDs allowed to send chat commands when allow_all is false"
+  runtime_control_allowed_user_ids:
+    type: array
+    required: false
+    description: "Telegram user IDs allowed to approve explicit PulSeed runtime-control requests"
+  allow_all:
+    type: boolean
+    required: false
+    description: "Allow all Telegram users in the configured chat to send normal chat messages; runtime control still requires runtime_control_allowed_user_ids"
   identity_key:
     type: string
     required: false

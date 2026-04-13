@@ -21,6 +21,7 @@ notifications are delivered through the same Cloud API client.
   "verify_token": "shared-secret",
   "recipient_id": "15551234567",
   "identity_key": "whatsapp:family",
+  "runtime_control_allowed_sender_ids": ["15551234567"],
   "host": "127.0.0.1",
   "port": 8788,
   "path": "/webhook"
@@ -31,4 +32,7 @@ notifications are delivered through the same Cloud API client.
 
 - `app_secret` is optional. When present, the webhook verifies
   `X-Hub-Signature-256` before accepting POST requests.
+- `runtime_control_allowed_sender_ids` limits who can approve explicit PulSeed
+  runtime-control requests from WhatsApp. Leave it empty to disable those
+  operations from WhatsApp.
 - Voice memo transcription is not implemented.

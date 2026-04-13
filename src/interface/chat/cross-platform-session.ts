@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
+import * as path from "node:path";
 import { ChatRunner } from "./chat-runner.js";
 import type { ChatRunResult, ChatRunnerDeps } from "./chat-runner.js";
+import type { RuntimeControlChatContext } from "./chat-runner.js";
 import type { ChatEvent, ChatEventHandler } from "./chat-events.js";
 import { StateManager } from "../../base/state/state-manager.js";
 import { buildAdapterRegistry, buildLLMClient } from "../../base/llm/provider-factory.js";
@@ -17,6 +19,10 @@ import {
   createNativeChatAgentLoopRunner,
   shouldUseNativeTaskAgentLoop,
 } from "../../orchestrator/execution/agent-loop/index.js";
+import {
+  RuntimeControlService,
+  createDaemonRuntimeControlExecutor,
+} from "../../runtime/control/index.js";
 
 export interface CrossPlatformChatSessionOptions {
   /**
@@ -122,6 +128,35 @@ function buildSessionMetadata(options: CrossPlatformChatSessionOptions): Record<
     ...(options.conversation_name ? { conversation_name: options.conversation_name } : {}),
     ...(options.user_id ? { user_id: options.user_id } : {}),
     ...(options.user_name ? { user_name: options.user_name } : {}),
+  };
+}
+
+function buildRuntimeControlChatContext(
+  options: CrossPlatformChatSessionOptions
+): RuntimeControlChatContext | null {
+  const platform = normalizePlatform(options.platform);
+  const conversationId = normalizeIdentity(options.conversation_id);
+  const identityKey = normalizeIdentity(options.identity_key);
+  const userId = normalizeIdentity(options.user_id);
+  if (!platform && !conversationId && !identityKey && !userId) return null;
+  const runtimeControlApproved = options.metadata?.["runtime_control_approved"] === true;
+
+  return {
+    actor: {
+      surface: platform ? "gateway" : "chat",
+      ...(platform ? { platform } : {}),
+      ...(conversationId ? { conversation_id: conversationId } : {}),
+      ...(identityKey ? { identity_key: identityKey } : {}),
+      ...(userId ? { user_id: userId } : {}),
+    },
+    replyTarget: {
+      surface: platform ? "gateway" : "chat",
+      ...(platform ? { platform } : {}),
+      ...(conversationId ? { conversation_id: conversationId } : {}),
+      ...(identityKey ? { identity_key: identityKey } : {}),
+      ...(userId ? { user_id: userId } : {}),
+    },
+    ...(runtimeControlApproved ? { approvalFn: async () => true } : {}),
   };
 }
 
@@ -253,9 +288,11 @@ export class CrossPlatformChatSessionManager {
     }
 
     try {
+      session.runner.setRuntimeControlContext(buildRuntimeControlChatContext(options));
       return await session.runner.execute(input, session.info.cwd, options.timeoutMs);
     } finally {
       session.runner.onEvent = previousOnEvent;
+      session.runner.setRuntimeControlContext(null);
     }
   }
 }
@@ -309,5 +346,11 @@ async function createGlobalCrossPlatformChatSessionManager(): Promise<CrossPlatf
     registry: toolRegistry,
     toolExecutor,
     chatAgentLoopRunner,
+    runtimeControlService: new RuntimeControlService({
+      runtimeRoot: path.join(stateManager.getBaseDir(), "runtime"),
+      executor: createDaemonRuntimeControlExecutor({
+        baseDir: stateManager.getBaseDir(),
+      }),
+    }),
   });
 }

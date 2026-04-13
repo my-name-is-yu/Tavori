@@ -33,7 +33,14 @@ import { IngressGateway, HttpChannelAdapter } from "../gateway/index.js";
 import { PulSeedEventSchema } from "../../base/types/drive.js";
 import type { Envelope } from "../types/envelope.js";
 import { LoopSupervisor } from "../executor/index.js";
-import { ApprovalStore, OutboxStore, RuntimeHealthStore, createRuntimeStorePaths } from "../store/index.js";
+import {
+  ApprovalStore,
+  OutboxStore,
+  RuntimeHealthStore,
+  RuntimeOperationStore,
+  createRuntimeStorePaths,
+} from "../store/index.js";
+import type { RuntimeControlOperationKind } from "../store/index.js";
 import { LeaderLockManager } from "../leader-lock-manager.js";
 import { GoalLeaseManager } from "../goal-lease-manager.js";
 import { JournalBackedQueue, type JournalBackedQueueAcceptResult } from "../queue/journal-backed-queue.js";
@@ -587,6 +594,8 @@ export class DaemonRunner {
           this.runCommandWithHealth("chat_message", () => this.handleChatMessageCommand(goalId, message)),
         onApprovalResponse: async (goalId, requestId, approved) =>
           this.runCommandWithHealth("approval_response", () => this.handleApprovalResponseCommand(goalId, requestId, approved)),
+        onRuntimeControl: async (operationId, kind) =>
+          this.runCommandWithHealth("runtime_control", () => this.handleRuntimeControlCommand(operationId, kind)),
       });
     }
 
@@ -618,6 +627,7 @@ export class DaemonRunner {
 
           const maintenanceIntervalMs = this.config.check_interval_ms;
           await this.runSupervisorMaintenanceCycle();
+          await this.reconcileRuntimeControlOperationsAfterStartup();
           this.cronScheduleInterval = setInterval(async () => {
             if (this.shuttingDown) return;
             await this.runSupervisorMaintenanceCycle();
@@ -631,6 +641,7 @@ export class DaemonRunner {
           });
         } else {
           // Fallback: sequential mode
+          await this.reconcileRuntimeControlOperationsAfterStartup();
           await this.runLoop();
           cleanupHandled = true;
         }
@@ -951,6 +962,38 @@ export class DaemonRunner {
     });
   }
 
+  private async reconcileRuntimeControlOperationsAfterStartup(): Promise<void> {
+    const operationStore = new RuntimeOperationStore(this.runtimeRoot ?? undefined);
+    const pending = await operationStore.listPending();
+    const now = new Date().toISOString();
+    for (const operation of pending) {
+      if (
+        operation.state !== "restarting" ||
+        (operation.kind !== "restart_daemon" && operation.kind !== "restart_gateway")
+      ) {
+        continue;
+      }
+      await operationStore.save({
+        ...operation,
+        state: "verified",
+        updated_at: now,
+        completed_at: now,
+        result: {
+          ok: true,
+          message:
+            operation.kind === "restart_gateway"
+              ? "gateway restart verified after daemon startup."
+              : "daemon restart verified after startup.",
+          daemon_status: this.state.status,
+        },
+      });
+      this.logger.info("Runtime control restart operation verified after startup", {
+        operation_id: operation.operation_id,
+        kind: operation.kind,
+      });
+    }
+  }
+
   // ─── Private: Cleanup ───
 
   /**
@@ -1129,6 +1172,53 @@ export class DaemonRunner {
     this.supervisor?.deactivateGoal(goalId);
     this.abortSleep();
     await this.broadcastGoalUpdated(goalId, "stopped");
+  }
+
+  private async handleRuntimeControlCommand(
+    operationId: string,
+    kind: RuntimeControlOperationKind
+  ): Promise<void> {
+    const operationStore = new RuntimeOperationStore(this.runtimeRoot ?? undefined);
+    const operation = await operationStore.load(operationId);
+    if (!operation) {
+      this.logger.warn("Runtime control operation not found", { operation_id: operationId, kind });
+      return;
+    }
+
+    if (kind !== "restart_daemon" && kind !== "restart_gateway") {
+      const now = new Date().toISOString();
+      await operationStore.save({
+        ...operation,
+        state: "failed",
+        updated_at: now,
+        completed_at: now,
+        result: {
+          ok: false,
+          message: `Runtime control operation ${kind} is not implemented yet.`,
+        },
+      });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    await operationStore.save({
+      ...operation,
+      state: "restarting",
+      started_at: operation.started_at ?? now,
+      updated_at: now,
+      result: {
+        ok: true,
+        message:
+          kind === "restart_gateway"
+            ? "gateway restart is being handled by a daemon restart because the gateway runs in-process."
+            : "daemon restart was accepted by the runtime command dispatcher.",
+      },
+    });
+
+    this.logger.info("Runtime control requested daemon restart", { operation_id: operationId, kind });
+    setTimeout(() => {
+      this.beginGracefulShutdown();
+    }, 25).unref?.();
   }
 
   private async handleGoalCompletion(goalId: string, result: { status: string; totalIterations: number }): Promise<void> {

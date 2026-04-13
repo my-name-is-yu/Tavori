@@ -6,6 +6,7 @@ export interface SignalBridgeConfig {
   account: string;
   recipient_id: string;
   identity_key: string;
+  runtime_control_allowed_sender_ids: string[];
   poll_interval_ms: number;
   receive_timeout_ms: number;
 }
@@ -32,6 +33,7 @@ function validateConfig(raw: unknown): SignalBridgeConfig {
   const cfg = raw as Record<string, unknown>;
   const pollInterval = cfg["poll_interval_ms"] ?? 5000;
   const receiveTimeout = cfg["receive_timeout_ms"] ?? 2000;
+  const runtimeControlAllowedSenderIds = cfg["runtime_control_allowed_sender_ids"] ?? [];
 
   if (typeof cfg["bridge_url"] !== "string" || cfg["bridge_url"].length === 0) {
     throw new Error("signal-bridge: bridge_url must be a non-empty string");
@@ -51,12 +53,19 @@ function validateConfig(raw: unknown): SignalBridgeConfig {
   if (typeof receiveTimeout !== "number" || !Number.isInteger(receiveTimeout)) {
     throw new Error("signal-bridge: receive_timeout_ms must be an integer");
   }
+  if (
+    !Array.isArray(runtimeControlAllowedSenderIds) ||
+    !runtimeControlAllowedSenderIds.every((id) => typeof id === "string" && id.length > 0)
+  ) {
+    throw new Error("signal-bridge: runtime_control_allowed_sender_ids must be an array of non-empty strings");
+  }
 
   return {
     bridge_url: cfg["bridge_url"] as string,
     account: cfg["account"] as string,
     recipient_id: cfg["recipient_id"] as string,
     identity_key: cfg["identity_key"] as string,
+    runtime_control_allowed_sender_ids: runtimeControlAllowedSenderIds as string[],
     poll_interval_ms: Math.max(1000, pollInterval),
     receive_timeout_ms: Math.max(250, receiveTimeout),
   };

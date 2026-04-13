@@ -77,6 +77,22 @@ describe("config — loadConfig", () => {
     expect(cfg.allowed_user_ids).toEqual([]);
   });
 
+  it("defaults runtime_control_allowed_user_ids to []", () => {
+    writeTmpConfig(tmpDir, { bot_token: "tok", chat_id: 1 });
+    const cfg = loadConfig(tmpDir);
+    expect(cfg.runtime_control_allowed_user_ids).toEqual([]);
+  });
+
+  it("accepts runtime_control_allowed_user_ids", () => {
+    writeTmpConfig(tmpDir, {
+      bot_token: "tok",
+      chat_id: 1,
+      runtime_control_allowed_user_ids: [123, 456],
+    });
+    const cfg = loadConfig(tmpDir);
+    expect(cfg.runtime_control_allowed_user_ids).toEqual([123, 456]);
+  });
+
   it("defaults allow_all to false", () => {
     writeTmpConfig(tmpDir, { bot_token: "tok", chat_id: 1 });
     const cfg = loadConfig(tmpDir);
@@ -98,6 +114,15 @@ describe("config — loadConfig", () => {
   it("throws when allow_all is not a boolean", () => {
     writeTmpConfig(tmpDir, { bot_token: "tok", chat_id: 1, allow_all: "yes" });
     expect(() => loadConfig(tmpDir)).toThrow("allow_all");
+  });
+
+  it("throws when runtime_control_allowed_user_ids is invalid", () => {
+    writeTmpConfig(tmpDir, {
+      bot_token: "tok",
+      chat_id: 1,
+      runtime_control_allowed_user_ids: ["123"],
+    });
+    expect(() => loadConfig(tmpDir)).toThrow("runtime_control_allowed_user_ids");
   });
 
   it("throws when identity_key is empty", () => {
@@ -561,6 +586,7 @@ describe("ChatBridge", () => {
     expect(processor.mock.calls[0]![0]).toBe("ping");
     expect(processor.mock.calls[0]![1]).toBe(100);
     expect(typeof processor.mock.calls[0]![2]).toBe("function");
+    expect(processor.mock.calls[0]![3]).toBe(1);
     expect(adapterFactory).toHaveBeenCalledWith(100);
     void sendPlainMessage;
   });
@@ -579,12 +605,16 @@ describe("ChatBridge", () => {
 
     await bridge.handleMessage("hello", 42, 999);
 
-    expect(processor).toHaveBeenCalledWith("hello", 999, expect.any(Function));
+    expect(processor).toHaveBeenCalledWith("hello", 999, expect.any(Function), 42);
     expect(sendFinalFallback).toHaveBeenCalledWith("ok");
   });
 
   it("does not send a fallback when assistant events already rendered output", async () => {
-    const processor = vi.fn().mockImplementation(async (_text: string, emit: (event: { type: string; runId: string; turnId: string; createdAt: string }) => Promise<void>) => {
+    const processor = vi.fn().mockImplementation(async (
+      _text: string,
+      _chatId: number,
+      emit: (event: { type: string; runId: string; turnId: string; createdAt: string }) => Promise<void>
+    ) => {
       await emit({
         type: "assistant_final",
         runId: "run-1",

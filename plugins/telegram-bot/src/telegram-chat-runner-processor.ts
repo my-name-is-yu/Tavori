@@ -32,7 +32,12 @@ interface BootstrapResult {
   chatAgentLoopRunner?: ChatAgentLoopRunner;
 }
 
-type ProcessMessageFn = (text: string, chatId: number, emit: ChatEventHandler) => Promise<string | void> | string | void;
+export type ProcessMessageFn = (
+  text: string,
+  chatId: number,
+  emit: ChatEventHandler,
+  fromUserId?: number
+) => Promise<string | void> | string | void;
 
 function formatError(message: string): string {
   return `Error: ${message}`;
@@ -41,15 +46,27 @@ function formatError(message: string): string {
 export class TelegramChatRunnerProcessor {
   private readonly workspaceRoot: string;
   private readonly identityKey: string | undefined;
+  private readonly runtimeControlAllowedUserIds: Set<number>;
   private bootstrapPromise: Promise<BootstrapResult> | null = null;
   private readonly sessions = new Map<number, ChatRunnerLike>();
 
-  constructor(_pluginDir: string, workspaceRoot = process.cwd(), identityKey?: string) {
+  constructor(
+    _pluginDir: string,
+    workspaceRoot = process.cwd(),
+    identityKey?: string,
+    runtimeControlAllowedUserIds: number[] = []
+  ) {
     this.workspaceRoot = workspaceRoot;
     this.identityKey = identityKey;
+    this.runtimeControlAllowedUserIds = new Set(runtimeControlAllowedUserIds);
   }
 
-  async processMessage(text: string, chatId: number, emit: ChatEventHandler): Promise<string> {
+  async processMessage(
+    text: string,
+    chatId: number,
+    emit: ChatEventHandler,
+    fromUserId?: number
+  ): Promise<string> {
     const shared = await this.getSharedManager();
     if (shared !== null) {
       return shared.processIncomingMessage({
@@ -60,7 +77,12 @@ export class TelegramChatRunnerProcessor {
         sender_id: String(chatId),
         cwd: this.workspaceRoot,
         onEvent: emit,
-        metadata: { chat_id: chatId },
+        metadata: {
+          chat_id: chatId,
+          ...(fromUserId !== undefined && this.runtimeControlAllowedUserIds.has(fromUserId)
+            ? { runtime_control_approved: true }
+            : {}),
+        },
       });
     }
 

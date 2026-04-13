@@ -122,6 +122,8 @@ export class WhatsAppWebhookServer {
       return;
     }
 
+    const runtimeControlApproved =
+      this.config.runtime_control_allowed_sender_ids.includes(message.from);
     const input: ChatContinuationInput = {
       platform: "whatsapp",
       identity_key: this.config.identity_key,
@@ -132,6 +134,7 @@ export class WhatsAppWebhookServer {
       metadata: {
         message_type: message.type,
         timestamp: message.timestamp,
+        ...(runtimeControlApproved ? { runtime_control_approved: true } : {}),
       },
     };
 

@@ -37,6 +37,10 @@ config_schema:
     type: string
     required: true
     description: "Cross-platform identity key passed to the shared session manager"
+  runtime_control_allowed_sender_ids:
+    type: array
+    required: false
+    description: "Discord user IDs allowed to approve explicit PulSeed runtime-control requests"
   command_name:
     type: string
     required: false

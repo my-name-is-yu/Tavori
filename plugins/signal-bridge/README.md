@@ -19,6 +19,7 @@ matching the real deployment boundary for Signal.
   "account": "+15551234567",
   "recipient_id": "+15557654321",
   "identity_key": "signal:ops",
+  "runtime_control_allowed_sender_ids": ["+15557654321"],
   "poll_interval_ms": 5000,
   "receive_timeout_ms": 2000
 }
@@ -28,4 +29,7 @@ matching the real deployment boundary for Signal.
 
 - The bridge API can vary slightly by deployment. The client uses a small set
   of compatible receive endpoints and falls back between them.
+- `runtime_control_allowed_sender_ids` limits who can approve explicit PulSeed
+  runtime-control requests from Signal. Leave it empty to disable those
+  operations from Signal.
 - Voice memo transcription is not implemented.

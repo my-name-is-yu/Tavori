@@ -133,4 +133,33 @@ describe("TelegramChatRunnerProcessor", () => {
     });
     expect(mockCreatedRunners).toHaveLength(0);
   });
+
+  it("marks runtime control approved only for configured Telegram user ids", async () => {
+    const processIncomingMessage = vi.fn().mockResolvedValue("shared-output");
+    mockGetGlobalCrossPlatformChatSessionManager.mockResolvedValue({ processIncomingMessage });
+    const processor = new TelegramChatRunnerProcessor(
+      "/tmp/plugins/telegram-bot",
+      "/workspace",
+      "shared-human",
+      [777]
+    );
+
+    await expect(processor.processMessage("PulSeed を再起動して", 101, vi.fn(), 777))
+      .resolves.toBe("shared-output");
+    await expect(processor.processMessage("PulSeed を再起動して", 101, vi.fn(), 888))
+      .resolves.toBe("shared-output");
+
+    expect(processIncomingMessage.mock.calls[0]?.[0]).toMatchObject({
+      metadata: {
+        chat_id: 101,
+        runtime_control_approved: true,
+      },
+    });
+    expect(processIncomingMessage.mock.calls[1]?.[0]).toMatchObject({
+      metadata: {
+        chat_id: 101,
+      },
+    });
+    expect(processIncomingMessage.mock.calls[1]?.[0].metadata.runtime_control_approved).toBeUndefined();
+  });
 });

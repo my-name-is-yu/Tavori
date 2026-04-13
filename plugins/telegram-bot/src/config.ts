@@ -7,6 +7,7 @@ export interface TelegramConfig {
   bot_token: string;
   chat_id: number;
   allowed_user_ids: number[];
+  runtime_control_allowed_user_ids: number[];
   allow_all: boolean;
   polling_timeout: number;
   identity_key?: string;
@@ -48,6 +49,14 @@ function validateConfig(raw: unknown): TelegramConfig {
     throw new Error("telegram-bot: allowed_user_ids must be an array of integers");
   }
 
+  const runtimeControlAllowedUserIds = cfg["runtime_control_allowed_user_ids"] ?? [];
+  if (
+    !Array.isArray(runtimeControlAllowedUserIds) ||
+    !runtimeControlAllowedUserIds.every((id) => Number.isInteger(id))
+  ) {
+    throw new Error("telegram-bot: runtime_control_allowed_user_ids must be an array of integers");
+  }
+
   const allowAll = cfg["allow_all"] ?? false;
   if (typeof allowAll !== "boolean") {
     throw new Error("telegram-bot: allow_all must be a boolean");
@@ -65,6 +74,7 @@ function validateConfig(raw: unknown): TelegramConfig {
     bot_token: cfg["bot_token"] as string,
     chat_id: cfg["chat_id"] as number,
     allowed_user_ids: allowedUserIds as number[],
+    runtime_control_allowed_user_ids: runtimeControlAllowedUserIds as number[],
     allow_all: allowAll,
     polling_timeout: Math.min(Math.max(pollingTimeout as number, 1), 60),
     identity_key: cfg["identity_key"] as string | undefined,

@@ -7,6 +7,7 @@ export interface WhatsAppWebhookConfig {
   verify_token: string;
   recipient_id: string;
   identity_key: string;
+  runtime_control_allowed_sender_ids: string[];
   host: string;
   port: number;
   path: string;
@@ -36,6 +37,7 @@ function validateConfig(raw: unknown): WhatsAppWebhookConfig {
   const host = cfg["host"] ?? "127.0.0.1";
   const port = cfg["port"] ?? 8788;
   const pathValue = cfg["path"] ?? "/webhook";
+  const runtimeControlAllowedSenderIds = cfg["runtime_control_allowed_sender_ids"] ?? [];
 
   if (typeof cfg["phone_number_id"] !== "string" || cfg["phone_number_id"].length === 0) {
     throw new Error("whatsapp-webhook: phone_number_id must be a non-empty string");
@@ -64,6 +66,12 @@ function validateConfig(raw: unknown): WhatsAppWebhookConfig {
   if (cfg["app_secret"] !== undefined && typeof cfg["app_secret"] !== "string") {
     throw new Error("whatsapp-webhook: app_secret must be a string when set");
   }
+  if (
+    !Array.isArray(runtimeControlAllowedSenderIds) ||
+    !runtimeControlAllowedSenderIds.every((id) => typeof id === "string" && id.length > 0)
+  ) {
+    throw new Error("whatsapp-webhook: runtime_control_allowed_sender_ids must be an array of non-empty strings");
+  }
 
   return {
     phone_number_id: cfg["phone_number_id"] as string,
@@ -71,6 +79,7 @@ function validateConfig(raw: unknown): WhatsAppWebhookConfig {
     verify_token: cfg["verify_token"] as string,
     recipient_id: cfg["recipient_id"] as string,
     identity_key: cfg["identity_key"] as string,
+    runtime_control_allowed_sender_ids: runtimeControlAllowedSenderIds as string[],
     host,
     port,
     path: pathValue,

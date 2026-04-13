@@ -142,4 +142,52 @@ describe("CrossPlatformChatSessionManager", () => {
     expect(events.some((event) => event.type === "assistant_final")).toBe(true);
     expect(events.at(-1)?.type).toBe("lifecycle_end");
   });
+
+  it("routes natural-language restart with the current platform reply target", async () => {
+    const stateManager = makeMockStateManager();
+    const adapter = makeMockAdapter();
+    const runtimeControlService = {
+      request: vi.fn().mockResolvedValue({
+        success: true,
+        message: "restart queued",
+        operationId: "op-1",
+        state: "acknowledged",
+      }),
+    };
+    const manager = new CrossPlatformChatSessionManager(makeDeps({
+      stateManager,
+      adapter,
+      runtimeControlService,
+      approvalFn: vi.fn().mockResolvedValue(true),
+    }));
+
+    const result = await manager.execute("PulSeed を再起動して", {
+      identity_key: "owner",
+      platform: "telegram",
+      conversation_id: "telegram-chat-1",
+      user_id: "user-1",
+      cwd: "/repo",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.output).toBe("restart queued");
+    expect(adapter.execute).not.toHaveBeenCalled();
+    expect(runtimeControlService.request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        intent: expect.objectContaining({ kind: "restart_daemon" }),
+        replyTarget: expect.objectContaining({
+          surface: "gateway",
+          platform: "telegram",
+          conversation_id: "telegram-chat-1",
+          identity_key: "owner",
+          user_id: "user-1",
+        }),
+        requestedBy: expect.objectContaining({
+          surface: "gateway",
+          platform: "telegram",
+          conversation_id: "telegram-chat-1",
+        }),
+      })
+    );
+  });
 });

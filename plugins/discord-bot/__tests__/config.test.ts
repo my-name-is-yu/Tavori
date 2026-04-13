@@ -32,6 +32,40 @@ describe("discord-bot config loader", () => {
     expect(cfg.command_name).toBe("pulseed");
     expect(cfg.port).toBe(8787);
     expect(cfg.ephemeral).toBe(false);
+    expect(cfg.runtime_control_allowed_sender_ids).toEqual([]);
+  });
+
+  it("loads runtime control sender allowlist", () => {
+    fs.writeFileSync(
+      path.join(tmpDir, "config.json"),
+      JSON.stringify({
+        application_id: "app-1",
+        bot_token: "bot-1",
+        channel_id: "chan-1",
+        identity_key: "discord:alpha",
+        runtime_control_allowed_sender_ids: ["user-1"],
+      }),
+      "utf-8"
+    );
+
+    const cfg = loadConfig(tmpDir);
+    expect(cfg.runtime_control_allowed_sender_ids).toEqual(["user-1"]);
+  });
+
+  it("rejects invalid runtime control sender allowlist", () => {
+    fs.writeFileSync(
+      path.join(tmpDir, "config.json"),
+      JSON.stringify({
+        application_id: "app-1",
+        bot_token: "bot-1",
+        channel_id: "chan-1",
+        identity_key: "discord:alpha",
+        runtime_control_allowed_sender_ids: [123],
+      }),
+      "utf-8"
+    );
+
+    expect(() => loadConfig(tmpDir)).toThrow("runtime_control_allowed_sender_ids");
   });
 
   it("requires identity_key", () => {

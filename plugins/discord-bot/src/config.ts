@@ -7,6 +7,7 @@ export interface DiscordBotConfig {
   bot_token: string;
   channel_id: string;
   identity_key: string;
+  runtime_control_allowed_sender_ids: string[];
   command_name: string;
   host: string;
   port: number;
@@ -37,6 +38,7 @@ function validateConfig(raw: unknown): DiscordBotConfig {
   const host = cfg["host"] ?? "127.0.0.1";
   const port = cfg["port"] ?? 8787;
   const ephemeral = cfg["ephemeral"] ?? false;
+  const runtimeControlAllowedSenderIds = cfg["runtime_control_allowed_sender_ids"] ?? [];
 
   if (typeof cfg["application_id"] !== "string" || cfg["application_id"].length === 0) {
     throw new Error("discord-bot: application_id must be a non-empty string");
@@ -62,6 +64,12 @@ function validateConfig(raw: unknown): DiscordBotConfig {
   if (typeof ephemeral !== "boolean") {
     throw new Error("discord-bot: ephemeral must be a boolean");
   }
+  if (
+    !Array.isArray(runtimeControlAllowedSenderIds) ||
+    !runtimeControlAllowedSenderIds.every((id) => typeof id === "string" && id.length > 0)
+  ) {
+    throw new Error("discord-bot: runtime_control_allowed_sender_ids must be an array of non-empty strings");
+  }
   if (cfg["public_key_hex"] !== undefined && typeof cfg["public_key_hex"] !== "string") {
     throw new Error("discord-bot: public_key_hex must be a string when set");
   }
@@ -72,6 +80,7 @@ function validateConfig(raw: unknown): DiscordBotConfig {
     bot_token: cfg["bot_token"] as string,
     channel_id: cfg["channel_id"] as string,
     identity_key: cfg["identity_key"] as string,
+    runtime_control_allowed_sender_ids: runtimeControlAllowedSenderIds as string[],
     command_name: commandName,
     host,
     port,

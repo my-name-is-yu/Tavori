@@ -30,6 +30,12 @@ import type {
   AgentLoopEventSink,
 } from "../../orchestrator/execution/agent-loop/agent-loop-events.js";
 import type { AgentLoopSessionState } from "../../orchestrator/execution/agent-loop/agent-loop-session-state.js";
+import { recognizeRuntimeControlIntent } from "../../runtime/control/index.js";
+import type { RuntimeControlService } from "../../runtime/control/index.js";
+import type {
+  RuntimeControlActor,
+  RuntimeControlReplyTarget,
+} from "../../runtime/store/runtime-operation-schemas.js";
 
 // ─── Types ───
 
@@ -70,12 +76,26 @@ export interface ChatRunnerDeps {
   onEvent?: (event: ChatEvent) => void;
   /** Optional: native agentloop runner for chat turns. */
   chatAgentLoopRunner?: ChatAgentLoopRunner;
+  /** Optional: first-class runtime control service for natural-language restart/update requests. */
+  runtimeControlService?: Pick<RuntimeControlService, "request">;
+  /** Optional: approval handler scoped to runtime-control operations only. */
+  runtimeControlApprovalFn?: (description: string) => Promise<boolean>;
+  /** Optional: durable reply target for post-restart reporting. */
+  runtimeReplyTarget?: RuntimeControlReplyTarget;
+  /** Optional: source metadata for runtime control operation records. */
+  runtimeControlActor?: RuntimeControlActor;
 }
 
 export interface ChatRunResult {
   success: boolean;
   output: string;
   elapsed_ms: number;
+}
+
+export interface RuntimeControlChatContext {
+  replyTarget?: RuntimeControlReplyTarget;
+  actor?: RuntimeControlActor;
+  approvalFn?: (description: string) => Promise<boolean>;
 }
 
 interface AssistantBuffer {
@@ -129,6 +149,7 @@ export class ChatRunner {
   onNotification: ((message: string) => void) | undefined = undefined;
   onEvent: ((event: ChatEvent) => void) | undefined = undefined;
   private nativeAgentLoopStatePath: string | null = null;
+  private runtimeControlContext: RuntimeControlChatContext | null = null;
 
   constructor(deps: ChatRunnerDeps) {
     this.deps = deps;
@@ -146,6 +167,10 @@ export class ChatRunner {
     this.sessionCwd = gitRoot;
     this.sessionActive = true;
     this.nativeAgentLoopStatePath = `chat/agentloop/${sessionId}.state.json`;
+  }
+
+  setRuntimeControlContext(context: RuntimeControlChatContext | null): void {
+    this.runtimeControlContext = context;
   }
 
   private async handleCommand(input: string): Promise<ChatRunResult | null> {
@@ -380,6 +405,27 @@ export class ChatRunner {
         false
       );
       return confirmationResult;
+    }
+
+    const runtimeControlResult = resumeOnly
+      ? null
+      : await this.handleRuntimeControlIntent(input, cwd, Date.now());
+    if (runtimeControlResult !== null) {
+      if (runtimeControlResult.output) {
+        this.emitEvent({
+          type: "assistant_final",
+          text: runtimeControlResult.output,
+          persisted: false,
+          ...this.eventBase(eventContext),
+        });
+      }
+      this.emitLifecycleEndEvent(
+        runtimeControlResult.success ? "completed" : "error",
+        runtimeControlResult.elapsed_ms,
+        eventContext,
+        false
+      );
+      return runtimeControlResult;
     }
 
     // Reuse session (interactive mode) or create a fresh one per call (1-shot mode)
@@ -640,6 +686,47 @@ export class ChatRunner {
       success: result.success,
       output: result.output,
       elapsed_ms,
+    };
+  }
+
+  private async handleRuntimeControlIntent(
+    input: string,
+    cwd: string,
+    start: number
+  ): Promise<ChatRunResult | null> {
+    const intent = recognizeRuntimeControlIntent(input);
+    if (intent === null) return null;
+
+    if (!this.deps.runtimeControlService) {
+      return {
+        success: false,
+        output: "Runtime control is not available in this chat surface yet.",
+        elapsed_ms: Date.now() - start,
+      };
+    }
+
+    const replyTarget = this.runtimeControlContext?.replyTarget ?? this.deps.runtimeReplyTarget;
+    const actor = this.runtimeControlContext?.actor ?? this.deps.runtimeControlActor;
+    const result = await this.deps.runtimeControlService.request({
+      intent,
+      cwd,
+      requestedBy: actor ?? {
+        surface: replyTarget?.surface ?? "chat",
+        platform: replyTarget?.platform,
+        conversation_id: replyTarget?.conversation_id,
+        identity_key: replyTarget?.identity_key,
+        user_id: replyTarget?.user_id,
+      },
+      replyTarget: replyTarget ?? { surface: "chat" },
+      approvalFn: this.runtimeControlContext?.approvalFn
+        ?? this.deps.runtimeControlApprovalFn
+        ?? this.deps.approvalFn,
+    });
+
+    return {
+      success: result.success,
+      output: result.message,
+      elapsed_ms: Date.now() - start,
     };
   }
 

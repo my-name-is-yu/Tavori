@@ -21,6 +21,7 @@ import {
   ChatAgentLoopRunner,
   CorePhaseRunner,
   ExtractiveAgentLoopCompactor,
+  JsonAgentLoopSessionStateStore,
   NoopAgentLoopCompactor,
   StaticAgentLoopModelRegistry,
   ToolExecutorAgentLoopToolRuntime,
@@ -345,6 +346,102 @@ describe("agentloop phase 5 compaction", () => {
     expect(result.compactions).toBe(1);
     expect(modelClient.calls[1].messages.some((m) => m.role === "tool" && m.toolName === "update_plan")).toBe(true);
     expect(modelClient.calls[1].messages.some((m) => m.content.includes("Summary of earlier agentloop context"))).toBe(true);
+  });
+
+  it("resumes from persisted compacted state after an interrupted turn", async () => {
+    const statePath = path.join(makeTempDir(), "agentloop.state.json");
+    const modelInfo = makeModelInfo();
+    const registry = new ToolRegistry();
+    registry.register(new UpdatePlanTool());
+    const { router, runtime } = makeRuntime(registry);
+
+    const firstModelClient = new ScriptedModelClient(modelInfo, [
+      {
+        content: "",
+        toolCalls: [{ id: "call-1", name: "update_plan", input: { steps: [{ step: "verify", status: "completed" }] } }],
+        stopReason: "tool_use",
+        usage: { inputTokens: 100, outputTokens: 100 },
+      },
+    ]);
+    const firstRunner = new BoundedAgentLoopRunner({
+      modelClient: firstModelClient,
+      toolRouter: router,
+      toolRuntime: runtime,
+      compactor: new ExtractiveAgentLoopCompactor(),
+    });
+
+    const first = await firstRunner.run({
+      session: createAgentLoopSession({
+        sessionId: "session-1",
+        traceId: "trace-1",
+        stateStore: new JsonAgentLoopSessionStateStore(statePath),
+      }),
+      turnId: "turn-1",
+      goalId: "goal-1",
+      cwd: process.cwd(),
+      model: modelInfo.ref,
+      modelInfo,
+      messages: [
+        { role: "system", content: "system" },
+        { role: "user", content: "one ".repeat(120) },
+        { role: "assistant", content: "two ".repeat(120) },
+        { role: "user", content: "three ".repeat(120) },
+        { role: "user", content: "continue after resume" },
+      ],
+      outputSchema: z.object({ status: z.literal("done"), message: z.string(), evidence: z.array(z.string()), blockers: z.array(z.string()) }),
+      budget: { ...defaultBudgetForTest(), maxToolCalls: 1, autoCompactTokenLimit: 50, compactionMaxMessages: 4 },
+      toolPolicy: {},
+      toolCallContext: {
+        cwd: process.cwd(),
+        goalId: "goal-1",
+        trustBalance: 0,
+        preApproved: true,
+        approvalFn: async () => false,
+      },
+    });
+
+    expect(first.success).toBe(false);
+    expect(first.stopReason).toBe("max_tool_calls");
+    expect(first.compactions).toBeGreaterThanOrEqual(1);
+
+    const secondModelClient = new ScriptedModelClient(modelInfo, [
+      { content: JSON.stringify({ status: "done", message: "resumed", evidence: ["plan update"], blockers: [] }), toolCalls: [], stopReason: "end_turn" },
+    ]);
+    const secondRunner = new BoundedAgentLoopRunner({
+      modelClient: secondModelClient,
+      toolRouter: router,
+      toolRuntime: runtime,
+      compactor: new ExtractiveAgentLoopCompactor(),
+    });
+
+    const second = await secondRunner.run({
+      session: createAgentLoopSession({
+        sessionId: "session-1",
+        traceId: "trace-1",
+        stateStore: new JsonAgentLoopSessionStateStore(statePath),
+      }),
+      turnId: "turn-1",
+      goalId: "goal-1",
+      cwd: process.cwd(),
+      model: modelInfo.ref,
+      modelInfo,
+      messages: [{ role: "user", content: "fresh prompt should be replaced by persisted state" }],
+      outputSchema: z.object({ status: z.literal("done"), message: z.string(), evidence: z.array(z.string()), blockers: z.array(z.string()) }),
+      budget: { ...defaultBudgetForTest(), autoCompactTokenLimit: 50, compactionMaxMessages: 4 },
+      toolPolicy: {},
+      toolCallContext: {
+        cwd: process.cwd(),
+        goalId: "goal-1",
+        trustBalance: 0,
+        preApproved: true,
+        approvalFn: async () => false,
+      },
+    });
+
+    expect(second.success).toBe(true);
+    expect(second.compactions).toBeGreaterThanOrEqual(first.compactions);
+    expect(secondModelClient.calls[0].messages.some((m) => m.content.includes("Summary of earlier agentloop context"))).toBe(true);
+    expect(secondModelClient.calls[0].messages.some((m) => m.role === "tool" && m.toolName === "update_plan")).toBe(true);
   });
 });
 

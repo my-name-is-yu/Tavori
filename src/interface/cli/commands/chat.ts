@@ -5,6 +5,7 @@ import { render, useApp } from "ink";
 import { parseArgs } from "node:util";
 import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
+import * as path from "node:path";
 
 import { StateManager } from "../../../base/state/state-manager.js";
 import { ensureProviderConfig } from "../ensure-api-key.js";
@@ -29,6 +30,10 @@ import {
   createNativeChatAgentLoopRunner,
   shouldUseNativeTaskAgentLoop,
 } from "../../../orchestrator/execution/agent-loop/index.js";
+import {
+  RuntimeControlService,
+  createDaemonRuntimeControlExecutor,
+} from "../../../runtime/control/index.js";
 
 const logger = getCliLogger();
 
@@ -286,6 +291,13 @@ export async function cmdChat(
       toolExecutor,
       chatAgentLoopRunner,
       approvalFn: promptChatApproval,
+      runtimeControlService: new RuntimeControlService({
+        runtimeRoot: path.join(stateManager.getBaseDir(), "runtime"),
+        executor: createDaemonRuntimeControlExecutor({
+          baseDir: stateManager.getBaseDir(),
+        }),
+      }),
+      runtimeReplyTarget: { surface: "cli" },
     });
 
     // Non-interactive: single turn

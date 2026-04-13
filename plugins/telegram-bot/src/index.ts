@@ -34,10 +34,16 @@ export class TelegramBotPlugin {
 
     this.notifier = new TelegramNotifier(this.api, config.chat_id);
 
-    this.processor = new TelegramChatRunnerProcessor(this.pluginDir, process.cwd(), config.identity_key);
+    this.processor = new TelegramChatRunnerProcessor(
+      this.pluginDir,
+      process.cwd(),
+      config.identity_key,
+      config.runtime_control_allowed_user_ids
+    );
 
     this.bridge = new ChatBridge(
-      (text, chatId, emit) => this.processor!.processMessage(text, chatId, emit),
+      (text, chatId, emit, fromUserId) =>
+        this.processor!.processMessage(text, chatId, emit, fromUserId),
       (chatId) => new TelegramChatEventAdapter(this.api!, chatId)
     );
 
@@ -62,9 +68,9 @@ export class TelegramBotPlugin {
     processMessage: ProcessMessageFn | LegacyProcessMessageFn
   ): void {
     if (!this.bridge) return;
-    this.bridge.setProcessMessage((text, chatId, emit) => {
+    this.bridge.setProcessMessage((text, chatId, emit, fromUserId) => {
       if (processMessage.length >= 3) {
-        return (processMessage as ProcessMessageFn)(text, chatId, emit);
+        return (processMessage as ProcessMessageFn)(text, chatId, emit, fromUserId);
       }
       return (processMessage as LegacyProcessMessageFn)(text, emit);
     });

@@ -43,6 +43,10 @@ PulSeed uses two layers:
 
 State, reports, schedules, and local memory live under `~/.pulseed/`.
 
+Security boundary: PulSeed uses approval gates and verification around delegated work,
+but it does not provide OS-level sandboxing for agent subprocesses. For high-risk or
+untrusted goals, run PulSeed inside a container or VM. See [Security](SECURITY.md).
+
 ## Main Command
 
 ```bash

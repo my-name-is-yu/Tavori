@@ -24,6 +24,7 @@ Create `config.json` in the plugin directory:
   "bot_token": "Bot ...",
   "channel_id": "123456789012345678",
   "identity_key": "discord:team-a",
+  "runtime_control_allowed_sender_ids": ["123456789012345678"],
   "command_name": "pulseed",
   "host": "127.0.0.1",
   "port": 8787
@@ -34,6 +35,9 @@ Create `config.json` in the plugin directory:
 
 - The shared cross-platform session manager receives `identity_key` inside the
   inbound payload so the same conversation can continue across channels.
+- `runtime_control_allowed_sender_ids` limits who can approve explicit PulSeed
+  runtime-control requests from Discord. Leave it empty to disable those
+  operations from Discord.
 - If `public_key_hex` is omitted, the webhook still works for local testing but
   request verification is skipped.
 - Voice memo transcription is not implemented.

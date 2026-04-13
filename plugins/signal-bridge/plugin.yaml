@@ -33,6 +33,10 @@ config_schema:
     type: string
     required: true
     description: "Cross-platform identity key passed to the shared session manager"
+  runtime_control_allowed_sender_ids:
+    type: array
+    required: false
+    description: "Signal sender IDs allowed to approve explicit PulSeed runtime-control requests"
   poll_interval_ms:
     type: number
     required: false

@@ -4,6 +4,8 @@ import {
 } from "./queue/journal-backed-queue.js";
 import type { Envelope } from "./types/envelope.js";
 import type { Logger } from "./logger.js";
+import { RuntimeControlOperationKindSchema } from "./store/index.js";
+import type { RuntimeControlOperationKind } from "./store/index.js";
 
 export interface CommandDispatcherDeps {
   journalQueue: JournalBackedQueue;
@@ -19,6 +21,11 @@ export interface CommandDispatcherDeps {
     goalId: string | undefined,
     requestId: string,
     approved: boolean,
+    envelope: Envelope
+  ) => Promise<void> | void;
+  onRuntimeControl?: (
+    operationId: string,
+    kind: RuntimeControlOperationKind,
     envelope: Envelope
   ) => Promise<void> | void;
 }
@@ -138,6 +145,16 @@ export class CommandDispatcher {
           throw new Error("approval_response command is missing requestId or approved");
         }
         await this.deps.onApprovalResponse?.(envelope.goal_id, requestId, approved, envelope);
+        return;
+      }
+      case "runtime_control": {
+        const operationId = this.readStringField(envelope.payload, "operationId");
+        const kindRaw = this.readStringField(envelope.payload, "kind");
+        const kind = RuntimeControlOperationKindSchema.parse(kindRaw);
+        if (!operationId) {
+          throw new Error("runtime_control command is missing operationId");
+        }
+        await this.deps.onRuntimeControl?.(operationId, kind, envelope);
         return;
       }
       default:

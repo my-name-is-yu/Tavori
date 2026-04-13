@@ -40,6 +40,7 @@ describe("WhatsAppWebhookPlugin", () => {
       verify_token: "verify-1",
       recipient_id: "15551234567",
       identity_key: "whatsapp:alpha",
+      runtime_control_allowed_sender_ids: [],
       host: "127.0.0.1",
       port: 8788,
       path: "/webhook",

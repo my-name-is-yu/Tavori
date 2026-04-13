@@ -15,6 +15,7 @@ import { findAvailablePort, DEFAULT_PORT, MAX_PORT_ATTEMPTS } from "../port-util
 import { createEnvelope, type Envelope } from "../types/envelope.js";
 import type { ApprovalBroker, ApprovalRequiredEvent } from "../approval-broker.js";
 import type { OutboxStore, OutboxRecord } from "../store/index.js";
+import { RuntimeControlOperationKindSchema } from "../store/index.js";
 import { EventServerSnapshotReader } from "./server-snapshot-reader.js";
 import { EventServerSseManager } from "./server-sse.js";
 
@@ -471,6 +472,11 @@ export class EventServer {
       return;
     }
 
+    if (req.method === "POST" && urlPath === "/daemon/runtime-control") {
+      void this.handlePostDaemonRuntimeControl(req, res);
+      return;
+    }
+
     // POST /goals/:id/start|stop|approve|chat
     const goalActionMatch = /^\/goals\/([^/]+)\/([^/]+)$/.exec(urlPath);
     if (req.method === "POST" && goalActionMatch) {
@@ -795,7 +801,7 @@ export class EventServer {
 
   private async dispatchCommandEnvelope(input: {
     name: string;
-    goalId: string;
+    goalId?: string;
     payload: Record<string, unknown>;
     priority?: Envelope["priority"];
     dedupeKey?: string;
@@ -812,6 +818,41 @@ export class EventServer {
         payload: input.payload,
       })
     );
+  }
+
+  private async handlePostDaemonRuntimeControl(
+    req: http.IncomingMessage,
+    res: http.ServerResponse
+  ): Promise<void> {
+    try {
+      const body = await readBody(req);
+      const parsed = JSON.parse(body) as Record<string, unknown>;
+      const operationId = typeof parsed["operationId"] === "string" ? parsed["operationId"] : "";
+      const reason = typeof parsed["reason"] === "string" ? parsed["reason"] : "";
+      const kind = RuntimeControlOperationKindSchema.parse(parsed["kind"]);
+      if (!operationId) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "operationId is required" }));
+        return;
+      }
+
+      await this.dispatchCommandEnvelope({
+        name: "runtime_control",
+        priority: "critical",
+        dedupeKey: `runtime_control:${operationId}`,
+        payload: {
+          operationId,
+          kind,
+          reason,
+        },
+      });
+      await this.broadcast("runtime_control_requested", { operationId, kind });
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true, operationId }));
+    } catch (err) {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: false, error: "Invalid runtime control request", details: String(err) }));
+    }
   }
 
   private async buildSnapshot(): Promise<EventServerSnapshot> {

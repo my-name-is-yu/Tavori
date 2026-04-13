@@ -8,6 +8,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { DEFAULT_PORT } from "../port-utils.js";
+import type { DaemonRuntimeControlRequestBody } from "../control/index.js";
 
 export interface DaemonClientConfig {
   host: string;
@@ -64,11 +65,6 @@ export function getDaemonTokenPath(baseDir?: string): string {
 }
 
 export function readDaemonAuthToken(baseDir?: string, expectedPort?: number): string | null {
-  const envToken = process.env[DAEMON_TOKEN_ENV];
-  if (envToken && envToken.trim() !== "") {
-    return envToken.trim();
-  }
-
   try {
     const raw = fs.readFileSync(getDaemonTokenPath(baseDir), "utf-8");
     const parsed = JSON.parse(raw) as Partial<DaemonAuthToken>;
@@ -77,8 +73,15 @@ export function readDaemonAuthToken(baseDir?: string, expectedPort?: number): st
     }
     return typeof parsed.token === "string" && parsed.token.length > 0 ? parsed.token : null;
   } catch {
-    return null;
+    // Fall back to the environment below.
   }
+
+  const envToken = process.env[DAEMON_TOKEN_ENV];
+  if (envToken && envToken.trim() !== "") {
+    return envToken.trim();
+  }
+
+  return null;
 }
 
 interface ResolvedDaemonClientConfig {
@@ -301,6 +304,10 @@ export class DaemonClient {
 
   async chat(goalId: string, message: string): Promise<{ ok: boolean }> {
     return this.post(`/goals/${encodeURIComponent(goalId)}/chat`, { message });
+  }
+
+  async requestRuntimeControl(input: DaemonRuntimeControlRequestBody): Promise<{ ok: boolean }> {
+    return this.post("/daemon/runtime-control", input);
   }
 
   async getStatus(): Promise<unknown> {
