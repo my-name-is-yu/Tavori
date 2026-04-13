@@ -261,8 +261,7 @@ export async function rebuildSoilFromRuntime(input: SoilRuntimeRebuildInput): Pr
 
   await projectIdentityToSoil(projectionBase);
   projected.identity = 3;
-  await projectSoilSystemPages(projectionBase);
-  projected.system = 3;
+  projected.system = await projectSoilSystemPages(projectionBase);
 
   const pruned = await pruneDeletedRuntimeProjections({ rootDir, clock: input.clock });
   const index = await rebuildSoilIndex({ rootDir }, { clock: input.clock });

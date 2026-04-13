@@ -17,3 +17,7 @@ export * from "./publish/index.js";
 export * from "./contracts.js";
 export * from "./ddl.js";
 export * from "./sqlite-repository.js";
+export * from "./context-compiler.js";
+export * from "./context-evaluation.js";
+export * from "./feedback-store.js";
+export * from "./health.js";

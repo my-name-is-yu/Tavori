@@ -3,6 +3,7 @@ import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { cleanupTempDir, makeTempDir } from "../../../../tests/helpers/temp-dir.js";
 import type { LearnedPattern } from "../../knowledge/types/learning.js";
+import { readSoilMarkdownFile } from "../../soil/io.js";
 import { buildDreamSoilMutationIntent } from "../dream-soil-mutation.js";
 import { syncDreamOutputsToSoil, type DreamSoilSyncRepository } from "../dream-soil-sync.js";
 
@@ -83,6 +84,17 @@ describe("dream soil sync", () => {
       tombstonesWritten: 0,
       queueReindexRecordIds: 0,
     });
+
+    const learnedPage = await readSoilMarkdownFile(path.join(tmpDir, "soil", "learning", "learned-patterns", "index.md"));
+    expect(learnedPage?.frontmatter.soil_id).toBe("learning/learned-patterns/index");
+    expect(learnedPage?.frontmatter.compiled_memory_schema).toBe("soil-compiled-memory-v1");
+    expect(learnedPage?.frontmatter.rendered_from).toBe("dream-consolidator");
+    expect(learnedPage?.body).toContain("Prefer small checkpoints.");
+
+    const feedbackPage = await readSoilMarkdownFile(path.join(tmpDir, "soil", "feedback", "context.md"));
+    expect(feedbackPage?.frontmatter.soil_id).toBe("feedback/context");
+    expect(feedbackPage?.frontmatter.rendered_from).toBe("soil-feedback");
+    expect(feedbackPage?.body).toContain("Soil context feedback");
   });
 
   it("does not apply an empty mutation", async () => {
@@ -209,5 +221,11 @@ describe("dream soil sync", () => {
       recordsWritten: 1,
       chunksWritten: 1,
     });
+
+    const workflowPage = await readSoilMarkdownFile(path.join(tmpDir, "soil", "dream", "workflows", "index.md"));
+    expect(workflowPage?.frontmatter.soil_id).toBe("dream/workflows/index");
+    expect(workflowPage?.frontmatter.compiled_memory_schema).toBe("soil-compiled-memory-v1");
+    expect(workflowPage?.body).toContain("Change strategy when confidence stalls.");
+    expect(workflowPage?.body).toContain("dream/events/goal-a.jsonl#L1");
   });
 });

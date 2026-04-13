@@ -73,6 +73,15 @@ export type SoilLane = z.infer<typeof SoilLaneSchema>;
 export const SoilSortDirectionSchema = z.enum(["asc", "desc"]);
 export type SoilSortDirection = z.infer<typeof SoilSortDirectionSchema>;
 
+export const SoilMemoryLifecycleStateSchema = z.enum([
+  "active",
+  "deprecated",
+  "superseded",
+  "archived",
+  "tombstoned",
+]);
+export type SoilMemoryLifecycleState = z.infer<typeof SoilMemoryLifecycleStateSchema>;
+
 export const SoilRecordSchema = z.object({
   record_id: z.string().min(1),
   record_key: z.string().min(1),
@@ -224,6 +233,100 @@ export const SoilSearchResultSchema = z.object({
   candidates: z.array(SoilCandidateSchema),
 });
 export type SoilSearchResult = z.infer<typeof SoilSearchResultSchema>;
+
+export const SoilContextRouteSchemaVersion = "soil-context-route-v1" as const;
+export const SoilRetrievalTraceSchemaVersion = "soil-retrieval-trace-v1" as const;
+export const SoilCompileMissObservationSchemaVersion = "soil-compile-miss-v1" as const;
+export const SoilMemoryLintFindingSchemaVersion = "soil-memory-lint-finding-v1" as const;
+
+export const SoilContextRouteSchema = z.object({
+  schema_version: z.literal(SoilContextRouteSchemaVersion).default(SoilContextRouteSchemaVersion),
+  route_id: z.string().min(1),
+  status: SoilMemoryLifecycleStateSchema.default("active"),
+  priority: z.number().int().default(0),
+  path_globs: z.array(z.string().min(1)).default([]),
+  goal_ids: z.array(z.string().min(1)).default([]),
+  task_categories: z.array(z.string().min(1)).default([]),
+  phases: z.array(z.string().min(1)).default([]),
+  soil_ids: z.array(z.string().min(1)).default([]),
+  record_ids: z.array(z.string().min(1)).default([]),
+  reason: z.string().min(1),
+  created_at: z.string().datetime(),
+  updated_at: z.string().datetime(),
+  source_observation_ids: z.array(z.string().min(1)).default([]),
+  last_evaluated_at: z.string().datetime().nullable().default(null),
+  last_evaluation_result: z.enum(["passed", "failed", "unknown"]).default("unknown"),
+});
+export type SoilContextRoute = z.infer<typeof SoilContextRouteSchema>;
+export type SoilContextRouteInput = z.input<typeof SoilContextRouteSchema>;
+
+export const SoilRetrievalDecisionSchema = z.object({
+  candidate_id: z.string().min(1),
+  decision: z.enum(["admitted", "rejected", "routed"]),
+  reason: z.string().min(1),
+  score: z.number().nullable().default(null),
+  soil_id: z.string().min(1).nullable().default(null),
+  record_id: z.string().min(1).nullable().default(null),
+  route_id: z.string().min(1).nullable().default(null),
+});
+export type SoilRetrievalDecision = z.infer<typeof SoilRetrievalDecisionSchema>;
+
+export const SoilRetrievalTraceSchema = z.object({
+  schema_version: z.literal(SoilRetrievalTraceSchemaVersion).default(SoilRetrievalTraceSchemaVersion),
+  retrieval_id: z.string().min(1),
+  timestamp: z.string().datetime(),
+  task_id: z.string().min(1).nullable().default(null),
+  goal_id: z.string().min(1).nullable().default(null),
+  phase: z.string().min(1).nullable().default(null),
+  task_category: z.string().min(1).nullable().default(null),
+  target_paths: z.array(z.string().min(1)).default([]),
+  fallback_query: z.string().min(1).nullable().default(null),
+  decisions: z.array(SoilRetrievalDecisionSchema).default([]),
+  warnings: z.array(z.string().min(1)).default([]),
+});
+export type SoilRetrievalTrace = z.infer<typeof SoilRetrievalTraceSchema>;
+
+export const SoilCompileMissObservationSchema = z.object({
+  schema_version: z.literal(SoilCompileMissObservationSchemaVersion).default(SoilCompileMissObservationSchemaVersion),
+  observation_id: z.string().min(1),
+  retrieval_id: z.string().min(1),
+  reason: z.enum(["no_route", "bad_route", "stale_route", "low_confidence_search", "irrelevant_context"]),
+  target_paths: z.array(z.string().min(1)).default([]),
+  route_ids: z.array(z.string().min(1)).default([]),
+  rejected_candidate_ids: z.array(z.string().min(1)).default([]),
+  created_at: z.string().datetime(),
+  notes: z.string().optional(),
+});
+export type SoilCompileMissObservation = z.infer<typeof SoilCompileMissObservationSchema>;
+
+export const SoilMemoryLintFindingCodeSchema = z.enum([
+  "stale_page",
+  "orphan_page",
+  "broken_source_ref",
+  "conflicting_active_record",
+  "overgrown_page",
+  "stale_route",
+  "missing_route",
+  "broken_route_target",
+  "schema_incompatible",
+]);
+export type SoilMemoryLintFindingCode = z.infer<typeof SoilMemoryLintFindingCodeSchema>;
+
+export const SoilMemoryLintFindingSchema = z.object({
+  schema_version: z.literal(SoilMemoryLintFindingSchemaVersion).default(SoilMemoryLintFindingSchemaVersion),
+  finding_id: z.string().min(1),
+  code: SoilMemoryLintFindingCodeSchema,
+  severity: z.enum(["info", "warning", "error"]),
+  status: z.enum(["open", "resolved", "ignored"]).default("open"),
+  message: z.string().min(1),
+  soil_id: z.string().min(1).nullable().default(null),
+  record_id: z.string().min(1).nullable().default(null),
+  route_id: z.string().min(1).nullable().default(null),
+  source_path: z.string().min(1).nullable().default(null),
+  created_at: z.string().datetime(),
+  resolved_at: z.string().datetime().nullable().default(null),
+});
+export type SoilMemoryLintFinding = z.infer<typeof SoilMemoryLintFindingSchema>;
 
 export const SoilMutationSchema = z.object({
   records: z.array(SoilRecordSchema).default([]),

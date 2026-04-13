@@ -358,6 +358,10 @@ export class SoilDoctor {
       if (!expected) {
         continue;
       }
+      const stat = await fsp.stat(resolved).catch(() => null);
+      if (stat === null || !stat.isFile()) {
+        continue;
+      }
       const actual = await this.computeFileChecksum(resolved);
       if (actual !== expected) {
         mismatches.push({ sourcePath, expected, actual });

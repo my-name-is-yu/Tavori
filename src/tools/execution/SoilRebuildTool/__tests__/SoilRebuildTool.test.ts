@@ -32,7 +32,7 @@ describe("SoilRebuildTool", () => {
       expect(result.success).toBe(true);
       const data = result.data as { index: { page_count: number }; projected: { system: number; identity: number } };
       expect(data.index.page_count).toBeGreaterThan(0);
-      expect(data.projected.system).toBe(3);
+      expect(data.projected.system).toBe(7);
       expect(data.projected.identity).toBe(3);
     } finally {
       cleanupTempDir(baseDir);

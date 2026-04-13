@@ -6,6 +6,9 @@ import { AgentMemoryStoreSchema, type AgentMemoryEntry } from "../knowledge/type
 import { LearnedPatternSchema, type LearnedPattern } from "../knowledge/types/learning.js";
 import type { SoilMutationInput, SoilRecord, SoilRecordFilterInput } from "../soil/contracts.js";
 import { SqliteSoilRepository } from "../soil/sqlite-repository.js";
+import { projectDreamKnowledgeToSoil, projectSoilFeedbackToSoil } from "../soil/content-projections.js";
+import { loadSoilCompileMissObservations } from "../soil/feedback-store.js";
+import { inspectSoilMemoryHealth } from "../soil/health.js";
 import { loadDreamWorkflowRecords } from "./dream-event-workflows.js";
 import { buildDreamSoilMutationIntent } from "./dream-soil-mutation.js";
 
@@ -31,6 +34,8 @@ export interface DreamSoilSyncReport {
   tombstonesWritten: number;
   recordsWithChangedSearchMaterial: number;
   queueReindexRecordIds: number;
+  soilHealthFindings: number;
+  soilCompileMissObservations: number;
 }
 
 export interface DreamSoilSyncInput {
@@ -89,6 +94,20 @@ export async function syncDreamOutputsToSoil(input: DreamSoilSyncInput): Promise
   if (hasMutation) {
     await input.repository.applyMutation(intent.mutation);
   }
+  await projectDreamKnowledgeToSoil({
+    baseDir: input.baseDir,
+    learnedPatterns,
+    workflowRecords,
+  });
+  const compileMissObservations = await loadSoilCompileMissObservations({ baseDir: input.baseDir, limit: 500 });
+  const healthSnapshot = await inspectSoilMemoryHealth({
+    rootDir: path.join(input.baseDir, "soil"),
+    compileMissObservations,
+  });
+  await projectSoilFeedbackToSoil({
+    baseDir: input.baseDir,
+    snapshot: healthSnapshot,
+  });
 
   return {
     agentMemoryEntries: agentMemoryEntries.length,
@@ -101,6 +120,8 @@ export async function syncDreamOutputsToSoil(input: DreamSoilSyncInput): Promise
     tombstonesWritten: intent.mutation.tombstones.length,
     recordsWithChangedSearchMaterial: intent.recordsWithChangedSearchMaterial.length,
     queueReindexRecordIds: intent.queueReindexRecordIds.length,
+    soilHealthFindings: healthSnapshot.findingCount,
+    soilCompileMissObservations: compileMissObservations.length,
   };
 }
 

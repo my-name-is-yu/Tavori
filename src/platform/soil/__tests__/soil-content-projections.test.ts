@@ -160,9 +160,19 @@ describe("Soil content projections", () => {
       const indexPage = await readSoilMarkdownFile(path.join(baseDir, "soil", "index.md"));
       const statusPage = await readSoilMarkdownFile(path.join(baseDir, "soil", "status.md"));
       const systemPage = await readSoilMarkdownFile(path.join(baseDir, "soil", "system.md"));
+      const logPage = await readSoilMarkdownFile(path.join(baseDir, "soil", "log.md"));
+      const healthPage = await readSoilMarkdownFile(path.join(baseDir, "soil", "health.md"));
+      const contextRoutesPage = await readSoilMarkdownFile(path.join(baseDir, "soil", "context-routes.md"));
+      const lifecycleArchivePage = await readSoilMarkdownFile(path.join(baseDir, "soil", "lifecycle", "archive.md"));
       expect(indexPage?.body).toContain("Soil is the readable surface");
       expect(statusPage?.body).toContain("Projection pages are written atomically.");
       expect(systemPage?.body).toContain("read-time truth surface");
+      expect(logPage?.frontmatter.compiled_memory_schema).toBe("soil-compiled-memory-v1");
+      expect(logPage?.body).toContain("Chronological record of important compiled Soil changes.");
+      expect(healthPage?.body).toContain("Health checks for the compiled Soil memory layer.");
+      expect(contextRoutesPage?.body).toContain("Fallback search is secondary");
+      expect(lifecycleArchivePage?.frontmatter.soil_id).toBe("lifecycle/archive");
+      expect(lifecycleArchivePage?.body).toContain("Summary of long-lived memory lifecycle states.");
     } finally {
       cleanupTempDir(baseDir);
     }
