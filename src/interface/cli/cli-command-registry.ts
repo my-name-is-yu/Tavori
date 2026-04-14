@@ -36,7 +36,6 @@ import { cmdSuggest, cmdImprove } from "./commands/suggest.js";
 import { cmdSetup } from "./commands/setup.js";
 import { cmdKnowledgeList, cmdKnowledgeSearch, cmdKnowledgeStats } from "./commands/knowledge.js";
 import { cmdTaskList, cmdTaskShow } from "./commands/task-read.js";
-import { cmdChat } from "./commands/chat.js";
 import { cmdDoctor } from "./commands/doctor.js";
 import { cmdLogs } from "./commands/logs.js";
 import { cmdInstall, cmdUninstall } from "./commands/install.js";
@@ -533,10 +532,6 @@ export async function dispatchCommand(
 
   if (subcommand === "notify") {
     return await cmdNotify(argv.slice(1));
-  }
-
-  if (subcommand === "chat") {
-    return await cmdChat(stateManager, argv.slice(1));
   }
 
   if (subcommand === "telegram") {

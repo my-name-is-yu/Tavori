@@ -28,11 +28,10 @@ Main exported surfaces include:
 
 - `src/interface/tui/entry.ts`
 
-### Chat entry
+### Chat runtime
 
 - `src/interface/chat/chat-runner.ts`
 - `src/interface/chat/chat-session-store.ts`
-- `src/interface/cli/commands/chat.ts` — chat command parsing, session-control flags, and REPL entrypoint
 
 ## 2. Directory guide
 
@@ -222,7 +221,6 @@ Start with:
 - `src/interface/chat/chat-history.ts`
 - `src/interface/chat/chat-session-store.ts`
 - `src/interface/chat/cross-platform-session.ts`
-- `src/interface/cli/commands/chat.ts`
 
 ### CLI setup and provider wiring
 

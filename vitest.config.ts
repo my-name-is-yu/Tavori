@@ -1,4 +1,3 @@
-import { existsSync } from 'node:fs';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
@@ -11,10 +10,6 @@ const include = [
   'tests/regression/**/*.test.ts',
   'tests/test_*.ts',
 ];
-
-if (existsSync('web/src/app')) {
-  include.push('tests/web/**/*.test.ts');
-}
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 

@@ -161,7 +161,6 @@ Common scriptable commands:
 | `pulseed status --goal <id>` | Inspect goal state |
 | `pulseed report --goal <id>` | Read the latest report |
 | `pulseed task list --goal <id>` | Inspect tasks |
-| `pulseed chat` | Start chat mode |
 | `pulseed tui` | Start the terminal UI |
 | `pulseed start --goal <id>` | Start the daemon |
 | `pulseed stop` | Stop the daemon |

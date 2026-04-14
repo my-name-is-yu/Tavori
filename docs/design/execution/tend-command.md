@@ -186,7 +186,7 @@ Tasks executed:
 | `src/interface/chat/tend-command.ts` | **New** — TendCommand class (summarize, generate goal, confirm, start daemon, subscribe) | ~150 |
 | `src/interface/chat/__tests__/tend-command.test.ts` | **New** — unit tests | ~200 |
 | `src/interface/chat/chat-runner.ts` | **Modify** — add `/tend` to handleCommand(), add TendCommand to deps | ~15 |
-| `src/interface/cli/commands/chat.ts` | **Modify** — wire TendCommand deps | ~10 |
+| TUI chat entry wiring | **Modify** — wire TendCommand deps | ~10 |
 | `src/interface/chat/event-subscriber.ts` | **New** — SSE client that subscribes to daemon EventServer, emits typed events | ~80 |
 | `src/interface/chat/__tests__/event-subscriber.test.ts` | **New** — unit tests | ~100 |
 

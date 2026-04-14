@@ -33,7 +33,6 @@
     "ai-agent",
     "multi-agent",
     "typescript",
-    "openclaw",
     "gateway"
   ],
   "repository": {

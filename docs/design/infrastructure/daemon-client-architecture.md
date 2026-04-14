@@ -14,7 +14,7 @@ This design makes the daemon the single owner of long-lived goal execution, with
 
 ```
 ┌─────────────┐   ┌─────────────┐   ┌─────────────┐
-│   TUI (Ink)  │   │  Web UI     │   │  Telegram   │
+│   TUI (Ink)  │   │  Remote UI  │   │  Telegram   │
 │   client     │   │  client     │   │  client     │
 └──────┬───────┘   └──────┬───────┘   └──────┬───────┘
        │                  │                  │

@@ -29,7 +29,7 @@ The solution is a 4-layer architecture that separates concerns cleanly. Each lay
 
 ```
 Channels
-  HTTP · WebSocket · CLI stdin · MCP · Slack Events API · webhook · TUI · Web UI
+  HTTP · WebSocket · CLI stdin · MCP · Slack Events API · webhook · TUI · remote UI
     │
     ▼
 ┌──────────────────────────────────┐
@@ -115,7 +115,7 @@ Approval is a **two-way interaction** that does not fit the unidirectional Envel
 The Gateway hosts an **ApprovalBroker** that owns this flow:
 
 1. A GoalWorker emits an `approval_request` Envelope (type `"command"`) onto the CommandBus outbound path. The Envelope carries a `correlation_id` and a `reply_channel_id`.
-2. The ApprovalBroker receives the request and broadcasts it to all registered approval channels (TUI, Web UI, Slack, chat).
+2. The ApprovalBroker receives the request and broadcasts it to all registered approval channels (TUI, remote UI, Slack, chat).
 3. The first `accept` or `reject` response received within the configurable timeout (default: 5 minutes) is wrapped in a new Envelope with the matching `correlation_id`.
 4. The ApprovalBroker routes the response back to the requesting GoalWorker via the CommandBus, using the `correlation_id` to match the pending request.
 5. If no response arrives within the timeout, the ApprovalBroker emits a synthetic `reject` response -- preserving the current default-reject behavior.
@@ -130,7 +130,7 @@ The Queue is the traffic controller between the Gateway and the Executor. It doe
 
 There are two buses.
 
-The **CommandBus** carries imperative messages: user commands from the CLI or TUI, API calls from the Web UI, approval responses. Commands expect a reply. They are processed in order of arrival within their priority tier.
+The **CommandBus** carries imperative messages: user commands from the CLI, TUI, or remote channels, plus approval responses. Commands expect a reply. They are processed in order of arrival within their priority tier.
 
 The **EventBus** carries reactive messages: state change notifications from external services, scheduled activations from `ScheduleEngine`, loop completion notifications. Events are fire-and-forget from the sender's perspective.
 
@@ -279,7 +279,7 @@ Files changed: `src/base/state/state-manager.ts`, `src/base/state/state-persiste
 
 **Phase E: Add remaining ChannelAdapters**
 
-With the Gateway in place, adding channels is mechanical: implement `ChannelAdapter`, register with `IngressGateway`. WebSocket adapter (for real-time Web UI), Slack Events API adapter (Slack signature verification + event routing), and additional webhook receivers all follow the same pattern.
+With the Gateway in place, adding channels is mechanical: implement `ChannelAdapter`, register with `IngressGateway`. WebSocket adapter (for real-time remote clients), Slack Events API adapter (Slack signature verification + event routing), and additional webhook receivers all follow the same pattern.
 
 New files: `src/runtime/gateway/websocket-channel-adapter.ts`, `src/runtime/gateway/slack-channel-adapter.ts`.
 
@@ -327,7 +327,7 @@ Metrics to track over time (emitted as structured log entries, digestible by any
 - State write latency: time from lock acquisition to WAL commit, p50/p95.
 - GoalWorker crash rate: crashes per goal per hour.
 
-Lifecycle events are emitted on the EventBus with source `"system"`, making them available to the Web UI, TUI, and any registered notifier plugin:
+Lifecycle events are emitted on the EventBus with source `"system"`, making them available to the TUI, remote clients, and any registered notifier plugin:
 
 - `worker_started` — a GoalWorker began a loop for a goal.
 - `worker_completed` — a GoalWorker finished a loop, with result status.
@@ -345,7 +345,7 @@ These events are LOW priority on the EventBus; they do not compete with goal wor
 
 **Multi-machine operation.** Running multiple PulSeed instances against the same goal set requires a shared state layer and leader election. SQLite (embedded, file-based) or Turso (libSQL over the network) could replace the per-file JSON approach while preserving the human-readable audit trail. Leader election (using a TTL-based lock in the shared database) would allow one machine to be the primary Executor while others hot-standby. This is not needed until a single machine's I/O or LLM rate limits become the bottleneck — likely years away for most deployments.
 
-**WebSocket push for real-time Web UI.** The SSE stream in `EventServer` already gives the Web UI real-time updates. WebSocket would allow bidirectional communication: the Web UI could send commands (goal start/stop, chat messages, approvals) through the same connection that receives updates. In the Gateway architecture this is a new ChannelAdapter that wraps a WebSocket server; the rest of the system sees it as another source of Envelopes. The outbound path (broadcasting events back to the Web UI) uses the same `reply` field on the Envelope to route responses through the WebSocket connection rather than a REST response.
+**WebSocket push for real-time remote clients.** The SSE stream in `EventServer` already supports real-time updates. WebSocket would allow bidirectional communication: a remote client could send commands (goal start/stop, chat messages, approvals) through the same connection that receives updates. In the Gateway architecture this is a new ChannelAdapter that wraps a WebSocket server; the rest of the system sees it as another source of Envelopes. The outbound path (broadcasting events back to the client) uses the same `reply` field on the Envelope to route responses through the WebSocket connection rather than a REST response.
 
 ---
 

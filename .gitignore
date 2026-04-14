@@ -12,16 +12,12 @@ coverage-c8/
 memory/
 /memory/research/dream-mode/
 *.tmp
-web/.next/
-web/node_modules/
-web/tsconfig.tsbuildinfo
 docs/archive/
 scripts/*
 !scripts/check-docs.mjs
 !scripts/release.mjs
 
 # Non-public: stale, will revisit later
-web/
 src/adapters/datasources/openclaw-datasource.ts
 src/adapters/agents/openclaw-acp.ts
 src/adapters/__tests__/openclaw-acp.test.ts

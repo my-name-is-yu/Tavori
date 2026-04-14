@@ -3,7 +3,6 @@ tests/
 docs/
 memory/
 .claude/
-web/
 *.test.ts
 *.test.js
 tsconfig.json

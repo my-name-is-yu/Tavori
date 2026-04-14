@@ -26,7 +26,7 @@ export const CONFIG_METADATA: Record<string, ConfigKeyMeta> = {
       "CoreLoopがバックグラウンドdaemonプロセスとして常時動作する",
       "TUIを閉じてもゴールの実行が継続する",
       "TUIは「ウィンドウ」として何度でも再接続可能になる",
-      "複数クライアント（TUI, Web UI）が同時にダエモンを監視できる",
+      "複数クライアント（TUIや通知チャネル）が同時にダエモンを監視できる",
     ],
     requirements: [
       "常時起動のPC（スリープしないこと）",

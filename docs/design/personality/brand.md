@@ -132,7 +132,7 @@ The standard lockup is: **Seedy icon** + **"PulSeed"** wordmark in Quicksand Bol
 
 ### Asset Files
 
-**Favicon sync rule**: `assets/favicon.svg` is the canonical favicon source. `web/src/app/icon.svg` must be kept in sync with it. When updating the favicon, copy the changes to both files.
+**Favicon source**: `assets/favicon.svg` is the canonical favicon source.
 
 ---
 

@@ -10,7 +10,7 @@ The following areas are candidates for future investment. None are scheduled; pr
 
 ### Multi-User Support
 
-Goal and state isolation per user, with authentication. The current design assumes a single user operating the system locally. Supporting multiple users requires scoping all persistent state (`~/.pulseed/`) per identity and adding an auth layer to the HTTP/Web UI surface. Tackle when user base grows.
+Goal and state isolation per user, with authentication. The current design assumes a single user operating the system locally. Supporting multiple users requires scoping all persistent state (`~/.pulseed/`) per identity and adding an authenticated remote surface. Tackle when user base grows.
 
 ### DimensionMapping Semantic Auto-Suggestion
 
