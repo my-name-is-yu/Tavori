@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { GoalRefiner } from "../goal-refiner.js";
 import type { StateManager } from "../../../base/state/state-manager.js";
 import type { ObservationEngine } from "../../../platform/observation/observation-engine.js";
-import type { GoalNegotiator } from "../goal-negotiator.js";
 import type { GoalTreeManager } from "../goal-tree-manager.js";
 import type { EthicsGate } from "../../../platform/traits/ethics-gate.js";
 import { createMockLLMClient } from "../../../../tests/helpers/mock-llm.js";
@@ -56,10 +55,6 @@ function makeObservationEngine(): ObservationEngine {
       { sourceId: "shell", config: { name: "shell" } },
     ]),
   } as unknown as ObservationEngine;
-}
-
-function makeNegotiator(): GoalNegotiator {
-  return {} as unknown as GoalNegotiator;
 }
 
 function makeTreeManager(childGoals: ReturnType<typeof makeGoal>[] = []): GoalTreeManager {
@@ -201,7 +196,6 @@ describe("GoalRefiner", () => {
         stateManager,
         llmClient,
         makeObservationEngine(),
-        makeNegotiator(),
         makeTreeManager(),
         makeEthicsGate()
       );
@@ -306,7 +300,6 @@ describe("GoalRefiner", () => {
         stateManager,
         llmClient,
         makeObservationEngine(),
-        makeNegotiator(),
         treeManager,
         makeEthicsGate()
       );
@@ -385,7 +378,6 @@ describe("GoalRefiner", () => {
         stateManager,
         llmClient,
         makeObservationEngine(),
-        makeNegotiator(),
         treeManager,
         makeEthicsGate()
       );
@@ -458,7 +450,6 @@ describe("GoalRefiner", () => {
       stateManager,
       llmClient,
       makeObservationEngine(),
-      makeNegotiator(),
       treeManager,
       makeEthicsGate()
     );
@@ -509,7 +500,6 @@ describe("GoalRefiner", () => {
       stateManager,
       llmClient,
       makeObservationEngine(),
-      makeNegotiator(),
       treeManager,
       makeEthicsGate()
     );
@@ -569,7 +559,6 @@ describe("GoalRefiner", () => {
       stateManager,
       llmClient,
       makeObservationEngine(),
-      makeNegotiator(),
       treeManager,
       makeEthicsGate()
     );
@@ -610,7 +599,6 @@ describe("GoalRefiner", () => {
       stateManager,
       llmClient,
       makeObservationEngine(),
-      makeNegotiator(),
       makeTreeManager(),
       makeEthicsGate()
     );
@@ -643,7 +631,6 @@ describe("GoalRefiner", () => {
       stateManager,
       llmClient,
       makeObservationEngine(),
-      makeNegotiator(),
       makeTreeManager(),
       makeEthicsGate()
     );

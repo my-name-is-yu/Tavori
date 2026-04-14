@@ -1,8 +1,8 @@
 /**
  * goal-refiner.ts — GoalRefiner class.
  *
- * Unified entry point that composes GoalNegotiator (feasibility) and
- * GoalTreeManager (decomposition) without replacing them.
+ * Unified entry point that composes feasibility checks and GoalTreeManager
+ * decomposition without replacing them.
  *
  * See docs/design/goal-refinement-pipeline.md §3 for the full algorithm.
  */
@@ -10,7 +10,6 @@
 import type { StateManager } from "../../base/state/state-manager.js";
 import type { ILLMClient } from "../../base/llm/llm-client.js";
 import type { ObservationEngine } from "../../platform/observation/observation-engine.js";
-import type { GoalNegotiator } from "./goal-negotiator.js";
 import type { GoalTreeManager } from "./goal-tree-manager.js";
 import type { EthicsGate } from "../../platform/traits/ethics-gate.js";
 import { GoalSchema } from "../../base/types/goal.js";
@@ -136,7 +135,6 @@ export class GoalRefiner {
     private readonly stateManager: StateManager,
     private readonly llmClient: ILLMClient,
     private readonly observationEngine: ObservationEngine,
-    private readonly negotiator: GoalNegotiator,
     private readonly treeManager: GoalTreeManager,
     private readonly ethicsGate: EthicsGate,
   ) {}

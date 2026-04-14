@@ -404,7 +404,6 @@ export async function buildDeps(
     stateManager,
     llmClient,
     observationEngine,
-    goalNegotiator,
     goalTreeManager,
     ethicsGate,
   );
