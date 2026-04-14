@@ -68,35 +68,62 @@ export function wrapTerminalCommand(
   const docker = backend.docker!;
   const hostCwd = path.resolve(spec.cwd ?? process.cwd());
   const containerWorkdir = docker.workdir ?? DEFAULT_CONTAINER_WORKDIR;
-  const args = [
-    "run",
-    "--rm",
-    "-i",
-    "--network",
-    docker.network ?? "none",
-    "-v",
-    `${hostCwd}:${containerWorkdir}`,
-    "-w",
-    containerWorkdir,
-  ];
-
-  for (const volume of docker.volumes ?? []) {
-    args.push("-v", volume);
-  }
   const containerEnv = normalizeContainerEnv(spec.env, docker.env);
-  for (const [key, value] of Object.entries(containerEnv)) {
-    args.push("-e", `${key}=${value}`);
-  }
-
-  args.push(docker.image, spec.command, ...spec.args);
 
   return {
     command: "docker",
-    args,
+    args: buildDockerRunArgs({
+      command: spec.command,
+      args: spec.args,
+      image: docker.image,
+      network: docker.network ?? "none",
+      hostCwd,
+      containerWorkdir,
+      volumes: docker.volumes ?? [],
+      env: containerEnv,
+    }),
     env: spec.env,
     stdinData: spec.stdinData,
     backend: "docker",
   };
+}
+
+function buildDockerRunArgs(input: {
+  command: string;
+  args: string[];
+  image: string;
+  network: "none" | "host" | "bridge";
+  hostCwd: string;
+  containerWorkdir: string;
+  volumes: string[];
+  env: Record<string, string>;
+}): string[] {
+  return [
+    "run",
+    "--rm",
+    "-i",
+    "--network",
+    input.network,
+    ...buildVolumeArgs(input.hostCwd, input.containerWorkdir, input.volumes),
+    ...buildEnvArgs(input.env),
+    input.image,
+    input.command,
+    ...input.args,
+  ];
+}
+
+function buildVolumeArgs(hostCwd: string, containerWorkdir: string, extraVolumes: string[]): string[] {
+  return [
+    "-v",
+    `${hostCwd}:${containerWorkdir}`,
+    "-w",
+    containerWorkdir,
+    ...extraVolumes.flatMap((volume) => ["-v", volume]),
+  ];
+}
+
+function buildEnvArgs(env: Record<string, string>): string[] {
+  return Object.entries(env).flatMap(([key, value]) => ["-e", `${key}=${value}`]);
 }
 
 function normalizeContainerEnv(

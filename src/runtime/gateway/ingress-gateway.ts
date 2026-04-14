@@ -4,6 +4,7 @@ import type { Logger } from "../logger.js";
 import {
   evaluateChannelAccess,
   resolveChannelRoute,
+  type ChannelMessageContext,
   type ChannelAccessPolicy,
   type ChannelRoutingPolicy,
 } from "./channel-policy.js";
@@ -91,53 +92,8 @@ export class IngressGateway {
 
   private routeEnvelope(envelope: Envelope, reply?: ReplyChannel): void | Promise<void> {
     const policy = this.policies.get(envelope.source);
-    if (policy) {
-      const payload = typeof envelope.payload === "object" && envelope.payload !== null
-        ? envelope.payload as Record<string, unknown>
-        : {};
-      const senderId = String(
-        envelope.auth?.principal ??
-        payload["sender_id"] ??
-        payload["user"] ??
-        payload["from"] ??
-        ""
-      ) || undefined;
-      const channelId = String(payload["channel_id"] ?? payload["channel"] ?? "") || undefined;
-      const conversationId = String(
-        payload["conversation_id"] ??
-        payload["conversationId"] ??
-        channelId ??
-        ""
-      ) || undefined;
-      const access = evaluateChannelAccess(policy.security, {
-        platform: envelope.source,
-        senderId,
-        conversationId,
-        channelId,
-      });
-      if (!access.allowed) {
-        this.logger?.warn("Gateway: security policy rejected envelope", {
-          id: envelope.id,
-          source: envelope.source,
-          reason: access.reason,
-        });
-        return;
-      }
-
-      const route = resolveChannelRoute(policy.routing, {
-        platform: envelope.source,
-        senderId,
-        conversationId,
-        channelId,
-      });
-      if (!envelope.goal_id && route.goalId) {
-        envelope.goal_id = route.goalId;
-      }
-      (envelope as Envelope & { metadata?: Record<string, unknown> }).metadata = {
-        ...((envelope as Envelope & { metadata?: Record<string, unknown> }).metadata ?? {}),
-        ...route.metadata,
-        ...(access.runtimeControlApproved ? { runtime_control_approved: true } : {}),
-      };
+    if (policy && !this.applyPolicy(envelope, policy)) {
+      return;
     }
 
     if (!this.handler) {
@@ -164,4 +120,65 @@ export class IngressGateway {
       });
     }
   }
+
+  private applyPolicy(envelope: Envelope, policy: IngressGatewayPolicy): boolean {
+    const context = buildPolicyContext(envelope);
+    const access = evaluateChannelAccess(policy.security, context);
+    if (!access.allowed) {
+      this.logger?.warn("Gateway: security policy rejected envelope", {
+        id: envelope.id,
+        source: envelope.source,
+        reason: access.reason,
+      });
+      return false;
+    }
+
+    const route = resolveChannelRoute(policy.routing, context);
+    if (!envelope.goal_id && route.goalId) {
+      envelope.goal_id = route.goalId;
+    }
+    setEnvelopeMetadata(envelope, {
+      ...route.metadata,
+      ...(access.runtimeControlApproved ? { runtime_control_approved: true } : {}),
+    });
+    return true;
+  }
+}
+
+function buildPolicyContext(envelope: Envelope): ChannelMessageContext {
+  const payload = typeof envelope.payload === "object" && envelope.payload !== null
+    ? envelope.payload as Record<string, unknown>
+    : {};
+  const senderId = stringifyOptional(
+    envelope.auth?.principal ??
+    payload["sender_id"] ??
+    payload["user"] ??
+    payload["from"]
+  );
+  const channelId = stringifyOptional(payload["channel_id"] ?? payload["channel"]);
+  const conversationId = stringifyOptional(
+    payload["conversation_id"] ??
+    payload["conversationId"] ??
+    channelId
+  );
+
+  return {
+    platform: envelope.source,
+    senderId,
+    conversationId,
+    channelId,
+  };
+}
+
+function stringifyOptional(value: unknown): string | undefined {
+  if (value === null || value === undefined) return undefined;
+  const normalized = String(value);
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function setEnvelopeMetadata(envelope: Envelope, metadata: Record<string, unknown>): void {
+  (envelope as Envelope & { metadata?: Record<string, unknown> }).metadata = {
+    ...((envelope as Envelope & { metadata?: Record<string, unknown> }).metadata ?? {}),
+    ...metadata,
+  };
 }
