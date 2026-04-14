@@ -152,6 +152,19 @@ describe("validateProviderConfig", () => {
     expect(result.errors).toEqual([]);
   });
 
+  it("reports error when api_key is missing for openai_api adapter on ollama", () => {
+    const result = validateProviderConfig({
+      provider: "ollama",
+      model: "llama3",
+      adapter: "openai_api",
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContainEqual(
+      expect.stringContaining('API key required for adapter "openai_api"')
+    );
+  });
+
   it("reports error when model provider mismatches", () => {
     const result = validateProviderConfig({
       provider: "anthropic",
@@ -419,6 +432,21 @@ describe("loadProviderConfig", () => {
     process.env["OPENAI_API_KEY"] = "sk-env";
 
     const config = await loadProviderConfig();
+    expect(config.api_key).toBe("sk-env");
+  });
+
+  it("OPENAI_API_KEY env var satisfies openai_api adapter on ollama provider", async () => {
+    mockAccess.mockResolvedValue(undefined);
+    mockReadFile.mockResolvedValue(JSON.stringify({
+      provider: "ollama",
+      model: "llama3",
+      adapter: "openai_api",
+    }));
+    process.env["OPENAI_API_KEY"] = "sk-env";
+
+    const config = await loadProviderConfig();
+    expect(config.provider).toBe("ollama");
+    expect(config.adapter).toBe("openai_api");
     expect(config.api_key).toBe("sk-env");
   });
 });

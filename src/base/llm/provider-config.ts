@@ -237,9 +237,15 @@ export function validateProviderConfig(config: ProviderConfig): ValidationResult
   }
 
   // Check required api_key
-  if (!config.api_key && config.adapter !== "openai_codex_cli" && (config.provider === "openai" || config.provider === "anthropic")) {
-    const envName = config.provider === "openai" ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY";
-    errors.push(`API key required for provider "${config.provider}". Set ${envName} or add api_key to config.`);
+  const requiresOpenAiApiKey =
+    config.provider === "openai" && config.adapter !== "openai_codex_cli";
+  const requiresAnthropicApiKey = config.provider === "anthropic";
+  const requiresAdapterApiKey = config.adapter === "openai_api";
+  const requiresApiKey = requiresOpenAiApiKey || requiresAnthropicApiKey || requiresAdapterApiKey;
+  if (!config.api_key && requiresApiKey) {
+    const envName = requiresAdapterApiKey || requiresOpenAiApiKey ? "OPENAI_API_KEY" : "ANTHROPIC_API_KEY";
+    const providerLabel = requiresAdapterApiKey ? 'adapter "openai_api"' : `provider "${config.provider}"`;
+    errors.push(`API key required for ${providerLabel}. Set ${envName} or add api_key to config.`);
   }
 
   return { valid: errors.length === 0, errors };
@@ -305,8 +311,12 @@ function resolveModel(
 function resolveApiKey(
   fileKey: string | undefined,
   provider: ProviderConfig["provider"],
+  adapter: ProviderConfig["adapter"],
   envFile: Record<string, string>
 ): string | undefined {
+  if (adapter === "openai_api") {
+    return process.env["OPENAI_API_KEY"] ?? envFile["OPENAI_API_KEY"] ?? fileKey;
+  }
   if (provider === "anthropic") {
     return process.env["ANTHROPIC_API_KEY"] ?? envFile["ANTHROPIC_API_KEY"] ?? fileKey;
   }
@@ -403,7 +413,7 @@ export async function loadProviderConfig(): Promise<ProviderConfig> {
     model = fallback;
   }
 
-  let api_key = resolveApiKey(fileConfig.api_key, provider, envFile);
+  let api_key = resolveApiKey(fileConfig.api_key, provider, adapter, envFile);
 
   // Fallback: read OAuth token from ~/.codex/auth.json when no API key is configured
   if (!api_key && provider === "openai" && adapter === "openai_codex_cli") {
