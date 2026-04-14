@@ -40,6 +40,11 @@ function itemPreview(item: SetupImportItem): string {
   const decision = item.decision === "copy_disabled" ? "copy disabled" : item.decision;
   const details = item.kind === "provider"
     ? providerPreview(item.providerSettings)
+    : item.kind === "telegram"
+      ? [
+          item.telegramSettings?.botToken ? `bot_token=${maskKey(item.telegramSettings.botToken)}` : undefined,
+          item.telegramSettings?.allowedUserIds?.length ? `allowed_users=${item.telegramSettings.allowedUserIds.length}` : undefined,
+        ].filter(Boolean).join(", ")
     : item.reason;
   return `[${item.sourceLabel}] ${item.kind}: ${item.label}\n  ${decision}${details ? ` - ${details}` : ""}`;
 }
@@ -82,10 +87,10 @@ export function providerConfigPatchFromImport(
 }
 
 export async function stepSetupImport(): Promise<SetupImportSelection | undefined> {
-  const sources = detectSetupImportSources();
-  if (sources.length === 0) return undefined;
+  const detectedSources = detectSetupImportSources();
+  if (detectedSources.length === 0) return undefined;
 
-  p.note(sourceSummary(sources), "Existing agent configs found");
+  p.note(sourceSummary(detectedSources), "Existing agent configs found");
   const wantsImport = guardCancel(
     await p.confirm({
       message: "Import settings from Hermes Agent / OpenClaw into PulSeed?",
@@ -93,6 +98,23 @@ export async function stepSetupImport(): Promise<SetupImportSelection | undefine
     })
   );
   if (!wantsImport) return undefined;
+
+  let sources = detectedSources;
+  if (detectedSources.length > 1) {
+    const sourceChoice = guardCancel(
+      await p.select({
+        message: "Which existing agent should PulSeed import from?",
+        options: detectedSources.map((source) => ({
+          value: source.id,
+          label: source.label,
+          hint: source.rootDir,
+        })),
+        initialValue: detectedSources.find((source) => source.id === "hermes")?.id ?? detectedSources[0]?.id,
+      })
+    );
+    sources = detectedSources.filter((source) => source.id === sourceChoice);
+  }
+
 
   p.note(preview(sources), "Import preview");
   const mode = guardCancel(

@@ -67,6 +67,8 @@ export function extractMcpServers(raw: unknown, source: SetupImportSourceId): MC
     ? raw["mcpServers"]
     : isRecord(raw["mcp_servers"])
       ? raw["mcp_servers"]
+      : isRecord(raw["mcp"]) && isRecord(raw["mcp"]["servers"])
+        ? raw["mcp"]["servers"]
       : raw;
 
   return Object.entries(mapValue).flatMap(([id, value]) => {

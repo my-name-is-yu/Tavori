@@ -13,16 +13,21 @@ type ProcessMessageFn = (
   fromUserId?: number
 ) => Promise<string | void> | string | void;
 
+type HomeCommandFn = (chatId: number) => Promise<string | void> | string | void;
+
 export class ChatBridge {
   private processMessage: ProcessMessageFn;
   private readonly apiFactory: (chatId: number) => TelegramChatEventAdapter;
+  private readonly onSetHome?: HomeCommandFn;
 
   constructor(
     processMessage: ProcessMessageFn,
-    apiFactory: (chatId: number) => TelegramChatEventAdapter
+    apiFactory: (chatId: number) => TelegramChatEventAdapter,
+    onSetHome?: HomeCommandFn
   ) {
     this.processMessage = processMessage;
     this.apiFactory = apiFactory;
+    this.onSetHome = onSetHome;
   }
 
   setProcessMessage(processMessage: ProcessMessageFn): void {
@@ -31,6 +36,13 @@ export class ChatBridge {
 
   async handleMessage(text: string, fromUserId: number, chatId: number): Promise<void> {
     const adapter = this.apiFactory(chatId);
+    const normalized = text.trim().toLowerCase();
+    if ((normalized === "/sethome" || normalized.startsWith("/sethome@")) && this.onSetHome) {
+      const response = await this.onSetHome(chatId);
+      await adapter.sendFinalFallback(typeof response === "string" && response.trim() ? response : "This chat is now the home channel for PulSeed notifications.");
+      return;
+    }
+
     let eventQueue = Promise.resolve();
     const emit: ChatEventHandler = (event) => {
       const next = eventQueue.then(() => adapter.handle(event)).catch((err) => {

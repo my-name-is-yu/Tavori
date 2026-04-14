@@ -46,7 +46,7 @@ describe("cmdTelegramSetup", () => {
   });
 
   it("writes optional identity_key for cross-platform continuation", async () => {
-    readlineState.answers = ["test-token", "123456", "777,888", "personal"];
+    readlineState.answers = ["test-token", "777,888", "", "personal"];
     const { cmdTelegramSetup } = await import("../commands/telegram.js");
 
     const result = await cmdTelegramSetup([]);
@@ -59,10 +59,10 @@ describe("cmdTelegramSetup", () => {
     const config = JSON.parse(await fsp.readFile(configPath, "utf-8")) as Record<string, unknown>;
     expect(config).toMatchObject({
       bot_token: "test-token",
-      chat_id: 123456,
       allowed_user_ids: [777, 888],
       polling_timeout: 30,
       identity_key: "personal",
     });
+    expect(config.chat_id).toBeUndefined();
   });
 });

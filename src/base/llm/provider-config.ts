@@ -129,6 +129,7 @@ interface LegacyProviderConfig {
 // ─── Constants ───
 
 const PROVIDER_CONFIG_PATH = path.join(getPulseedDirPath(), "provider.json");
+const PROVIDER_ENV_PATH = path.join(getPulseedDirPath(), ".env");
 
 const DEFAULT_PROVIDER_CONFIG: ProviderConfig = {
   provider: "openai",
@@ -303,29 +304,53 @@ function resolveModel(
 
 function resolveApiKey(
   fileKey: string | undefined,
-  provider: ProviderConfig["provider"]
+  provider: ProviderConfig["provider"],
+  envFile: Record<string, string>
 ): string | undefined {
   if (provider === "anthropic") {
-    return process.env["ANTHROPIC_API_KEY"] ?? fileKey;
+    return process.env["ANTHROPIC_API_KEY"] ?? envFile["ANTHROPIC_API_KEY"] ?? fileKey;
   }
   // openai (and codex) both use OPENAI_API_KEY
   if (provider === "openai") {
-    return process.env["OPENAI_API_KEY"] ?? fileKey;
+    return process.env["OPENAI_API_KEY"] ?? envFile["OPENAI_API_KEY"] ?? fileKey;
   }
   return fileKey;
 }
 
 function resolveBaseUrl(
   fileUrl: string | undefined,
-  provider: ProviderConfig["provider"]
+  provider: ProviderConfig["provider"],
+  envFile: Record<string, string>
 ): string | undefined {
   if (provider === "ollama") {
-    return process.env["OLLAMA_BASE_URL"] ?? fileUrl;
+    return process.env["OLLAMA_BASE_URL"] ?? envFile["OLLAMA_BASE_URL"] ?? fileUrl;
   }
   if (provider === "openai") {
-    return process.env["OPENAI_BASE_URL"] ?? fileUrl;
+    return process.env["OPENAI_BASE_URL"] ?? envFile["OPENAI_BASE_URL"] ?? fileUrl;
   }
   return fileUrl;
+}
+
+function parseEnvFile(raw: string): Record<string, string> {
+  const entries = raw
+    .split(/\r?\n/)
+    .flatMap((line) => {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) return [];
+      const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(trimmed);
+      if (!match) return [];
+      const value = match[2]!.trim().replace(/^['"]|['"]$/g, "");
+      return [[match[1]!, value] as const];
+    });
+  return Object.fromEntries(entries);
+}
+
+async function readProviderEnvFile(): Promise<Record<string, string>> {
+  try {
+    return parseEnvFile(await fsp.readFile(PROVIDER_ENV_PATH, "utf-8"));
+  } catch {
+    return {};
+  }
 }
 
 // ─── Public API ───
@@ -343,6 +368,7 @@ function resolveBaseUrl(
 export async function loadProviderConfig(): Promise<ProviderConfig> {
   let fileConfig: Partial<ProviderConfig> = {};
   let needsMigrationSave = false;
+  const envFile = await readProviderEnvFile();
 
   try {
     await fsp.access(PROVIDER_CONFIG_PATH);
@@ -377,14 +403,14 @@ export async function loadProviderConfig(): Promise<ProviderConfig> {
     model = fallback;
   }
 
-  let api_key = resolveApiKey(fileConfig.api_key, provider);
+  let api_key = resolveApiKey(fileConfig.api_key, provider, envFile);
 
   // Fallback: read OAuth token from ~/.codex/auth.json when no API key is configured
   if (!api_key && provider === "openai" && adapter === "openai_codex_cli") {
     api_key = await readCodexOAuthToken();
   }
 
-  const base_url = resolveBaseUrl(fileConfig.base_url, provider);
+  const base_url = resolveBaseUrl(fileConfig.base_url, provider, envFile);
 
   const config: ProviderConfig = { provider, model, adapter };
   if (api_key !== undefined) config.api_key = api_key;

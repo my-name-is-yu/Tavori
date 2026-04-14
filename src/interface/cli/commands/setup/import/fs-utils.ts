@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
+import { load as parseYaml } from "js-yaml";
 
 export function unique<T>(values: T[]): T[] {
   return [...new Set(values)];
@@ -26,9 +27,32 @@ export async function pathExistsAsync(filePath: string): Promise<boolean> {
 
 export function readJson(filePath: string): unknown | undefined {
   try {
-    return JSON.parse(fs.readFileSync(filePath, "utf-8")) as unknown;
+    const raw = fs.readFileSync(filePath, "utf-8");
+    if (filePath.endsWith(".yaml") || filePath.endsWith(".yml")) {
+      return parseYaml(raw) as unknown;
+    }
+    return JSON.parse(raw) as unknown;
   } catch {
     return undefined;
+  }
+}
+
+export function readEnvFile(filePath: string): Record<string, string> {
+  try {
+    const raw = fs.readFileSync(filePath, "utf-8");
+    const entries = raw
+      .split(/\r?\n/)
+      .flatMap((line) => {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith("#")) return [];
+        const match = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(trimmed);
+        if (!match) return [];
+        const value = match[2]!.trim().replace(/^['"]|['"]$/g, "");
+        return [[match[1]!, value] as const];
+      });
+    return Object.fromEntries(entries);
+  } catch {
+    return {};
   }
 }
 

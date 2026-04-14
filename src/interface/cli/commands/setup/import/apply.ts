@@ -1,4 +1,5 @@
 import * as path from "node:path";
+import * as fsp from "node:fs/promises";
 import { readJsonFileOrNull, writeJsonFileAtomic } from "../../../../../base/utils/json-io.js";
 import type { MCPServerConfig, MCPServersConfig } from "../../../../../base/types/mcp.js";
 import { copyDirectoryNoSymlinks, safeImportName, uniqueImportPath } from "./fs-utils.js";
@@ -8,6 +9,16 @@ import type {
   SetupImportReport,
   SetupImportSelection,
 } from "./types.js";
+
+interface TelegramPluginConfig {
+  bot_token?: string;
+  chat_id?: number;
+  allowed_user_ids?: number[];
+  runtime_control_allowed_user_ids?: number[];
+  allow_all?: boolean;
+  polling_timeout?: number;
+  identity_key?: string;
+}
 
 function nextMcpId(existing: Set<string>, requested: string): string {
   const base = safeImportName(requested);
@@ -102,6 +113,66 @@ function reportItem(item: SetupImportItem, status: SetupImportAppliedItem["statu
   };
 }
 
+async function copyTelegramPluginYaml(pluginDir: string): Promise<void> {
+  const destYaml = path.join(pluginDir, "plugin.yaml");
+  const minimal = [
+    "name: telegram-bot",
+    "version: 1.0.0",
+    "type: notifier",
+    "capabilities:",
+    "  - telegram_notification",
+    "  - bidirectional_chat",
+    "description: \"Telegram bot plugin for PulSeed\"",
+    "config_schema:",
+    "  bot_token:",
+    "    type: string",
+    "    required: true",
+    "  chat_id:",
+    "    type: number",
+    "    required: false",
+    "entry_point: \"dist/index.js\"",
+    "permissions:",
+    "  network: true",
+  ].join("\n") + "\n";
+  await fsp.mkdir(pluginDir, { recursive: true });
+  try {
+    await fsp.access(destYaml);
+  } catch {
+    await fsp.writeFile(destYaml, minimal, "utf-8");
+  }
+}
+
+async function applyTelegramConfig(baseDir: string, items: SetupImportItem[]): Promise<string | undefined> {
+  const selected = items.filter((item) => item.kind === "telegram" && item.telegramSettings);
+  if (selected.length === 0) return undefined;
+  const pluginDir = path.join(baseDir, "plugins", "telegram-bot");
+  const configPath = path.join(pluginDir, "config.json");
+  const current = await readJsonFileOrNull<TelegramPluginConfig>(configPath);
+  const allowed = new Set<number>(current?.allowed_user_ids ?? []);
+  const runtimeAllowed = new Set<number>(current?.runtime_control_allowed_user_ids ?? []);
+  let botToken = current?.bot_token;
+
+  for (const item of selected) {
+    if (item.telegramSettings?.botToken) botToken = item.telegramSettings.botToken;
+    for (const id of item.telegramSettings?.allowedUserIds ?? []) {
+      allowed.add(id);
+      runtimeAllowed.add(id);
+    }
+  }
+
+  const config: TelegramPluginConfig = {
+    ...(current ?? {}),
+    ...(botToken ? { bot_token: botToken } : {}),
+    allowed_user_ids: [...allowed],
+    runtime_control_allowed_user_ids: [...runtimeAllowed],
+    allow_all: current?.allow_all ?? false,
+    polling_timeout: current?.polling_timeout ?? 30,
+  };
+  await writeJsonFileAtomic(configPath, config);
+  await copyTelegramPluginYaml(pluginDir);
+  return configPath;
+}
+
 export async function applySetupImportSelection(
   baseDir: string,
   selection: SetupImportSelection
@@ -113,11 +184,34 @@ export async function applySetupImportSelection(
     try {
       if (item.kind === "provider") {
         applied.push(reportItem(item, "applied", "provider settings seeded into setup answers"));
+      } else if (item.kind === "telegram") {
+        applied.push(reportItem(item, "applied", "telegram settings seeded into plugin config"));
       } else if (item.kind === "skill" || item.kind === "plugin") {
         applied.push(await applyFileItem(baseDir, item));
       }
     } catch (err) {
       applied.push(reportItem(item, "failed", err instanceof Error ? err.message : String(err)));
+    }
+  }
+
+  try {
+    const targetPath = await applyTelegramConfig(baseDir, selectedItems);
+    if (targetPath) {
+      for (const item of selectedItems.filter((candidate) => candidate.kind === "telegram")) {
+        const existing = applied.find((appliedItem) => appliedItem.id === item.id);
+        if (existing) existing.targetPath = targetPath;
+      }
+    }
+  } catch (err) {
+    for (const item of selectedItems.filter((candidate) => candidate.kind === "telegram")) {
+      const existing = applied.find((appliedItem) => appliedItem.id === item.id);
+      const reason = err instanceof Error ? err.message : String(err);
+      if (existing) {
+        existing.status = "failed";
+        existing.reason = reason;
+      } else {
+        applied.push(reportItem(item, "failed", reason));
+      }
     }
   }
 

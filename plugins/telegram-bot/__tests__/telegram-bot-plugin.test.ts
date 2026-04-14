@@ -60,9 +60,10 @@ describe("config — loadConfig", () => {
     expect(() => loadConfig(tmpDir)).toThrow("bot_token");
   });
 
-  it("throws when chat_id is missing", () => {
+  it("allows chat_id to be omitted before /sethome", () => {
     writeTmpConfig(tmpDir, { bot_token: "tok" });
-    expect(() => loadConfig(tmpDir)).toThrow("chat_id");
+    const cfg = loadConfig(tmpDir);
+    expect(cfg.chat_id).toBeUndefined();
   });
 
   it("defaults polling_timeout to 30", () => {
@@ -353,6 +354,11 @@ describe("TelegramNotifier", () => {
     sendMessageMock.mockRejectedValue(new Error("network error"));
     await expect(notifier.notify(makeEvent())).rejects.toThrow("network error");
   });
+
+  it("throws a setup hint when no home chat is configured", async () => {
+    notifier = new TelegramNotifier(mockApi, () => undefined);
+    await expect(notifier.notify(makeEvent())).rejects.toThrow("/sethome");
+  });
 });
 
 // ─── polling-loop.ts ───
@@ -520,6 +526,31 @@ describe("PollingLoop", () => {
     stopLoop();
   });
 
+  it("allows configured users from any chat when chat_id is not set", async () => {
+    const onMessage = vi.fn().mockResolvedValue(undefined);
+    loadLoopConfig({ bot_token: "tok", allowed_user_ids: [777] });
+
+    let stopLoop!: () => void;
+    const blocker = new Promise<Response>((resolve) => { stopLoop = () => resolve(updatesResponse([])); });
+
+    fetchMock
+      .mockResolvedValueOnce(updatesResponse([
+        { update_id: 1, message: { message_id: 1, from: { id: 777 }, chat: { id: 999 }, text: "hi" } },
+      ]))
+      .mockReturnValueOnce(blocker);
+
+    const loop = new PollingLoop(api, onMessage, [777], {});
+    loop.start();
+
+    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setImmediate(r));
+
+    expect(onMessage).toHaveBeenCalledWith("hi", 777, 999);
+
+    loop.stop();
+    stopLoop();
+  });
+
   it("stop() halts the loop — running becomes false", async () => {
     const onMessage = vi.fn().mockResolvedValue(undefined);
     loadLoopConfig({ bot_token: "tok", chat_id: 300, allowed_user_ids: [] });
@@ -667,6 +698,23 @@ describe("ChatBridge", () => {
     expect(first).not.toHaveBeenCalled();
     expect(second).toHaveBeenCalledOnce();
     expect(sendFinalFallback).toHaveBeenCalledWith("second");
+  });
+
+  it("handles /sethome before the normal message processor", async () => {
+    const processor = vi.fn().mockResolvedValue("should not run");
+    const onSetHome = vi.fn().mockReturnValue("home set");
+    const sendFinalFallback = vi.fn().mockResolvedValue(undefined);
+    const bridge = new ChatBridge(
+      processor,
+      () => ({ handle: vi.fn(), sendFinalFallback, renderedAssistantOutput: false } as unknown as TelegramChatEventAdapter),
+      onSetHome
+    );
+
+    await bridge.handleMessage("/sethome", 777, 999);
+
+    expect(onSetHome).toHaveBeenCalledWith(999);
+    expect(processor).not.toHaveBeenCalled();
+    expect(sendFinalFallback).toHaveBeenCalledWith("home set");
   });
 });
 
@@ -850,6 +898,12 @@ describe("TelegramBotPlugin", () => {
     await expect(plugin.init()).resolves.not.toThrow();
   });
 
+  it("init() succeeds before chat_id is configured", async () => {
+    writeTmpConfig(tmpDir, { bot_token: "tok123", allowed_user_ids: [42] });
+    const plugin = new TelegramBotPlugin(tmpDir);
+    await expect(plugin.init()).resolves.not.toThrow();
+  });
+
   it("getNotifier() returns TelegramNotifier after init", async () => {
     writeTmpConfig(tmpDir, { bot_token: "tok123", chat_id: 42 });
     const plugin = new TelegramBotPlugin(tmpDir);
@@ -893,5 +947,17 @@ describe("TelegramBotPlugin", () => {
 
     const bridge = (plugin as unknown as { bridge?: ChatBridge }).bridge;
     expect(bridge).toBeDefined();
+  });
+
+  it("/sethome persists the notification chat_id", async () => {
+    writeTmpConfig(tmpDir, { bot_token: "tok123", allowed_user_ids: [42] });
+    const plugin = new TelegramBotPlugin(tmpDir);
+    await plugin.init();
+
+    const bridge = (plugin as unknown as { bridge?: ChatBridge }).bridge;
+    await bridge!.handleMessage("/sethome", 42, 987);
+
+    const config = JSON.parse(fs.readFileSync(path.join(tmpDir, "config.json"), "utf-8")) as Record<string, unknown>;
+    expect(config["chat_id"]).toBe(987);
   });
 });

@@ -65,23 +65,23 @@ describe("setup import discovery", () => {
 
     const { detectSetupImportSources } = await import("../commands/setup/import/discovery.js");
     const sources = detectSetupImportSources();
+    const openclaw = sources.find((source) => source.id === "openclaw");
 
-    expect(sources).toHaveLength(1);
-    expect(sources[0]?.id).toBe("openclaw");
-    expect(sources[0]?.items.map((item) => item.kind).sort()).toEqual([
+    expect(openclaw).toBeDefined();
+    expect(openclaw?.items.map((item) => item.kind).sort()).toEqual([
       "mcp",
       "plugin",
       "provider",
       "skill",
     ]);
-    expect(sources[0]?.items.find((item) => item.kind === "provider")?.providerSettings).toMatchObject({
+    expect(openclaw?.items.find((item) => item.kind === "provider")?.providerSettings).toMatchObject({
       provider: "anthropic",
       model: "claude-sonnet-4-6",
       adapter: "agent_loop",
       apiKey: "sk-imported",
       baseUrl: "https://example.test",
     });
-    expect(sources[0]?.items.find((item) => item.kind === "mcp")?.mcpServer).toMatchObject({
+    expect(openclaw?.items.find((item) => item.kind === "mcp")?.mcpServer).toMatchObject({
       id: "openclaw-filesystem",
       enabled: false,
       transport: "stdio",
@@ -94,7 +94,71 @@ describe("setup import discovery", () => {
         },
       ],
     });
-    expect(sources[0]?.items.find((item) => item.kind === "plugin")?.decision).toBe("copy_disabled");
+    expect(openclaw?.items.find((item) => item.kind === "plugin")?.decision).toBe("copy_disabled");
+  });
+
+  it("detects OpenClaw migration-style YAML, env secrets, workspace skills, and nested MCP servers", async () => {
+    const openclawHome = path.join(tmpDir, "openclaw");
+    process.env["PULSEED_IMPORT_OPENCLAW_HOME"] = openclawHome;
+
+    await fsp.mkdir(openclawHome, { recursive: true });
+    await fsp.writeFile(
+      path.join(openclawHome, ".env"),
+      [
+        "OPENAI_API_KEY=sk-env-openai",
+        "TELEGRAM_BOT_TOKEN=123456:telegram-token",
+      ].join("\n"),
+      "utf-8"
+    );
+    await fsp.writeFile(
+      path.join(openclawHome, "config.yaml"),
+      [
+        "agents:",
+        "  defaults:",
+        "    model: gpt-5.4-mini",
+        "models:",
+        "  providers:",
+        "    openai:",
+        "      apiKey:",
+        "        source: env",
+        "        id: OPENAI_API_KEY",
+        "      baseUrl: https://api.openai.com/v1",
+        "channels:",
+        "  telegram:",
+        "    botToken: ${TELEGRAM_BOT_TOKEN}",
+        "mcp:",
+        "  servers:",
+        "    filesystem:",
+        "      command: node",
+        "      args:",
+        "        - server.js",
+      ].join("\n"),
+      "utf-8"
+    );
+    await fsp.mkdir(path.join(openclawHome, "workspace-main", "skills", "review"), { recursive: true });
+    await fsp.writeFile(path.join(openclawHome, "workspace-main", "skills", "review", "SKILL.md"), "# Review\n", "utf-8");
+
+    const { detectSetupImportSources } = await import("../commands/setup/import/discovery.js");
+    const sources = detectSetupImportSources();
+    const openclaw = sources.find((source) => source.id === "openclaw");
+    const provider = openclaw?.items.find((item) => item.kind === "provider");
+    const skill = openclaw?.items.find((item) => item.kind === "skill");
+    const mcp = openclaw?.items.find((item) => item.kind === "mcp");
+
+    expect(provider?.providerSettings).toMatchObject({
+      provider: "openai",
+      model: "gpt-5.4-mini",
+      apiKey: "sk-env-openai",
+      baseUrl: "https://api.openai.com/v1",
+    });
+    expect(provider?.providerSettings?.apiKey).not.toBe("123456:telegram-token");
+    expect(skill?.label).toBe("review");
+    expect(mcp?.mcpServer).toMatchObject({
+      id: "openclaw-filesystem",
+      command: "node",
+      args: ["server.js"],
+      enabled: false,
+    });
   });
 });
 
@@ -168,6 +232,19 @@ describe("setup import apply", () => {
             enabled: false,
           },
         },
+        {
+          id: "openclaw:telegram:config.json",
+          source: "openclaw",
+          sourceLabel: "OpenClaw",
+          kind: "telegram",
+          label: "bot token / 2 allowed user(s)",
+          decision: "import",
+          reason: "Telegram bot and allowed-user defaults",
+          telegramSettings: {
+            botToken: "123456:token",
+            allowedUserIds: [111, 222],
+          },
+        },
       ],
     };
 
@@ -186,7 +263,17 @@ describe("setup import apply", () => {
         expect.objectContaining({ id: "openclaw-filesystem-2", enabled: false }),
       ])
     );
-    expect(report.items.filter((item) => item.status === "applied")).toHaveLength(3);
+    expect(report.items.filter((item) => item.status === "applied")).toHaveLength(4);
+    const telegramConfig = JSON.parse(
+      await fsp.readFile(path.join(baseDir, "plugins", "telegram-bot", "config.json"), "utf-8")
+    ) as Record<string, unknown>;
+    expect(telegramConfig).toMatchObject({
+      bot_token: "123456:token",
+      allowed_user_ids: [111, 222],
+      runtime_control_allowed_user_ids: [111, 222],
+      allow_all: false,
+      polling_timeout: 30,
+    });
 
     const reportRoots = await fsp.readdir(path.join(baseDir, "imports", "openclaw"));
     expect(reportRoots).toHaveLength(1);
@@ -215,12 +302,12 @@ describe("setup import flow", () => {
     expect(confirmMock).not.toHaveBeenCalled();
   });
 
-  it("asks which provider defaults to use when multiple provider configs are selected", async () => {
+  it("asks which source to import from when Hermes and OpenClaw are both detected", async () => {
     vi.resetModules();
     const confirmMock = vi.fn(async () => true);
     const selectMock = vi.fn()
-      .mockResolvedValueOnce("recommended")
-      .mockResolvedValueOnce("openclaw-provider");
+      .mockResolvedValueOnce("openclaw")
+      .mockResolvedValueOnce("recommended");
     const logInfoMock = vi.fn();
     const sources: SetupImportSource[] = [
       {
@@ -290,12 +377,13 @@ describe("setup import flow", () => {
       adapter: "agent_loop",
       apiKey: "sk-openclaw",
     });
-    expect(selection?.items.find((item) => item.id === "hermes-provider")?.decision).toBe("skip");
+    expect(selection?.sources.map((source) => source.id)).toEqual(["openclaw"]);
+    expect(selection?.items.find((item) => item.id === "hermes-provider")).toBeUndefined();
     expect(selection?.items.find((item) => item.id === "openclaw-provider")?.decision).toBe("import");
     expect(selectMock).toHaveBeenNthCalledWith(
-      2,
+      1,
       expect.objectContaining({
-        message: expect.stringContaining("Which provider settings"),
+        message: expect.stringContaining("Which existing agent"),
       })
     );
   });

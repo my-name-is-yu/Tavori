@@ -4,11 +4,14 @@ import { CONFIG_FILENAMES, MCP_FILENAMES, SOURCE_LABELS } from "./constants.js";
 import {
   listImmediateDirs,
   pathExists,
+  readEnvFile,
   readJson,
+  safeImportName,
   unique,
 } from "./fs-utils.js";
 import { extractMcpServers } from "./mcp.js";
 import { buildProviderItem, extractProviderSettings } from "./provider.js";
+import { buildTelegramItem, extractTelegramSettings, telegramCredentialItems } from "./telegram.js";
 import type {
   SetupImportItem,
   SetupImportSource,
@@ -22,11 +25,24 @@ function candidateFiles(rootDir: string, filenames: readonly string[]): string[]
   ]).filter(pathExists);
 }
 
-function findSkillDirs(rootDir: string): string[] {
+function workspaceRoots(rootDir: string): string[] {
+  return unique([
+    path.join(rootDir, "workspace"),
+    path.join(rootDir, "workspace.default"),
+    path.join(rootDir, "workspace-main"),
+    ...listImmediateDirs(rootDir).filter((dir) => path.basename(dir).startsWith("workspace-")),
+  ]);
+}
+
+function findSkillDirs(source: SetupImportSourceId, rootDir: string): string[] {
   const roots = unique([
     path.join(rootDir, "skills"),
     path.join(rootDir, "agent", "skills"),
     path.join(rootDir, "agents", "skills"),
+    ...workspaceRoots(rootDir).flatMap((workspaceRoot) => [
+      path.join(workspaceRoot, "skills"),
+      path.join(workspaceRoot, ".agents", "skills"),
+    ]),
   ]);
   const candidates: string[] = [];
   for (const skillRoot of roots) {
@@ -64,28 +80,46 @@ function sourceRoots(source: SetupImportSourceId): string[] {
       path.join(home, "Library", "Application Support", "Hermes Agent"),
     ].filter(Boolean));
   }
-  return unique([
-    process.env["PULSEED_IMPORT_OPENCLAW_HOME"] ?? "",
-    process.env["PULSEED_OPENCLAW_HOME"] ?? "",
-    process.env["OPENCLAW_HOME"] ?? "",
-    path.join(home, ".openclaw"),
-    path.join(home, ".config", "openclaw"),
-    path.join(home, "Library", "Application Support", "OpenClaw"),
-  ].filter(Boolean));
+    return unique([
+      process.env["PULSEED_IMPORT_OPENCLAW_HOME"] ?? "",
+      process.env["PULSEED_OPENCLAW_HOME"] ?? "",
+      process.env["OPENCLAW_HOME"] ?? "",
+      path.join(home, ".openclaw"),
+      path.join(home, ".clawdbot"),
+      path.join(home, ".moltbot"),
+      path.join(home, ".config", "openclaw"),
+      path.join(home, "Library", "Application Support", "OpenClaw"),
+    ].filter(Boolean));
 }
 
 function providerItems(source: SetupImportSourceId, rootDir: string): SetupImportItem[] {
+  const env = {
+    ...readEnvFile(path.join(rootDir, ".env")),
+    ...readEnvFile(path.join(rootDir, "config", ".env")),
+  };
   return candidateFiles(rootDir, CONFIG_FILENAMES).flatMap((configPath) => {
-    const settings = extractProviderSettings(readJson(configPath), source);
+    const settings = extractProviderSettings(readJson(configPath), source, { env });
     return settings ? [buildProviderItem(source, configPath, settings)] : [];
   });
 }
 
+function telegramItems(source: SetupImportSourceId, rootDir: string): SetupImportItem[] {
+  const env = {
+    ...readEnvFile(path.join(rootDir, ".env")),
+    ...readEnvFile(path.join(rootDir, "config", ".env")),
+  };
+  const configItems = candidateFiles(rootDir, CONFIG_FILENAMES).flatMap((configPath) => {
+    const settings = extractTelegramSettings(readJson(configPath), env);
+    return settings ? [buildTelegramItem(source, configPath, settings)] : [];
+  });
+  return [...configItems, ...telegramCredentialItems(source, rootDir)];
+}
+
 function skillItems(source: SetupImportSourceId, rootDir: string): SetupImportItem[] {
-  return findSkillDirs(rootDir).map((skillDir) => {
+  return findSkillDirs(source, rootDir).map((skillDir) => {
     const name = path.basename(skillDir);
     return {
-      id: `${source}:skill:${name}`,
+      id: `${source}:skill:${safeImportName(skillDir)}`,
       source,
       sourceLabel: SOURCE_LABELS[source],
       kind: "skill",
@@ -98,7 +132,7 @@ function skillItems(source: SetupImportSourceId, rootDir: string): SetupImportIt
 }
 
 function mcpItems(source: SetupImportSourceId, rootDir: string): SetupImportItem[] {
-  return candidateFiles(rootDir, MCP_FILENAMES).flatMap((mcpPath) =>
+  return candidateFiles(rootDir, [...MCP_FILENAMES, ...CONFIG_FILENAMES]).flatMap((mcpPath) =>
     extractMcpServers(readJson(mcpPath), source).map((server) => ({
       id: `${source}:mcp:${server.id}`,
       source,
@@ -134,6 +168,7 @@ function detectSource(source: SetupImportSourceId): SetupImportSource | undefine
     if (!pathExists(rootDir)) continue;
     const items = [
       ...providerItems(source, rootDir),
+      ...telegramItems(source, rootDir),
       ...skillItems(source, rootDir),
       ...mcpItems(source, rootDir),
       ...pluginItems(source, rootDir),

@@ -439,10 +439,10 @@ describe("setup notification step", () => {
         provider: "openai",
         model: "gpt-5.4-mini",
         adapter: "agent_loop",
-        api_key: "sk-existing",
         codex_cli_path: "/usr/local/bin/codex",
       })
     );
+    expect((saveProviderConfigMock.mock.calls[0] as unknown[] | undefined)?.[0]).not.toHaveProperty("api_key");
   });
 
   it("starts daemon and gateway after saving daemon config", async () => {
@@ -658,15 +658,15 @@ describe("setup notification step", () => {
     expect(stepProviderMock).toHaveBeenCalledWith("anthropic");
     expect(stepModelMock).toHaveBeenCalledWith("anthropic", "claude-sonnet-4-6");
     expect(stepAdapterMock).toHaveBeenCalledWith("claude-sonnet-4-6", "anthropic", "agent_loop");
-    expect(stepApiKeyMock).toHaveBeenCalledWith("anthropic", expect.any(Object), "sk-imported");
+    expect(stepApiKeyMock).toHaveBeenCalledWith("anthropic", expect.any(Object), "sk-imported", "agent_loop");
     expect(saveProviderConfigMock).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: "anthropic",
         model: "claude-sonnet-4-6",
         adapter: "agent_loop",
-        api_key: "sk-imported",
       })
     );
+    expect((saveProviderConfigMock.mock.calls[0] as unknown[] | undefined)?.[0]).not.toHaveProperty("api_key");
     expect(applySetupImportSelectionMock).toHaveBeenCalledWith("/tmp/pulseed-test", importSelection);
   });
 
@@ -708,8 +708,10 @@ describe("setup notification step", () => {
       clearIdentityCache: vi.fn(),
     }));
     const mkdirSyncMock = vi.fn();
-    const writeFileSyncMock = vi.fn(() => {
-      throw new Error("disk full");
+    const writeFileSyncMock = vi.fn((filePath: string) => {
+      if (filePath.endsWith("notification.json")) {
+        throw new Error("disk full");
+      }
     });
     vi.doMock("node:fs", () => ({
       mkdirSync: mkdirSyncMock,

@@ -5,6 +5,7 @@ import { PollingLoop } from "./polling-loop.js";
 import { ChatBridge } from "./chat-bridge.js";
 import { TelegramChatEventAdapter } from "./telegram-chat-event-adapter.js";
 import { TelegramChatRunnerProcessor, type ProcessMessageFn } from "./telegram-chat-runner-processor.js";
+import { HomeChatStore } from "./home-chat-store.js";
 import type { ChatEventHandler } from "pulseed";
 
 type LegacyProcessMessageFn = (text: string, emit: ChatEventHandler) => Promise<string | void> | string | void;
@@ -27,12 +28,13 @@ export class TelegramBotPlugin {
     const config = loadConfig(this.pluginDir);
 
     this.api = new TelegramAPI(config.bot_token);
+    const homeChatStore = new HomeChatStore(this.pluginDir, config.chat_id);
 
     // Verify credentials
     const botInfo = await this.api.getMe();
     console.log(`[telegram-bot] connected as @${botInfo.username} (id: ${botInfo.id})`);
 
-    this.notifier = new TelegramNotifier(this.api, config.chat_id);
+    this.notifier = new TelegramNotifier(this.api, () => homeChatStore.get());
 
     this.processor = new TelegramChatRunnerProcessor(
       this.pluginDir,
@@ -44,7 +46,11 @@ export class TelegramBotPlugin {
     this.bridge = new ChatBridge(
       (text, chatId, emit, fromUserId) =>
         this.processor!.processMessage(text, chatId, emit, fromUserId),
-      (chatId) => new TelegramChatEventAdapter(this.api!, chatId)
+      (chatId) => new TelegramChatEventAdapter(this.api!, chatId),
+      (chatId) => {
+        homeChatStore.set(chatId);
+        return "This chat is now the home channel for PulSeed notifications.";
+      }
     );
 
     const api = this.api;

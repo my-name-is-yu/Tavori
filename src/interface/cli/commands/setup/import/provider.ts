@@ -1,5 +1,6 @@
 import * as path from "node:path";
 import type { ProviderConfig } from "../../../../../base/llm/provider-config.js";
+import { MODEL_REGISTRY } from "../../../../../base/llm/provider-config.js";
 import { PROVIDERS, getAdaptersForModel } from "../../setup-shared.js";
 import type { Provider } from "../../setup-shared.js";
 import { SOURCE_LABELS } from "./constants.js";
@@ -21,9 +22,14 @@ const PROVIDER_KEYS = [
 
 const MODEL_KEYS = ["model", "default_model", "defaultModel", "modelName"];
 const ADAPTER_KEYS = ["adapter", "default_adapter", "defaultAdapter", "backend", "terminalBackend"];
-const API_KEY_KEYS = ["api_key", "apiKey", "key", "token", "authToken"];
+const API_KEY_KEYS = ["api_key", "apiKey", "openai_api_key", "anthropic_api_key", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"];
 const BASE_URL_KEYS = ["base_url", "baseUrl", "baseURL", "endpoint", "api_base"];
 const CLI_PATH_KEYS = ["codex_cli_path", "codexCliPath", "cli_path", "cliPath"];
+const PROVIDER_ENV_KEYS: Record<Provider, string[]> = {
+  openai: ["OPENAI_API_KEY"],
+  anthropic: ["ANTHROPIC_API_KEY"],
+  ollama: [],
+};
 
 function normalizeProvider(value: string | undefined): Provider | undefined {
   const normalized = value?.toLowerCase().trim();
@@ -38,6 +44,26 @@ function normalizeProvider(value: string | undefined): Provider | undefined {
     return "ollama";
   }
   return PROVIDERS.includes(normalized as Provider) ? (normalized as Provider) : undefined;
+}
+
+function providerFromModel(model: string | undefined): Provider | undefined {
+  if (!model) return undefined;
+  const registered = MODEL_REGISTRY[model]?.provider;
+  if (registered && PROVIDERS.includes(registered as Provider)) return registered as Provider;
+  const lower = model.toLowerCase();
+  if (lower.startsWith("gpt-") || lower.startsWith("o3") || lower.startsWith("o4")) return "openai";
+  if (lower.startsWith("claude-")) return "anthropic";
+  return undefined;
+}
+
+function providerFromKnownMap(records: Record<string, unknown>[]): Provider | undefined {
+  for (const record of records) {
+    const providers = nestedRecord(record, "providers");
+    if (!providers) continue;
+    const keys = Object.keys(providers).map(normalizeProvider).filter(Boolean) as Provider[];
+    if (keys.length === 1) return keys[0];
+  }
+  return undefined;
 }
 
 function normalizeAdapter(
@@ -88,6 +114,65 @@ function providerSection(
   return undefined;
 }
 
+function stringFromSecretRef(value: unknown, env: Record<string, string>): string | undefined {
+  if (typeof value === "string" && value.trim()) {
+    const match = /^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$/.exec(value.trim());
+    if (match) return env[match[1]!];
+    return value.trim();
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  if (record["source"] === "env" && typeof record["id"] === "string") {
+    return env[record["id"]];
+  }
+  return undefined;
+}
+
+function firstSecretString(
+  records: Record<string, unknown>[],
+  keys: string[],
+  env: Record<string, string>
+): string | undefined {
+  for (const record of records) {
+    for (const key of keys) {
+      const value = stringFromSecretRef(record[key], env);
+      if (value) return value;
+    }
+  }
+  return undefined;
+}
+
+function envFromConfig(records: Record<string, unknown>[]): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const record of records) {
+    const env = nestedRecord(record, "env");
+    const vars = env ? nestedRecord(env, "vars") : undefined;
+    for (const source of [env, vars]) {
+      if (!source) continue;
+      for (const [key, value] of Object.entries(source)) {
+        if (typeof value === "string") result[key] = value;
+      }
+    }
+  }
+  return result;
+}
+
+function providerApiKey(
+  provider: Provider | undefined,
+  records: Record<string, unknown>[],
+  env: Record<string, string>
+): string | undefined {
+  if (!provider) return undefined;
+  const section = providerSection(records, provider);
+  const sectionKey = section ? firstSecretString([section], API_KEY_KEYS, env) : undefined;
+  if (sectionKey) return sectionKey;
+  for (const key of PROVIDER_ENV_KEYS[provider]) {
+    if (env[key]) return env[key];
+  }
+  const root = records[0];
+  return root ? firstSecretString([root], API_KEY_KEYS, env) : undefined;
+}
+
 function openclawSettings(
   records: Record<string, unknown>[],
   model: string | undefined
@@ -106,17 +191,23 @@ function openclawSettings(
 
 export function extractProviderSettings(
   raw: unknown,
-  source: SetupImportSourceId
+  source: SetupImportSourceId,
+  context: { env?: Record<string, string> } = {}
 ): SetupImportProviderSettings | undefined {
   const records = collectRecords(raw);
   if (records.length === 0) return undefined;
 
-  const provider = normalizeProvider(firstString(records, PROVIDER_KEYS));
+  const env = { ...envFromConfig(records), ...(context.env ?? {}) };
+  const initialModel = firstString(records, MODEL_KEYS);
+  const provider =
+    normalizeProvider(firstString(records, PROVIDER_KEYS)) ??
+    providerFromModel(initialModel) ??
+    providerFromKnownMap(records);
   const section = providerSection(records, provider);
   const searchable = section ? [section, ...records] : records;
-  const model = firstString(searchable, MODEL_KEYS);
+  const model = firstString(searchable, MODEL_KEYS) ?? initialModel;
   const adapter = normalizeAdapter(firstString(searchable, ADAPTER_KEYS), provider, model);
-  const apiKey = firstString(searchable, API_KEY_KEYS);
+  const apiKey = providerApiKey(provider, searchable, env);
   const baseUrl = firstString(searchable, BASE_URL_KEYS);
   const codexCliPath = firstString(searchable, CLI_PATH_KEYS);
   const openclaw = source === "openclaw" ? openclawSettings(searchable, model) : undefined;

@@ -146,20 +146,71 @@ export async function runCodexOAuthLogin(): Promise<string | undefined> {
   return undefined;
 }
 
+function isLikelyCodexOAuthToken(value: string | undefined): boolean {
+  if (!value) return false;
+  const trimmed = value.trim();
+  return trimmed.startsWith("eyJ") && trimmed.split(".").length >= 3;
+}
+
+function requiresOpenAIApiKey(provider: Provider, adapter?: string): boolean {
+  return provider === "openai" && adapter !== "openai_codex_cli";
+}
+
 export async function stepApiKey(
   provider: Provider,
   detectedKeys: Record<string, boolean>,
-  existingApiKey?: string
+  existingApiKey?: string,
+  adapter?: string
 ): Promise<string | undefined> {
   const envKeyName = ENV_KEY_NAMES[provider];
   if (!envKeyName) return undefined;
 
-  if (detectedKeys[provider]) {
-    p.log.info(`Using ${envKeyName} from environment.`);
-    return process.env[envKeyName];
+  if (provider === "openai" && adapter === "openai_codex_cli") {
+    const existingToken = await readCodexOAuthToken();
+    if (existingToken) {
+      p.log.info("Using existing Codex CLI OAuth login. No OpenAI API key will be saved.");
+      return undefined;
+    }
+
+    const authChoice = guardCancel(
+      await p.select({
+        message: "Codex CLI authentication:",
+        options: [
+          {
+            value: "login" as const,
+            label: "Login with OAuth (opens browser via Codex CLI)",
+            hint: "recommended for OpenAI Codex CLI adapter",
+          },
+          {
+            value: "skip" as const,
+            label: "Skip for now",
+            hint: "run `codex login` before using this adapter",
+          },
+        ],
+        initialValue: "login" as const,
+      })
+    );
+
+    if (authChoice === "login") {
+      await runCodexOAuthLogin();
+    }
+    return undefined;
   }
 
-  if (existingApiKey) {
+  if (detectedKeys[provider]) {
+    const envValue = process.env[envKeyName];
+    if (requiresOpenAIApiKey(provider, adapter) && isLikelyCodexOAuthToken(envValue)) {
+      p.log.warn(`${envKeyName} appears to contain a Codex OAuth token, not an OpenAI API key.`);
+    } else {
+      p.log.info(`Using ${envKeyName} from environment.`);
+      return envValue;
+    }
+  }
+
+  const canKeepExisting =
+    existingApiKey && !(requiresOpenAIApiKey(provider, adapter) && isLikelyCodexOAuthToken(existingApiKey));
+
+  if (canKeepExisting) {
     const keyChoice = guardCancel(
       await p.select({
         message: `${envKeyName} is already configured. What should setup do?`,
@@ -178,53 +229,20 @@ export async function stepApiKey(
       })
     );
     if (keyChoice === "keep") return existingApiKey;
-  }
-
-  if (provider === "openai") {
-    const existingToken = await readCodexOAuthToken();
-
-    type OAuthMethod = "login" | "oauth" | "manual";
-    const oauthOptions: p.Option<OAuthMethod>[] = [
-      {
-        value: "login" as const,
-        label: "Login with OAuth (opens browser via Codex CLI)",
-        hint: "runs npx @openai/codex login",
-      },
-    ];
-
-    if (existingToken) {
-      oauthOptions.push({
-        value: "oauth" as const,
-        label: "Use existing OAuth token",
-        hint: "from previous Codex CLI login",
-      });
-    }
-
-    oauthOptions.push({
-      value: "manual" as const,
-      label: "Enter API key manually",
-    });
-
-    const authMethod = guardCancel(
-      await p.select({
-        message: "Select authentication method:",
-        options: oauthOptions,
-      })
-    ) as OAuthMethod;
-
-    if (authMethod === "login") {
-      const token = await runCodexOAuthLogin();
-      if (token) return token;
-      p.log.info("Falling back to manual API key entry.");
-    } else if (authMethod === "oauth" && existingToken) {
-      return existingToken;
-    }
+  } else if (existingApiKey && requiresOpenAIApiKey(provider, adapter)) {
+    p.log.warn("Existing OpenAI auth looks like a Codex OAuth token and cannot be used for the OpenAI API adapter.");
   }
 
   const key = guardCancel(
     await p.password({
       message: `Enter ${envKeyName}:`,
-      validate: (value) => (!value ? "API key is required" : undefined),
+      validate: (value) => {
+        if (!value) return "API key is required";
+        if (requiresOpenAIApiKey(provider, adapter) && isLikelyCodexOAuthToken(value)) {
+          return "Codex OAuth tokens cannot call OpenAI API endpoints. Enter an OpenAI API key instead.";
+        }
+        return undefined;
+      },
     })
   );
   if (!key) {

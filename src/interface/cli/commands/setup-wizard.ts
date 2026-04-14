@@ -112,7 +112,9 @@ async function stepExecutionConfig(
 
   const detectedKeys = detectApiKeys();
   const apiKey =
-    current?.provider === provider ? await stepApiKey(provider, detectedKeys, current.apiKey) : await stepApiKey(provider, detectedKeys);
+    current?.provider === provider
+      ? await stepApiKey(provider, detectedKeys, current.apiKey, adapter)
+      : await stepApiKey(provider, detectedKeys, undefined, adapter);
   return { provider, model, adapter, apiKey };
 }
 
@@ -165,8 +167,44 @@ async function validateAndSaveProviderConfig(config: ProviderConfig): Promise<nu
     return 1;
   }
 
-  await saveProviderConfig(config);
+  const fileConfig: ProviderConfig = { ...config };
+  const apiKey = fileConfig.api_key;
+  delete fileConfig.api_key;
+  await saveProviderConfig(fileConfig);
+  if (apiKey) {
+    saveProviderApiKeyToEnv(config.provider, apiKey);
+  }
   return undefined;
+}
+
+function saveProviderApiKeyToEnv(provider: ProviderConfig["provider"], apiKey: string): void {
+  const envKey = provider === "openai"
+    ? "OPENAI_API_KEY"
+    : provider === "anthropic"
+      ? "ANTHROPIC_API_KEY"
+      : undefined;
+  if (!envKey) return;
+
+  const dir = ensurePulseedDir();
+  const envPath = path.join(dir, ".env");
+  let lines: string[] = [];
+  try {
+    lines = fs.readFileSync(envPath, "utf-8").split(/\r?\n/);
+  } catch {
+    lines = [];
+  }
+
+  const replacement = `${envKey}=${apiKey}`;
+  let replaced = false;
+  lines = lines.map((line) => {
+    if (line.startsWith(`${envKey}=`)) {
+      replaced = true;
+      return replacement;
+    }
+    return line;
+  }).filter((line, index, all) => line || index < all.length - 1);
+  if (!replaced) lines.push(replacement);
+  fs.writeFileSync(envPath, `${lines.join("\n")}\n`, "utf-8");
 }
 
 async function startDaemonDetached(baseDir: string): Promise<number | undefined> {

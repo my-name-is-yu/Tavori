@@ -5,7 +5,7 @@ import * as path from "node:path";
 
 export interface TelegramConfig {
   bot_token: string;
-  chat_id: number;
+  chat_id?: number;
   allowed_user_ids: number[];
   runtime_control_allowed_user_ids: number[];
   allow_all: boolean;
@@ -40,8 +40,8 @@ function validateConfig(raw: unknown): TelegramConfig {
   if (typeof cfg["bot_token"] !== "string" || cfg["bot_token"].length === 0) {
     throw new Error("telegram-bot: bot_token must be a non-empty string");
   }
-  if (typeof cfg["chat_id"] !== "number" || !Number.isInteger(cfg["chat_id"])) {
-    throw new Error("telegram-bot: chat_id must be an integer");
+  if (cfg["chat_id"] !== undefined && (typeof cfg["chat_id"] !== "number" || !Number.isInteger(cfg["chat_id"]))) {
+    throw new Error("telegram-bot: chat_id must be an integer when set");
   }
 
   const allowedUserIds = cfg["allowed_user_ids"] ?? [];
@@ -72,7 +72,7 @@ function validateConfig(raw: unknown): TelegramConfig {
 
   return {
     bot_token: cfg["bot_token"] as string,
-    chat_id: cfg["chat_id"] as number,
+    chat_id: cfg["chat_id"] as number | undefined,
     allowed_user_ids: allowedUserIds as number[],
     runtime_control_allowed_user_ids: runtimeControlAllowedUserIds as number[],
     allow_all: allowAll,

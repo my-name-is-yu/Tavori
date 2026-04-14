@@ -2,8 +2,8 @@
 //
 // Guides the user through configuring the Telegram Bot plugin:
 //   1. Bot token (from @BotFather) — verified via getMe API
-//   2. chat_id (number) — instruct user to message the bot and use getUpdates
-//   3. allowed_user_ids (optional, comma-separated)
+//   2. allowed_user_ids (optional, comma-separated)
+//   3. home chat_id (optional) — can be set later by sending /sethome
 //   4. identity_key (optional) — share one PulSeed session across chat platforms
 //
 // Writes config to ~/.pulseed/plugins/telegram-bot/config.json
@@ -126,25 +126,11 @@ export async function cmdTelegramSetup(_args: string[]): Promise<number> {
     }
     console.log(` OK (@${botInfo.username ?? botInfo.first_name})\n`);
 
-    // Step 2: chat_id
-    console.log("Step 2: Chat ID");
-    console.log("  To find your chat_id:");
-    console.log("    1. Send any message to your bot in Telegram.");
-    console.log(`    2. Open: https://api.telegram.org/bot${token}/getUpdates`);
-    console.log('    3. Copy the numeric "id" from result[0].message.chat.id');
-    console.log("    Alternatively, forward a message to @userinfobot.\n");
-
-    const chatIdStr = await ask(rl, "Enter chat_id (number): ");
-    const chatId = parseInt(chatIdStr, 10);
-    if (isNaN(chatId)) {
-      console.error("Error: chat_id must be a number.");
-      return 1;
-    }
-
-    // Step 3: allowed_user_ids (optional)
-    console.log("\nStep 3: Allowed user IDs (optional)");
+    // Step 2: allowed_user_ids (optional)
+    console.log("\nStep 2: Allowed user IDs (recommended)");
     console.log("  Comma-separated Telegram user IDs that may send commands to the bot.");
-    console.log("  Leave empty to allow all users.\n");
+    console.log("  Hermes-style setup uses user IDs for access control instead of requiring chat_id up front.");
+    console.log("  Message @userinfobot if you need your numeric user ID.\n");
 
     const allowedStr = await ask(rl, "Allowed user IDs (e.g. 123456,789012) or press Enter to skip: ");
     const allowedUserIds: number[] = [];
@@ -155,6 +141,22 @@ export async function cmdTelegramSetup(_args: string[]): Promise<number> {
           allowedUserIds.push(n);
         }
       }
+    }
+
+    // Step 3: home chat_id (optional)
+    console.log("\nStep 3: Home chat (optional)");
+    console.log("  Leave empty now, then send /sethome to the bot from Telegram after the plugin is running.");
+    console.log("  Notifications will use that chat.\n");
+
+    const chatIdStr = await ask(rl, "Home chat_id (number) or press Enter to set later with /sethome: ");
+    let chatId: number | undefined;
+    if (chatIdStr) {
+      const parsed = parseInt(chatIdStr, 10);
+      if (isNaN(parsed)) {
+        console.error("Error: chat_id must be a number when provided.");
+        return 1;
+      }
+      chatId = parsed;
     }
 
     // Step 4: identity_key (optional)
@@ -171,9 +173,9 @@ export async function cmdTelegramSetup(_args: string[]): Promise<number> {
 
     const config = {
       bot_token: token,
-      chat_id: chatId,
       allowed_user_ids: allowedUserIds,
       polling_timeout: 30,
+      ...(chatId !== undefined ? { chat_id: chatId } : {}),
       ...(identityKey ? { identity_key: identityKey } : {}),
     };
 
@@ -186,7 +188,7 @@ export async function cmdTelegramSetup(_args: string[]): Promise<number> {
     console.log("\nTelegram Bot setup complete!");
     console.log(`  Config: ${configPath}`);
     console.log(`  Bot:    @${botInfo.username ?? botInfo.first_name}`);
-    console.log(`  Chat:   ${chatId}`);
+    console.log(`  Home:   ${chatId !== undefined ? chatId : "(send /sethome to set later)"}`);
     if (allowedUserIds.length > 0) {
       console.log(`  Allowed users: ${allowedUserIds.join(", ")}`);
     } else {

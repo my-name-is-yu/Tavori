@@ -4,7 +4,7 @@ import type { TelegramAPI } from "./telegram-api.js";
 
 type OnMessageFn = (text: string, fromUserId: number, chatId: number) => Promise<void>;
 interface PollingLoopOptions {
-  allowedChatId: number;
+  allowedChatId?: number;
   allowAll?: boolean;
 }
 
@@ -18,7 +18,7 @@ export class PollingLoop {
   private readonly api: TelegramAPI;
   private readonly onMessage: OnMessageFn;
   private readonly allowedUserIds: number[];
-  private readonly allowedChatId: number;
+  private readonly allowedChatId: number | undefined;
   private readonly allowAll: boolean;
 
   private running = false;
@@ -64,7 +64,7 @@ export class PollingLoop {
           const chatId = msg.chat?.id;
           if (typeof fromId !== "number" || !Number.isInteger(fromId)) continue;
           if (typeof chatId !== "number" || !Number.isInteger(chatId)) continue;
-          if (chatId !== this.allowedChatId) continue;
+          if (this.allowedChatId !== undefined && chatId !== this.allowedChatId) continue;
 
           if (!this.allowAll && !this.allowedUserIds.includes(fromId)) {
             continue;

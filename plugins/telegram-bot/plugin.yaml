@@ -19,8 +19,8 @@ config_schema:
     description: "Telegram Bot API token from @BotFather"
   chat_id:
     type: number
-    required: true
-    description: "Telegram chat ID to send notifications to"
+    required: false
+    description: "Optional Telegram home chat ID for notifications. If omitted, send /sethome to the bot from the target chat."
   allowed_user_ids:
     type: array
     required: false

@@ -15,11 +15,11 @@ export class TelegramNotifier implements INotifier {
   readonly name = "telegram-bot";
 
   private readonly api: TelegramAPI;
-  private readonly chatId: number;
+  private readonly resolveChatId: () => number | undefined;
 
-  constructor(api: TelegramAPI, chatId: number) {
+  constructor(api: TelegramAPI, chatId: number | (() => number | undefined)) {
     this.api = api;
-    this.chatId = chatId;
+    this.resolveChatId = typeof chatId === "function" ? chatId : () => chatId;
   }
 
   supports(_eventType: string): boolean {
@@ -27,7 +27,11 @@ export class TelegramNotifier implements INotifier {
   }
 
   async notify(event: NotificationEvent): Promise<void> {
+    const chatId = this.resolveChatId();
+    if (chatId === undefined) {
+      throw new Error("telegram-bot: no home chat configured. Send /sethome to the bot from the target Telegram chat.");
+    }
     const text = formatNotification(event);
-    await this.api.sendMessage(this.chatId, text);
+    await this.api.sendMessage(chatId, text);
   }
 }
