@@ -16,6 +16,7 @@ const {
   daemonRunnerArgs,
   watchdogArgs,
   notificationDispatcherArgs,
+  cliLoggerMock,
 } = vi.hoisted(() => ({
   buildDepsMock: vi.fn(),
   daemonStartMock: vi.fn().mockResolvedValue(undefined),
@@ -30,6 +31,11 @@ const {
   daemonRunnerArgs: [] as unknown[],
   watchdogArgs: [] as unknown[],
   notificationDispatcherArgs: [] as unknown[],
+  cliLoggerMock: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
 }));
 
 vi.mock("node:os", async (importOriginal) => {
@@ -79,6 +85,10 @@ vi.mock("../../../runtime/logger.js", () => ({
       error: vi.fn(),
     };
   }),
+}));
+
+vi.mock("../cli-logger.js", () => ({
+  getCliLogger: vi.fn(() => cliLoggerMock),
 }));
 
 vi.mock("../../../runtime/event/server.js", () => ({
@@ -161,6 +171,9 @@ describe("cmdStart", () => {
     daemonRunnerArgs.length = 0;
     watchdogArgs.length = 0;
     notificationDispatcherArgs.length = 0;
+    cliLoggerMock.info.mockClear();
+    cliLoggerMock.warn.mockClear();
+    cliLoggerMock.error.mockClear();
     delete process.env.PULSEED_WATCHDOG_CHILD;
     fs.rmSync(mockedHome, { recursive: true, force: true });
     fs.rmSync("/tmp/pulseed-daemon-start-base", { recursive: true, force: true });
@@ -296,6 +309,22 @@ describe("cmdStart", () => {
         startChild: expect.any(Function),
       })
     );
+  });
+
+  it("warns and falls back to defaults when ~/.pulseed/daemon.json is invalid", async () => {
+    fs.mkdirSync(path.join(mockedHome, ".pulseed"), { recursive: true });
+    fs.writeFileSync(path.join(mockedHome, ".pulseed", "daemon.json"), "{not-json", "utf-8");
+
+    await cmdStart(
+      { getBaseDir: vi.fn().mockReturnValue("/tmp/pulseed-daemon-start-base") } as never,
+      {} as never,
+      ["--goal", "goal-1"]
+    );
+
+    expect(cliLoggerMock.warn).toHaveBeenCalledWith(
+      expect.stringContaining("Ignoring invalid daemon config at")
+    );
+    expect(watchdogStartMock).toHaveBeenCalledOnce();
   });
 
   it("allows idle watchdog startup with zero initial goals", async () => {

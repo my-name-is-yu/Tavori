@@ -401,7 +401,7 @@ export async function runSetupWizard(): Promise<number> {
       existing["event_server_port"] = finalAnswers.daemonPort;
       fs.writeFileSync(daemonConfigPath, JSON.stringify(existing, null, 2), "utf-8");
     } catch {
-      p.log.warn("Could not save daemon port to daemon.json");
+      p.log.warn("Setup saved, but could not save daemon port to daemon.json");
     }
     p.log.info("Daemon port " + finalAnswers.daemonPort + " saved. Start it later with pulseed daemon start or pulseed start --goal <goal-id>.");
   }
@@ -412,7 +412,7 @@ export async function runSetupWizard(): Promise<number> {
       fs.mkdirSync(dir, { recursive: true });
       fs.writeFileSync(notifPath, JSON.stringify(finalAnswers.notificationConfig, null, 2));
     } catch (err) {
-      p.log.warn(`Could not save notification config: ${err}`);
+      p.log.warn(`Setup saved, but could not save notification config: ${err}`);
     }
   }
 
@@ -426,7 +426,7 @@ export async function runSetupWizard(): Promise<number> {
           (failedCount > 0 ? ` (${failedCount} failed; see import report).` : ".")
       );
     } catch (err) {
-      p.log.warn(`Configuration saved, but import side effects failed: ${err instanceof Error ? err.message : String(err)}`);
+      p.log.warn(`Setup saved, but import side effects failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -436,7 +436,7 @@ export async function runSetupWizard(): Promise<number> {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       p.log.warn(
-        `Configuration saved, but daemon/gateway did not start: ${message}. ` +
+        `Setup saved, but daemon/gateway did not start: ${message}. ` +
           "Run `pulseed daemon start --detach` to try again."
       );
     }

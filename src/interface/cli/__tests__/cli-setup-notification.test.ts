@@ -734,7 +734,7 @@ describe("setup notification step", () => {
 
     expect(code).toBe(0);
     expect(logWarnMock).toHaveBeenCalledWith(
-      expect.stringContaining("Could not save notification config: Error: disk full")
+      expect.stringContaining("Setup saved, but could not save notification config: Error: disk full")
     );
   });
 });
