@@ -121,4 +121,59 @@ describe("IngressGateway", () => {
 
     expect(handler).toHaveBeenCalledWith(envelope, reply);
   });
+
+  it("applies configured security and routing policy before forwarding", () => {
+    const gw = new IngressGateway({
+      policies: {
+        test: {
+          security: {
+            allowedSenderIds: ["user-1"],
+            runtimeControlAllowedSenderIds: ["user-1"],
+          },
+          routing: {
+            conversationGoalMap: { "chan-1": "goal-1" },
+          },
+        },
+      },
+    });
+    const adapter = createMockAdapter("test");
+    const handler = vi.fn();
+    gw.registerAdapter(adapter);
+    gw.onEnvelope(handler);
+
+    const envelope = createEnvelope({
+      type: "event",
+      name: "message",
+      source: "test",
+      payload: { sender_id: "user-1", conversation_id: "chan-1" },
+    });
+    adapter.emitEnvelope(envelope);
+
+    expect(handler).toHaveBeenCalledOnce();
+    expect(handler.mock.calls[0][0].goal_id).toBe("goal-1");
+    expect(handler.mock.calls[0][0].metadata.runtime_control_approved).toBe(true);
+  });
+
+  it("drops envelopes rejected by security policy", () => {
+    const gw = new IngressGateway({
+      policies: {
+        test: {
+          security: { deniedSenderIds: ["blocked-user"] },
+        },
+      },
+    });
+    const adapter = createMockAdapter("test");
+    const handler = vi.fn();
+    gw.registerAdapter(adapter);
+    gw.onEnvelope(handler);
+
+    adapter.emitEnvelope(createEnvelope({
+      type: "event",
+      name: "message",
+      source: "test",
+      payload: { sender_id: "blocked-user" },
+    }));
+
+    expect(handler).not.toHaveBeenCalled();
+  });
 });

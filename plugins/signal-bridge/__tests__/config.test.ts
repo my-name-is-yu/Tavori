@@ -50,6 +50,31 @@ describe("signal-bridge config loader", () => {
     expect(cfg.runtime_control_allowed_sender_ids).toEqual(["+15557654321"]);
   });
 
+  it("loads channel security and routing config", () => {
+    fs.writeFileSync(
+      path.join(tmpDir, "config.json"),
+      JSON.stringify({
+        bridge_url: "http://127.0.0.1:7583",
+        account: "+15551234567",
+        recipient_id: "+15557654321",
+        identity_key: "signal:alpha",
+        allowed_sender_ids: ["+15557654321"],
+        denied_conversation_ids: ["group-deny"],
+        conversation_goal_map: { "group-1": "goal-1" },
+        sender_goal_map: { "+15557654321": "goal-user" },
+        default_goal_id: "goal-default",
+      }),
+      "utf-8"
+    );
+
+    const cfg = loadConfig(tmpDir);
+    expect(cfg.allowed_sender_ids).toEqual(["+15557654321"]);
+    expect(cfg.denied_conversation_ids).toEqual(["group-deny"]);
+    expect(cfg.conversation_goal_map).toEqual({ "group-1": "goal-1" });
+    expect(cfg.sender_goal_map).toEqual({ "+15557654321": "goal-user" });
+    expect(cfg.default_goal_id).toBe("goal-default");
+  });
+
   it("rejects invalid runtime control sender allowlist", () => {
     fs.writeFileSync(
       path.join(tmpDir, "config.json"),

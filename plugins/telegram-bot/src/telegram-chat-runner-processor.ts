@@ -27,6 +27,7 @@ import {
   type ProviderConfig,
   createNativeChatAgentLoopRunner,
   shouldUseNativeTaskAgentLoop,
+  resolveChannelRoute,
 } from "pulseed";
 import { TrustManager } from "pulseed";
 
@@ -55,6 +56,9 @@ export class TelegramChatRunnerProcessor {
   private readonly workspaceRoot: string;
   private readonly identityKey: string | undefined;
   private readonly runtimeControlAllowedUserIds: Set<number>;
+  private readonly chatGoalMap: Record<string, string>;
+  private readonly userGoalMap: Record<string, string>;
+  private readonly defaultGoalId: string | undefined;
   private bootstrapPromise: Promise<BootstrapResult> | null = null;
   private readonly sessions = new Map<number, ChatRunnerLike>();
 
@@ -62,11 +66,17 @@ export class TelegramChatRunnerProcessor {
     _pluginDir: string,
     workspaceRoot = process.cwd(),
     identityKey?: string,
-    runtimeControlAllowedUserIds: number[] = []
+    runtimeControlAllowedUserIds: number[] = [],
+    chatGoalMap: Record<string, string> = {},
+    userGoalMap: Record<string, string> = {},
+    defaultGoalId?: string
   ) {
     this.workspaceRoot = workspaceRoot;
     this.identityKey = identityKey;
     this.runtimeControlAllowedUserIds = new Set(runtimeControlAllowedUserIds);
+    this.chatGoalMap = chatGoalMap;
+    this.userGoalMap = userGoalMap;
+    this.defaultGoalId = defaultGoalId;
   }
 
   async processMessage(
@@ -77,16 +87,33 @@ export class TelegramChatRunnerProcessor {
   ): Promise<string> {
     const shared = await this.getSharedManager();
     if (shared !== null) {
+      const senderId = String(fromUserId ?? chatId);
+      const route = resolveChannelRoute(
+        {
+          identityKey: this.identityKey,
+          conversationGoalMap: this.chatGoalMap,
+          senderGoalMap: this.userGoalMap,
+          defaultGoalId: this.defaultGoalId,
+        },
+        {
+          platform: "telegram",
+          senderId,
+          conversationId: String(chatId),
+          channelId: String(chatId),
+        }
+      );
       return shared.processIncomingMessage({
         text,
         platform: "telegram",
-        identity_key: this.identityKey,
+        identity_key: route.identityKey ?? this.identityKey,
         conversation_id: String(chatId),
-        sender_id: String(chatId),
+        sender_id: senderId,
         cwd: this.workspaceRoot,
         onEvent: emit,
         metadata: {
+          ...route.metadata,
           chat_id: chatId,
+          ...(route.goalId ? { goal_id: route.goalId } : {}),
           ...(fromUserId !== undefined && this.runtimeControlAllowedUserIds.has(fromUserId)
             ? { runtime_control_approved: true }
             : {}),

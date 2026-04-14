@@ -1,11 +1,19 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import type { ChannelAdapter, EnvelopeHandler } from "./channel-adapter.js";
 import { createEnvelope } from "../types/envelope.js";
+import {
+  evaluateChannelAccess,
+  resolveChannelRoute,
+  type ChannelAccessPolicy,
+  type ChannelRoutingPolicy,
+} from "./channel-policy.js";
 
 export interface SlackChannelAdapterConfig {
   signingSecret: string;
   /** Optional: map Slack channel IDs to PulSeed goal IDs */
   channelGoalMap?: Record<string, string>;
+  security?: ChannelAccessPolicy;
+  routing?: ChannelRoutingPolicy;
 }
 
 export interface SlackResponse {
@@ -138,9 +146,27 @@ export class SlackChannelAdapter implements ChannelAdapter {
     }
 
     const slackChannelId = slackEvent["channel"] as string | undefined;
-    const goalId = slackChannelId
-      ? this.config.channelGoalMap?.[slackChannelId]
-      : undefined;
+    const userId = slackEvent["user"] as string | undefined;
+    const context = {
+      platform: "slack",
+      senderId: userId,
+      conversationId: slackChannelId,
+      channelId: slackChannelId,
+    };
+    const access = evaluateChannelAccess(this.config.security, context);
+    if (!access.allowed) {
+      return { status: 403, body: access.reason ?? "forbidden" };
+    }
+    const route = resolveChannelRoute(
+      {
+        ...this.config.routing,
+        channelGoalMap: {
+          ...(this.config.channelGoalMap ?? {}),
+          ...(this.config.routing?.channelGoalMap ?? {}),
+        },
+      },
+      context
+    );
 
     const eventType = String(slackEvent["type"] ?? "slack_event");
 
@@ -148,16 +174,19 @@ export class SlackChannelAdapter implements ChannelAdapter {
       type: "event",
       name: eventType,
       source: "slack",
-      goal_id: goalId,
+      goal_id: route.goalId,
       priority: "normal",
       payload: slackEvent,
       dedupe_key: parsed["event_id"] as string | undefined,
+      auth: userId ? { principal: userId } : undefined,
     });
 
     // Attach Slack-specific metadata via a plain property merge (envelope is a plain object)
     (envelope as Record<string, unknown>)["metadata"] = {
+      ...route.metadata,
       slack_team_id: parsed["team_id"],
       slack_event_id: parsed["event_id"],
+      ...(access.runtimeControlApproved ? { runtime_control_approved: true } : {}),
     };
 
     this.handler(envelope);

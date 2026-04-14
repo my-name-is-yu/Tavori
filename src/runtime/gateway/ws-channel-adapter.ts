@@ -1,5 +1,16 @@
 import type { ChannelAdapter, EnvelopeHandler, ReplyChannel } from "./channel-adapter.js";
 import { createEnvelope, EnvelopeTypeSchema, EnvelopePrioritySchema } from "../types/envelope.js";
+import {
+  evaluateChannelAccess,
+  resolveChannelRoute,
+  type ChannelAccessPolicy,
+  type ChannelRoutingPolicy,
+} from "./channel-policy.js";
+
+export interface WsChannelAdapterConfig {
+  security?: ChannelAccessPolicy;
+  routing?: ChannelRoutingPolicy;
+}
 
 /** Minimal interface for a WebSocket-like socket */
 export interface WsSocketLike {
@@ -28,9 +39,11 @@ export class WsChannelAdapter implements ChannelAdapter {
   readonly name = "websocket";
   private handler: EnvelopeHandler | null = null;
   private wss: WsLike;
+  private config: WsChannelAdapterConfig;
 
-  constructor(wss: WsLike) {
+  constructor(wss: WsLike, config: WsChannelAdapterConfig = {}) {
     this.wss = wss;
+    this.config = config;
   }
 
   onEnvelope(handler: EnvelopeHandler): void {
@@ -81,15 +94,41 @@ export class WsChannelAdapter implements ChannelAdapter {
 
     const typeParsed = EnvelopeTypeSchema.safeParse(parsed["type"]);
     const priorityParsed = EnvelopePrioritySchema.safeParse(parsed["priority"]);
+    const senderId = typeof parsed["sender_id"] === "string"
+      ? parsed["sender_id"]
+      : typeof parsed["principal"] === "string"
+        ? parsed["principal"]
+        : undefined;
+    const channelId = typeof parsed["channel_id"] === "string" ? parsed["channel_id"] : undefined;
+    const conversationId = typeof parsed["conversation_id"] === "string"
+      ? parsed["conversation_id"]
+      : channelId;
+    const context = {
+      platform: "websocket",
+      senderId,
+      conversationId,
+      channelId,
+    };
+    const access = evaluateChannelAccess(this.config.security, context);
+    if (!access.allowed) {
+      socket.send(JSON.stringify({ error: access.reason ?? "forbidden" }));
+      return;
+    }
+    const route = resolveChannelRoute(this.config.routing, context);
 
     const envelope = createEnvelope({
       type: typeParsed.success ? typeParsed.data : "event",
       name: String(parsed["name"] ?? "ws_message"),
       source: "websocket",
-      goal_id: parsed["goal_id"] as string | undefined,
+      goal_id: (parsed["goal_id"] as string | undefined) ?? route.goalId,
       priority: priorityParsed.success ? priorityParsed.data : "normal",
       payload: parsed["payload"] ?? parsed,
+      auth: senderId ? { principal: senderId } : undefined,
     });
+    (envelope as Record<string, unknown>)["metadata"] = {
+      ...route.metadata,
+      ...(access.runtimeControlApproved ? { runtime_control_approved: true } : {}),
+    };
 
     const reply: ReplyChannel = {
       send(responseData: unknown): void {

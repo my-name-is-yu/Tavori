@@ -30,6 +30,10 @@ export function getPluginsDir(base?: string): string {
   return path.join(base ?? getPulseedDirPath(), "plugins");
 }
 
+export function getSkillsDir(base?: string): string {
+  return path.join(base ?? getPulseedDirPath(), "skills");
+}
+
 export function getLogsDir(base?: string): string {
   return path.join(base ?? getPulseedDirPath(), "logs");
 }

@@ -1,6 +1,27 @@
 import type { ChannelAdapter, EnvelopeHandler, ReplyChannel } from "./channel-adapter.js";
 import type { Envelope } from "../types/envelope.js";
 import type { Logger } from "../logger.js";
+import {
+  evaluateChannelAccess,
+  resolveChannelRoute,
+  type ChannelMessageContext,
+  type ChannelAccessPolicy,
+  type ChannelRoutingPolicy,
+} from "./channel-policy.js";
+
+export interface IngressGatewayPolicy {
+  security?: ChannelAccessPolicy;
+  routing?: ChannelRoutingPolicy;
+}
+
+export interface IngressGatewayOptions {
+  logger?: Logger;
+  policies?: Record<string, IngressGatewayPolicy>;
+}
+
+function isGatewayOptions(value: Logger | IngressGatewayOptions | undefined): value is IngressGatewayOptions {
+  return typeof value === "object" && value !== null && ("policies" in value || "logger" in value);
+}
 
 /**
  * IngressGateway collects Envelopes from all registered ChannelAdapters
@@ -11,9 +32,17 @@ export class IngressGateway {
   private adapters: Map<string, ChannelAdapter> = new Map();
   private handler: EnvelopeHandler | null = null;
   private logger?: Logger;
+  private policies: Map<string, IngressGatewayPolicy> = new Map();
 
-  constructor(logger?: Logger) {
-    this.logger = logger;
+  constructor(loggerOrOptions?: Logger | IngressGatewayOptions) {
+    if (isGatewayOptions(loggerOrOptions)) {
+      this.logger = loggerOrOptions.logger;
+      for (const [source, policy] of Object.entries(loggerOrOptions.policies ?? {})) {
+        this.policies.set(source, policy);
+      }
+    } else {
+      this.logger = loggerOrOptions;
+    }
   }
 
   /** Register an adapter. Throws if name is already registered. */
@@ -57,7 +86,16 @@ export class IngressGateway {
     return Array.from(this.adapters.keys());
   }
 
+  setPolicy(source: string, policy: IngressGatewayPolicy): void {
+    this.policies.set(source, policy);
+  }
+
   private routeEnvelope(envelope: Envelope, reply?: ReplyChannel): void | Promise<void> {
+    const policy = this.policies.get(envelope.source);
+    if (policy && !this.applyPolicy(envelope, policy)) {
+      return;
+    }
+
     if (!this.handler) {
       this.logger?.warn("Gateway: no handler registered, dropping envelope", {
         id: envelope.id,
@@ -82,4 +120,65 @@ export class IngressGateway {
       });
     }
   }
+
+  private applyPolicy(envelope: Envelope, policy: IngressGatewayPolicy): boolean {
+    const context = buildPolicyContext(envelope);
+    const access = evaluateChannelAccess(policy.security, context);
+    if (!access.allowed) {
+      this.logger?.warn("Gateway: security policy rejected envelope", {
+        id: envelope.id,
+        source: envelope.source,
+        reason: access.reason,
+      });
+      return false;
+    }
+
+    const route = resolveChannelRoute(policy.routing, context);
+    if (!envelope.goal_id && route.goalId) {
+      envelope.goal_id = route.goalId;
+    }
+    setEnvelopeMetadata(envelope, {
+      ...route.metadata,
+      ...(access.runtimeControlApproved ? { runtime_control_approved: true } : {}),
+    });
+    return true;
+  }
+}
+
+function buildPolicyContext(envelope: Envelope): ChannelMessageContext {
+  const payload = typeof envelope.payload === "object" && envelope.payload !== null
+    ? envelope.payload as Record<string, unknown>
+    : {};
+  const senderId = stringifyOptional(
+    envelope.auth?.principal ??
+    payload["sender_id"] ??
+    payload["user"] ??
+    payload["from"]
+  );
+  const channelId = stringifyOptional(payload["channel_id"] ?? payload["channel"]);
+  const conversationId = stringifyOptional(
+    payload["conversation_id"] ??
+    payload["conversationId"] ??
+    channelId
+  );
+
+  return {
+    platform: envelope.source,
+    senderId,
+    conversationId,
+    channelId,
+  };
+}
+
+function stringifyOptional(value: unknown): string | undefined {
+  if (value === null || value === undefined) return undefined;
+  const normalized = String(value);
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function setEnvelopeMetadata(envelope: Envelope, metadata: Record<string, unknown>): void {
+  (envelope as Envelope & { metadata?: Record<string, unknown> }).metadata = {
+    ...((envelope as Envelope & { metadata?: Record<string, unknown> }).metadata ?? {}),
+    ...metadata,
+  };
 }

@@ -3,6 +3,7 @@ import * as http from "node:http";
 import { WhatsAppCloudClient } from "./whatsapp-client.js";
 import { dispatchChatInput, type ChatContinuationInput } from "./shared-manager.js";
 import type { WhatsAppWebhookConfig } from "./config.js";
+import { evaluateChannelAccess, resolveChannelRoute } from "./channel-policy.js";
 
 interface WhatsAppWebhookPayload {
   entry?: Array<{
@@ -122,19 +123,43 @@ export class WhatsAppWebhookServer {
       return;
     }
 
-    const runtimeControlApproved =
-      this.config.runtime_control_allowed_sender_ids.includes(message.from);
+    const channelContext = {
+      platform: "whatsapp",
+      senderId: message.from,
+      conversationId: message.from,
+    };
+    const access = evaluateChannelAccess(
+      {
+        allowedSenderIds: this.config.allowed_sender_ids,
+        deniedSenderIds: this.config.denied_sender_ids,
+        runtimeControlAllowedSenderIds: this.config.runtime_control_allowed_sender_ids,
+      },
+      channelContext
+    );
+    if (!access.allowed) {
+      return;
+    }
+    const route = resolveChannelRoute(
+      {
+        identityKey: this.config.identity_key,
+        senderGoalMap: this.config.sender_goal_map,
+        defaultGoalId: this.config.default_goal_id,
+      },
+      channelContext
+    );
     const input: ChatContinuationInput = {
       platform: "whatsapp",
-      identity_key: this.config.identity_key,
+      identity_key: route.identityKey ?? this.config.identity_key,
       conversation_id: message.from,
       sender_id: message.from,
       message_id: message.id,
       text: message.text.body,
       metadata: {
+        ...route.metadata,
         message_type: message.type,
         timestamp: message.timestamp,
-        ...(runtimeControlApproved ? { runtime_control_approved: true } : {}),
+        ...(route.goalId ? { goal_id: route.goalId } : {}),
+        ...(access.runtimeControlApproved ? { runtime_control_approved: true } : {}),
       },
     };
 

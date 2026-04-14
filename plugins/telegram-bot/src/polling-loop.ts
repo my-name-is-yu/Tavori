@@ -5,6 +5,9 @@ import type { TelegramAPI } from "./telegram-api.js";
 type OnMessageFn = (text: string, fromUserId: number, chatId: number) => Promise<void>;
 interface PollingLoopOptions {
   allowedChatId?: number;
+  allowedChatIds?: number[];
+  deniedChatIds?: number[];
+  deniedUserIds?: number[];
   allowAll?: boolean;
 }
 
@@ -19,6 +22,9 @@ export class PollingLoop {
   private readonly onMessage: OnMessageFn;
   private readonly allowedUserIds: number[];
   private readonly allowedChatId: number | undefined;
+  private readonly allowedChatIds: number[];
+  private readonly deniedChatIds: number[];
+  private readonly deniedUserIds: number[];
   private readonly allowAll: boolean;
 
   private running = false;
@@ -30,6 +36,9 @@ export class PollingLoop {
     this.onMessage = onMessage;
     this.allowedUserIds = allowedUserIds;
     this.allowedChatId = options.allowedChatId;
+    this.allowedChatIds = options.allowedChatIds ?? [];
+    this.deniedChatIds = options.deniedChatIds ?? [];
+    this.deniedUserIds = options.deniedUserIds ?? [];
     this.allowAll = options.allowAll ?? false;
   }
 
@@ -64,7 +73,10 @@ export class PollingLoop {
           const chatId = msg.chat?.id;
           if (typeof fromId !== "number" || !Number.isInteger(fromId)) continue;
           if (typeof chatId !== "number" || !Number.isInteger(chatId)) continue;
+          if (this.deniedUserIds.includes(fromId)) continue;
+          if (this.deniedChatIds.includes(chatId)) continue;
           if (this.allowedChatId !== undefined && chatId !== this.allowedChatId) continue;
+          if (this.allowedChatIds.length > 0 && !this.allowedChatIds.includes(chatId)) continue;
 
           if (!this.allowAll && !this.allowedUserIds.includes(fromId)) {
             continue;

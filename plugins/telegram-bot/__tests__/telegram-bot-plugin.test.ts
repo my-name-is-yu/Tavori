@@ -94,6 +94,26 @@ describe("config — loadConfig", () => {
     expect(cfg.runtime_control_allowed_user_ids).toEqual([123, 456]);
   });
 
+  it("accepts channel security and routing config", () => {
+    writeTmpConfig(tmpDir, {
+      bot_token: "tok",
+      chat_id: 1,
+      allowed_chat_ids: [1, 2],
+      denied_chat_ids: [3],
+      denied_user_ids: [999],
+      chat_goal_map: { "1": "goal-1" },
+      user_goal_map: { "123": "goal-user" },
+      default_goal_id: "goal-default",
+    });
+    const cfg = loadConfig(tmpDir);
+    expect(cfg.allowed_chat_ids).toEqual([1, 2]);
+    expect(cfg.denied_chat_ids).toEqual([3]);
+    expect(cfg.denied_user_ids).toEqual([999]);
+    expect(cfg.chat_goal_map).toEqual({ "1": "goal-1" });
+    expect(cfg.user_goal_map).toEqual({ "123": "goal-user" });
+    expect(cfg.default_goal_id).toBe("goal-default");
+  });
+
   it("defaults allow_all to false", () => {
     writeTmpConfig(tmpDir, { bot_token: "tok", chat_id: 1 });
     const cfg = loadConfig(tmpDir);

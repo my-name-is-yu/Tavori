@@ -18,6 +18,7 @@
 import type { IAdapter, AgentTask, AgentResult } from "../../orchestrator/execution/adapter-layer.js";
 import type { Logger } from "../../runtime/logger.js";
 import { spawnWithTimeout, spawnResultToAgentResult } from "../spawn-helper.js";
+import { wrapTerminalCommand, type TerminalBackendConfig } from "../../runtime/terminal/backend.js";
 
 export interface OpenAICodexCLIAdapterConfig {
   /** The executable name / path for the codex CLI. Default: "codex" */
@@ -34,6 +35,8 @@ export interface OpenAICodexCLIAdapterConfig {
   repoPath?: string;
   /** Pass --skip-git-repo-check. Default: true for daemon/test workspaces. */
   skipGitRepoCheck?: boolean;
+  /** Optional command backend for local or containerized terminal execution. */
+  terminalBackend?: TerminalBackendConfig;
 }
 
 export class OpenAICodexCLIAdapter implements IAdapter {
@@ -45,6 +48,7 @@ export class OpenAICodexCLIAdapter implements IAdapter {
   private readonly model: string | undefined;
   private readonly repoPath: string;
   private readonly skipGitRepoCheck: boolean;
+  private readonly terminalBackend?: TerminalBackendConfig;
   private readonly logger?: Logger;
 
   constructor(config: OpenAICodexCLIAdapterConfig = {}, logger?: Logger) {
@@ -54,6 +58,7 @@ export class OpenAICodexCLIAdapter implements IAdapter {
     this.model = config.model;
     this.repoPath = config.repoPath?.trim() || ".";
     this.skipGitRepoCheck = config.skipGitRepoCheck ?? true;
+    this.terminalBackend = config.terminalBackend;
     this.logger = logger;
   }
 
@@ -90,14 +95,28 @@ export class OpenAICodexCLIAdapter implements IAdapter {
     // NOTE: --path is NOT supported by codex-cli 0.114.0; use cwd instead
     // Per-task cwd override (from workspace_path: constraint) takes priority over constructor repoPath.
     const cwd = task.cwd ?? this.repoPath;
-    const result = await spawnWithTimeout(
-      this.cliPath,
-      spawnArgs,
-      { cwd, env: { ...process.env, TERM: "dumb", NO_COLOR: "1" }, stdinData: task.system_prompt ? `[System Context]
+    const command = wrapTerminalCommand(
+      {
+        command: this.cliPath,
+        args: spawnArgs,
+        cwd,
+        env: { ...process.env, TERM: "dumb", NO_COLOR: "1" },
+        stdinData: task.system_prompt ? `[System Context]
 ${task.system_prompt}
 
 [User Request]
-${task.prompt}` : task.prompt },
+${task.prompt}` : task.prompt,
+      },
+      this.terminalBackend
+    );
+    const result = await spawnWithTimeout(
+      command.command,
+      command.args,
+      {
+        ...(command.cwd !== undefined ? { cwd: command.cwd } : {}),
+        ...(command.env !== undefined ? { env: command.env } : {}),
+        stdinData: command.stdinData,
+      },
       task.timeout_ms
     );
 

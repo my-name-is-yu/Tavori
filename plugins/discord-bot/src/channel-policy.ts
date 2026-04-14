@@ -1,0 +1,70 @@
+export interface ChannelAccessDecision {
+  allowed: boolean;
+  reason?: string;
+  runtimeControlApproved: boolean;
+}
+
+export function evaluateChannelAccess(policy: {
+  allowedSenderIds?: string[];
+  deniedSenderIds?: string[];
+  allowedConversationIds?: string[];
+  deniedConversationIds?: string[];
+  runtimeControlAllowedSenderIds?: string[];
+}, context: {
+  senderId?: string;
+  conversationId?: string;
+  channelId?: string;
+}): ChannelAccessDecision {
+  if (context.senderId && policy.deniedSenderIds?.includes(context.senderId)) {
+    return { allowed: false, reason: "sender_denied", runtimeControlApproved: false };
+  }
+  if (
+    (context.conversationId && policy.deniedConversationIds?.includes(context.conversationId)) ||
+    (context.channelId && policy.deniedConversationIds?.includes(context.channelId))
+  ) {
+    return { allowed: false, reason: "conversation_denied", runtimeControlApproved: false };
+  }
+  if ((policy.allowedSenderIds?.length ?? 0) > 0 && !policy.allowedSenderIds?.includes(context.senderId ?? "")) {
+    return { allowed: false, reason: "sender_not_allowed", runtimeControlApproved: false };
+  }
+  if (
+    (policy.allowedConversationIds?.length ?? 0) > 0 &&
+    !policy.allowedConversationIds?.includes(context.conversationId ?? "") &&
+    !policy.allowedConversationIds?.includes(context.channelId ?? "")
+  ) {
+    return { allowed: false, reason: "conversation_not_allowed", runtimeControlApproved: false };
+  }
+  return {
+    allowed: true,
+    runtimeControlApproved: context.senderId !== undefined &&
+      (policy.runtimeControlAllowedSenderIds?.includes(context.senderId) ?? false),
+  };
+}
+
+export function resolveChannelRoute(policy: {
+  identityKey?: string;
+  conversationGoalMap?: Record<string, string>;
+  senderGoalMap?: Record<string, string>;
+  defaultGoalId?: string;
+}, context: {
+  platform: string;
+  senderId?: string;
+  conversationId?: string;
+  channelId?: string;
+}): { goalId?: string; identityKey?: string; metadata: Record<string, unknown> } {
+  const goalId =
+    (context.conversationId ? policy.conversationGoalMap?.[context.conversationId] : undefined) ??
+    (context.senderId ? policy.senderGoalMap?.[context.senderId] : undefined) ??
+    policy.defaultGoalId;
+  return {
+    goalId,
+    identityKey: policy.identityKey,
+    metadata: {
+      platform: context.platform,
+      ...(context.senderId ? { sender_id: context.senderId } : {}),
+      ...(context.conversationId ? { conversation_id: context.conversationId } : {}),
+      ...(context.channelId ? { channel_id: context.channelId } : {}),
+      ...(goalId ? { routed_goal_id: goalId } : {}),
+    },
+  };
+}

@@ -40,7 +40,10 @@ export class TelegramBotPlugin {
       this.pluginDir,
       process.cwd(),
       config.identity_key,
-      config.runtime_control_allowed_user_ids
+      config.runtime_control_allowed_user_ids,
+      config.chat_goal_map,
+      config.user_goal_map,
+      config.default_goal_id
     );
 
     this.bridge = new ChatBridge(
@@ -62,7 +65,13 @@ export class TelegramBotPlugin {
         await bridge.handleMessage(text, fromUserId, chatId);
       },
       config.allowed_user_ids,
-      { allowedChatId: config.chat_id, allowAll: config.allow_all }
+      {
+        allowedChatId: config.chat_id,
+        allowedChatIds: config.allowed_chat_ids,
+        deniedChatIds: config.denied_chat_ids,
+        deniedUserIds: config.denied_user_ids,
+        allowAll: config.allow_all,
+      }
     );
   }
 

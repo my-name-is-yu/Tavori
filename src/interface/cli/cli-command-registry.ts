@@ -42,6 +42,7 @@ import { cmdInstall, cmdUninstall } from "./commands/install.js";
 import { cmdNotify } from "./commands/notify.js";
 import { cmdTelegramSetup } from "./commands/telegram.js";
 import { cmdSchedule } from "./commands/schedule.js";
+import { cmdSkills } from "./commands/skills.js";
 import { printUsage, formatOperationError } from "./utils.js";
 import { ensureProviderConfig } from "./ensure-api-key.js";
 
@@ -327,6 +328,10 @@ export async function dispatchCommand(
   if (subcommand === "schedule") {
     await cmdSchedule(stateManager, argv.slice(1), characterConfigManager);
     return 0;
+  }
+
+  if (subcommand === "skills" || subcommand === "skill") {
+    return await cmdSkills(argv.slice(1));
   }
 
   if (subcommand === "datasource") {

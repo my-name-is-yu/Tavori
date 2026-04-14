@@ -133,14 +133,20 @@ export async function buildAdapterRegistry(
   providerConfig?: ProviderConfig
 ): Promise<AdapterRegistry> {
   const registry = new AdapterRegistry();
-  registry.register(new ClaudeCodeCLIAdapter());
+  // Register CLI adapters after loading config so terminal_backend can wrap
+  // their child processes without changing adapter public names.
+  const config = providerConfig ?? await loadProviderConfig();
+  registry.register(new ClaudeCodeCLIAdapter({ terminalBackend: config.terminal_backend }));
   registry.register(new ClaudeAPIAdapter(llmClient));
-  registry.register(new OpenAICodexCLIAdapter());
+  registry.register(new OpenAICodexCLIAdapter({
+    cliPath: config.codex_cli_path,
+    model: config.model,
+    terminalBackend: config.terminal_backend,
+  }));
   registry.register(new NativeAgentLoopAdapter());
   registry.register(new GitHubIssueAdapter());
 
   // Register A2A agents from config
-  const config = providerConfig ?? await loadProviderConfig();
   if (config.a2a?.agents) {
     for (const [name, agentConfig] of Object.entries(config.a2a.agents)) {
       registry.register(new A2AAdapter({

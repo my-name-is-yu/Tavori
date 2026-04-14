@@ -3,6 +3,7 @@ import { createHash, webcrypto } from "node:crypto";
 import { DiscordAPI } from "./discord-api.js";
 import { dispatchChatInput, type ChatContinuationInput } from "./shared-manager.js";
 import type { DiscordBotConfig } from "./config.js";
+import { evaluateChannelAccess, resolveChannelRoute } from "./channel-policy.js";
 
 const MAX_DISCORD_ACTIVITY_MESSAGES = 8;
 const MAX_DISCORD_ACTIVITY_CHARS = 300;
@@ -123,21 +124,50 @@ export class DiscordWebhookServer {
 
     const senderId = payload.member?.user?.id ?? payload.user?.id ?? "discord-user";
     const conversationId = payload.channel_id ?? payload.guild_id ?? payload.id ?? senderId;
-    const runtimeControlApproved =
-      this.config.runtime_control_allowed_sender_ids.includes(senderId);
+    const channelContext = {
+      platform: "discord",
+      senderId,
+      conversationId,
+      channelId: payload.channel_id,
+    };
+    const access = evaluateChannelAccess(
+      {
+        allowedSenderIds: this.config.allowed_sender_ids,
+        deniedSenderIds: this.config.denied_sender_ids,
+        allowedConversationIds: this.config.allowed_conversation_ids,
+        deniedConversationIds: this.config.denied_conversation_ids,
+        runtimeControlAllowedSenderIds: this.config.runtime_control_allowed_sender_ids,
+      },
+      channelContext
+    );
+    if (!access.allowed) {
+      this.respondJson(res, 403, { error: access.reason ?? "forbidden" });
+      return;
+    }
+    const route = resolveChannelRoute(
+      {
+        identityKey: this.config.identity_key,
+        conversationGoalMap: this.config.conversation_goal_map,
+        senderGoalMap: this.config.sender_goal_map,
+        defaultGoalId: this.config.default_goal_id,
+      },
+      channelContext
+    );
     const input: ChatContinuationInput = {
       platform: "discord",
-      identity_key: this.config.identity_key,
+      identity_key: route.identityKey ?? this.config.identity_key,
       conversation_id: conversationId,
       sender_id: senderId,
       message_id: payload.id,
       text,
       metadata: {
+        ...route.metadata,
         interaction_type: payload.type,
         command_name: payload.data?.name,
         channel_id: payload.channel_id,
         guild_id: payload.guild_id,
-        ...(runtimeControlApproved ? { runtime_control_approved: true } : {}),
+        ...(route.goalId ? { goal_id: route.goalId } : {}),
+        ...(access.runtimeControlApproved ? { runtime_control_approved: true } : {}),
       },
     };
 

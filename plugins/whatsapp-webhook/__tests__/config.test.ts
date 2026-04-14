@@ -52,6 +52,30 @@ describe("whatsapp-webhook config loader", () => {
     expect(cfg.runtime_control_allowed_sender_ids).toEqual(["15557654321"]);
   });
 
+  it("loads sender security and routing config", () => {
+    fs.writeFileSync(
+      path.join(tmpDir, "config.json"),
+      JSON.stringify({
+        phone_number_id: "phone-1",
+        access_token: "token-1",
+        verify_token: "verify-1",
+        recipient_id: "15551234567",
+        identity_key: "whatsapp:alpha",
+        allowed_sender_ids: ["15557654321"],
+        denied_sender_ids: ["15550000000"],
+        sender_goal_map: { "15557654321": "goal-1" },
+        default_goal_id: "goal-default",
+      }),
+      "utf-8"
+    );
+
+    const cfg = loadConfig(tmpDir);
+    expect(cfg.allowed_sender_ids).toEqual(["15557654321"]);
+    expect(cfg.denied_sender_ids).toEqual(["15550000000"]);
+    expect(cfg.sender_goal_map).toEqual({ "15557654321": "goal-1" });
+    expect(cfg.default_goal_id).toBe("goal-default");
+  });
+
   it("rejects invalid runtime control sender allowlist", () => {
     fs.writeFileSync(
       path.join(tmpDir, "config.json"),

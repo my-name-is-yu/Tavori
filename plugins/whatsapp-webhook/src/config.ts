@@ -7,7 +7,11 @@ export interface WhatsAppWebhookConfig {
   verify_token: string;
   recipient_id: string;
   identity_key: string;
+  allowed_sender_ids: string[];
+  denied_sender_ids: string[];
   runtime_control_allowed_sender_ids: string[];
+  sender_goal_map: Record<string, string>;
+  default_goal_id?: string;
   host: string;
   port: number;
   path: string;
@@ -38,6 +42,9 @@ function validateConfig(raw: unknown): WhatsAppWebhookConfig {
   const port = cfg["port"] ?? 8788;
   const pathValue = cfg["path"] ?? "/webhook";
   const runtimeControlAllowedSenderIds = cfg["runtime_control_allowed_sender_ids"] ?? [];
+  const allowedSenderIds = cfg["allowed_sender_ids"] ?? cfg["allow_from"] ?? [];
+  const deniedSenderIds = cfg["denied_sender_ids"] ?? cfg["deny_from"] ?? [];
+  const senderGoalMap = cfg["sender_goal_map"] ?? cfg["goal_routes"] ?? {};
 
   if (typeof cfg["phone_number_id"] !== "string" || cfg["phone_number_id"].length === 0) {
     throw new Error("whatsapp-webhook: phone_number_id must be a non-empty string");
@@ -72,6 +79,25 @@ function validateConfig(raw: unknown): WhatsAppWebhookConfig {
   ) {
     throw new Error("whatsapp-webhook: runtime_control_allowed_sender_ids must be an array of non-empty strings");
   }
+  for (const [key, value] of Object.entries({
+    allowed_sender_ids: allowedSenderIds,
+    denied_sender_ids: deniedSenderIds,
+  })) {
+    if (!Array.isArray(value) || !value.every((id) => typeof id === "string" && id.length > 0)) {
+      throw new Error(`whatsapp-webhook: ${key} must be an array of non-empty strings`);
+    }
+  }
+  if (
+    typeof senderGoalMap !== "object" ||
+    senderGoalMap === null ||
+    Array.isArray(senderGoalMap) ||
+    !Object.values(senderGoalMap).every((goalId) => typeof goalId === "string" && goalId.length > 0)
+  ) {
+    throw new Error("whatsapp-webhook: sender_goal_map must be an object mapping IDs to goal IDs");
+  }
+  if (cfg["default_goal_id"] !== undefined && (typeof cfg["default_goal_id"] !== "string" || cfg["default_goal_id"].length === 0)) {
+    throw new Error("whatsapp-webhook: default_goal_id must be a non-empty string when set");
+  }
 
   return {
     phone_number_id: cfg["phone_number_id"] as string,
@@ -79,7 +105,11 @@ function validateConfig(raw: unknown): WhatsAppWebhookConfig {
     verify_token: cfg["verify_token"] as string,
     recipient_id: cfg["recipient_id"] as string,
     identity_key: cfg["identity_key"] as string,
+    allowed_sender_ids: allowedSenderIds as string[],
+    denied_sender_ids: deniedSenderIds as string[],
     runtime_control_allowed_sender_ids: runtimeControlAllowedSenderIds as string[],
+    sender_goal_map: senderGoalMap as Record<string, string>,
+    default_goal_id: cfg["default_goal_id"] as string | undefined,
     host,
     port,
     path: pathValue,

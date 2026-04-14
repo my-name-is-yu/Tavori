@@ -7,6 +7,7 @@ export type { PermissionManagerDeps, PermissionRule } from "./permission.js";
 export { ConcurrencyController } from "./concurrency.js";
 export { createBuiltinTools } from "./builtin/index.js";
 export type { BuiltinToolDeps } from "./builtin/index.js";
+export { SkillSearchTool } from "./query/SkillSearchTool/SkillSearchTool.js";
 export {
   GitHubReadTool,
   GitHubPrCreateTool,

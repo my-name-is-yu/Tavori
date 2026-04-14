@@ -126,6 +126,24 @@ describe("ClaudeCodeCLIAdapter", () => {
       expect(child.stdin.write).toHaveBeenCalledWith("hello world", "utf8");
     });
 
+    it("wraps claude execution with docker terminal backend when configured", async () => {
+      const adapter = new ClaudeCodeCLIAdapter({
+        terminalBackend: { type: "docker", docker: { image: "node:22" } },
+      });
+      const child = makeFakeChild();
+
+      const executePromise = adapter.execute(makeTask({ cwd: "/tmp/repo" }));
+      child.emit("close", 0);
+      await executePromise;
+
+      const [cliPath, spawnArgs, opts] = mockSpawn.mock.calls[0] as [string, string[], { cwd?: string }];
+      expect(cliPath).toBe("docker");
+      expect(spawnArgs).toContain("node:22");
+      expect(spawnArgs).toContain("claude");
+      expect(spawnArgs).toContain("/tmp/repo:/workspace");
+      expect(opts.cwd).toBeUndefined();
+    });
+
     it("closes stdin after writing the prompt", async () => {
       const adapter = new ClaudeCodeCLIAdapter();
       const child = makeFakeChild();

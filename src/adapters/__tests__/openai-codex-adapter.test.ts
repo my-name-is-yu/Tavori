@@ -156,6 +156,24 @@ describe("OpenAICodexCLIAdapter", () => {
       expect(spawnArgs).not.toContain("--skip-git-repo-check");
       expect(spawnArgs).toEqual(["exec", "-s", "danger-full-access"]);
     });
+
+    it("wraps codex execution with docker terminal backend when configured", async () => {
+      const adapter = new OpenAICodexCLIAdapter({
+        terminalBackend: { type: "docker", docker: { image: "node:22" } },
+      });
+      const child = makeFakeChild();
+
+      const executePromise = adapter.execute(makeTask({ cwd: "/tmp/repo" }));
+      child.emit("close", 0);
+      await executePromise;
+
+      const [cliPath, spawnArgs, opts] = mockSpawn.mock.calls[0] as [string, string[], { cwd?: string }];
+      expect(cliPath).toBe("docker");
+      expect(spawnArgs).toContain("node:22");
+      expect(spawnArgs).toContain("codex");
+      expect(spawnArgs).toContain("/tmp/repo:/workspace");
+      expect(opts.cwd).toBeUndefined();
+    });
   });
 
   // ─── Success path ───

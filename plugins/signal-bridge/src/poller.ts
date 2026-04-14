@@ -1,6 +1,7 @@
 import { SignalBridgeClient, type SignalReceivedMessage } from "./signal-client.js";
 import { dispatchChatInput, type ChatContinuationInput } from "./shared-manager.js";
 import type { SignalBridgeConfig } from "./config.js";
+import { evaluateChannelAccess, resolveChannelRoute } from "./channel-policy.js";
 
 export class SignalBridgePoller {
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -48,19 +49,46 @@ export class SignalBridgePoller {
         continue;
       }
       this.seenMessageIds.add(normalized.messageId);
+      const channelContext = {
+        platform: "signal",
+        senderId: normalized.senderId,
+        conversationId: normalized.conversationId,
+      };
+      const access = evaluateChannelAccess(
+        {
+          allowedSenderIds: this.config.allowed_sender_ids,
+          deniedSenderIds: this.config.denied_sender_ids,
+          allowedConversationIds: this.config.allowed_conversation_ids,
+          deniedConversationIds: this.config.denied_conversation_ids,
+          runtimeControlAllowedSenderIds: this.config.runtime_control_allowed_sender_ids,
+        },
+        channelContext
+      );
+      if (!access.allowed) {
+        continue;
+      }
+      const route = resolveChannelRoute(
+        {
+          identityKey: this.config.identity_key,
+          conversationGoalMap: this.config.conversation_goal_map,
+          senderGoalMap: this.config.sender_goal_map,
+          defaultGoalId: this.config.default_goal_id,
+        },
+        channelContext
+      );
 
       const reply = await this.fetchChatReply({
         platform: "signal",
-        identity_key: this.config.identity_key,
+        identity_key: route.identityKey ?? this.config.identity_key,
         conversation_id: normalized.conversationId,
         sender_id: normalized.senderId,
         message_id: normalized.messageId,
         text: normalized.text,
         metadata: {
+          ...route.metadata,
           ...normalized.metadata,
-          ...(this.config.runtime_control_allowed_sender_ids.includes(normalized.senderId)
-            ? { runtime_control_approved: true }
-            : {}),
+          ...(route.goalId ? { goal_id: route.goalId } : {}),
+          ...(access.runtimeControlApproved ? { runtime_control_approved: true } : {}),
         },
       });
 

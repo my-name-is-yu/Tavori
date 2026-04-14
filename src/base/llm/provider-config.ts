@@ -84,6 +84,18 @@ export interface ProviderConfig {
   /** CLI path for openai_codex_cli adapter */
   codex_cli_path?: string;
 
+  /** Optional terminal backend for CLI execution adapters. */
+  terminal_backend?: {
+    type: "local" | "docker";
+    docker?: {
+      image: string;
+      workdir?: string;
+      network?: "none" | "host" | "bridge";
+      env?: Record<string, string>;
+      volumes?: string[];
+    };
+  };
+
   /** A2A protocol agent endpoints */
   a2a?: {
     agents?: Record<string, {
@@ -426,6 +438,7 @@ export async function loadProviderConfig(): Promise<ProviderConfig> {
   if (api_key !== undefined) config.api_key = api_key;
   if (base_url !== undefined) config.base_url = base_url;
   if (fileConfig.codex_cli_path !== undefined) config.codex_cli_path = fileConfig.codex_cli_path;
+  if (fileConfig.terminal_backend !== undefined) config.terminal_backend = fileConfig.terminal_backend;
   if (fileConfig.a2a !== undefined) config.a2a = fileConfig.a2a;
   if (fileConfig.light_model !== undefined) config.light_model = fileConfig.light_model;
   if (fileConfig.openclaw !== undefined) config.openclaw = fileConfig.openclaw;
@@ -451,6 +464,7 @@ export async function loadProviderConfig(): Promise<ProviderConfig> {
       if (fileConfig.api_key !== undefined) fileOnly.api_key = fileConfig.api_key;
       if (fileConfig.base_url !== undefined) fileOnly.base_url = fileConfig.base_url;
       if (fileConfig.codex_cli_path !== undefined) fileOnly.codex_cli_path = fileConfig.codex_cli_path;
+      if (fileConfig.terminal_backend !== undefined) fileOnly.terminal_backend = fileConfig.terminal_backend;
       if (fileConfig.a2a !== undefined) fileOnly.a2a = fileConfig.a2a;
       if (fileConfig.agent_loop !== undefined) fileOnly.agent_loop = fileConfig.agent_loop;
       await saveProviderConfig(fileOnly);
@@ -471,6 +485,7 @@ export async function getProviderRuntimeFingerprint(): Promise<string> {
     light_model: config.light_model ?? null,
     base_url: config.base_url ?? null,
     codex_cli_path: config.codex_cli_path ?? null,
+    terminal_backend: config.terminal_backend ?? null,
     api_key_hash: config.api_key
       ? createHash("sha256").update(config.api_key).digest("hex")
       : null,

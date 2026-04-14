@@ -13,6 +13,15 @@ export {
   ConcurrencyController,
   TrustManager,
   shouldUseNativeTaskAgentLoop,
+  buildCliDataSourceRegistry,
+  ObservationEngine,
+  KnowledgeManager,
+  GoalDependencyGraph,
+  SessionManager,
+  ScheduleEngine,
+  PluginLoader,
+  NotifierRegistry,
+  resolveChannelRoute,
 } from "../../../src/index.js";
 
 export type {

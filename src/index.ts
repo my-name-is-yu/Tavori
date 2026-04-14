@@ -43,6 +43,7 @@ export { GoalNegotiator, EthicsRejectedError } from "./orchestrator/goal/goal-ne
 export { AdapterRegistry } from "./orchestrator/execution/adapter-layer.js";
 export type { IAdapter, AgentTask, AgentResult } from "./orchestrator/execution/adapter-layer.js";
 export { ClaudeCodeCLIAdapter } from "./adapters/agents/claude-code-cli.js";
+export type { ClaudeCodeCLIAdapterConfig } from "./adapters/agents/claude-code-cli.js";
 export { ClaudeAPIAdapter } from "./adapters/agents/claude-api.js";
 export { OpenAICodexCLIAdapter } from "./adapters/agents/openai-codex.js";
 export type { OpenAICodexCLIAdapterConfig } from "./adapters/agents/openai-codex.js";
@@ -182,6 +183,28 @@ export type { IDataSourceAdapter } from "./platform/observation/data-source-adap
 export { createCliDataSourceAdapter, buildCliDataSourceRegistry } from "./interface/cli/data-source-bootstrap.js";
 export { ScheduleEngine } from "./runtime/schedule/engine.js";
 export type { RunScheduleNowOptions, RunScheduleNowResult } from "./runtime/schedule/engine.js";
+export {
+  evaluateChannelAccess,
+  resolveChannelRoute,
+} from "./runtime/gateway/channel-policy.js";
+export type {
+  ChannelAccessDecision,
+  ChannelAccessPolicy,
+  ChannelMessageContext,
+  ChannelRouteDecision,
+  ChannelRoutingPolicy,
+} from "./runtime/gateway/channel-policy.js";
+export {
+  resolveTerminalBackendConfig,
+  wrapTerminalCommand,
+} from "./runtime/terminal/backend.js";
+export type {
+  DockerTerminalBackendConfig,
+  ResolvedTerminalCommandSpec,
+  TerminalBackendConfig,
+  TerminalBackendType,
+  TerminalCommandSpec,
+} from "./runtime/terminal/backend.js";
 
 // --- Stage 14 modules ---
 export { GoalTreeManager } from "./orchestrator/goal/goal-tree-manager.js";
@@ -224,6 +247,8 @@ export type {
 // --- Plugin architecture (M12) ---
 export { NotifierRegistry } from "./runtime/notifier-registry.js";
 export { PluginLoader } from "./runtime/plugin-loader.js";
+export { SkillRegistry } from "./runtime/skills/skill-registry.js";
+export type { SkillRecord, SkillRegistryOptions } from "./runtime/skills/skill-registry.js";
 
 // --- Iteration budget ---
 export { IterationBudget } from "./orchestrator/loop/iteration-budget.js";

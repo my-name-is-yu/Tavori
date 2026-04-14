@@ -13,6 +13,13 @@
 
 import type { IAdapter, AgentTask, AgentResult } from "../../orchestrator/execution/adapter-layer.js";
 import { spawnWithTimeout, spawnResultToAgentResult } from "../spawn-helper.js";
+import { wrapTerminalCommand, type TerminalBackendConfig } from "../../runtime/terminal/backend.js";
+
+export interface ClaudeCodeCLIAdapterConfig {
+  cliPath?: string;
+  workDir?: string;
+  terminalBackend?: TerminalBackendConfig;
+}
 
 export class ClaudeCodeCLIAdapter implements IAdapter {
   readonly adapterType = "claude_code_cli";
@@ -24,10 +31,18 @@ export class ClaudeCodeCLIAdapter implements IAdapter {
    */
   private readonly cliPath: string;
   private readonly workDir: string | undefined;
+  private readonly terminalBackend: TerminalBackendConfig | undefined;
 
-  constructor(cliPath: string = "claude", workDir?: string) {
-    this.cliPath = cliPath;
-    this.workDir = workDir;
+  constructor(cliPathOrConfig: string | ClaudeCodeCLIAdapterConfig = "claude", workDir?: string) {
+    if (typeof cliPathOrConfig === "string") {
+      this.cliPath = cliPathOrConfig;
+      this.workDir = workDir;
+      this.terminalBackend = undefined;
+    } else {
+      this.cliPath = cliPathOrConfig.cliPath ?? "claude";
+      this.workDir = cliPathOrConfig.workDir;
+      this.terminalBackend = cliPathOrConfig.terminalBackend;
+    }
   }
 
   async execute(task: AgentTask): Promise<AgentResult> {
@@ -46,14 +61,27 @@ export class ClaudeCodeCLIAdapter implements IAdapter {
 
     // Per-task cwd override (from workspace_path: constraint) takes priority over constructor workDir.
     const cwd = task.cwd ?? this.workDir;
-    const result = await spawnWithTimeout(
-      this.cliPath,
-      spawnArgs,
-      { cwd, stdinData: task.system_prompt ? `[System Context]
+    const command = wrapTerminalCommand(
+      {
+        command: this.cliPath,
+        args: spawnArgs,
+        cwd,
+        stdinData: task.system_prompt ? `[System Context]
 ${task.system_prompt}
 
 [User Request]
-${task.prompt}` : task.prompt },
+${task.prompt}` : task.prompt,
+      },
+      this.terminalBackend
+    );
+    const result = await spawnWithTimeout(
+      command.command,
+      command.args,
+      {
+        ...(command.cwd !== undefined ? { cwd: command.cwd } : {}),
+        ...(command.env !== undefined ? { env: command.env } : {}),
+        stdinData: command.stdinData,
+      },
       task.timeout_ms
     );
 

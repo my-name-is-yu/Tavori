@@ -31,6 +31,7 @@ export type { ISearchClient, SearchResult } from "../network/WebSearchTool/WebSe
 export { GitHubReadTool, GitHubPrCreateTool } from "../network/GitHubCliTool/GitHubCliTool.js";
 export { McpListToolsTool, McpCallToolTool } from "../network/McpStdioTool/McpStdioTool.js";
 export { ToolSearchTool } from "../query/ToolSearchTool/ToolSearchTool.js";
+export { SkillSearchTool } from "../query/SkillSearchTool/SkillSearchTool.js";
 export { EnvTool } from "../system/EnvTool/EnvTool.js";
 export { SleepTool } from "../system/SleepTool/SleepTool.js";
 export { GitDiffTool } from "../system/GitDiffTool/GitDiffTool.js";
@@ -115,6 +116,7 @@ import { WebSearchTool, createWebSearchClient } from "../network/WebSearchTool/W
 import { GitHubReadTool, GitHubPrCreateTool } from "../network/GitHubCliTool/GitHubCliTool.js";
 import { McpListToolsTool, McpCallToolTool } from "../network/McpStdioTool/McpStdioTool.js";
 import { ToolSearchTool } from "../query/ToolSearchTool/ToolSearchTool.js";
+import { SkillSearchTool } from "../query/SkillSearchTool/SkillSearchTool.js";
 import { EnvTool } from "../system/EnvTool/EnvTool.js";
 import { SleepTool } from "../system/SleepTool/SleepTool.js";
 import { GitDiffTool } from "../system/GitDiffTool/GitDiffTool.js";
@@ -243,6 +245,7 @@ export function createBuiltinTools(deps?: BuiltinToolDeps): ITool[] {
   tools.push(
     new ConfigTool(),
     new ArchitectureTool(),
+    new SkillSearchTool(),
     new SoilQueryTool(
       deps && "embeddingClient" in deps
         ? { embeddingClient: deps.embeddingClient ?? null, embeddingModel: deps.embeddingModel }
