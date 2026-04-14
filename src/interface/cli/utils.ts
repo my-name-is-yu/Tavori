@@ -41,6 +41,7 @@ Usage:
   pulseed cleanup                      Archive all completed goals and remove stale data
   pulseed status --goal <id>           Show current status and progress
   pulseed report --goal <id>           Show latest report
+  pulseed approval list [--resolved]   List pending durable approvals
   pulseed log --goal <id>              View observation and gap history log
   pulseed tui                          Launch the interactive TUI
   pulseed start --goal <id>            Start daemon mode for one or more goals

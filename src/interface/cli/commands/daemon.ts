@@ -56,11 +56,29 @@ function formatGoalMode(goalIds: string[]): string {
 async function loadDaemonConfig(baseDir: string): Promise<DaemonConfig> {
   const configPath = path.join(baseDir, "daemon.json");
   const legacyConfigPath = path.join(baseDir, "daemon-config.json");
-  const configRaw =
-    (await readJsonFileOrNull(configPath)) ??
-    (await readJsonFileOrNull(legacyConfigPath));
-  const configParsed = configRaw !== null ? DaemonConfigSchema.safeParse(configRaw) : null;
-  return configParsed?.success ? configParsed.data : DaemonConfigSchema.parse({});
+
+  function readDaemonConfigFile(filePath: string): DaemonConfig | null {
+    if (!fs.existsSync(filePath)) {
+      return null;
+    }
+
+    try {
+      const raw = JSON.parse(fs.readFileSync(filePath, "utf-8")) as unknown;
+      const configParsed = DaemonConfigSchema.safeParse(raw);
+      if (configParsed.success) {
+        return configParsed.data;
+      }
+      getCliLogger().warn(`Ignoring invalid daemon config at ${filePath}; using defaults.`);
+    } catch (err) {
+      getCliLogger().warn(
+        `Ignoring invalid daemon config at ${filePath}; using defaults. ${err instanceof Error ? err.message : String(err)}`
+      );
+    }
+
+    return null;
+  }
+
+  return readDaemonConfigFile(configPath) ?? readDaemonConfigFile(legacyConfigPath) ?? DaemonConfigSchema.parse({});
 }
 
 export async function cmdStart(
@@ -115,8 +133,10 @@ export async function cmdStart(
       try {
         const raw = JSON.parse(fs.readFileSync(defaultDaemonConfigPath, 'utf-8'));
         daemonConfig = DaemonConfigSchema.parse(raw);
-      } catch {
-        // Ignore invalid daemon.json, use defaults
+      } catch (err) {
+        getCliLogger().warn(
+          `Ignoring invalid daemon config at ${defaultDaemonConfigPath}; using defaults. ${err instanceof Error ? err.message : String(err)}`
+        );
       }
     }
   }
@@ -747,7 +767,9 @@ export async function cmdCron(args: string[]): Promise<void> {
   const intervalMinutes = parseInt(values.interval as string, 10) || 60;
 
   if (goalIds.length === 0) {
-    getCliLogger().error("Error: at least one --goal is required");
+    getCliLogger().error(
+      "Error: at least one --goal is required for pulseed cron.\nUsage: pulseed cron --goal <id> [--goal <id> ...]"
+    );
     process.exit(1);
   }
 

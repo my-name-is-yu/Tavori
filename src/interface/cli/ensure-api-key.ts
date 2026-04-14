@@ -68,7 +68,9 @@ export interface EnsureProviderConfigOptions {
  * the configured provider. Throws if a required key is missing.
  *
  * If no ~/.pulseed/provider.json exists and stdin is a TTY, automatically
- * runs the interactive setup wizard. If not a TTY, uses defaults silently.
+ * runs the interactive setup wizard. If requireInteractiveSetup is set, the
+ * helper throws for missing or invalid config on non-TTY input instead of
+ * falling through to defaults.
  *
  * Ollama provider is not checked here — it needs no API key.
  * OpenAI provider is validated by buildLLMClient() when the client is constructed.
@@ -84,22 +86,28 @@ export async function ensureProviderConfig(
   const configState = await inspectProviderConfig(configPath);
   const stdinIsTty = tty.isatty(0);
 
-  if (!configState.exists) {
-    if (stdinIsTty) {
-      await runSetupWizardOrThrow(
-        "No provider configuration found. Starting setup wizard...\n"
-      );
-    } else if (options.requireInteractiveSetup) {
-      throw new Error(formatMissingConfigError(configPath));
+  if (options.requireInteractiveSetup) {
+    if (!configState.exists) {
+      if (stdinIsTty) {
+        await runSetupWizardOrThrow(
+          "No provider configuration found. Starting setup wizard...\n"
+        );
+      } else {
+        throw new Error(formatMissingConfigError(configPath));
+      }
+    } else if (!configState.validJson) {
+      if (stdinIsTty) {
+        await runSetupWizardOrThrow(
+          "Provider configuration is invalid. Starting setup wizard...\n"
+        );
+      } else {
+        throw new Error(formatInvalidConfigError(configPath));
+      }
     }
-  } else if (!configState.validJson && options.requireInteractiveSetup) {
-    if (stdinIsTty) {
-      await runSetupWizardOrThrow(
-        "Provider configuration is invalid. Starting setup wizard...\n"
-      );
-    } else {
-      throw new Error(formatInvalidConfigError(configPath));
-    }
+  } else if (!configState.exists && stdinIsTty) {
+    await runSetupWizardOrThrow(
+      "No provider configuration found. Starting setup wizard...\n"
+    );
   }
 
   const config = await loadProviderConfig();

@@ -346,6 +346,27 @@ describe("ensureProviderConfig", () => {
     vi.mocked(tty.isatty).mockReset();
   });
 
+  it("does not fall through to defaults when provider.json is missing and interactive setup is required", async () => {
+    vi.mocked(tty.isatty).mockReturnValue(false);
+    const providerConfigMod = await import("../../../base/llm/provider-config.js");
+    const loadSpy = vi.spyOn(providerConfigMod, "loadProviderConfig").mockResolvedValue({
+      provider: "openai",
+      model: "gpt-5.4-mini",
+      adapter: "openai_codex_cli",
+      api_key: "sk-default",
+    });
+
+    const { ensureProviderConfig } = await import("../ensure-api-key.js");
+
+    await expect(
+      ensureProviderConfig({ requireInteractiveSetup: true })
+    ).rejects.toThrow(/no provider configuration found/i);
+    expect(loadSpy).not.toHaveBeenCalled();
+
+    loadSpy.mockRestore();
+    vi.mocked(tty.isatty).mockReset();
+  });
+
   it("falls back to loadProviderConfig when provider.json is invalid JSON and setup is not required", async () => {
     await writeConfig("{not-json");
 
@@ -388,6 +409,29 @@ describe("ensureProviderConfig", () => {
     await expect(
       ensureProviderConfig({ requireInteractiveSetup: true })
     ).rejects.toThrow(/invalid json/i);
+    loadSpy.mockRestore();
+    vi.mocked(tty.isatty).mockReset();
+  });
+
+  it("does not fall through to defaults when provider.json is invalid and interactive setup is required", async () => {
+    await writeConfig("{not-json");
+
+    vi.mocked(tty.isatty).mockReturnValue(false);
+    const providerConfigMod = await import("../../../base/llm/provider-config.js");
+    const loadSpy = vi.spyOn(providerConfigMod, "loadProviderConfig").mockResolvedValue({
+      provider: "openai",
+      model: "gpt-5.4-mini",
+      adapter: "openai_codex_cli",
+      api_key: "sk-default",
+    });
+
+    const { ensureProviderConfig } = await import("../ensure-api-key.js");
+
+    await expect(
+      ensureProviderConfig({ requireInteractiveSetup: true })
+    ).rejects.toThrow(/invalid json/i);
+    expect(loadSpy).not.toHaveBeenCalled();
+
     loadSpy.mockRestore();
     vi.mocked(tty.isatty).mockReset();
   });

@@ -17,6 +17,7 @@ import { cmdStatus, cmdLog, cmdCleanup } from "./commands/goal.js";
 import { dispatchGoalCommand } from "./commands/goal-dispatch.js";
 import { cmdPluginList, cmdPluginInstall, cmdPluginRemove, cmdPluginUpdate, cmdPluginSearch } from "./commands/plugin.js";
 import { cmdReport } from "./commands/report.js";
+import { cmdApprovalList } from "./commands/approval.js";
 import {
   cmdProvider,
   cmdConfigCharacter,
@@ -46,6 +47,14 @@ import { printUsage, formatOperationError } from "./utils.js";
 import { ensureProviderConfig } from "./ensure-api-key.js";
 
 const logger = getCliLogger();
+
+function formatGoalRequiredError(command: string, usage: string): string {
+  return `Error: --goal <id> is required for pulseed ${command}.\nUsage: ${usage}`;
+}
+
+function formatMultiGoalError(command: string, usage: string): string {
+  return `Error: only one --goal is supported per pulseed ${command}. Run separately for each goal, or use --tree for tree traversal.\nUsage: ${usage}`;
+}
 
 /**
  * @description Dispatches a PulSeed CLI subcommand and returns an exit code.
@@ -95,11 +104,11 @@ export async function dispatchCommand(
 
     const goalIds = values.goal ?? [];
     if (goalIds.length === 0) {
-      logger.error("Error: --goal <id> is required for \.");
+      logger.error(formatGoalRequiredError("run", "pulseed run --goal <id> [--max-iterations <n>] [--adapter <type>] [--tree] [--workspace <path>] [--yes]"));
       return 1;
     }
     if (goalIds.length > 1) {
-      logger.error("Error: only one --goal is supported per \. Run separately for each goal, or use --tree for tree traversal.");
+      logger.error(formatMultiGoalError("run", "pulseed run --goal <id> [--max-iterations <n>] [--adapter <type>] [--tree] [--workspace <path>] [--yes]"));
       return 1;
     }
     const goalId = goalIds[0];
@@ -189,7 +198,7 @@ export async function dispatchCommand(
 
     const goalId = values.goal;
     if (!goalId || typeof goalId !== "string") {
-      logger.error("Error: --goal <id> is required for \.");
+      logger.error(formatGoalRequiredError("status", "pulseed status --goal <id>"));
       return 1;
     }
 
@@ -222,6 +231,23 @@ export async function dispatchCommand(
     }
 
     return cmdReport(stateManager, goalId);
+  }
+
+  if (subcommand === "approval") {
+    const approvalSubcommand = argv[1];
+
+    if (!approvalSubcommand) {
+      logger.error("Error: approval subcommand required. Available: approval list");
+      return 1;
+    }
+
+    if (approvalSubcommand === "list") {
+      return await cmdApprovalList(stateManager, argv.slice(2));
+    }
+
+    logger.error(`Unknown approval subcommand: "${approvalSubcommand}"`);
+    logger.error("Available: approval list");
+    return 1;
   }
 
   if (subcommand === "log") {

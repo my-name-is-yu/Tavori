@@ -164,6 +164,8 @@ vi.mock("../../../reporting/reporting-engine.js", async (importOriginal) => {
 
 import { CLIRunner } from "../cli-runner.js";
 import { StateManager } from "../../../base/state/state-manager.js";
+import { ApprovalStore } from "../../../runtime/store/approval-store.js";
+import { ApprovalRecordSchema } from "../../../runtime/store/runtime-schemas.js";
 import { CoreLoop } from "../../../orchestrator/loop/core-loop.js";
 import { GoalNegotiator, EthicsRejectedError } from "../../../orchestrator/goal/goal-negotiator.js";
 import { GoalRefiner } from "../../../orchestrator/goal/goal-refiner.js";
@@ -203,6 +205,21 @@ function makeNegotiationResult(goal: Goal) {
       renegotiation_trigger: null,
     },
   };
+}
+
+function makeApproval(overrides: Record<string, unknown> = {}) {
+  return ApprovalRecordSchema.parse({
+    approval_id: "approval-1",
+    goal_id: "goal-1",
+    request_envelope_id: "msg-1",
+    correlation_id: "corr-1",
+    state: "pending",
+    created_at: 1,
+    expires_at: 2,
+    payload: { prompt: "approve?" },
+    response_channel: "chat",
+    ...overrides,
+  });
 }
 
 // No argv wrapper needed — run() accepts pure subcommand args directly.
@@ -266,6 +283,49 @@ describe("CLIRunner construction", () => {
   });
 });
 
+// ─── Goal argument errors ────────────────────────────────────────────────────
+
+describe("CLIRunner goal argument errors", () => {
+  it("names pulseed run and shows usage when --goal is missing", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const code = await runCLI("run");
+
+    expect(code).toBe(1);
+    const output = errorSpy.mock.calls.map((call) => call.join(" ")).join("\n");
+    expect(output).toContain("Error: --goal <id> is required for pulseed run.");
+    expect(output).toContain("Usage: pulseed run --goal <id>");
+
+    errorSpy.mockRestore();
+  });
+
+  it("names pulseed status and shows usage when --goal is missing", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const code = await runCLI("status");
+
+    expect(code).toBe(1);
+    const output = errorSpy.mock.calls.map((call) => call.join(" ")).join("\n");
+    expect(output).toContain("Error: --goal <id> is required for pulseed status.");
+    expect(output).toContain("Usage: pulseed status --goal <id>");
+
+    errorSpy.mockRestore();
+  });
+
+  it("names pulseed run and shows usage when multiple goals are provided", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const code = await runCLI("run", "--goal", "goal-a", "--goal", "goal-b");
+
+    expect(code).toBe(1);
+    const output = errorSpy.mock.calls.map((call) => call.join(" ")).join("\n");
+    expect(output).toContain("Error: only one --goal is supported per pulseed run.");
+    expect(output).toContain("Usage: pulseed run --goal <id>");
+
+    errorSpy.mockRestore();
+  });
+});
+
 // ─── Unknown subcommand ───────────────────────────────────────────────────────
 
 describe("unknown subcommand", async () => {
@@ -307,9 +367,10 @@ describe("unknown subcommand", async () => {
   it("exits with code 0 for --help", async () => {
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
     const code = await runCLI("--help");
-    const output = consoleSpy.mock.calls[0]?.[0] as string;
+    const output = consoleSpy.mock.calls.map((call) => call.join(" ")).join("\n");
     expect(code).toBe(0);
     expect(output).toContain("pulseed daemon ping");
+    expect(output).toContain("pulseed approval list");
     consoleSpy.mockRestore();
   });
 
@@ -328,6 +389,115 @@ describe("unknown subcommand", async () => {
     const code = await runCLI("daemon", "ping");
 
     expect(code).toBe(0);
+  });
+});
+
+// ─── `approval list` subcommand ──────────────────────────────────────────────
+
+describe("approval list subcommand", async () => {
+  it("lists pending approvals from runtime storage", async () => {
+    const approvalStore = new ApprovalStore(path.join(tmpDir, "runtime"));
+    await approvalStore.ensureReady();
+    await approvalStore.savePending(
+      makeApproval({
+        approval_id: "approval-pending",
+        goal_id: "goal-pending",
+        expires_at: Date.now() + 3_600_000,
+      })
+    );
+
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const code = await runCLI("approval", "list");
+    const output = consoleSpy.mock.calls.map((call) => call.join(" ")).join("\n");
+
+    expect(code).toBe(0);
+    expect(output).toContain("approval-pe...");
+    expect(output).toContain("goal-pending");
+    expect(output).toContain("pending");
+    consoleSpy.mockRestore();
+  });
+
+  it("lists resolved approvals when --resolved is set", async () => {
+    const approvalStore = new ApprovalStore(path.join(tmpDir, "runtime"));
+    await approvalStore.ensureReady();
+    await approvalStore.saveResolved(
+      makeApproval({
+        approval_id: "approval-resolved",
+        goal_id: "goal-resolved",
+        state: "approved",
+        resolved_at: Date.now(),
+        response_channel: "daemon",
+      })
+    );
+
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const code = await runCLI("approval", "list", "--resolved");
+    const output = consoleSpy.mock.calls.map((call) => call.join(" ")).join("\n");
+
+    expect(code).toBe(0);
+    expect(output).toContain("approval-re...");
+    expect(output).toContain("goal-resolved");
+    expect(output).toContain("approved");
+    consoleSpy.mockRestore();
+  });
+
+  it("skips malformed approval files without crashing", async () => {
+    const approvalStore = new ApprovalStore(path.join(tmpDir, "runtime"));
+    await approvalStore.ensureReady();
+    await fs.promises.writeFile(
+      path.join(tmpDir, "runtime", "approvals", "pending", "bad.json"),
+      "{not-json",
+      "utf-8"
+    );
+    await approvalStore.savePending(
+      makeApproval({
+        approval_id: "approval-valid",
+        goal_id: "goal-valid",
+        created_at: 10,
+        expires_at: Date.now() + 3_600_000,
+      })
+    );
+
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const code = await runCLI("approval", "list");
+    const output = consoleSpy.mock.calls.map((call) => call.join(" ")).join("\n");
+    const warnings = warnSpy.mock.calls.map((call) => call.join(" ")).join("\n");
+
+    expect(code).toBe(0);
+    expect(output).toContain("approval-valid");
+    expect(output).toContain("goal-valid");
+    expect(output).not.toContain("bad.json");
+    expect(warnings).toContain("Skipped 1 invalid pending approval record(s).");
+    warnSpy.mockRestore();
+    consoleSpy.mockRestore();
+  });
+
+  it("normalizes long and odd approval fields for table output", async () => {
+    const approvalStore = new ApprovalStore(path.join(tmpDir, "runtime"));
+    await approvalStore.ensureReady();
+    await approvalStore.savePending(
+      makeApproval({
+        approval_id: "approval-with-a-very-long-id-and-newline\nsuffix",
+        goal_id: undefined,
+        created_at: 20,
+        expires_at: Date.now() + 3_600_000,
+        response_channel: "chat\nwith\todd whitespace and a very long channel name",
+      })
+    );
+
+    const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const code = await runCLI("approval", "list");
+    const output = consoleSpy.mock.calls.map((call) => call.join(" ")).join("\n");
+
+    expect(code).toBe(0);
+    expect(output).toContain("approval-wi...");
+    expect(output).toContain("pending");
+    expect(output).toContain(" - ");
+    expect(output).toContain("chat with odd whitesp...");
+    expect(output).not.toContain("approval-with-a-very-long-id-and-newline\nsuffix");
+    expect(output).not.toContain("chat\nwith");
+    consoleSpy.mockRestore();
   });
 });
 
