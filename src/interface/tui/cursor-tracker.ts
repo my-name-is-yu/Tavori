@@ -4,28 +4,55 @@
  */
 
 // Unique marker: zero-width space + ◉ — won't appear in message history
-const INPUT_MARKER = "\u200B\u25C9";
+export const INPUT_MARKER = "\u200B\u25C9";
+const ZERO_WIDTH_SPACE = "\u200B";
+const ESCAPE_SEQUENCE = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
+const PROMPT_WIDTH = 2; // "◉ " prefix
 
-/**
- * Find the row index of the input prompt in a rendered frame.
- * Returns null if the marker is not found (e.g., overlay is showing).
- */
-export function findCursorRow(frame: string): number | null {
+function displayWidth(text: string): number {
+  let width = 0;
+  for (const segment of text
+    .replace(ESCAPE_SEQUENCE, "")
+    .split(ZERO_WIDTH_SPACE)
+    .join("")) {
+    const cp = segment.codePointAt(0) ?? 0;
+    width += cp > 0x2E7F ? 2 : 1;
+  }
+  return width;
+}
+
+function findInputMarkerPosition(frame: string): { row: number; col: number } | null {
   const lines = frame.split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].includes(INPUT_MARKER)) {
-      return i;
+  for (let row = 0; row < lines.length; row++) {
+    const line = lines[row];
+    const markerIndex = line.indexOf(INPUT_MARKER);
+    if (markerIndex >= 0) {
+      return {
+        row,
+        col: displayWidth(line.slice(0, markerIndex)),
+      };
     }
   }
   return null;
 }
 
 /**
- * Compute the cursor x-position from input text.
+ * Find the row index of the input prompt in a rendered frame.
+ * Returns null if the marker is not found (e.g., overlay is showing).
+ */
+export function findCursorRow(frame: string): number | null {
+  return findInputMarkerPosition(frame)?.row ?? null;
+}
+
+/**
+ * Compute the cursor x-position from the marker column and input text.
  * Prompt "◉ " = 2 columns. CJK chars = 2 columns each.
  */
-export function computeCursorX(input: string): number {
-  let width = 2; // "◉ " prefix
+export function computeCursorX(frame: string, input: string): number | null {
+  const position = findInputMarkerPosition(frame);
+  if (!position) return null;
+
+  let width = position.col + PROMPT_WIDTH;
   for (const ch of input) {
     const cp = ch.codePointAt(0) ?? 0;
     width += cp > 0x2E7F ? 2 : 1;
@@ -43,8 +70,8 @@ export function positionCursorInFrame(
   write: (s: string) => boolean,
 ): void {
   const row = findCursorRow(frame);
-  if (row === null) return;
-  const x = computeCursorX(inputText);
+  const x = computeCursorX(frame, inputText);
+  if (row === null || x === null) return;
   // ANSI CSI: move to row;col (1-indexed) and show cursor
   write(`\x1b[${row + 1};${x + 1}H\x1b[?25h`);
 }
@@ -59,7 +86,7 @@ export function buildCursorEscape(
   inputText: string,
 ): string | null {
   const row = findCursorRow(frame);
-  if (row === null) return null;
-  const x = computeCursorX(inputText);
+  const x = computeCursorX(frame, inputText);
+  if (row === null || x === null) return null;
   return `[${row + 1};${x + 1}H[?25h`;
 }

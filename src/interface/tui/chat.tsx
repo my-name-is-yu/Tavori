@@ -12,7 +12,7 @@ import { getClipboardContent } from "./clipboard.js";
 import { theme } from "./theme.js";
 import { pickSpinnerVerb } from "./spinner-verbs.js";
 import { ShimmerText } from "./shimmer-text.js";
-import { positionCursorInFrame, buildCursorEscape } from "./cursor-tracker.js";
+import { INPUT_MARKER, positionCursorInFrame, buildCursorEscape } from "./cursor-tracker.js";
 import { isBashModeInput } from "./bash-mode.js";
 import { isRenderableFrameChunk } from "./render-output.js";
 import { buildChatViewport } from "./chat/viewport.js";
@@ -350,13 +350,10 @@ export function Chat({
           <Box
             borderStyle="single"
             borderColor={bashMode ? theme.command : theme.border}
-            borderBottom={false}
-            borderLeft={false}
-            borderRight={false}
-          />
-          <Box>
+            paddingX={1}
+          >
             <Text color={bashMode ? theme.command : theme.userPrompt} bold>
-              {"​◉ "}
+              {`${INPUT_MARKER} `}
             </Text>
             <TextInput
               value={input}
@@ -368,13 +365,6 @@ export function Chat({
               placeholder={bashMode ? "! for bash mode" : "/ for commands"}
             />
           </Box>
-          <Box
-            borderStyle="single"
-            borderColor={bashMode ? theme.command : theme.border}
-            borderTop={false}
-            borderLeft={false}
-            borderRight={false}
-          />
           {bashMode && <Text color={theme.command}>! for bash mode</Text>}
           {emptyHint && (
             <Text dimColor> Type a message or /help for commands</Text>

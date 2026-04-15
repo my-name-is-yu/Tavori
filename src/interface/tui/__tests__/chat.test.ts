@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildChatViewport, getMatchingSuggestions, getScrollRequest, stripMouseEscapeSequences } from "../chat.js";
 import { estimateMarkdownHeight, estimateWrappedLineCount, wrapTextToRows } from "../markdown-renderer.js";
 import { extractBashCommand, isBashModeInput, isSafeBashCommand, createShellApprovalTask, formatShellOutput } from "../bash-mode.js";
+import { INPUT_MARKER, buildCursorEscape } from "../cursor-tracker.js";
 
 describe("getMatchingSuggestions", () => {
   it("hides suggestions for an exact slash command so enter can submit", () => {
@@ -137,5 +138,17 @@ describe("chat scroll keys", () => {
 
   it("strips sgr mouse sequences from input text", () => {
     expect(stripMouseEscapeSequences("hello\u001b[<64;40;12Mworld")).toBe("helloworld");
+  });
+});
+
+describe("cursor tracker", () => {
+  it("positions the caret from the marker column inside a bordered input box", () => {
+    const frame = [
+      "┌──────────────────┐",
+      `│ \u001b[31m${INPUT_MARKER} \u001b[0mhello │`,
+      "└──────────────────┘",
+    ].join("\n");
+
+    expect(buildCursorEscape(frame, "abc")).toBe("\u001b[2;8H\u001b[?25h");
   });
 });
