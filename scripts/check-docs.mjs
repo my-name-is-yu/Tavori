@@ -117,7 +117,7 @@ function walk(currentDir, results) {
   const entries = fs.readdirSync(currentDir, { withFileTypes: true });
   for (const entry of entries) {
     if (entry.isDirectory()) {
-      if (ignoredDirNames.has(entry.name)) {
+      if (ignoredDirNames.has(entry.name) || entry.name.startsWith('.dist-delete-')) {
         continue;
       }
       walk(path.join(currentDir, entry.name), results);
