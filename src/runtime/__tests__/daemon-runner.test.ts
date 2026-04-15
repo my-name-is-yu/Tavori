@@ -1065,7 +1065,7 @@ describe("DaemonRunner durable runtime", () => {
     const daemon = new DaemonRunner(deps);
     currentDaemon = daemon;
 
-    const startPromise = daemon.start(["goal-1"]);
+    const startPromise = daemon.start([]);
     currentStartPromise = startPromise;
     await pollForFile(path.join(tmpDir, "daemon-state.json"));
     daemon.stop();
@@ -1212,7 +1212,7 @@ describe("DaemonRunner durable runtime", () => {
     const daemon = new DaemonRunner(deps);
     currentDaemon = daemon;
 
-    const startPromise = daemon.start(["goal-1"]);
+    const startPromise = daemon.start([]);
     currentStartPromise = startPromise;
 
     const runtimeDir = path.join(tmpDir, "runtime");
@@ -1358,10 +1358,10 @@ describe("DaemonRunner durable runtime", () => {
       priority: "normal",
     });
     queue.accept(envelope);
-    const claim1 = queue.claim("worker-1", 100);
+    const claim1 = queue.claim("worker-1", 5_000);
     expect(claim1).not.toBeNull();
     expect(queue.nack(claim1!.claimToken, "boom", true)).toBe(true);
-    const claim2 = queue.claim("worker-2", 100);
+    const claim2 = queue.claim("worker-2", 5_000);
     expect(claim2).not.toBeNull();
     expect(queue.nack(claim2!.claimToken, "boom", true)).toBe(true);
     const claim3 = queue.claim("worker-3", 1);

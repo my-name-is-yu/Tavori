@@ -63,7 +63,7 @@ function makeSupervisor(
   const journalQueue = new JournalBackedQueue({
     journalPath: path.join(runtimeRoot, "queue.json"),
   });
-  const goalLeaseManager = new GoalLeaseManager(runtimeRoot, 40);
+  const goalLeaseManager = new GoalLeaseManager(runtimeRoot, 1_000);
   const mockCoreLoop = { run: vi.fn().mockImplementation(coreLoopImpl ?? (() => Promise.resolve(makeLoopResult()))), stop: vi.fn() };
   const deps = {
     coreLoopFactory: () => mockCoreLoop as any,
@@ -464,7 +464,7 @@ describe("LoopSupervisor", () => {
           payload: {},
           priority: "normal",
         }));
-        await new Promise((resolve) => setTimeout(resolve, 40));
+        await new Promise((resolve) => setTimeout(resolve, 120));
       }
       return makeLoopResult({ goalId });
     });

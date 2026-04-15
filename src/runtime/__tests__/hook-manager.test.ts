@@ -11,6 +11,21 @@ function writeHooksJson(dir: string, hooks: HookConfig[]): void {
   fs.writeFileSync(path.join(dir, "hooks.json"), JSON.stringify({ hooks }), "utf-8");
 }
 
+async function waitFor(
+  predicate: () => boolean,
+  timeoutMs = 8_000,
+  intervalMs = 20
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  throw new Error("Timed out waiting for condition");
+}
+
 // ─── Tests ───
 
 describe("HookManager", () => {
@@ -108,7 +123,7 @@ describe("HookManager", () => {
 
       const manager = new HookManager(tempDir);
       await manager.emit("LoopCycleStart", { goal_id: "g1" });
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       expect(fs.existsSync(path.join(tempDir, "dream", "events", "g1.jsonl"))).toBe(false);
     });
@@ -123,12 +138,11 @@ describe("HookManager", () => {
 
       const manager = new HookManager(tempDir);
       await manager.emit("LoopCycleStart", { goal_id: "g1" });
-      await new Promise((resolve) => setTimeout(resolve, 50));
 
       const dateSuffix = new Date().toISOString().slice(0, 10);
-      expect(
+      await waitFor(() =>
         fs.existsSync(path.join(tempDir, "dream", "events", `g1.${dateSuffix}.jsonl`))
-      ).toBe(true);
+      );
     });
 
     it("only fires hooks matching the event type", async () => {
