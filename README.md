@@ -115,19 +115,6 @@ adapters can be wrapped with a Docker terminal backend. These reduce blast
 radius, but local backends and plugins still run with the user's privileges. See
 [Security](SECURITY.md).
 
-## Release
-
-Run releases from a clean, up-to-date `main` branch:
-
-```bash
-npm run release -- 0.4.9
-```
-
-The script updates the package version, runs release verification including
-docs, typecheck, boundary lint, full tests, production audit, and an npm pack
-dry run, pushes `main`, then pushes the matching `v*` tag. The tag push triggers
-GitHub Actions to publish to npm through Trusted Publishing.
-
 ## License
 
 MIT
