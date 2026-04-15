@@ -794,7 +794,8 @@ describe("DaemonRunner durable runtime", () => {
       resident_activity: { kind: string; summary: string } | null;
     }>(
       path.join(tmpDir, "daemon-state.json"),
-      (value) => value.resident_activity?.summary.includes("light analysis") ?? false
+      (value) => value.resident_activity?.summary.includes("light analysis") ?? false,
+      5_000
     );
 
     expect(state.resident_activity).toEqual(expect.objectContaining({

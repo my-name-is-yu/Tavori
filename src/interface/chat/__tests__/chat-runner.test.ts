@@ -878,6 +878,143 @@ describe("ChatRunner", () => {
       expect(seenEvents).toContain("tool_update");
     });
 
+    it("routes simple questions directly through llmClient even when chatAgentLoopRunner is configured", async () => {
+      const adapter = makeMockAdapter();
+      const chatAgentLoopRunner = {
+        execute: vi.fn().mockRejectedValue(new Error("chatAgentLoopRunner must not be called")),
+      } as unknown as ChatAgentLoopRunner;
+      const llmClient = {
+        supportsToolCalling: () => true,
+        sendMessage: vi.fn().mockResolvedValue({
+          content: "Direct answer",
+          usage: { input_tokens: 4, output_tokens: 6 },
+          stop_reason: "end_turn",
+        }),
+        parseJSON: vi.fn(),
+      };
+
+      const runner = new ChatRunner(makeDeps({
+        adapter,
+        chatAgentLoopRunner,
+        llmClient: llmClient as never,
+      }));
+      const result = await runner.execute("What is a lightweight direct-answer route?", "/repo");
+
+      expect(llmClient.sendMessage).toHaveBeenCalledOnce();
+      const [messages, options] = (llmClient.sendMessage as ReturnType<typeof vi.fn>).mock.calls[0] as [
+        Array<{ role: string; content: string }>,
+        Record<string, unknown> | undefined,
+      ];
+      expect(messages).toHaveLength(1);
+      expect(messages[0].role).toBe("user");
+      expect(messages[0].content).toContain("What is a lightweight direct-answer route?");
+      expect(options).toMatchObject({
+        model_tier: "light",
+        max_tokens: 256,
+      });
+      expect(options?.tools).toBeUndefined();
+      expect(chatAgentLoopRunner.execute).not.toHaveBeenCalled();
+      expect(adapter.execute).not.toHaveBeenCalled();
+      expect(result.success).toBe(true);
+      expect(result.output).toBe("Direct answer");
+      expect(result.diagnostics).toEqual({
+        route: "direct",
+        reason: "simple_question",
+        modelTier: "light",
+        maxTokens: 256,
+      });
+    });
+
+    it("keeps diagnostics out of the user-facing output", async () => {
+      const adapter = makeMockAdapter();
+      const llmClient = {
+        sendMessage: vi.fn().mockResolvedValue({
+          content: "Plain answer",
+          usage: { input_tokens: 2, output_tokens: 3 },
+          stop_reason: "end_turn",
+        }),
+        parseJSON: vi.fn(),
+      };
+
+      const runner = new ChatRunner(makeDeps({ adapter, llmClient: llmClient as never }));
+      const result = await runner.execute("How should the direct route behave?", "/repo");
+
+      expect(result.output).toBe("Plain answer");
+      expect(result.output).not.toContain("simple_question");
+      expect(result.diagnostics).toEqual({
+        route: "direct",
+        reason: "simple_question",
+        modelTier: "light",
+        maxTokens: 256,
+      });
+    });
+
+    it("does not route repository confirmation questions through the direct path", async () => {
+      const adapter = makeMockAdapter();
+      const chatAgentLoopRunner = {
+        execute: vi.fn().mockResolvedValue({
+          success: true,
+          output: "Agentloop checked it",
+          error: null,
+          exit_code: null,
+          elapsed_ms: 42,
+          stopped_reason: "completed",
+        }),
+      } as unknown as ChatAgentLoopRunner;
+      const llmClient = {
+        supportsToolCalling: () => true,
+        sendMessage: vi.fn().mockRejectedValue(new Error("direct llm path must not be called")),
+        parseJSON: vi.fn(),
+      };
+
+      const runner = new ChatRunner(makeDeps({
+        adapter,
+        chatAgentLoopRunner,
+        llmClient: llmClient as never,
+      }));
+      const result = await runner.execute("What files changed?", "/repo");
+
+      expect(chatAgentLoopRunner.execute).toHaveBeenCalledOnce();
+      expect(llmClient.sendMessage).not.toHaveBeenCalled();
+      expect(adapter.execute).not.toHaveBeenCalled();
+      expect(result.success).toBe(true);
+      expect(result.output).toBe("Agentloop checked it");
+      expect(result.diagnostics).toBeUndefined();
+    });
+
+    it("does not route explicit confirmation requests through the direct path", async () => {
+      const adapter = makeMockAdapter();
+      const chatAgentLoopRunner = {
+        execute: vi.fn().mockResolvedValue({
+          success: true,
+          output: "Confirmed with tools",
+          error: null,
+          exit_code: null,
+          elapsed_ms: 42,
+          stopped_reason: "completed",
+        }),
+      } as unknown as ChatAgentLoopRunner;
+      const llmClient = {
+        supportsToolCalling: () => true,
+        sendMessage: vi.fn().mockRejectedValue(new Error("direct llm path must not be called")),
+        parseJSON: vi.fn(),
+      };
+
+      const runner = new ChatRunner(makeDeps({
+        adapter,
+        chatAgentLoopRunner,
+        llmClient: llmClient as never,
+      }));
+      const result = await runner.execute("Can you confirm whether this is safe?", "/repo");
+
+      expect(chatAgentLoopRunner.execute).toHaveBeenCalledOnce();
+      expect(llmClient.sendMessage).not.toHaveBeenCalled();
+      expect(adapter.execute).not.toHaveBeenCalled();
+      expect(result.success).toBe(true);
+      expect(result.output).toBe("Confirmed with tools");
+      expect(result.diagnostics).toBeUndefined();
+    });
+
     it("routes to adapter.execute when supportsToolCalling() returns false", async () => {
       const adapter = makeMockAdapter();
       const llmClient = {

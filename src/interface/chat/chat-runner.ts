@@ -95,6 +95,14 @@ export interface ChatRunResult {
   success: boolean;
   output: string;
   elapsed_ms: number;
+  diagnostics?: ChatRunDiagnostics;
+}
+
+export interface ChatRunDiagnostics {
+  route: "direct";
+  reason: "simple_question";
+  modelTier: "light";
+  maxTokens: number;
 }
 
 export interface RuntimeControlChatContext {
@@ -115,6 +123,7 @@ const DEFAULT_TIMEOUT_MS = 120_000;
 const MAX_VERIFY_RETRIES = 2;
 const MAX_TOOL_LOOPS = 5;
 const ACTIVITY_PREVIEW_CHARS = 40;
+const DIRECT_ANSWER_MAX_TOKENS = 256;
 
 // ─── Command help text ───
 
@@ -148,6 +157,31 @@ function previewActivityText(value: string, maxChars = ACTIVITY_PREVIEW_CHARS): 
 function formatToolActivity(action: "Running" | "Finished" | "Failed", toolName: string, detail?: string): string {
   const preview = detail ? previewActivityText(detail) : "";
   return preview ? `${action} tool: ${toolName} - ${preview}` : `${action} tool: ${toolName}`;
+}
+
+function shouldUseDirectAnswerRoute(input: string): boolean {
+  const normalized = input.trim();
+  if (!normalized) return false;
+
+  const lowered = normalized.toLowerCase();
+  const questionSignals = [
+    /[?？]/,
+    /\b(what|why|how|when|where|who|which|is|are|can|could|would|should|tell me|explain|describe|help me understand)\b/,
+    /(教えて|説明して|教えてください|説明してください|どう思う|なんで|なぜ|どうして|いつ|どこ|だれ|誰|何|どれ|どっち)/,
+  ];
+  if (!questionSignals.some((pattern) => pattern.test(lowered))) {
+    return false;
+  }
+
+  const workSignals = [
+    /\b(fix|implement|change|changed|add|remove|delete|update|refactor|patch|debug|diagnose|investigate|review|write|create|build|run|execute|test|verify|confirm|check|inspect|search|open|read|edit|modify|commit|push|merge|release|deploy|start|stop|restart|resume|compare|convert|migrate|optimize|improve|configure|setup|set up)\b/,
+    /(修正|実装|変更|追加|削除|更新|リファクタ|デバッグ|調査|確認|レビュー|書いて|作って|作成|実行|走らせ|テスト|検証|調べて|開いて|読んで|編集|コミット|プッシュ|マージ|デプロイ|再起動|再開|設定)/,
+    /\b(git|repo|repository|branch|commit|diff|pull request|pr|issue|ticket|adapter|agentloop|tool|tools|code)\b|コード|src\//,
+    /\b(latest|most recent|current|today|now|recent|news|web|internet|api|docs|github|release|version)\b|最新|最新版|今日|現在|最近|今|外部|ネット/,
+    /\bwhat\s+(files?\s+)?changed\b|\bwhich\s+files?\s+(changed|were\s+(modified|edited))\b/,
+    /(\.(ts|tsx|js|jsx|json|md|yml|yaml|toml|py|go|rs|sh|sql)\b|\/[^/\s]+\.[A-Za-z0-9]+$)/,
+  ];
+  return !workSignals.some((pattern) => pattern.test(lowered));
 }
 
 // ─── ChatRunner ───
@@ -622,6 +656,79 @@ export class ChatRunner {
       }
     }
 
+    // Build conversation history from prior turns (last 10)
+    const messages = history.getMessages();
+    const priorTurns = resumeOnly ? messages.slice(-10) : messages.slice(0, -1).slice(-10);
+    let historyBlock = "";
+    if (priorTurns.length > 0) {
+      const lines = priorTurns.map((m: { role: string; content: string }) =>
+        `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`
+      ).join("\n");
+      historyBlock = `Previous conversation:\n${lines}\n\nCurrent message:\n`;
+    }
+
+    const directAnswerRoute = !resumeOnly && this.deps.llmClient !== undefined && shouldUseDirectAnswerRoute(input);
+    const directPrompt = historyBlock ? `${historyBlock}${input}` : input;
+
+    const start = Date.now();
+    const assistantBuffer: AssistantBuffer = { text: "" };
+
+    if (directAnswerRoute) {
+      try {
+        this.emitActivity("lifecycle", "Calling model...", eventContext, "lifecycle:model");
+        const directResponse = await this.sendLLMMessage(
+          this.deps.llmClient!,
+          [{ role: "user", content: directPrompt }],
+          {
+            ...(this.cachedStaticSystemPrompt ? { system: this.cachedStaticSystemPrompt } : {}),
+            model_tier: "light",
+            max_tokens: DIRECT_ANSWER_MAX_TOKENS,
+          },
+          assistantBuffer,
+          eventContext
+        );
+        const elapsed_ms = Date.now() - start;
+        const output = assistantBuffer.text || directResponse.content || "(no response)";
+        await history.appendAssistantMessage(output);
+        this.emitActivity("lifecycle", "Finalizing response...", eventContext, "lifecycle:finalizing");
+        this.emitEvent({
+          type: "assistant_final",
+          text: output,
+          persisted: true,
+          ...this.eventBase(eventContext),
+        });
+        this.emitLifecycleEndEvent("completed", elapsed_ms, eventContext, true);
+        return {
+          success: true,
+          output,
+          elapsed_ms,
+          diagnostics: {
+            route: "direct",
+            reason: "simple_question",
+            modelTier: "light",
+            maxTokens: DIRECT_ANSWER_MAX_TOKENS,
+          },
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.emitLifecycleErrorEvent(message, assistantBuffer.text, eventContext);
+        this.emitLifecycleEndEvent("error", Date.now() - start, eventContext, false);
+        return {
+          success: false,
+          output: assistantBuffer.text
+            ? `${assistantBuffer.text}\n\n[interrupted: ${message}]`
+            : `Error: ${message}`,
+          elapsed_ms: Date.now() - start,
+          diagnostics: {
+            route: "direct",
+            reason: "simple_question",
+            modelTier: "light",
+            maxTokens: DIRECT_ANSWER_MAX_TOKENS,
+          },
+        };
+      }
+    }
+
     let dynamicSystemPrompt = "";
     try {
       this.emitActivity("lifecycle", "Preparing context...", eventContext, "lifecycle:context");
@@ -635,23 +742,9 @@ export class ChatRunner {
       .join("\n\n")
       .trim();
 
-    // Build conversation history from prior turns (last 10)
-    const messages = history.getMessages();
-    const priorTurns = resumeOnly ? messages.slice(-10) : messages.slice(0, -1).slice(-10);
-    let historyBlock = "";
-    if (priorTurns.length > 0) {
-      const lines = priorTurns.map((m: { role: string; content: string }) =>
-        `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`
-      ).join("\n");
-      historyBlock = `Previous conversation:\n${lines}\n\nCurrent message:\n`;
-    }
-
     const context = resumeOnly ? "" : await buildChatContext(input, gitRoot);
     const basePrompt = resumeOnly ? "" : (context ? `${context}\n\n${input}` : input);
     const prompt = historyBlock ? `${historyBlock}${basePrompt}` : basePrompt;
-
-    const start = Date.now();
-    const assistantBuffer: AssistantBuffer = { text: "" };
 
     if (resumeOnly && !this.deps.chatAgentLoopRunner) {
       const elapsed_ms = Date.now() - start;
