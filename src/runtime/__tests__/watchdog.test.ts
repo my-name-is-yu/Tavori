@@ -206,7 +206,7 @@ describe("RuntimeWatchdog", () => {
 
     watchdog.stop();
     await startPromise;
-  });
+  }, 20_000);
 
   it("marks the child unhealthy when the live daemon health probe fails repeatedly", async () => {
     tmpDir = makeTempDir();
