@@ -145,7 +145,7 @@ describe("cursor tracker", () => {
   it("positions the caret from the marker column inside a bordered input box", () => {
     const frame = [
       "┌──────────────────┐",
-      `│ \u001b[31m${INPUT_MARKER}! \u001b[0mhello │`,
+      `│ \u001b[31m! \u001b[0m${INPUT_MARKER}hello │`,
       "└──────────────────┘",
     ].join("\n");
 

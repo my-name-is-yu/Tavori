@@ -7,7 +7,6 @@
 export const INPUT_MARKER = "\u200B\u2060";
 const ZERO_WIDTH_SPACE = "\u200B";
 const ESCAPE_SEQUENCE = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
-const PROMPT_WIDTH = 2; // one prompt glyph + trailing space
 
 function displayWidth(text: string): number {
   let width = 0;
@@ -46,13 +45,13 @@ export function findCursorRow(frame: string): number | null {
 
 /**
  * Compute the cursor x-position from the marker column and input text.
- * Prompt "x " = 2 columns. CJK chars = 2 columns each.
+ * The marker is rendered at the input start column. CJK chars = 2 columns each.
  */
 export function computeCursorX(frame: string, input: string): number | null {
   const position = findInputMarkerPosition(frame);
   if (!position) return null;
 
-  let width = position.col + PROMPT_WIDTH;
+  let width = position.col;
   for (const ch of input) {
     const cp = ch.codePointAt(0) ?? 0;
     width += cp > 0x2E7F ? 2 : 1;

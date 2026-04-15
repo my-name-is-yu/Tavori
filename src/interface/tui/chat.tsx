@@ -362,9 +362,9 @@ export function Chat({
             paddingX={1}
           >
             <Text color={bashMode ? theme.command : theme.userPrompt} bold>
-              {INPUT_MARKER}
               {getInputPromptLabel(bashMode)}{" "}
             </Text>
+            <Text>{INPUT_MARKER}</Text>
             <TextInput
               value={input}
               onChange={(val) => {
