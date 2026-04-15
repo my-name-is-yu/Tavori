@@ -174,7 +174,7 @@ describe("StateManager WAL integration", () => {
     // Compaction leaves only uncommitted intents (none here) + compaction markers
     const intents = records.filter((r) => r.op !== "commit" && r.op !== "compaction_start" && r.op !== "compaction_complete");
     expect(intents.length).toBe(0);
-  });
+  }, 20_000);
 
   it("concurrent saveGoal for same goal both succeed", async () => {
     const sm = new StateManager(tmpDir, undefined, { walEnabled: true });

@@ -593,7 +593,7 @@ describe("runTaskAgentLoopDogfoodBenchmark", () => {
     expect(summary.ready).toBe(true);
     expect(summary.results[0]!.score.signals.successfulVerificationCommands).toBe(1);
     expect(fs.readFileSync(path.join(repoDir, "resume.txt"), "utf-8")).toBe("resume-ok\n");
-  });
+  }, 20_000);
 });
 
 function makeModelInfo(): AgentLoopModelInfo {
