@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.12] - 2026-04-15
+
+### Added
+- Added an imported-setup defaults summary during onboarding so migrated Hermes and OpenClaw settings show the detected provider, model, adapter, and API key status before saving (#684)
+
+### Changed
+- Improved imported setup defaults for migrated agent configs by keeping the default style preset and importing provider API keys from root, config, and selected workspace env files, including `.env.local` (#684)
+- Bumped the package version to `0.4.12`
+
+### Fixed
+- Fixed imported provider auth detection so env-var references such as `apiKey: OPENAI_API_KEY` resolve to the referenced secret instead of the variable name itself (#684)
+- Fixed imported OpenAI setup flows by distinguishing Codex OAuth tokens from OpenAI API keys, letting imported Codex CLI setups skip execution prompts when a usable OAuth login already exists, and avoiding API key leakage from unrelated workspaces during import (#684)
+
 ## [0.4.11] - 2026-04-15
 
 ### Added
