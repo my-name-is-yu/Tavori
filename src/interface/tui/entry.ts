@@ -18,7 +18,7 @@ import { isSafeBashCommand } from "./bash-mode.js";
 import { getCliLogger } from "../cli/cli-logger.js";
 import { ensureProviderConfig } from "../cli/ensure-api-key.js";
 import type { Task } from "../../base/types/task.js";
-import { isNoFlickerEnabled, createFrameWriter, AlternateScreen, type FrameWriter } from "./flicker/index.js";
+import { isNoFlickerEnabled, createFrameWriter, AlternateScreen, MouseTracking, type FrameWriter } from "./flicker/index.js";
 import { isRenderableFrameChunk } from "./render-output.js";
 
 // ─── Breadcrumb helpers ───
@@ -494,9 +494,13 @@ async function startTUIStandaloneMode(): Promise<void> {
   });
 
   const { waitUntilExit } = render(
-    noFlicker
-      ? React.createElement(AlternateScreen, { enabled: true }, appElement)
-      : appElement,
+    React.createElement(
+      MouseTracking,
+      null,
+      noFlicker
+        ? React.createElement(AlternateScreen, { enabled: true }, appElement)
+        : appElement,
+    ),
     { exitOnCtrlC: false }
   );
 
@@ -615,9 +619,13 @@ async function startTUIDaemonMode(): Promise<void> {
   });
 
   const { waitUntilExit } = render(
-    noFlicker
-      ? React.createElement(AlternateScreen, { enabled: true }, appElement)
-      : appElement,
+    React.createElement(
+      MouseTracking,
+      null,
+      noFlicker
+        ? React.createElement(AlternateScreen, { enabled: true }, appElement)
+        : appElement,
+    ),
     { exitOnCtrlC: false }
   );
 

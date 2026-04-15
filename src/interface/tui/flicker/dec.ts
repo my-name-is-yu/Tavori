@@ -25,6 +25,12 @@ export const HIDE_CURSOR = "[?25l";
 /** Show cursor */
 export const SHOW_CURSOR = "[?25h";
 
+/** Enable SGR mouse tracking */
+export const ENABLE_MOUSE_TRACKING = "[?1000h[?1006h";
+
+/** Disable SGR mouse tracking */
+export const DISABLE_MOUSE_TRACKING = "[?1006l[?1000l";
+
 /** Build a cursor-park sequence for the given terminal row */
 export function parkCursor(rows: number): string {
   return `[${rows};1H`;

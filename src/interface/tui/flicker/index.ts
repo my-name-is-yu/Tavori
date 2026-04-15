@@ -1,9 +1,10 @@
 import { loadGlobalConfig } from "../../../base/config/global-config.js";
 
-export { ENTER_ALT_SCREEN, EXIT_ALT_SCREEN, BSU, ESU, CURSOR_HOME, ERASE_SCREEN, HIDE_CURSOR, SHOW_CURSOR, parkCursor } from "./dec.js";
+export { ENTER_ALT_SCREEN, EXIT_ALT_SCREEN, BSU, ESU, CURSOR_HOME, ERASE_SCREEN, HIDE_CURSOR, SHOW_CURSOR, ENABLE_MOUSE_TRACKING, DISABLE_MOUSE_TRACKING, parkCursor } from "./dec.js";
 export { isSynchronizedOutputSupported, isTmuxCC } from "./terminal-detect.js";
 export { createFrameWriter, type FrameWriter } from "./frame-writer.js";
 export { AlternateScreen } from "./AlternateScreen.js";
+export { MouseTracking, attachMouseTracking } from "./MouseTracking.js";
 
 /**
  * Check if no-flicker mode is enabled.
