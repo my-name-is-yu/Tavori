@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.15] - 2026-04-16
+
+### Added
+- Added chat slash commands for compacting sessions, inspecting goals and tasks, and viewing masked provider/plugin configuration directly in chat (#690)
+- Added a builtin Soil display integration that materializes typed Soil records into Markdown before Soil open/publish flows so Notion and Obsidian can consume typed-store-backed memory (#691)
+
+### Changed
+- Clarified chat slash-command behavior and aligned `/model` output with the active provider configuration (#690)
+- Reported builtin integrations separately from installed plugins and quarantined imported Hermes/OpenClaw plugins with compatibility reports until reviewed (#691)
+- Added build guidance and TypeScript build configs for the example plugins so their declared compiled entrypoints are easier to use correctly (#693)
+- Bumped the package version to `0.4.15`
+
+### Fixed
+- Fixed setup and runtime paths that only looked at `OPENAI_API_KEY` environment variables by reusing configured OpenAI credentials for embeddings and related setup flows (#693)
+- Fixed concurrent schedule updates by adding schedule-file locking and stale-lock cleanup around `schedules.json` writes (#693)
+- Fixed PulSeed home file tools to reject symlink and path-escape access outside the PulSeed state directory (#693)
+
 ## [0.4.14] - 2026-04-15
 
 ### Added
