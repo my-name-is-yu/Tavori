@@ -74,18 +74,10 @@ export const ToolMetadataSchema = z.object({
    */
   tags: z.array(z.string()).default([]),
   /** Whether this tool requires network access even if it is otherwise read-only. */
-  requiresNetwork: z.boolean().default(false),
+  requiresNetwork: z.boolean().optional(),
 });
 
-type ParsedToolMetadata = z.infer<typeof ToolMetadataSchema>;
-
-export type ToolMetadata = Omit<ParsedToolMetadata, "requiresNetwork"> & {
-  /**
-   * Tools omit this unless they need network access. Treat an absent value as
-   * false at policy boundaries, matching ToolMetadataSchema's runtime default.
-   */
-  requiresNetwork?: boolean;
-};
+export type ToolMetadata = z.infer<typeof ToolMetadataSchema>;
 
 // --- Tool Interface ---
 
