@@ -3,6 +3,7 @@ import type { ITool, ToolResult, ToolCallContext, PermissionCheckResult, ToolMet
 import { execFileNoThrow } from "../../../base/utils/execFileNoThrow.js";
 import { DESCRIPTION } from "./prompt.js";
 import { TAGS, MAX_OUTPUT_CHARS, PERMISSION_LEVEL } from "./constants.js";
+import { assessShellCommand } from "./command-policy.js";
 
 export const ShellInputSchema = z.object({
   command: z.string().min(1),
@@ -54,51 +55,12 @@ export class ShellTool implements ITool<ShellInput, ShellOutput> {
   }
 
   async checkPermissions(input: ShellInput, context?: ToolCallContext): Promise<PermissionCheckResult> {
-    const cmd = input.command.trim();
-    const SAFE_PATTERNS = [
-      /^(cat|head|tail|wc|ls|pwd|echo|date|hostname|which|type|file)/,
-      /^git\s+(status|log|diff|show|branch|rev-parse|rev-list|describe|tag\s+-l)/,
-      /^npm\s+(ls|list|view|info|outdated|audit)/,
-      /^npx\s+vitest\s+(run|list|--reporter)/,
-      /^npx\s+tsc\s+--noEmit/,
-      /^rg\s/, /^find\s/, /^du\s/, /^df\s/, /^tree\s/,
-    ];
-    const DENY_PATTERNS = [
-      /rm\s/, /mv\s/, /cp\s/, /mkdir\s/, /touch\s/, /chmod\s/, /chown\s/,
-      /git\s+(push|commit|merge|rebase|reset|checkout|clean|stash)/,
-      /npm\s+(install|uninstall|publish|run|exec)/,
-      /curl\s.*(-X\s*(POST|PUT|DELETE|PATCH)|-d\s)/,
-      /wget\s/, /sudo\s/, /mkfs/, /dd\s+if=/, /shutdown/, /reboot/,
-    ];
-    const segments = cmd.split(/\s*(?:&&|\|\||;)\s*/);
-    // Injection patterns always checked regardless of trust level
-    const INJECTION_PATTERNS = [/>/, /\|.*(tee|dd|rm|mv)/];
-    for (const segment of segments) {
-      const trimmed = segment.trim();
-      if (!trimmed) continue;
-      if (INJECTION_PATTERNS.some(p => p.test(trimmed))) {
-        return { status: "denied", reason: `Denied command segment (injection risk): ${trimmed}` };
-      }
+    const assessment = assessShellCommand(input.command, context?.executionPolicy, context?.trusted === true);
+    if (assessment.status === "allowed") return { status: "allowed" };
+    if (assessment.status === "needs_approval") {
+      return { status: "needs_approval", reason: assessment.reason ?? "Shell command requires approval" };
     }
-    // trusted: skip DENY_PATTERNS and SAFE_PATTERNS; only injection checks above apply
-    if (context?.trusted) {
-      return { status: "allowed" };
-    }
-    for (const segment of segments) {
-      const trimmed = segment.trim();
-      if (!trimmed) continue;
-      if (DENY_PATTERNS.some(p => p.test(trimmed))) {
-        return { status: "denied", reason: `Denied command segment: ${trimmed}` };
-      }
-    }
-    for (const segment of segments) {
-      const trimmed = segment.trim();
-      if (!trimmed) continue;
-      if (!SAFE_PATTERNS.some(p => p.test(trimmed))) {
-        return { status: "needs_approval", reason: `Unknown command segment requires approval: ${trimmed}` };
-      }
-    }
-    return { status: "allowed" };
+    return { status: "denied", reason: assessment.reason ?? "Shell command denied by policy" };
   }
 
   isConcurrencySafe(input: ShellInput): boolean {

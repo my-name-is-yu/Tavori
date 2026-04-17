@@ -6,6 +6,7 @@ export * from "./agent-loop-dogfood-benchmark.js";
 export * from "./agent-loop-evaluator.js";
 export * from "./agent-loop-events.js";
 export * from "./agent-loop-history.js";
+export * from "./execution-policy.js";
 export * from "./agent-loop-model.js";
 export * from "./agent-loop-model-client.js";
 export * from "./agent-loop-model-client-factory.js";

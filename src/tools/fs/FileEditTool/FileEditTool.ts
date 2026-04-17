@@ -50,7 +50,7 @@ export class FileEditTool implements ITool<FileEditInput, FileEditOutput> {
 
   async call(input: FileEditInput, context: ToolCallContext): Promise<ToolResult> {
     const startTime = Date.now();
-    const validation = validateFilePath(input.path, context.cwd);
+    const validation = validateFilePath(input.path, context.cwd, context.executionPolicy?.protectedPaths);
     if (!validation.valid) {
       return {
         success: false,

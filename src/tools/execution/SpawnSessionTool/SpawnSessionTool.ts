@@ -7,12 +7,31 @@ import { DESCRIPTION } from "./prompt.js";
 import { TAGS, CATEGORY as _CATEGORY, READ_ONLY, PERMISSION_LEVEL } from "./constants.js";
 
 export const SpawnSessionInputSchema = z.object({
-  session_type: z.enum(["task_execution", "observation", "task_review", "goal_review", "chat_execution"]),
+  session_type: z.enum(["task_execution", "observation", "task_review", "goal_review", "chat_execution"]).optional(),
+  role: z.enum(["default", "explorer", "worker", "reviewer"]).optional(),
   goal_id: z.string().min(1, "goal_id is required"),
   task_id: z.string().optional(),
   context_budget: z.number().int().positive().optional(),
+}).superRefine((value, ctx) => {
+  if (!value.session_type && !value.role) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["session_type"],
+      message: "session_type or role is required",
+    });
+  }
 });
 export type SpawnSessionInput = z.infer<typeof SpawnSessionInputSchema>;
+
+export function resolveSpawnSessionType(input: Pick<SpawnSessionInput, "session_type" | "role">): SessionType {
+  if (input.session_type) return input.session_type;
+  switch (input.role) {
+    case "explorer": return "observation";
+    case "reviewer": return "task_review";
+    case "worker": return "task_execution";
+    default: return "chat_execution";
+  }
+}
 
 export class SpawnSessionTool implements ITool<SpawnSessionInput, unknown> {
   readonly metadata: ToolMetadata = {
@@ -39,15 +58,20 @@ export class SpawnSessionTool implements ITool<SpawnSessionInput, unknown> {
     const startTime = Date.now();
     try {
       const session = await this.sessionManager.createSession(
-        input.session_type as SessionType,
+        resolveSpawnSessionType(input),
         input.goal_id,
         input.task_id ?? null,
         input.context_budget ?? DEFAULT_CONTEXT_BUDGET,
       );
       return {
         success: true,
-        data: { sessionId: session.id, session_type: session.session_type, goal_id: session.goal_id },
-        summary: `Session ${session.id} created (type=${session.session_type})`,
+        data: {
+          sessionId: session.id,
+          session_type: session.session_type,
+          goal_id: session.goal_id,
+          role: input.role ?? "default",
+        },
+        summary: `Session ${session.id} created (type=${session.session_type}, role=${input.role ?? "default"})`,
         durationMs: Date.now() - startTime,
       };
     } catch (err) {

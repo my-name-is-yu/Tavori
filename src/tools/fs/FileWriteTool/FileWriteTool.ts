@@ -39,7 +39,7 @@ export class FileWriteTool implements ITool<FileWriteInput, FileWriteOutput> {
 
   async call(input: FileWriteInput, context: ToolCallContext): Promise<ToolResult> {
     const startTime = Date.now();
-    const validation = validateFilePath(input.path, context.cwd);
+    const validation = validateFilePath(input.path, context.cwd, context.executionPolicy?.protectedPaths);
     if (!validation.valid) {
       return {
         success: false,

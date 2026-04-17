@@ -45,4 +45,10 @@ describe("validateFilePath", () => {
     expect(result.valid).toBe(false);
     expect(result.error).toContain("node_modules");
   });
+
+  it("rejects custom protected paths from execution policy", () => {
+    const result = validateFilePath("build/output.txt", cwd, ["build"]);
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("build");
+  });
 });

@@ -6,6 +6,8 @@ import type { Task } from "../../../base/types/task.js";
 import { TaskSchema } from "../../../base/types/task.js";
 import type { Strategy } from "../../../base/types/strategy.js";
 import { appendTaskOutcomeEvent } from "./task-outcome-ledger.js";
+import { validateProtectedPath } from "../../../tools/fs/FileValidationTool/protected-path-policy.js";
+import { loadProviderConfig } from "../../../base/llm/provider-config.js";
 const DEBUG = process.env.PULSEED_DEBUG === "true";
 
 // ─── Deps interface ───
@@ -207,26 +209,18 @@ export async function executeTask(
       }
 
       if (changedFiles.length > 0) {
-        const protectedPatterns = [
-          /vitest\.config/,
-          /jest\.config/,
-          /tsconfig/,
-          /package\.json$/,
-          /package-lock\.json$/,
-          /\.config\.(ts|js|mjs)$/,
-        ];
-
-        const protectedChanges = changedFiles.filter((f) =>
-          protectedPatterns.some((p) => p.test(f))
+        const providerConfig = await loadProviderConfig({ saveMigration: false });
+        const protectedPaths = providerConfig.agent_loop?.security?.protected_paths;
+        const protectedChanges = changedFiles.filter((changedFile) =>
+          !validateProtectedPath(changedFile, { cwd: gitCwd, workspaceRoot: gitCwd, protectedPaths }).valid
         );
 
         if (protectedChanges.length > 0) {
-          execFileSyncFn("git", ["checkout", "--", ...protectedChanges], {
-            cwd: gitCwd,
-            encoding: "utf-8",
-          });
+          result.success = false;
+          result.error = `Protected files were modified: ${protectedChanges.join(", ")}`;
           result.output = (result.output || "") +
-            `\n[Scope Check] Reverted ${protectedChanges.length} protected file(s): ${protectedChanges.join(", ")}`;
+            `\n[Scope Check] Protected files were modified: ${protectedChanges.join(", ")}`;
+          result.stopped_reason = "error";
         }
       }
     } catch {

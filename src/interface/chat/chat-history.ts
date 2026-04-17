@@ -117,6 +117,25 @@ export class ChatHistory {
     return { before, after: this.session.messages.length };
   }
 
+  async removeLastTurn(): Promise<number> {
+    if (this.session.messages.length === 0) return 0;
+
+    let removed = 0;
+    while (this.session.messages.length > 0) {
+      const message = this.session.messages.pop();
+      if (!message) break;
+      removed += 1;
+      if (message.role === "user") break;
+    }
+
+    this.session.messages = this.session.messages.map((message, index) => ({
+      ...message,
+      turnIndex: index,
+    }));
+    await this.persist();
+    return removed;
+  }
+
   getMessages(): ChatMessage[] {
     return [...this.session.messages];
   }

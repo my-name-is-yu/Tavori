@@ -21,6 +21,7 @@ import type { AgentLoopToolPolicy } from "./agent-loop-turn-context.js";
 import type { SoilPrefetchQuery, SoilPrefetchResult } from "./agent-loop-context-assembler.js";
 import { createPersistentAgentLoopSessionFactory } from "./agent-loop-session-factory.js";
 import type { AgentLoopWorktreePolicy } from "./task-agent-loop-worktree.js";
+import { resolveExecutionPolicy } from "./execution-policy.js";
 
 export interface NativeTaskAgentLoopRuntimeDeps {
   llmClient: ILLMClient;
@@ -47,6 +48,10 @@ export function createNativeTaskAgentLoopRunner(
   deps: NativeTaskAgentLoopRuntimeDeps,
 ): TaskAgentLoopRunner {
   const runtime = createNativeAgentLoopRuntime(deps);
+  const executionPolicy = resolveExecutionPolicy({
+    workspaceRoot: deps.cwd ?? process.cwd(),
+    security: deps.providerConfig.agent_loop?.security,
+  });
 
   return new TaskAgentLoopRunner({
     boundedRunner: runtime.boundedRunner,
@@ -55,6 +60,7 @@ export function createNativeTaskAgentLoopRunner(
     defaultModel: runtime.modelInfo.ref,
     defaultBudget: deps.defaultBudget,
     defaultToolPolicy: deps.defaultToolPolicy,
+    defaultToolCallContext: { executionPolicy },
     defaultWorktreePolicy: deps.defaultWorktreePolicy,
     soilPrefetch: deps.soilPrefetch,
     cwd: deps.cwd,
@@ -71,6 +77,10 @@ export function createNativeChatAgentLoopRunner(
   deps: NativeTaskAgentLoopRuntimeDeps,
 ): ChatAgentLoopRunner {
   const runtime = createNativeAgentLoopRuntime(deps);
+  const executionPolicy = resolveExecutionPolicy({
+    workspaceRoot: deps.cwd ?? process.cwd(),
+    security: deps.providerConfig.agent_loop?.security,
+  });
 
   return new ChatAgentLoopRunner({
     boundedRunner: runtime.boundedRunner,
@@ -79,6 +89,7 @@ export function createNativeChatAgentLoopRunner(
     defaultModel: runtime.modelInfo.ref,
     defaultBudget: deps.defaultBudget,
     defaultToolPolicy: deps.defaultToolPolicy,
+    defaultToolCallContext: { executionPolicy },
     cwd: deps.cwd,
     createSession: deps.traceBaseDir
       ? createPersistentAgentLoopSessionFactory({ traceBaseDir: deps.traceBaseDir, kind: "chat" })

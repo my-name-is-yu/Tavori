@@ -18,6 +18,8 @@ import {
   prepareTaskAgentLoopWorkspace,
   type AgentLoopWorktreePolicy,
 } from "./task-agent-loop-worktree.js";
+import type { ToolCallContext } from "../../../tools/types.js";
+import type { SubagentRole } from "./execution-policy.js";
 
 export interface TaskAgentLoopRunnerDeps {
   boundedRunner: BoundedAgentLoopRunner;
@@ -26,6 +28,7 @@ export interface TaskAgentLoopRunnerDeps {
   defaultModel?: AgentLoopModelRef;
   defaultBudget?: Partial<AgentLoopBudget>;
   defaultToolPolicy?: AgentLoopToolPolicy;
+  defaultToolCallContext?: Partial<ToolCallContext>;
   defaultWorktreePolicy?: AgentLoopWorktreePolicy;
   contextAssembler?: AgentLoopContextAssembler;
   soilPrefetch?: (query: SoilPrefetchQuery) => Promise<SoilPrefetchResult | null>;
@@ -44,6 +47,7 @@ export interface TaskAgentLoopRunInput {
   worktreePolicy?: AgentLoopWorktreePolicy;
   resumeState?: AgentLoopSessionState;
   abortSignal?: AbortSignal;
+  role?: SubagentRole;
 }
 
 export class TaskAgentLoopRunner {
@@ -66,6 +70,7 @@ export class TaskAgentLoopRunner {
       knowledgeContext: input.knowledgeContext,
       cwd: workspace.executionCwd,
       soilPrefetch: this.deps.soilPrefetch,
+      trustProjectInstructions: this.deps.defaultToolCallContext?.executionPolicy?.trustProjectInstructions,
     });
     const turn = buildTaskAgentLoopTurnContext({
       task: input.task,
@@ -79,8 +84,10 @@ export class TaskAgentLoopRunner {
       userPrompt: assembled.userPrompt,
       budget: { ...this.deps.defaultBudget, ...input.budget },
       toolPolicy: { ...this.deps.defaultToolPolicy, ...input.toolPolicy },
+      toolCallContext: this.deps.defaultToolCallContext,
       ...(input.resumeState ? { resumeState: input.resumeState } : {}),
       abortSignal: input.abortSignal,
+      role: input.role,
     });
     try {
       const result = await this.deps.boundedRunner.run(turn);

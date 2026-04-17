@@ -10,7 +10,8 @@ import { withDefaultBudget } from "./agent-loop-turn-context.js";
 import type { BoundedAgentLoopRunner } from "./bounded-agent-loop-runner.js";
 import type { AgentLoopSessionState } from "./agent-loop-session-state.js";
 import { buildAgentLoopBaseInstructions } from "./agent-loop-prompts.js";
-import type { ApprovalRequest } from "../../../tools/types.js";
+import type { ApprovalRequest, ToolCallContext } from "../../../tools/types.js";
+import type { SubagentRole } from "./execution-policy.js";
 
 export const ChatAgentLoopOutputSchema = z.object({
   status: z.enum(["done", "blocked", "failed"]).default("done"),
@@ -28,6 +29,7 @@ export interface ChatAgentLoopRunnerDeps {
   cwd?: string;
   defaultBudget?: Partial<AgentLoopBudget>;
   defaultToolPolicy?: AgentLoopToolPolicy;
+  defaultToolCallContext?: Partial<ToolCallContext>;
   createSession?: (input: {
     goalId?: string;
     eventSink?: AgentLoopEventSink;
@@ -48,9 +50,11 @@ export interface ChatAgentLoopInput {
   budget?: Partial<AgentLoopBudget>;
   toolPolicy?: AgentLoopToolPolicy;
   approvalFn?: (request: ApprovalRequest) => Promise<boolean>;
+  toolCallContext?: Partial<ToolCallContext>;
   resumeState?: AgentLoopSessionState;
   resumeStatePath?: string;
   resumeOnly?: boolean;
+  role?: SubagentRole;
 }
 
 export class ChatAgentLoopRunner {
@@ -90,6 +94,7 @@ export class ChatAgentLoopRunner {
                     "Use tools to answer the user and operate CoreLoop only through tools.",
                     "Do not call CoreLoop internals directly.",
                   ],
+                  role: input.role,
                 }),
                 input.systemPrompt?.trim() ? input.systemPrompt.trim() : "",
               ].join("\n"),
@@ -123,6 +128,9 @@ export class ChatAgentLoopRunner {
             isDestructive: request.isDestructive,
           });
         },
+        ...this.deps.defaultToolCallContext,
+        ...input.toolCallContext,
+        agentRole: input.role,
       },
     });
 

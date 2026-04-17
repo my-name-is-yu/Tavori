@@ -10,6 +10,7 @@ import * as os from "node:os";
 import { createHash } from "node:crypto";
 import { getPulseedDirPath } from "../utils/paths.js";
 import { writeJsonFileAtomic } from "../utils/json-io.js";
+import type { AgentLoopSecurityConfig } from "../../orchestrator/execution/agent-loop/execution-policy.js";
 
 // ─── OAuth Token Helpers ───
 
@@ -125,6 +126,7 @@ export interface ProviderConfig {
 
   /** Native agentloop runtime settings */
   agent_loop?: {
+    security?: AgentLoopSecurityConfig;
     worktree?: {
       enabled?: boolean;
       base_dir?: string;
@@ -159,6 +161,14 @@ const DEFAULT_PROVIDER_CONFIG: ProviderConfig = {
   provider: "openai",
   model: "gpt-5.4-mini",
   adapter: "openai_codex_cli",
+  agent_loop: {
+    security: {
+      sandbox_mode: "workspace_write",
+      approval_policy: "on_request",
+      network_access: false,
+      trust_project_instructions: true,
+    },
+  },
 };
 
 // Track whether we've already warned about provider config issues in this process

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { ExecutionPolicy, SubagentRole } from "../orchestrator/execution/agent-loop/execution-policy.js";
 
 // --- Tool Result ---
 
@@ -72,6 +73,8 @@ export const ToolMetadataSchema = z.object({
    * Used by the context-filtered tier of the registry.
    */
   tags: z.array(z.string()).default([]),
+  /** Whether this tool requires network access even if it is otherwise read-only. */
+  requiresNetwork: z.boolean().optional(),
 });
 
 export type ToolMetadata = z.infer<typeof ToolMetadataSchema>;
@@ -150,6 +153,10 @@ export interface ToolCallContext {
   onApprovalRequested?: (request: ApprovalRequest & { callId?: string }) => Promise<void> | void;
   /** When true, bypass DENY_PATTERNS in ShellTool (internal use only) */
   trusted?: boolean;
+  /** Shared execution policy for chat/agent-loop sessions. */
+  executionPolicy?: ExecutionPolicy;
+  /** Optional subagent role for delegated runs. */
+  agentRole?: SubagentRole;
   /** Abort signal for cancellation */
   abortSignal?: AbortSignal;
   /** Timeout in milliseconds (per-tool-call) */

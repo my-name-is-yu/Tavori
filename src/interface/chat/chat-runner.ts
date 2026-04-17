@@ -51,6 +51,12 @@ import type {
   RuntimeControlActor,
   RuntimeControlReplyTarget,
 } from "../../runtime/store/runtime-operation-schemas.js";
+import {
+  resolveExecutionPolicy,
+  summarizeExecutionPolicy,
+  withExecutionPolicyOverrides,
+  type ExecutionPolicy,
+} from "../../orchestrator/execution/agent-loop/execution-policy.js";
 
 // ─── Types ───
 
@@ -171,10 +177,16 @@ Goals and tasks
 Configuration
   /config               Show provider configuration with secrets masked
   /model                Show the active provider/model/adapter
+  /permissions [args]   Show or update session execution policy
   /plugins              List installed plugins when plugin metadata is available
 
+Review and branching
+  /review               Show current diff summary and verification context
+  /fork [title]         Fork the current chat session into a new session
+  /undo                 Remove the latest chat turn from session history
+
 Deferred
-  /retry, /undo, and /usage are intentionally not supported yet.`;
+  /retry and /usage are intentionally not supported yet.`;
 
 // ─── Helpers ───
 
@@ -245,6 +257,7 @@ export class ChatRunner {
   onEvent: ((event: ChatEvent) => void) | undefined = undefined;
   private nativeAgentLoopStatePath: string | null = null;
   private runtimeControlContext: RuntimeControlChatContext | null = null;
+  private sessionExecutionPolicy: ExecutionPolicy | null = null;
 
   constructor(deps: ChatRunnerDeps) {
     this.deps = deps;
@@ -263,6 +276,7 @@ export class ChatRunner {
     this.sessionActive = true;
     this.nativeAgentLoopStatePath = `chat/agentloop/${sessionId}.state.json`;
     this.history.setAgentLoopStatePath(this.nativeAgentLoopStatePath);
+    this.sessionExecutionPolicy = null;
   }
 
   startSessionFromLoadedSession(session: LoadedChatSession): void {
@@ -272,6 +286,7 @@ export class ChatRunner {
     this.sessionActive = true;
     this.nativeAgentLoopStatePath = session.agentLoopStatePath ?? `chat/agentloop/${session.id}.state.json`;
     this.history.setAgentLoopStatePath(this.nativeAgentLoopStatePath);
+    this.sessionExecutionPolicy = null;
   }
 
   getSessionId(): string | null {
@@ -761,8 +776,20 @@ export class ChatRunner {
     if (cmd === "/model") {
       return this.handleModel(start);
     }
+    if (cmd === "/permissions") {
+      return this.handlePermissions(trimmed.slice("/permissions".length).trim(), start);
+    }
     if (cmd === "/plugins") {
       return this.handlePlugins(start);
+    }
+    if (cmd === "/review") {
+      return this.handleReview(start);
+    }
+    if (cmd === "/fork") {
+      return this.handleFork(trimmed.slice("/fork".length).trim(), start);
+    }
+    if (cmd === "/undo") {
+      return this.handleUndo(start);
     }
     if (cmd === "/exit") {
       return { success: true, output: "Exiting chat mode.", elapsed_ms: Date.now() - start };
@@ -817,6 +844,120 @@ export class ChatRunner {
         elapsed_ms: Date.now() - start,
       };
     }
+  }
+
+  private async handlePermissions(args: string, start: number): Promise<ChatRunResult> {
+    const policy = await this.getSessionExecutionPolicy();
+    if (!args) {
+      return {
+        success: true,
+        output: summarizeExecutionPolicy(policy),
+        elapsed_ms: Date.now() - start,
+      };
+    }
+
+    const tokens = args.toLowerCase().split(/\s+/).filter(Boolean);
+    let nextPolicy = policy;
+    for (let index = 0; index < tokens.length; index++) {
+      const token = tokens[index];
+      if (token === "read-only" || token === "readonly" || token === "read_only") {
+        nextPolicy = withExecutionPolicyOverrides(nextPolicy, { sandboxMode: "read_only" });
+        continue;
+      }
+      if (token === "workspace-write" || token === "workspace_write") {
+        nextPolicy = withExecutionPolicyOverrides(nextPolicy, { sandboxMode: "workspace_write" });
+        continue;
+      }
+      if (token === "full-access" || token === "danger-full-access" || token === "danger_full_access") {
+        nextPolicy = withExecutionPolicyOverrides(nextPolicy, { sandboxMode: "danger_full_access" });
+        continue;
+      }
+      if (token === "network" && tokens[index + 1]) {
+        nextPolicy = withExecutionPolicyOverrides(nextPolicy, { networkAccess: tokens[index + 1] === "on" });
+        index += 1;
+        continue;
+      }
+      if (token === "approval" && tokens[index + 1]) {
+        const approvalPolicy = tokens[index + 1];
+        if (approvalPolicy === "never" || approvalPolicy === "on_request" || approvalPolicy === "untrusted") {
+          nextPolicy = withExecutionPolicyOverrides(nextPolicy, { approvalPolicy });
+          index += 1;
+          continue;
+        }
+      }
+      return {
+        success: false,
+        output: "Usage: /permissions [read-only|workspace-write|full-access] [network on|off] [approval on_request|never|untrusted]",
+        elapsed_ms: Date.now() - start,
+      };
+    }
+
+    this.sessionExecutionPolicy = nextPolicy;
+    return {
+      success: true,
+      output: summarizeExecutionPolicy(nextPolicy),
+      elapsed_ms: Date.now() - start,
+    };
+  }
+
+  private async handleReview(start: number): Promise<ChatRunResult> {
+    const cwd = this.sessionCwd ?? process.cwd();
+    const diffStat = await checkGitChanges(cwd);
+    const policy = await this.getSessionExecutionPolicy();
+    const output = [
+      "Review summary",
+      diffStat ? diffStat : "No uncommitted changes detected.",
+      "",
+      "Execution policy",
+      summarizeExecutionPolicy(policy),
+    ].join("\n");
+    return { success: true, output, elapsed_ms: Date.now() - start };
+  }
+
+  private async handleFork(title: string, start: number): Promise<ChatRunResult> {
+    const cwd = this.sessionCwd ?? process.cwd();
+    const sessionId = crypto.randomUUID();
+    const baseSession = this.history?.getSessionData() ?? {
+      id: sessionId,
+      cwd,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      messages: [],
+    };
+    const now = new Date().toISOString();
+    const forkedSession: ChatSession = {
+      ...baseSession,
+      id: sessionId,
+      createdAt: now,
+      updatedAt: now,
+      title: title || (baseSession.title ? `${baseSession.title} (fork)` : "Forked session"),
+    };
+    this.history = ChatHistory.fromSession(this.deps.stateManager, forkedSession);
+    this.sessionCwd = cwd;
+    this.sessionActive = true;
+    this.nativeAgentLoopStatePath = `chat/agentloop/${sessionId}.state.json`;
+    this.history.setAgentLoopStatePath(this.nativeAgentLoopStatePath);
+    await this.history.persist();
+    return {
+      success: true,
+      output: `Forked chat session as ${sessionId}.`,
+      elapsed_ms: Date.now() - start,
+    };
+  }
+
+  private async handleUndo(start: number): Promise<ChatRunResult> {
+    if (!this.history) {
+      return { success: false, output: "No active chat session to undo.", elapsed_ms: Date.now() - start };
+    }
+    const removed = await this.history.removeLastTurn();
+    if (removed === 0) {
+      return { success: false, output: "No chat turn to undo.", elapsed_ms: Date.now() - start };
+    }
+    return {
+      success: true,
+      output: `Removed ${removed} message(s) from chat history. File changes were not reverted.`,
+      elapsed_ms: Date.now() - start,
+    };
   }
 
   private async handleTend(args: string, start: number): Promise<ChatRunResult> {
@@ -1227,6 +1368,9 @@ export class ChatRunner {
             }
             return false;
           },
+          toolCallContext: {
+            executionPolicy: await this.getSessionExecutionPolicy(),
+          },
           ...(this.nativeAgentLoopStatePath ? { resumeStatePath: this.nativeAgentLoopStatePath } : {}),
           ...(resumeState ? { resumeState } : {}),
           ...(resumeOnly ? { resumeOnly: true } : {}),
@@ -1433,7 +1577,7 @@ export class ChatRunner {
   ): Promise<string> {
     const llmClient = this.deps.llmClient!;
     const messages: LLMMessage[] = [{ role: "user", content: prompt }];
-    const toolCallContext = this.buildToolCallContext();
+    const toolCallContext = await this.buildToolCallContext();
 
     for (let loop = 0; loop < MAX_TOOL_LOOPS; loop++) {
       // Recompute tools each iteration so newly activated deferred tools are included
@@ -1954,7 +2098,18 @@ export class ChatRunner {
   }
 
   /** Build a ToolCallContext from ChatRunnerDeps for tool dispatch. */
-  private buildToolCallContext(): ToolCallContext {
+  private async getSessionExecutionPolicy(): Promise<ExecutionPolicy> {
+    if (this.sessionExecutionPolicy) return this.sessionExecutionPolicy;
+    const config = await loadProviderConfig({ saveMigration: false });
+    this.sessionExecutionPolicy = resolveExecutionPolicy({
+      workspaceRoot: this.sessionCwd ?? process.cwd(),
+      security: config.agent_loop?.security,
+    });
+    return this.sessionExecutionPolicy;
+  }
+
+  private async buildToolCallContext(): Promise<ToolCallContext> {
+    const executionPolicy = await this.getSessionExecutionPolicy();
     return {
       cwd: this.sessionCwd ?? process.cwd(),
       goalId: this.deps.goalId ?? "",
@@ -1966,6 +2121,7 @@ export class ChatRunner {
         }
         return false;
       },
+      executionPolicy,
     };
   }
 }

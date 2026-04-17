@@ -3,7 +3,7 @@
 // IAdapter implementation that spawns the `codex` CLI process.
 // The task prompt is written to stdin (not passed as a CLI arg) to avoid
 // exposing sensitive content in `ps aux` output.
-// Uses -s danger-full-access by default for non-interactive execution.
+// Uses -s workspace-write by default for non-interactive execution.
 //
 // Usage: echo "PROMPT" | codex exec [-s danger-full-access] [-m <model>]
 //
@@ -24,8 +24,8 @@ export interface OpenAICodexCLIAdapterConfig {
   /** The executable name / path for the codex CLI. Default: "codex" */
   cliPath?: string;
   /**
-   * Sandbox policy passed via -s flag. Default: "danger-full-access" for
-   * non-interactive execution. Use "workspace-write" for a safer sandbox.
+   * Sandbox policy passed via -s flag. Default: "workspace-write" for
+   * non-interactive execution. Use "danger-full-access" only as an explicit opt-in.
    * Set to null to omit the flag entirely.
    */
   sandboxPolicy?: string | null;
@@ -54,7 +54,7 @@ export class OpenAICodexCLIAdapter implements IAdapter {
   constructor(config: OpenAICodexCLIAdapterConfig = {}, logger?: Logger) {
     this.cliPath = config.cliPath ?? "codex";
     this.sandboxPolicy =
-      config.sandboxPolicy !== undefined ? config.sandboxPolicy : "danger-full-access";
+      config.sandboxPolicy !== undefined ? config.sandboxPolicy : "workspace-write";
     this.model = config.model;
     this.repoPath = config.repoPath?.trim() || ".";
     this.skipGitRepoCheck = config.skipGitRepoCheck ?? true;

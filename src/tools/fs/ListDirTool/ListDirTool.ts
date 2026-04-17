@@ -66,7 +66,7 @@ export class ListDirTool implements ITool<ListDirInput, DirEntry[]> {
 
   async checkPermissions(input: ListDirInput, context?: ToolCallContext): Promise<PermissionCheckResult> {
     if (context) {
-      const validation = validateFilePath(input.path, context.cwd);
+      const validation = validateFilePath(input.path, context.cwd, context.executionPolicy?.protectedPaths);
       if (!validation.valid) {
         return { status: "needs_approval", reason: `Listing outside the working directory: ${validation.resolved}` };
       }

@@ -236,7 +236,7 @@ export class HttpFetchTool implements ITool<HttpFetchInput, HttpFetchOutput> {
     name: "http_fetch", aliases: ["fetch", "curl", "http"],
     permissionLevel: PERMISSION_LEVEL, isReadOnly: true, isDestructive: false,
     shouldDefer: true, alwaysLoad: false, maxConcurrency: 5,
-    maxOutputChars: MAX_OUTPUT_CHARS, tags: [...TAGS],
+    maxOutputChars: MAX_OUTPUT_CHARS, tags: [...TAGS], requiresNetwork: true,
   };
   readonly inputSchema = HttpFetchInputSchema;
 

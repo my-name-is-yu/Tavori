@@ -62,7 +62,7 @@ export class GlobTool implements ITool<GlobInput, string[]> {
       return { status: "needs_approval", reason: `Glob pattern may access outside the working directory: ${input.pattern}` };
     }
     if (context) {
-      const validation = validateFilePath(input.path ?? ".", context.cwd);
+      const validation = validateFilePath(input.path ?? ".", context.cwd, context.executionPolicy?.protectedPaths);
       if (!validation.valid) {
         return { status: "needs_approval", reason: `Globbing outside the working directory: ${validation.resolved}` };
       }

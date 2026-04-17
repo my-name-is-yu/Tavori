@@ -18,6 +18,7 @@ import { NativeAgentLoopAdapter } from "../../adapters/agents/native-agent-loop.
 import { GitHubIssueAdapter } from "../../adapters/github-issue.js";
 import { A2AAdapter } from "../../adapters/agents/a2a-adapter.js";
 import type { ProviderConfig } from "./provider-config.js";
+import { resolveExecutionPolicy } from "../../orchestrator/execution/agent-loop/execution-policy.js";
 
 type OpenClawACPAdapterCtor = new (config: {
   cliPath?: string;
@@ -72,10 +73,15 @@ export async function buildLLMClient(): Promise<ILLMClient> {
       // CodexLLMClient shells out to the codex CLI which handles auth internally,
       // so no api_key check is needed here.
       if (config.adapter === "openai_codex_cli") {
+        const executionPolicy = resolveExecutionPolicy({
+          workspaceRoot: process.cwd(),
+          security: config.agent_loop?.security,
+        });
         return new CodexLLMClient({
           cliPath: config.codex_cli_path,
           model: config.model,
           lightModel: config.light_model,
+          sandboxPolicy: executionPolicy.sandboxMode === "danger_full_access" ? "danger-full-access" : executionPolicy.sandboxMode.replace("_", "-"),
         });
       }
       // Otherwise use OpenAILLMClient
@@ -141,6 +147,15 @@ export async function buildAdapterRegistry(
   registry.register(new OpenAICodexCLIAdapter({
     cliPath: config.codex_cli_path,
     model: config.model,
+    sandboxPolicy: resolveExecutionPolicy({
+      workspaceRoot: process.cwd(),
+      security: config.agent_loop?.security,
+    }).sandboxMode === "danger_full_access"
+      ? "danger-full-access"
+      : resolveExecutionPolicy({
+          workspaceRoot: process.cwd(),
+          security: config.agent_loop?.security,
+        }).sandboxMode.replace("_", "-"),
     terminalBackend: config.terminal_backend,
   }));
   registry.register(new NativeAgentLoopAdapter());

@@ -69,7 +69,7 @@ export class ReadTool implements ITool<ReadInput, string> {
       return { status: "needs_approval", reason: `Reading potentially sensitive file: ${basename}` };
     }
     if (context) {
-      const validation = validateFilePath(input.file_path, context.cwd);
+      const validation = validateFilePath(input.file_path, context.cwd, context.executionPolicy?.protectedPaths);
       if (!validation.valid) {
         return { status: "needs_approval", reason: `Reading outside the working directory: ${validation.resolved}` };
       }

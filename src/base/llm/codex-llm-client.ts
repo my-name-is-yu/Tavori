@@ -53,6 +53,10 @@ export interface CodexLLMClientConfig {
   repoPath?: string;
   /** Timeout per call in milliseconds. Default: 120000 (2 minutes) */
   timeoutMs?: number;
+  /** Sandbox passed to codex exec. Default: workspace-write. */
+  sandboxPolicy?: string;
+  /** Pass --skip-git-repo-check. Default: true. */
+  skipGitRepoCheck?: boolean;
 }
 
 /**
@@ -71,6 +75,8 @@ export class CodexLLMClient extends BaseLLMClient implements ILLMClient {
   private readonly model: string | undefined;
   private readonly repoPath: string;
   private readonly timeoutMs: number;
+  private readonly sandboxPolicy: string;
+  private readonly skipGitRepoCheck: boolean;
 
   constructor(config: CodexLLMClientConfig = {}) {
     super();
@@ -79,6 +85,8 @@ export class CodexLLMClient extends BaseLLMClient implements ILLMClient {
     this.lightModel = config.lightModel;
     this.repoPath = config.repoPath?.trim() || ".";
     this.timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.sandboxPolicy = config.sandboxPolicy ?? "workspace-write";
+    this.skipGitRepoCheck = config.skipGitRepoCheck ?? true;
   }
 
   /**
@@ -122,7 +130,7 @@ export class CodexLLMClient extends BaseLLMClient implements ILLMClient {
   supportsToolCalling(): boolean { return false; }
 
   /**
-   * Spawn `codex exec -s danger-full-access [-o <tmpfile>] [--model <model>] "PROMPT"`
+   * Spawn `codex exec -s <sandbox> [-o <tmpfile>] [--model <model>] "PROMPT"`
    * and return the response content read from the temp output file.
    */
   private async _spawnCodex(prompt: string, model?: string): Promise<string> {
@@ -132,17 +140,20 @@ export class CodexLLMClient extends BaseLLMClient implements ILLMClient {
 
     return new Promise((resolve, reject) => {
 
-      // Build spawn args: exec -s danger-full-access -o <tmpfile> [--model <model>] -
+      // Build spawn args: exec -s <sandbox> -o <tmpfile> [--model <model>] -
       // Prompt is sent via stdin (using "-" as positional arg) to avoid arg length limits.
       // --path is not supported by codex-cli 0.114.0+; use cwd instead (see src/adapters/openai-codex.ts)
       const spawnArgs: string[] = [
         "exec",
         "-s",
-        "danger-full-access",
-        "--skip-git-repo-check",
+        this.sandboxPolicy,
         "-o",
         tmpFile,
       ];
+
+      if (this.skipGitRepoCheck) {
+        spawnArgs.splice(3, 0, "--skip-git-repo-check");
+      }
 
       if (model) {
         spawnArgs.push("--model", model);

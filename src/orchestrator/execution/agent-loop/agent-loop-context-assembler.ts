@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { homedir } from "node:os";
 import type { Task } from "../../../base/types/task.js";
 
 export interface AgentLoopContextBlock {
@@ -30,6 +31,7 @@ export interface TaskAgentLoopAssemblyInput {
   knowledgeContext?: string;
   soilPrefetch?: (query: SoilPrefetchQuery) => Promise<SoilPrefetchResult | null>;
   maxProjectDocChars?: number;
+  trustProjectInstructions?: boolean;
 }
 
 export interface TaskAgentLoopAssembly {
@@ -43,7 +45,9 @@ export class AgentLoopContextAssembler {
   async assembleTask(input: TaskAgentLoopAssemblyInput): Promise<TaskAgentLoopAssembly> {
     const cwd = resolve(input.cwd ?? process.cwd());
     const blocks: AgentLoopContextBlock[] = [];
-    const projectDocs = await loadProjectInstructionBlocks(cwd, input.maxProjectDocChars ?? 20_000);
+    const projectDocs = await loadProjectInstructionBlocks(cwd, input.maxProjectDocChars ?? 20_000, {
+      trustProjectInstructions: input.trustProjectInstructions ?? true,
+    });
     blocks.push(...projectDocs);
 
     if (input.workspaceContext?.trim()) {
@@ -109,7 +113,11 @@ export class AgentLoopContextAssembler {
   }
 }
 
-export async function loadProjectInstructionBlocks(cwd: string, maxChars: number): Promise<AgentLoopContextBlock[]> {
+export async function loadProjectInstructionBlocks(
+  cwd: string,
+  maxChars: number,
+  options: { trustProjectInstructions?: boolean } = {},
+): Promise<AgentLoopContextBlock[]> {
   const root = findProjectRoot(cwd);
   const dirs: string[] = [];
   let cursor = resolve(cwd);
@@ -123,8 +131,11 @@ export async function loadProjectInstructionBlocks(cwd: string, maxChars: number
 
   const blocks: AgentLoopContextBlock[] = [];
   let remaining = maxChars;
-  for (const dir of dirs.reverse()) {
-    const filePath = join(dir, "AGENTS.md");
+  const homeCandidates = [
+    join(homedir(), ".pulseed", "AGENTS.md"),
+    join(homedir(), ".pulseed", "AGENTS.override.md"),
+  ];
+  for (const filePath of homeCandidates) {
     if (!existsSync(filePath) || remaining <= 0) continue;
     const content = (await readFile(filePath, "utf-8")).slice(0, remaining);
     remaining -= content.length;
@@ -132,8 +143,27 @@ export async function loadProjectInstructionBlocks(cwd: string, maxChars: number
       id: `project-doc:${filePath}`,
       source: filePath,
       content,
-      priority: 5,
+      priority: filePath.endsWith("override.md") ? 1 : 2,
     });
+  }
+
+  if (options.trustProjectInstructions === false) {
+    return blocks;
+  }
+
+  for (const dir of dirs.reverse()) {
+    const candidates = [join(dir, "AGENTS.md"), join(dir, "AGENTS.override.md")];
+    for (const filePath of candidates) {
+      if (!existsSync(filePath) || remaining <= 0) continue;
+      const content = (await readFile(filePath, "utf-8")).slice(0, remaining);
+      remaining -= content.length;
+      blocks.push({
+        id: `project-doc:${filePath}`,
+        source: filePath,
+        content,
+        priority: filePath.endsWith("override.md") ? 3 : 5,
+      });
+    }
   }
   return blocks;
 }

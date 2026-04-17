@@ -70,6 +70,7 @@ export class WebSearchTool implements ITool<WebSearchInput, SearchResult[]> {
     maxConcurrency: 3,
     maxOutputChars: MAX_OUTPUT_CHARS,
     tags: [...TAGS],
+    requiresNetwork: true,
   };
 
   readonly inputSchema = WebSearchInputSchema;

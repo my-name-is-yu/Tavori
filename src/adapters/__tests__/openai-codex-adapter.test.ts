@@ -79,7 +79,7 @@ describe("OpenAICodexCLIAdapter", () => {
       const [cliPath, spawnArgs, opts] = mockSpawn.mock.calls[0] as [string, string[], { cwd: string }];
       expect(cliPath).toBe("codex");
       // Prompt must NOT appear in spawn args (would expose it in `ps aux`)
-      expect(spawnArgs).toEqual(["exec", "-s", "danger-full-access", "--skip-git-repo-check"]);
+      expect(spawnArgs).toEqual(["exec", "-s", "workspace-write", "--skip-git-repo-check"]);
       expect(spawnArgs).not.toContain("run tests");
       expect(opts.cwd).toBe(".");
       // Prompt is delivered via stdin instead
@@ -154,7 +154,7 @@ describe("OpenAICodexCLIAdapter", () => {
 
       const [, spawnArgs] = mockSpawn.mock.calls[0] as [string, string[]];
       expect(spawnArgs).not.toContain("--skip-git-repo-check");
-      expect(spawnArgs).toEqual(["exec", "-s", "danger-full-access"]);
+      expect(spawnArgs).toEqual(["exec", "-s", "workspace-write"]);
     });
 
     it("wraps codex execution with docker terminal backend when configured", async () => {

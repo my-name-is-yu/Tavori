@@ -12,6 +12,7 @@ import { withDefaultBudget } from "./agent-loop-turn-context.js";
 import { TaskAgentLoopOutputSchema, type TaskAgentLoopOutput } from "./task-agent-loop-result.js";
 import { buildAgentLoopBaseInstructions } from "./agent-loop-prompts.js";
 import { isTaskRelevantVerificationCommand } from "./task-agent-loop-verification.js";
+import type { SubagentRole } from "./execution-policy.js";
 
 export interface TaskAgentLoopContextInput {
   task: Task;
@@ -28,6 +29,7 @@ export interface TaskAgentLoopContextInput {
   toolCallContext?: Partial<ToolCallContext>;
   resumeState?: AgentLoopSessionState;
   abortSignal?: AbortSignal;
+  role?: SubagentRole;
 }
 
 export function buildTaskAgentLoopTurnContext(
@@ -61,6 +63,7 @@ export function buildTaskAgentLoopTurnContext(
             "If files changed or you claim files changed, run at least one focused verification command through tools before the final answer.",
             "Do not return status=done while blockers remain.",
           ],
+          role: input.role,
         }),
       },
       { role: "user", content: userPrompt },
@@ -104,6 +107,7 @@ export function buildTaskAgentLoopTurnContext(
       trustBalance: 0,
       preApproved: true,
       approvalFn: async () => false,
+      agentRole: input.role,
       ...input.toolCallContext,
     },
     ...(input.resumeState ? { resumeState: input.resumeState } : {}),

@@ -43,6 +43,77 @@ function makeContext(overrides: Partial<ToolCallContext> = {}): ToolCallContext 
 // --- Tests ---
 
 describe("ToolPermissionManager", () => {
+  describe("execution policy", () => {
+    it("read_only sandbox blocks write tools", async () => {
+      const manager = new ToolPermissionManager({});
+      const tool = makeTool({ permissionLevel: "write_local", isReadOnly: false });
+      const result = await manager.check(tool, {}, makeContext({
+        executionPolicy: {
+          sandboxMode: "read_only",
+          approvalPolicy: "on_request",
+          networkAccess: false,
+          workspaceRoot: "/tmp",
+          protectedPaths: [],
+          trustProjectInstructions: true,
+        },
+      }));
+      expect(result.status).toBe("denied");
+    });
+
+    it("network-off policy blocks remote writes", async () => {
+      const manager = new ToolPermissionManager({});
+      const tool = makeTool({ permissionLevel: "write_remote", isReadOnly: false });
+      const result = await manager.check(tool, {}, makeContext({
+        executionPolicy: {
+          sandboxMode: "workspace_write",
+          approvalPolicy: "on_request",
+          networkAccess: false,
+          workspaceRoot: "/tmp",
+          protectedPaths: [],
+          trustProjectInstructions: true,
+        },
+      }));
+      expect(result.status).toBe("denied");
+    });
+
+    it("network-off policy blocks read-only network tools", async () => {
+      const manager = new ToolPermissionManager({});
+      const tool = makeTool({
+        permissionLevel: "read_only",
+        isReadOnly: true,
+        requiresNetwork: true,
+        tags: ["network"],
+      });
+      const result = await manager.check(tool, {}, makeContext({
+        executionPolicy: {
+          sandboxMode: "workspace_write",
+          approvalPolicy: "on_request",
+          networkAccess: false,
+          workspaceRoot: "/tmp",
+          protectedPaths: [],
+          trustProjectInstructions: true,
+        },
+      }));
+      expect(result.status).toBe("denied");
+    });
+
+    it("read_only policy still allows safe shell reads", async () => {
+      const manager = new ToolPermissionManager({});
+      const tool = makeTool({ name: "shell", permissionLevel: "read_metrics", isReadOnly: false });
+      const result = await manager.check(tool, { command: "git status" }, makeContext({
+        executionPolicy: {
+          sandboxMode: "read_only",
+          approvalPolicy: "on_request",
+          networkAccess: false,
+          workspaceRoot: "/tmp",
+          protectedPaths: [],
+          trustProjectInstructions: true,
+        },
+      }));
+      expect(result.status).toBe("allowed");
+    });
+  });
+
   describe("Layer 1: deny-list", () => {
     it("blocks tool matching deny rule by name", async () => {
       const manager = new ToolPermissionManager({

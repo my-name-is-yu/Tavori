@@ -40,7 +40,7 @@ export class JsonQueryTool implements ITool<JsonQueryInput, unknown> {
 
   async checkPermissions(input: JsonQueryInput, context?: ToolCallContext): Promise<PermissionCheckResult> {
     if (context) {
-      const validation = validateFilePath(input.file_path, context.cwd);
+      const validation = validateFilePath(input.file_path, context.cwd, context.executionPolicy?.protectedPaths);
       if (!validation.valid) {
         return { status: "needs_approval", reason: `Reading JSON outside the working directory: ${validation.resolved}` };
       }

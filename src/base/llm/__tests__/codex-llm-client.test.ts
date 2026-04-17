@@ -111,7 +111,7 @@ describe("CodexLLMClient", () => {
   // ─── spawn arguments ───
 
   describe("sendMessage: spawn args", () => {
-    it("spawns with exec -s danger-full-access --skip-git-repo-check -o <path> - (stdin mode) and cwd set", async () => {
+    it("spawns with exec -s workspace-write --skip-git-repo-check -o <path> - (stdin mode) and cwd set", async () => {
       const client = new CodexLLMClient();
       const child = makeFakeChild();
 
@@ -125,7 +125,7 @@ describe("CodexLLMClient", () => {
       expect(spawnArgs).not.toContain("--ephemeral");
       expect(spawnArgs).not.toContain("--full-auto");
       expect(spawnArgs).toContain("-s");
-      expect(spawnArgs).toContain("danger-full-access");
+      expect(spawnArgs).toContain("workspace-write");
       expect(spawnArgs).toContain("--skip-git-repo-check");
       // --path is not supported by codex-cli 0.114.0+; cwd is used instead
       expect(spawnArgs).not.toContain("--path");
