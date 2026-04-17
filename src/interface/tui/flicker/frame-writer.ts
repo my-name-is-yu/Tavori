@@ -33,9 +33,9 @@ interface ParsedLine {
  */
 export function createFrameWriter(stream: NodeJS.WriteStream): FrameWriter {
   const syncSupported = isSynchronizedOutputSupported();
-  // Capture raw write BEFORE any monkey-patching to avoid infinite recursion:
-  // entry.ts patches process.stdout.write -> frameWriter.write -> stream.write
-  // If stream.write is the patched version, it loops forever.
+  // Capture raw write before the session controller patches stdout/stderr:
+  // renderStdout.write -> frameWriter.write -> raw stream.write
+  // If stream.write is wrapped, it would recurse or swallow frames.
   const rawWrite = stream.write.bind(stream) as (s: string) => boolean;
   let needsErase = false;
   let destroyed = false;

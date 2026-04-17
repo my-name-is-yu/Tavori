@@ -7,7 +7,6 @@
 
 import os from "os";
 import path from "path";
-import { execFileSync } from "child_process";
 import { randomUUID } from "node:crypto";
 import * as fs from "node:fs/promises";
 
@@ -15,14 +14,16 @@ import { StateManager } from "../../base/state/state-manager.js";
 import { loadProviderConfig } from "../../base/llm/provider-config.js";
 import { getPulseedDirPath } from "../../base/utils/paths.js";
 import { App, type ApprovalRequest } from "./app.js";
+import type { ChatRunner } from "../../interface/chat/chat-runner.js";
 import { isSafeBashCommand } from "./bash-mode.js";
-import { buildCursorEscapeFromPromptAnchor, buildHiddenCursorEscapeFromCaretMarker, getActiveCursorEscape } from "./cursor-tracker.js";
 import { getCliLogger } from "../cli/cli-logger.js";
 import { ensureProviderConfig } from "../cli/ensure-api-key.js";
 import type { Task } from "../../base/types/task.js";
-import { isNoFlickerEnabled, createFrameWriter, MouseTracking, type FrameWriter } from "./flicker/index.js";
+import { isNoFlickerEnabled, AlternateScreen, MouseTracking } from "./flicker/index.js";
 import { DEFAULT_CURSOR_STYLE, HIDE_CURSOR, SHOW_CURSOR, STEADY_BAR_CURSOR } from "./flicker/dec.js";
-import { isRenderableFrameChunk } from "./render-output.js";
+import { setTrustedTuiControlStream } from "./terminal-output.js";
+import { getGitBranch } from "./git-branch.js";
+import { createNoFlickerOutputController } from "./output-controller.js";
 import { PIDManager } from "../../runtime/pid-manager.js";
 import { probeDaemonHealth, readDaemonAuthToken } from "../../runtime/daemon/client.js";
 import { DEFAULT_PORT } from "../../runtime/port-utils.js";
@@ -36,14 +37,6 @@ function getCwd(): string {
   const raw = process.cwd();
   const home = os.homedir();
   return raw.startsWith(home) ? "~" + raw.slice(home.length) : raw;
-}
-
-function getGitBranch(): string {
-  try {
-    return execFileSync("git", ["branch", "--show-current"], { encoding: "utf-8" }).trim();
-  } catch {
-    return "";
-  }
 }
 
 // ─── Daemon auto-start helpers ───
@@ -479,80 +472,86 @@ async function buildDeps() {
 // ─── Standalone mode ───
 
 async function startTUIStandaloneMode(): Promise<void> {
-  let deps: Awaited<ReturnType<typeof buildDeps>>;
-  try {
-    deps = await buildDeps();
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    getCliLogger().error(`Error: Failed to initialise dependencies: ${message}`);
-    process.exit(1);
-  }
-
-  const { stateManager, llmClient, trustManager, coreLoop, actionHandler, intentRecognizer, setRequestApproval, chatRunner } = deps;
-
-  process.on("SIGTERM", () => { coreLoop.stop(); process.exit(0); });
-
-  const providerConfig = await loadProviderConfig();
-  const breadcrumb = {
-    cwd: getCwd(),
-    gitBranch: getGitBranch(),
-    providerName: providerConfig.provider,
+  const noFlicker = await isNoFlickerEnabled();
+  const outputController = noFlicker ? createNoFlickerOutputController() : null;
+  outputController?.install();
+  let cleanedUp = false;
+  const cleanup = () => {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    if (noFlicker) {
+      outputController?.writeTerminal(DEFAULT_CURSOR_STYLE + SHOW_CURSOR);
+    }
+    outputController?.destroy();
+    setTrustedTuiControlStream(null);
   };
 
-  const { render } = await import("ink");
-  const React = await import("react");
+  try {
+    let deps: Awaited<ReturnType<typeof buildDeps>>;
+    try {
+      deps = await buildDeps();
+    } catch (err) {
+      cleanup();
+      const message = err instanceof Error ? err.message : String(err);
+      getCliLogger().error(`Error: Failed to initialise dependencies: ${message}`);
+      process.exit(1);
+    }
 
-  const noFlicker = await isNoFlickerEnabled();
-  let frameWriter: FrameWriter | undefined;
+    const { stateManager, llmClient, trustManager, coreLoop, actionHandler, intentRecognizer, setRequestApproval, chatRunner } = deps;
 
-  if (noFlicker) {
-    frameWriter = createFrameWriter(process.stdout);
-    frameWriter.requestErase();
-    process.stdout.write(STEADY_BAR_CURSOR + HIDE_CURSOR);
-    process.stdout.on("resize", () => frameWriter?.requestErase());
+    process.on("SIGTERM", () => { coreLoop.stop(); process.exit(0); });
 
-    // Install stdout intercept BEFORE render() — chat.tsx patches on top
-    const rawWrite = process.stdout.write.bind(process.stdout);
-    process.stdout.write = function (chunk: any, ...args: any[]) {
-      if (typeof chunk === "string" && isRenderableFrameChunk(chunk)) {
-        const cursorEscape =
-          buildHiddenCursorEscapeFromCaretMarker(chunk) ??
-          buildCursorEscapeFromPromptAnchor(chunk) ??
-          getActiveCursorEscape() ??
-          HIDE_CURSOR;
-        frameWriter!.write(chunk, cursorEscape);
-        return true;
+    const providerConfig = await loadProviderConfig();
+    const breadcrumb = {
+      cwd: getCwd(),
+      gitBranch: getGitBranch(),
+      providerName: providerConfig.provider,
+    };
+
+    const { render } = await import("ink");
+    const React = await import("react");
+    const terminalStream = outputController?.terminalStream ?? process.stdout;
+    setTrustedTuiControlStream(terminalStream);
+    if (noFlicker) {
+      outputController?.writeTerminal(STEADY_BAR_CURSOR + HIDE_CURSOR);
+    }
+
+    const appElement = React.createElement(App, {
+      coreLoop,
+      stateManager,
+      trustManager,
+      actionHandler,
+      intentRecognizer,
+      chatRunner,
+      onApprovalReady: setRequestApproval,
+      noFlicker,
+      controlStream: terminalStream,
+      ...breadcrumb,
+    });
+
+    const { waitUntilExit } = render(
+      React.createElement(
+        AlternateScreen,
+        { enabled: noFlicker, stream: terminalStream },
+        React.createElement(
+          MouseTracking,
+          { stream: terminalStream },
+          appElement,
+        ),
+      ),
+      {
+        exitOnCtrlC: false,
+        incrementalRendering: noFlicker,
+        maxFps: noFlicker ? 60 : 30,
+        patchConsole: false,
+        stdout: outputController?.renderStdout ?? process.stdout,
+        stderr: outputController?.renderStderr ?? process.stderr,
       }
-      return (rawWrite as any)(chunk, ...args);
-    } as typeof process.stdout.write;
+    );
+    await waitUntilExit();
+  } finally {
+    cleanup();
   }
-
-  const appElement = React.createElement(App, {
-    coreLoop,
-    stateManager,
-    trustManager,
-    actionHandler,
-    intentRecognizer,
-    chatRunner,
-    onApprovalReady: setRequestApproval,
-    noFlicker,
-    ...breadcrumb,
-  });
-
-  const { waitUntilExit } = render(
-    React.createElement(
-      MouseTracking,
-      null,
-      appElement,
-    ),
-    { exitOnCtrlC: false }
-  );
-
-  await waitUntilExit();
-  if (noFlicker) {
-    process.stdout.write(DEFAULT_CURSOR_STYLE + SHOW_CURSOR);
-  }
-  frameWriter?.destroy();
 }
 
 // ─── Daemon mode ───
@@ -560,121 +559,162 @@ async function startTUIStandaloneMode(): Promise<void> {
 async function startTUIDaemonMode(): Promise<void> {
   const { DaemonClient } = await import("../../runtime/daemon/client.js");
   const baseDir = process.env.PULSEED_HOME ?? getPulseedDirPath();
-
-  let daemonClient: InstanceType<typeof DaemonClient>;
+  const noFlicker = await isNoFlickerEnabled();
+  const outputController = noFlicker ? createNoFlickerOutputController() : null;
+  outputController?.install();
+  let cleanedUp = false;
+  const cleanup = () => {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    if (noFlicker) {
+      outputController?.writeTerminal(DEFAULT_CURSOR_STYLE + SHOW_CURSOR);
+    }
+    outputController?.destroy();
+    setTrustedTuiControlStream(null);
+  };
 
   try {
-    const existingConnection = await resolveRunningDaemonConnection(baseDir);
+    let daemonClient: InstanceType<typeof DaemonClient>;
 
-    if (existingConnection) {
-      daemonClient = new DaemonClient({ host: "127.0.0.1", ...existingConnection, baseDir });
-    } else {
-      await startDaemonDetached(baseDir);
-      const ready = await waitForDaemon(baseDir, 10_000);
-      daemonClient = new DaemonClient({ host: "127.0.0.1", port: ready.port, authToken: ready.authToken, baseDir });
+    try {
+      const existingConnection = await resolveRunningDaemonConnection(baseDir);
+
+      if (existingConnection) {
+        daemonClient = new DaemonClient({ host: "127.0.0.1", ...existingConnection, baseDir });
+      } else {
+        await startDaemonDetached(baseDir);
+        const ready = await waitForDaemon(baseDir, 10_000);
+        daemonClient = new DaemonClient({ host: "127.0.0.1", port: ready.port, authToken: ready.authToken, baseDir });
+      }
+
+      daemonClient.connect();
+    } catch (err) {
+      cleanup();
+      const message = err instanceof Error ? err.message : String(err);
+      getCliLogger().error(`Error: Failed to connect to daemon: ${message}`);
+      process.exit(1);
     }
 
-    daemonClient.connect();
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    getCliLogger().error(`Error: Failed to connect to daemon: ${message}`);
-    process.exit(1);
-  }
+    const stateManager = new StateManager(baseDir);
+    await stateManager.init();
+    let chatRunner: ChatRunner | undefined;
+    const { TrustManager } = await import("../../platform/traits/trust-manager.js");
+    const { ScheduleEngine } = await import("../../runtime/schedule/engine.js");
+    const { buildCliDataSourceRegistry } = await import("../cli/data-source-bootstrap.js");
+    const { ToolRegistry, ToolExecutor, ToolPermissionManager, ConcurrencyController, createBuiltinTools } = await import("../../tools/index.js");
+    const trustManager = new TrustManager(stateManager);
+    const toolRegistry = new ToolRegistry();
+    const dataSourceRegistry = await buildCliDataSourceRegistry(process.cwd(), getCliLogger());
+    const scheduleEngine = new ScheduleEngine({ baseDir, dataSourceRegistry });
+    await scheduleEngine.loadEntries();
+    for (const tool of createBuiltinTools({ stateManager, trustManager, registry: toolRegistry, scheduleEngine })) {
+      toolRegistry.register(tool);
+    }
+    const permissionManager = new ToolPermissionManager({
+      trustManager,
+      allowRules: [
+        {
+          toolName: "shell",
+          inputMatcher: (input) =>
+            typeof input === "object" &&
+            input !== null &&
+            typeof (input as Record<string, unknown>)["command"] === "string" &&
+            isSafeBashCommand((input as Record<string, unknown>)["command"] as string),
+          reason: "safe shell command",
+        },
+      ],
+    });
+    const toolExecutor = new ToolExecutor({
+      registry: toolRegistry,
+      permissionManager,
+      concurrency: new ConcurrencyController(),
+    });
 
-  const stateManager = new StateManager(baseDir);
-  await stateManager.init();
-  const { TrustManager } = await import("../../platform/traits/trust-manager.js");
-  const { ScheduleEngine } = await import("../../runtime/schedule/engine.js");
-  const { buildCliDataSourceRegistry } = await import("../cli/data-source-bootstrap.js");
-  const { ToolRegistry, ToolExecutor, ToolPermissionManager, ConcurrencyController, createBuiltinTools } = await import("../../tools/index.js");
-  const trustManager = new TrustManager(stateManager);
-  const toolRegistry = new ToolRegistry();
-  const dataSourceRegistry = await buildCliDataSourceRegistry(process.cwd(), getCliLogger());
-  const scheduleEngine = new ScheduleEngine({ baseDir, dataSourceRegistry });
-  await scheduleEngine.loadEntries();
-  for (const tool of createBuiltinTools({ stateManager, trustManager, registry: toolRegistry, scheduleEngine })) {
-    toolRegistry.register(tool);
-  }
-  const permissionManager = new ToolPermissionManager({
-    trustManager,
-    allowRules: [
+    const providerConfig = await loadProviderConfig();
+    const cwd = getCwd();
+    const gitBranch = getGitBranch();
+    const providerName = providerConfig.provider;
+
+    try {
+      const { ChatRunner } = await import("../../interface/chat/chat-runner.js");
+      const { buildLLMClient, buildAdapterRegistry } = await import("../../base/llm/provider-factory.js");
+      const { createNativeChatAgentLoopRunner, shouldUseNativeTaskAgentLoop } = await import("../../orchestrator/execution/agent-loop/index.js");
+      const llmClient = await buildLLMClient();
+      const adapterRegistry = await buildAdapterRegistry(llmClient);
+      const adapterType = providerConfig.adapter ?? "claude_code_cli";
+      const adapter = adapterRegistry.getAdapter(adapterType);
+      const chatAgentLoopRunner = shouldUseNativeTaskAgentLoop(providerConfig, llmClient)
+        ? createNativeChatAgentLoopRunner({
+            llmClient,
+            providerConfig,
+            toolRegistry,
+            toolExecutor,
+            cwd: process.cwd(),
+            traceBaseDir: stateManager.getBaseDir(),
+          })
+        : undefined;
+      chatRunner = new ChatRunner({
+        stateManager,
+        adapter,
+        llmClient,
+        trustManager,
+        registry: toolRegistry,
+        toolExecutor,
+        chatAgentLoopRunner,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      getCliLogger().warn(`[pulseed] Daemon-mode ChatRunner init failed — free-form chat disabled: ${message}`);
+      chatRunner = undefined;
+    }
+
+    process.on("SIGTERM", () => {
+      daemonClient.disconnect();
+      process.exit(0);
+    });
+
+    const { render } = await import("ink");
+    const React = await import("react");
+    const terminalStream = outputController?.terminalStream ?? process.stdout;
+    setTrustedTuiControlStream(terminalStream);
+    if (noFlicker) {
+      outputController?.writeTerminal(STEADY_BAR_CURSOR + HIDE_CURSOR);
+    }
+
+    const appElement = React.createElement(App, {
+      daemonClient,
+      stateManager,
+      cwd,
+      gitBranch,
+      providerName,
+      noFlicker,
+      chatRunner,
+      controlStream: terminalStream,
+    });
+
+    const { waitUntilExit } = render(
+      React.createElement(
+        AlternateScreen,
+        { enabled: noFlicker, stream: terminalStream },
+        React.createElement(
+          MouseTracking,
+          { stream: terminalStream },
+          appElement,
+        ),
+      ),
       {
-        toolName: "shell",
-        inputMatcher: (input) =>
-          typeof input === "object" &&
-          input !== null &&
-          typeof (input as Record<string, unknown>)["command"] === "string" &&
-          isSafeBashCommand((input as Record<string, unknown>)["command"] as string),
-        reason: "safe shell command",
-      },
-    ],
-  });
-  const toolExecutor = new ToolExecutor({
-    registry: toolRegistry,
-    permissionManager,
-    concurrency: new ConcurrencyController(),
-  });
-
-  const providerConfig = await loadProviderConfig();
-  const cwd = getCwd();
-  const gitBranch = getGitBranch();
-  const providerName = providerConfig.provider;
-
-  process.on("SIGTERM", () => {
-    daemonClient.disconnect();
-    process.exit(0);
-  });
-
-  const { render } = await import("ink");
-  const React = await import("react");
-
-  const noFlicker = await isNoFlickerEnabled();
-  let frameWriter: FrameWriter | undefined;
-
-  if (noFlicker) {
-    frameWriter = createFrameWriter(process.stdout);
-    frameWriter.requestErase();
-    process.stdout.write(STEADY_BAR_CURSOR + HIDE_CURSOR);
-    process.stdout.on("resize", () => frameWriter?.requestErase());
-
-    const rawWrite = process.stdout.write.bind(process.stdout);
-    process.stdout.write = function (chunk: any, ...args: any[]) {
-      if (typeof chunk === "string" && isRenderableFrameChunk(chunk)) {
-        const cursorEscape =
-          buildHiddenCursorEscapeFromCaretMarker(chunk) ??
-          buildCursorEscapeFromPromptAnchor(chunk) ??
-          getActiveCursorEscape() ??
-          HIDE_CURSOR;
-        frameWriter!.write(chunk, cursorEscape);
-        return true;
+        exitOnCtrlC: false,
+        incrementalRendering: noFlicker,
+        maxFps: noFlicker ? 60 : 30,
+        patchConsole: false,
+        stdout: outputController?.renderStdout ?? process.stdout,
+        stderr: outputController?.renderStderr ?? process.stderr,
       }
-      return (rawWrite as any)(chunk, ...args);
-    } as typeof process.stdout.write;
+    );
+    await waitUntilExit();
+  } finally {
+    cleanup();
   }
-
-  const appElement = React.createElement(App, {
-    daemonClient,
-    stateManager,
-    cwd,
-    gitBranch,
-    providerName,
-    noFlicker,
-  });
-
-  const { waitUntilExit } = render(
-    React.createElement(
-      MouseTracking,
-      null,
-      appElement,
-    ),
-    { exitOnCtrlC: false }
-  );
-
-  await waitUntilExit();
-  if (noFlicker) {
-    process.stdout.write(DEFAULT_CURSOR_STYLE + SHOW_CURSOR);
-  }
-  frameWriter?.destroy();
 }
 
 // ─── Main entry ───

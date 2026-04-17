@@ -7,11 +7,13 @@ import {
   ERASE_SCREEN,
   CURSOR_HOME,
 } from "./dec.js";
+import { getTrustedTuiControlStream } from "../terminal-output.js";
 
 interface AlternateScreenProps {
   children?: React.ReactNode;
   /** When false, renders children without alt-screen (pass-through) */
   enabled?: boolean;
+  stream?: Pick<NodeJS.WriteStream, "write">;
 }
 
 /**
@@ -30,18 +32,19 @@ interface AlternateScreenProps {
 export function AlternateScreen({
   children,
   enabled = true,
+  stream = getTrustedTuiControlStream(),
 }: AlternateScreenProps): React.ReactNode {
   useInsertionEffect(() => {
     if (!enabled) return;
 
     // Enter alt-screen, clear it, hide cursor
-    process.stdout.write(ENTER_ALT_SCREEN + ERASE_SCREEN + CURSOR_HOME + HIDE_CURSOR);
+    stream.write(ENTER_ALT_SCREEN + ERASE_SCREEN + CURSOR_HOME + HIDE_CURSOR);
 
     return () => {
       // Show cursor, exit alt-screen (restores main buffer)
-      process.stdout.write(SHOW_CURSOR + EXIT_ALT_SCREEN);
+      stream.write(SHOW_CURSOR + EXIT_ALT_SCREEN);
     };
-  }, [enabled]);
+  }, [enabled, stream]);
 
   return React.createElement(React.Fragment, null, children);
 }

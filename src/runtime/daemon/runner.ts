@@ -54,6 +54,7 @@ import {
   type RuntimeHealthComponents,
 } from "./runtime-ownership.js";
 import {
+  type ProcessSignalTarget,
   ProcessShutdownCoordinator,
   startDaemonStatusHeartbeat,
 } from "./runner-lifecycle.js";
@@ -219,6 +220,8 @@ export interface DaemonDeps {
   }>;
   /** Factory to create fresh CoreLoop instances for LoopSupervisor workers. */
   coreLoopFactory?: () => CoreLoop;
+  /** Optional signal target for tests that must not emit process-wide signals. */
+  shutdownSignalTarget?: ProcessSignalTarget;
 }
 
 export class DaemonRunner {
@@ -497,6 +500,7 @@ export class DaemonRunner {
         onForceStop: () => {
           this.running = false;
         },
+        signalTarget: this.deps.shutdownSignalTarget,
       });
       this.shutdownCoordinator.activate();
 

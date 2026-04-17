@@ -2,6 +2,7 @@
  * Scans rendered terminal output to find the input prompt row.
  * Used for IME candidate window positioning — avoids fragile arithmetic.
  */
+import { measureTextWidth } from "./text-width.js";
 
 // Unique invisible marker — won't appear in message history or the visible prompt.
 export const INPUT_MARKER = "\u200B\u2060";
@@ -9,7 +10,6 @@ export const CARET_MARKER = "\u200B\u2061";
 export const PROTECTED_ROW_MARKER = "\u2062\u2063";
 let activeCursorEscape: string | null = null;
 let activePromptCursorAnchor: PromptCursorAnchor | null = null;
-const ZERO_WIDTH_SPACE = "\u200B";
 const ESCAPE_SEQUENCE = /\u001b\[[0-9;?]*[ -/]*[@-~]/g;
 
 export interface PromptCursorAnchor {
@@ -19,20 +19,12 @@ export interface PromptCursorAnchor {
 }
 
 function displayWidth(text: string): number {
-  let width = 0;
   const normalized = text
     .replace(ESCAPE_SEQUENCE, "")
     .replaceAll(INPUT_MARKER, "")
     .replaceAll(CARET_MARKER, "")
-    .replaceAll(PROTECTED_ROW_MARKER, "")
-    .split(ZERO_WIDTH_SPACE)
-    .join("");
-
-  for (const segment of normalized) {
-    const cp = segment.codePointAt(0) ?? 0;
-    width += cp > 0x2E7F ? 2 : 1;
-  }
-  return width;
+    .replaceAll(PROTECTED_ROW_MARKER, "");
+  return measureTextWidth(normalized);
 }
 
 function findInputMarkerPosition(frame: string): { row: number; col: number } | null {
@@ -149,6 +141,10 @@ export function buildHiddenCursorEscapeFromCaretMarker(frame: string): string | 
   const position = findMarkerPosition(frame, CARET_MARKER);
   if (!position) return null;
   return `\x1b[${position.row + 1};${position.col + 1}H\x1b[?25l`;
+}
+
+export function buildHiddenCursorEscapeFromPosition(position: { x: number; y: number }): string {
+  return `\x1b[${position.y + 1};${position.x + 1}H\x1b[?25l`;
 }
 
 export function setActiveCursorEscape(cursorEscape: string | null): void {

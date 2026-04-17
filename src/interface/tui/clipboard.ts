@@ -1,4 +1,5 @@
 import { spawn } from "child_process";
+import { writeTrustedTuiControl } from "./terminal-output.js";
 
 function spawnWithStdin(cmd: string, args: string[], text: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -11,7 +12,7 @@ function spawnWithStdin(cmd: string, args: string[], text: string): Promise<bool
 
 function writeOsc52(text: string): boolean {
   const b64 = Buffer.from(text).toString("base64");
-  process.stdout.write(`]52;c;${b64}`);
+  writeTrustedTuiControl(`]52;c;${b64}`);
   return true;
 }
 

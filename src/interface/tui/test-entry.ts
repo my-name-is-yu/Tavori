@@ -1,35 +1,24 @@
 #!/usr/bin/env node
 
 import os from "os";
-import { execFileSync } from "node:child_process";
 import React from "react";
 import { render } from "ink";
 import { TUITestApp } from "./test-app.js";
-import { buildCursorEscapeFromPromptAnchor, buildHiddenCursorEscapeFromCaretMarker, getActiveCursorEscape } from "./cursor-tracker.js";
 import { resetTuiDebugLog, getTuiDebugLogPath, logTuiDebug } from "./debug-log.js";
 import {
+  AlternateScreen,
   MouseTracking,
-  createFrameWriter,
   isNoFlickerEnabled,
-  type FrameWriter,
 } from "./flicker/index.js";
 import { DEFAULT_CURSOR_STYLE, HIDE_CURSOR, SHOW_CURSOR, STEADY_BAR_CURSOR } from "./flicker/dec.js";
-import { isRenderableFrameChunk } from "./render-output.js";
+import { getGitBranch } from "./git-branch.js";
+import { createNoFlickerOutputController } from "./output-controller.js";
+import { setTrustedTuiControlStream } from "./terminal-output.js";
 
 function getCwd(): string {
   const raw = process.cwd();
   const home = os.homedir();
   return raw.startsWith(home) ? "~" + raw.slice(home.length) : raw;
-}
-
-function getGitBranch(): string {
-  try {
-    return execFileSync("git", ["branch", "--show-current"], {
-      encoding: "utf-8",
-    }).trim();
-  } catch {
-    return "";
-  }
 }
 
 export async function startTUITest(): Promise<void> {
@@ -40,50 +29,56 @@ export async function startTUITest(): Promise<void> {
   logTuiDebug("test-entry", "start", { logPath: getTuiDebugLogPath() });
 
   const noFlicker = await isNoFlickerEnabled();
-  let frameWriter: FrameWriter | undefined;
+  const outputController = noFlicker ? createNoFlickerOutputController() : null;
+  outputController?.install();
+  let cleanedUp = false;
+  const cleanup = () => {
+    if (cleanedUp) return;
+    cleanedUp = true;
+    if (noFlicker) {
+      outputController?.writeTerminal(DEFAULT_CURSOR_STYLE + SHOW_CURSOR);
+    }
+    outputController?.destroy();
+    setTrustedTuiControlStream(null);
+  };
 
-  if (noFlicker) {
-    frameWriter = createFrameWriter(process.stdout);
-    frameWriter.requestErase();
-    process.stdout.write(STEADY_BAR_CURSOR + HIDE_CURSOR);
-    process.stdout.on("resize", () => frameWriter?.requestErase());
+  try {
+    const terminalStream = outputController?.terminalStream ?? process.stdout;
+    setTrustedTuiControlStream(terminalStream);
+    if (noFlicker) {
+      outputController?.writeTerminal(STEADY_BAR_CURSOR + HIDE_CURSOR);
+    }
 
-    const rawWrite = process.stdout.write.bind(process.stdout);
-    process.stdout.write = function (chunk: any, ...args: any[]) {
-      if (typeof chunk === "string" && isRenderableFrameChunk(chunk)) {
-        const cursorEscape =
-          buildHiddenCursorEscapeFromCaretMarker(chunk) ??
-          buildCursorEscapeFromPromptAnchor(chunk) ??
-          getActiveCursorEscape() ??
-          HIDE_CURSOR;
-        frameWriter!.write(chunk, cursorEscape);
-        return true;
-      }
+    const appElement = React.createElement(TUITestApp, {
+      cwd: getCwd(),
+      gitBranch: getGitBranch(),
+      noFlicker,
+      controlStream: terminalStream,
+    });
 
-      return (rawWrite as any)(chunk, ...args);
-    } as typeof process.stdout.write;
+    const { waitUntilExit } = render(
+      React.createElement(
+        AlternateScreen,
+        { enabled: noFlicker, stream: terminalStream },
+        React.createElement(
+          MouseTracking,
+          { stream: terminalStream },
+          appElement,
+        ),
+      ),
+      {
+        exitOnCtrlC: false,
+        incrementalRendering: noFlicker,
+        maxFps: noFlicker ? 60 : 30,
+        patchConsole: false,
+        stdout: outputController?.renderStdout ?? process.stdout,
+        stderr: outputController?.renderStderr ?? process.stderr,
+      },
+    );
+    await waitUntilExit();
+  } finally {
+    cleanup();
   }
-
-  const appElement = React.createElement(TUITestApp, {
-    cwd: getCwd(),
-    gitBranch: getGitBranch(),
-    noFlicker,
-  });
-
-  const { waitUntilExit } = render(
-    React.createElement(
-      MouseTracking,
-      null,
-      appElement,
-    ),
-    { exitOnCtrlC: false },
-  );
-
-  await waitUntilExit();
-  if (noFlicker) {
-    process.stdout.write(DEFAULT_CURSOR_STYLE + SHOW_CURSOR);
-  }
-  frameWriter?.destroy();
 }
 
 const isMain =

@@ -21,6 +21,8 @@ import { buildChatViewport } from "./chat/viewport.js";
 import { getScrollRequest, stripMouseEscapeSequences } from "./chat/scroll.js";
 import { getMatchingSuggestions, type Suggestion } from "./chat/suggestions.js";
 import type { ChatMessage } from "./chat/types.js";
+import { getTrustedTuiControlStream } from "./terminal-output.js";
+import { measureCharWidth, measureTextWidth } from "./text-width.js";
 
 export type {
   ChatDisplayRow,
@@ -38,17 +40,16 @@ interface ChatProps {
   noFlicker?: boolean;
   availableRows?: number;
   availableCols?: number;
+  controlStream?: Pick<NodeJS.WriteStream, "write">;
 }
 
-const SCROLL_LINE_STEP = 3;
+const SCROLL_LINE_STEP = 1;
 const DEFAULT_PROMPT = "◉";
 const BASH_PROMPT = "!";
 const CHAT_CHROME_RESERVED_ROWS = 4;
 const SCROLL_INDICATOR_ROWS = 2;
 const INPUT_BOX_HORIZONTAL_CHROME = 4;
 const SUGGESTION_HINT = " arrows to navigate, tab/enter to select, esc to dismiss";
-const ZERO_WIDTH_CHARS = new Set(["\u200B", "\u2060", "\u2061"]);
-
 export { buildChatViewport } from "./chat/viewport.js";
 export { getScrollRequest, parseMouseEvent, stripMouseEscapeSequences } from "./chat/scroll.js";
 export { getMatchingSuggestions } from "./chat/suggestions.js";
@@ -77,17 +78,11 @@ type InputRow = {
 };
 
 function charWidth(ch: string): number {
-  if (ZERO_WIDTH_CHARS.has(ch)) return 0;
-  const cp = ch.codePointAt(0) ?? 0;
-  return cp > 0x2e7f ? 2 : 1;
+  return measureCharWidth(ch);
 }
 
 function stringWidth(text: string): number {
-  let width = 0;
-  for (const ch of text) {
-    width += charWidth(ch);
-  }
-  return width;
+  return measureTextWidth(text);
 }
 
 function trimToWidth(text: string, width: number): string {
@@ -233,6 +228,7 @@ export function Chat({
   noFlicker,
   availableRows,
   availableCols,
+  controlStream = getTrustedTuiControlStream(),
 }: ChatProps) {
   const [input, setInput] = useState("");
   const [selectedIdx, setSelectedIdx] = useState(0);
@@ -331,7 +327,7 @@ export function Chat({
 
   const applyScroll = useCallback((direction: "up" | "down", kind: "page" | "line") => {
     setScrollOffset((prev) => {
-      const maxOffset = Math.max(0, viewport.totalRows - 1);
+      const maxOffset = Math.max(0, viewport.totalRows - viewport.maxVisibleRows);
       const amount = kind === "page" ? viewport.maxVisibleRows : SCROLL_LINE_STEP;
       const delta = direction === "up" ? amount : -amount;
       return Math.max(0, Math.min(maxOffset, prev + delta));
@@ -422,7 +418,8 @@ export function Chat({
 
   // Stdout intercept: capture frame AND position cursor via direct ANSI injection
   React.useEffect(() => {
-    const original = process.stdout.write.bind(process.stdout);
+    if (!stdout) return;
+    const original = stdout.write.bind(stdout);
     const patched = function (chunk: any, ...args: any[]) {
       // Only process full Ink frames (not small escape sequences)
       if (
@@ -441,26 +438,25 @@ export function Chat({
         }
         // Standard mode: write frame, then position cursor separately
         const result = (original as any)(chunk, ...args);
-        positionCursorInFrame(chunk, inputRef.current, original);
+        positionCursorInFrame(chunk, inputRef.current, (cursor: string) => controlStream.write(cursor));
         return result;
       }
       return (original as any)(chunk, ...args);
-    } as typeof process.stdout.write;
-    process.stdout.write = patched;
+    } as typeof stdout.write;
+    stdout.write = patched;
     return () => {
-      process.stdout.write = original;
+      stdout.write = original;
     };
-  }, []);
+  }, [controlStream, noFlicker, stdout]);
 
   // Keep the terminal's real cursor hidden in standard mode.
   React.useEffect(() => {
     if (noFlicker) return;
-    const original = process.stdout.write.bind(process.stdout);
-    original(HIDE_CURSOR);
+    controlStream.write(HIDE_CURSOR);
     return () => {
-      original(SHOW_CURSOR);
+      controlStream.write(SHOW_CURSOR);
     };
-  }, [noFlicker]);
+  }, [controlStream, noFlicker]);
 
   const handleSubmit = (value: string) => {
     if (hasMatches) return; // let useInput handle enter when suggestions are shown

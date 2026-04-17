@@ -12,6 +12,7 @@ interface TUITestAppProps {
   cwd: string;
   gitBranch: string;
   noFlicker: boolean;
+  controlStream?: Pick<NodeJS.WriteStream, "write">;
 }
 
 function createSystemMessage(
@@ -27,7 +28,7 @@ function createSystemMessage(
   };
 }
 
-export function TUITestApp({ cwd, gitBranch, noFlicker }: TUITestAppProps) {
+export function TUITestApp({ cwd, gitBranch, noFlicker, controlStream }: TUITestAppProps) {
   const { stdout } = useStdout();
   const termRows = stdout?.rows ?? 24;
   const termCols = stdout?.columns ?? 80;
@@ -137,6 +138,7 @@ export function TUITestApp({ cwd, gitBranch, noFlicker }: TUITestAppProps) {
               noFlicker={false}
               availableRows={Math.max(1, termRows - 8)}
               availableCols={termCols}
+              controlStream={controlStream}
             />
           )}
         </Box>

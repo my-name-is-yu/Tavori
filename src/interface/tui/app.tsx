@@ -36,10 +36,11 @@ import type { DaemonClient } from "../../runtime/daemon/client.js";
 import { ShellTool } from "../../tools/system/ShellTool/ShellTool.js";
 import { getPulseedVersion } from "../../base/utils/pulseed-meta.js";
 import { applyChatEventToMessages } from "../chat/chat-event-state.js";
+import { setActiveCursorEscape } from "./cursor-tracker.js";
 
 const MAX_MESSAGES = 200;
 const PULSEED_VERSION = getPulseedVersion(import.meta.url);
-const APP_HEADER_ROWS = SEEDY_PIXEL.split("\n").length;
+export const APP_HEADER_ROWS = SEEDY_PIXEL.split("\n").length;
 const STATUS_BAR_ROWS = 3;
 
 export interface ApprovalRequest {
@@ -52,6 +53,26 @@ export type DaemonConnectionState = "connected" | "connecting" | "disconnected";
 export function formatDaemonConnectionState(state: DaemonConnectionState | undefined): string | undefined {
   if (!state) return undefined;
   return `  [daemon ${state}]`;
+}
+
+export type FreeformInputRoute = "daemon_goal_chat" | "chat_runner" | "unavailable";
+
+export function resolveFreeformInputRoute({
+  isDaemonMode,
+  daemonGoalId,
+  hasChatRunner,
+}: {
+  isDaemonMode: boolean;
+  daemonGoalId: string | null;
+  hasChatRunner: boolean;
+}): FreeformInputRoute {
+  if (isDaemonMode && daemonGoalId) {
+    return "daemon_goal_chat";
+  }
+  if (hasChatRunner) {
+    return "chat_runner";
+  }
+  return "unavailable";
 }
 
 interface AppProps {
@@ -70,6 +91,7 @@ interface AppProps {
   gitBranch?: string;
   providerName?: string;
   noFlicker?: boolean;
+  controlStream?: Pick<NodeJS.WriteStream, "write">;
 }
 
 const StatusBar: React.FC<{
@@ -438,33 +460,38 @@ export function App({
               timestamp: new Date(), messageType: "warning" as const,
             }].slice(-MAX_MESSAGES));
           }
-        } else if (isDaemonMode && daemonClient && daemonLoopState.goalId) {
-          // Daemon mode: free-form text → daemon chat endpoint
-          try {
-            await daemonClient.chat(daemonLoopState.goalId, input);
+        } else {
+          const freeformRoute = resolveFreeformInputRoute({
+            isDaemonMode,
+            daemonGoalId: daemonLoopState.goalId,
+            hasChatRunner: chatRunner !== undefined,
+          });
+
+          if (freeformRoute === "daemon_goal_chat" && daemonClient && daemonLoopState.goalId) {
+            try {
+              await daemonClient.chat(daemonLoopState.goalId, input);
+              setMessages((prev) => [...prev, {
+                id: randomUUID(), role: "pulseed" as const,
+                text: "Message sent to daemon.", timestamp: new Date(), messageType: "info" as const,
+              }].slice(-MAX_MESSAGES));
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              setMessages((prev) => [...prev, {
+                id: randomUUID(), role: "pulseed" as const,
+                text: `Chat error: ${msg}`, timestamp: new Date(), messageType: "error" as const,
+              }].slice(-MAX_MESSAGES));
+            }
+          } else if (freeformRoute === "chat_runner" && chatRunner) {
+            await chatRunner.execute(input, process.cwd());
+          } else {
             setMessages((prev) => [...prev, {
               id: randomUUID(), role: "pulseed" as const,
-              text: "Message sent to daemon.", timestamp: new Date(), messageType: "info" as const,
-            }].slice(-MAX_MESSAGES));
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            setMessages((prev) => [...prev, {
-              id: randomUUID(), role: "pulseed" as const,
-              text: `Chat error: ${msg}`, timestamp: new Date(), messageType: "error" as const,
+              text: isDaemonMode
+                ? "No active goal. Use /start <goal-id> to begin."
+                : "Chat is not available. Use slash commands (/help).",
+              timestamp: new Date(), messageType: "info" as const,
             }].slice(-MAX_MESSAGES));
           }
-        } else if (chatRunner) {
-          // Standalone mode: free-form text goes through ChatRunner
-          await chatRunner.execute(input, process.cwd());
-        } else {
-          // Fallback: no chat capability
-          setMessages((prev) => [...prev, {
-            id: randomUUID(), role: "pulseed" as const,
-            text: isDaemonMode
-              ? "No active goal. Use /start <goal-id> to begin."
-              : "Chat is not available. Use slash commands (/help).",
-            timestamp: new Date(), messageType: "info" as const,
-          }].slice(-MAX_MESSAGES));
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -493,6 +520,15 @@ export function App({
   );
   const sidebarCols = showSidebar ? Math.floor(termCols * 0.3) : 0;
   const chatAvailableCols = Math.max(20, termCols - sidebarCols);
+  const showingOverlay =
+    approvalRequest !== null ||
+    showSettings ||
+    reportToShow !== null ||
+    showHelp;
+  useEffect(() => {
+    if (!noFlicker || !showingOverlay) return;
+    setActiveCursorEscape(null);
+  }, [noFlicker, showingOverlay]);
 
   // ─── Sidebar layout ───
   return (
@@ -561,6 +597,8 @@ export function App({
                 goalNames={goalNames}
                 availableRows={chatAvailableRows}
                 availableCols={chatAvailableCols}
+                cursorOriginX={sidebarCols}
+                cursorOriginY={APP_HEADER_ROWS}
               />
             ) : (
               <Chat

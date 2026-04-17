@@ -18,6 +18,12 @@ interface ProcessShutdownCoordinatorOptions {
   gracefulShutdownTimeoutMs: number;
   onShutdown: () => void;
   onForceStop: () => void;
+  signalTarget?: ProcessSignalTarget;
+}
+
+export interface ProcessSignalTarget {
+  on(event: "SIGTERM" | "SIGINT", listener: () => void): unknown;
+  removeListener(event: "SIGTERM" | "SIGINT", listener: () => void): unknown;
 }
 
 export function startDaemonStatusHeartbeat(
@@ -71,8 +77,9 @@ export class ProcessShutdownCoordinator {
     };
 
     this.shutdownHandler = shutdown;
-    process.on("SIGTERM", shutdown);
-    process.on("SIGINT", shutdown);
+    const signalTarget = this.options.signalTarget ?? process;
+    signalTarget.on("SIGTERM", shutdown);
+    signalTarget.on("SIGINT", shutdown);
   }
 
   dispose(): void {
@@ -82,8 +89,9 @@ export class ProcessShutdownCoordinator {
     }
 
     if (this.shutdownHandler) {
-      process.removeListener("SIGTERM", this.shutdownHandler);
-      process.removeListener("SIGINT", this.shutdownHandler);
+      const signalTarget = this.options.signalTarget ?? process;
+      signalTarget.removeListener("SIGTERM", this.shutdownHandler);
+      signalTarget.removeListener("SIGINT", this.shutdownHandler);
       this.shutdownHandler = null;
     }
   }

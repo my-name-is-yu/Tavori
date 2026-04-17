@@ -128,6 +128,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
 }
 
 function makeDeps(tmpDir: string, overrides: Partial<DaemonDeps> = {}): DaemonDeps {
+  const { config, ...restOverrides } = overrides;
   const mockCoreLoop = {
     run: vi.fn().mockResolvedValue(makeLoopResult()),
     stop: vi.fn(),
@@ -166,7 +167,8 @@ function makeDeps(tmpDir: string, overrides: Partial<DaemonDeps> = {}): DaemonDe
     stateManager: mockStateManager as unknown as DaemonDeps["stateManager"],
     pidManager,
     logger,
-    ...overrides,
+    config: { event_server_port: 0, ...config },
+    ...restOverrides,
   };
 }
 

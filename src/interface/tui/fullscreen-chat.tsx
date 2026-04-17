@@ -5,11 +5,12 @@ import { logTuiDebug } from "./debug-log.js";
 import { theme } from "./theme.js";
 import { pickSpinnerVerb } from "./spinner-verbs.js";
 import {
+  buildHiddenCursorEscapeFromPosition,
   CARET_MARKER,
   PROTECTED_ROW_MARKER,
   setActiveCursorEscape,
-  setActivePromptCursorAnchor,
 } from "./cursor-tracker.js";
+import { measureCharWidth, measureTextWidth } from "./text-width.js";
 import { isBashModeInput } from "./bash-mode.js";
 import { buildChatViewport } from "./chat/viewport.js";
 import {
@@ -28,17 +29,19 @@ interface FullscreenChatProps {
   goalNames?: string[];
   availableRows: number;
   availableCols: number;
+  cursorOriginX?: number;
+  cursorOriginY?: number;
 }
 
-const SCROLL_LINE_STEP = 3;
+const SCROLL_LINE_STEP = 1;
+const SCROLL_ANIMATION_INTERVAL_MS = 16;
 const DEFAULT_PROMPT = "◉";
 const BASH_PROMPT = "!";
 const SUGGESTION_HINT = " arrows to navigate, tab/enter to select, esc to dismiss";
 const INPUT_MARGIN = 4;
-const ZERO_WIDTH_CHARS = new Set(["\u200B", "\u2060", "\u2061"]);
 const SELECTION_BACKGROUND = theme.text;
 const SELECTION_FOREGROUND = "#1F2329";
-const FAKE_CURSOR_GLYPH = "█";
+const FAKE_CURSOR_GLYPH = "▌";
 
 type RenderSegment = {
   text: string;
@@ -98,17 +101,11 @@ type ComposerLayout = {
 };
 
 function charWidth(ch: string): number {
-  if (ZERO_WIDTH_CHARS.has(ch)) return 0;
-  const cp = ch.codePointAt(0) ?? 0;
-  return cp > 0x2e7f ? 2 : 1;
+  return measureCharWidth(ch);
 }
 
 function stringWidth(text: string): number {
-  let width = 0;
-  for (const ch of text) {
-    width += charWidth(ch);
-  }
-  return width;
+  return measureTextWidth(text);
 }
 
 function trimToWidth(text: string, width: number): string {
@@ -406,27 +403,9 @@ function buildInputContentSegments(
   return segments;
 }
 
-function buildCursorEscapeFromComposerLayout(layout: ComposerLayout): string | null {
-  for (let rowIndex = 0; rowIndex < layout.rows.length; rowIndex += 1) {
-    const row = layout.rows[rowIndex];
-    if (!row) continue;
-
-    let colOffset = 0;
-    for (const cell of row.cells) {
-      if (cell.text === CARET_MARKER) {
-        return `\x1b[${layout.startLine + rowIndex};${layout.contentStartCol + colOffset}H\x1b[?25l`;
-      }
-      colOffset += cell.width;
-    }
-  }
-
-  return null;
-}
-
-function getCursorAnchorFromComposerLayout(layout: ComposerLayout): {
-  caretRowOffset: number;
-  caretColumnOffset: number;
-} | null {
+function getCursorPositionFromComposerLayout(
+  layout: ComposerLayout,
+): { x: number; y: number } | null {
   for (let rowIndex = 0; rowIndex < layout.rows.length; rowIndex += 1) {
     const row = layout.rows[rowIndex];
     if (!row) continue;
@@ -435,8 +414,8 @@ function getCursorAnchorFromComposerLayout(layout: ComposerLayout): {
     for (const cell of row.cells) {
       if (cell.text === CARET_MARKER) {
         return {
-          caretRowOffset: rowIndex,
-          caretColumnOffset: colOffset,
+          x: layout.contentStartCol + colOffset - 1,
+          y: layout.startLine + rowIndex - 1,
         };
       }
       colOffset += cell.width;
@@ -642,6 +621,8 @@ export function FullscreenChat({
   goalNames = [],
   availableRows,
   availableCols,
+  cursorOriginX = 0,
+  cursorOriginY = 0,
 }: FullscreenChatProps) {
   const [input, setInput] = useState("");
   const [cursorOffset, setCursorOffset] = useState(0);
@@ -658,6 +639,7 @@ export function FullscreenChat({
   const [copyToast, setCopyToast] = useState<string | null>(null);
   const emptyHintTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [scrollOffset, setScrollOffset] = React.useState(0);
+  const [targetScrollOffset, setTargetScrollOffset] = React.useState(0);
   const [spinnerVerb, setSpinnerVerb] = React.useState(() => pickSpinnerVerb());
 
   React.useEffect(() => {
@@ -755,37 +737,69 @@ export function FullscreenChat({
     availableRows - composer.lines.length - 3,
   );
   const viewport = buildChatViewport(messages, availableCols, messageRows, scrollOffset);
+  const maxScrollOffset = Math.max(
+    0,
+    viewport.totalRows - viewport.maxVisibleRows,
+  );
   const composerLayout: ComposerLayout = {
     startLine: viewport.maxVisibleRows + 3 + composer.inputRowStartIndex + 1,
     contentStartCol: composer.contentStartCol,
     rows: composer.inputRows,
   };
-  setActiveCursorEscape(buildCursorEscapeFromComposerLayout(composerLayout));
-  const promptCursorAnchor = getCursorAnchorFromComposerLayout(composerLayout);
-  setActivePromptCursorAnchor(
-    promptCursorAnchor
-      ? {
-          promptLabel: getPromptLabel(bashMode),
-          ...promptCursorAnchor,
-        }
-      : null,
-  );
+  const cursorPosition = getCursorPositionFromComposerLayout(composerLayout);
+  const absoluteCursorPosition = cursorPosition
+    ? {
+        x: cursorOriginX + cursorPosition.x,
+        y: cursorOriginY + cursorPosition.y,
+      }
+    : null;
 
   React.useEffect(() => {
+    setActiveCursorEscape(
+      absoluteCursorPosition
+        ? buildHiddenCursorEscapeFromPosition(absoluteCursorPosition)
+        : null,
+    );
     return () => {
       setActiveCursorEscape(null);
-      setActivePromptCursorAnchor(null);
     };
-  }, []);
+  }, [absoluteCursorPosition]);
+
+  React.useEffect(() => {
+    setScrollOffset((prev) => Math.min(prev, maxScrollOffset));
+    setTargetScrollOffset((prev) => Math.min(prev, maxScrollOffset));
+  }, [maxScrollOffset]);
+
+  React.useEffect(() => {
+    if (scrollOffset === targetScrollOffset) {
+      return;
+    }
+
+    const interval = setInterval(() => {
+      setScrollOffset((prev) => {
+        if (prev === targetScrollOffset) {
+          return prev;
+        }
+
+        const delta = targetScrollOffset - prev;
+        const step = Math.max(
+          1,
+          Math.min(Math.abs(delta), Math.ceil(Math.abs(delta) * 0.35)),
+        );
+        return prev + Math.sign(delta) * step;
+      });
+    }, SCROLL_ANIMATION_INTERVAL_MS);
+
+    return () => clearInterval(interval);
+  }, [scrollOffset, targetScrollOffset]);
 
   const applyScroll = useCallback((direction: "up" | "down", kind: "page" | "line") => {
-    setScrollOffset((prev) => {
-      const maxOffset = Math.max(0, viewport.totalRows - 1);
+    setTargetScrollOffset((prev) => {
       const amount = kind === "page" ? viewport.maxVisibleRows : SCROLL_LINE_STEP;
       const delta = direction === "up" ? amount : -amount;
-      return Math.max(0, Math.min(maxOffset, prev + delta));
+      return Math.max(0, Math.min(maxScrollOffset, prev + delta));
     });
-  }, [viewport.maxVisibleRows, viewport.totalRows]);
+  }, [maxScrollOffset, viewport.maxVisibleRows]);
 
   const handleSubmit = useCallback((value: string) => {
     logTuiDebug("fullscreen-chat", "submit-attempt", {
@@ -810,6 +824,7 @@ export function FullscreenChat({
       setHistory((prev) => [...prev, trimmed]);
       setHistoryIdx(-1);
       setScrollOffset(0);
+      setTargetScrollOffset(0);
       return;
     }
 
@@ -820,6 +835,7 @@ export function FullscreenChat({
     setHistory((prev) => [...prev, trimmed]);
     setHistoryIdx(-1);
     setScrollOffset(0);
+    setTargetScrollOffset(0);
   }, [clearSelection, hasMatches, isProcessing, onClear, onSubmit]);
 
   useInput((inputChar, key) => {

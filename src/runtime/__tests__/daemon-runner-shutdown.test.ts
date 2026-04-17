@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as fsp from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
+import { EventEmitter } from "node:events";
 import { DaemonRunner } from "../daemon-runner.js";
 import type { ShutdownMarker } from "../daemon-runner.js";
 import { PIDManager } from "../pid-manager.js";
@@ -11,6 +12,8 @@ import type { LoopResult } from "../../orchestrator/loop/core-loop.js";
 import type { DaemonDeps } from "../daemon-runner.js";
 
 // ─── Helpers ───
+
+let shutdownSignals: EventEmitter;
 
 function makeTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "pulseed-shutdown-test-"));
@@ -29,6 +32,7 @@ function makeLoopResult(overrides: Partial<LoopResult> = {}): LoopResult {
 }
 
 function makeDeps(tmpDir: string, overrides: Partial<DaemonDeps> = {}): DaemonDeps {
+  const { config, ...restOverrides } = overrides;
   const mockCoreLoop = {
     run: vi.fn().mockResolvedValue(makeLoopResult()),
     stop: vi.fn(),
@@ -60,7 +64,9 @@ function makeDeps(tmpDir: string, overrides: Partial<DaemonDeps> = {}): DaemonDe
     stateManager: mockStateManager as unknown as DaemonDeps["stateManager"],
     pidManager,
     logger,
-    ...overrides,
+    shutdownSignalTarget: shutdownSignals,
+    config: { event_server_port: 0, ...config },
+    ...restOverrides,
   };
 }
 
@@ -116,6 +122,7 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
     tmpDir = makeTempDir();
     currentDaemon = null;
     currentStartPromise = null;
+    shutdownSignals = new EventEmitter();
   });
 
   afterEach(async () => {
@@ -145,7 +152,7 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
       await waitForDaemonRunning(tmpDir);
 
       // Emit SIGTERM — should set shuttingDown and exit the loop
-      process.emit("SIGTERM");
+      shutdownSignals.emit("SIGTERM");
 
       await expect(startPromise).resolves.toBeUndefined();
     });
@@ -175,7 +182,7 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
       const startPromise = daemon.start(["goal-1"]);
       currentStartPromise = startPromise;
       await waitForDaemonRunning(tmpDir);
-      process.emit("SIGTERM");
+      shutdownSignals.emit("SIGTERM");
       await startPromise;
 
       const marker = readMarker(tmpDir);
@@ -191,7 +198,7 @@ describe("DaemonRunner — Graceful Shutdown + Crash Recovery", () => {
       const startPromise = daemon.start(["goal-1"]);
       currentStartPromise = startPromise;
       await waitForDaemonRunning(tmpDir);
-      process.emit("SIGINT");
+      shutdownSignals.emit("SIGINT");
       await startPromise;
 
       const marker = readMarker(tmpDir);
