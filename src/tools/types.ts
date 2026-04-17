@@ -74,7 +74,7 @@ export const ToolMetadataSchema = z.object({
    */
   tags: z.array(z.string()).default([]),
   /** Whether this tool requires network access even if it is otherwise read-only. */
-  requiresNetwork: z.boolean().default(false),
+  requiresNetwork: z.boolean().optional(),
 });
 
 export type ToolMetadata = z.infer<typeof ToolMetadataSchema>;

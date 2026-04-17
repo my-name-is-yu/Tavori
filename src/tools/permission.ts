@@ -149,7 +149,7 @@ export class ToolPermissionManager {
     if (policy.sandboxMode === "read_only" && !tool.metadata.isReadOnly) {
       return { status: "denied", reason: "Read-only sandbox blocks mutating tools" };
     }
-    if (!policy.networkAccess && (tool.metadata.permissionLevel === "write_remote" || tool.metadata.requiresNetwork || tool.metadata.tags.includes("network"))) {
+    if (!policy.networkAccess && (tool.metadata.permissionLevel === "write_remote" || tool.metadata.requiresNetwork === true || tool.metadata.tags.includes("network"))) {
       return { status: "denied", reason: "Network access is disabled for this session" };
     }
     if (tool.metadata.permissionLevel === "write_local" || tool.metadata.permissionLevel === "execute" || tool.metadata.permissionLevel === "write_remote") {
