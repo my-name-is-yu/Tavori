@@ -76,12 +76,12 @@ type GoalThreshold =
       value: string | number | boolean;
     };
 
-interface WorkingMemorySelection {
+export interface ContextAssemblerWorkingMemorySelection {
   shortTerm: unknown[];
-  lessons: LessonEntry[];
+  lessons: ContextAssemblerLessonEntry[];
 }
 
-interface LessonEntry {
+export interface ContextAssemblerLessonEntry {
   lesson?: string;
   content?: string;
   relevance_tags?: string[];
@@ -89,20 +89,20 @@ interface LessonEntry {
   access_count?: number;
 }
 
-interface KnowledgeEntry {
+export interface ContextAssemblerKnowledgeEntry {
   question?: string;
   answer?: string;
   content?: string;
   confidence?: number;
 }
 
-interface ReflectionEntry {
+export interface ContextAssemblerReflectionEntry {
   why_it_worked_or_failed?: string;
   what_to_do_differently?: string;
   what_was_attempted?: string;
 }
 
-interface StrategyTemplateEntry {
+export interface ContextAssemblerStrategyTemplateEntry {
   hypothesis_pattern: string;
   effectiveness_score: number;
   similarity?: number;
@@ -111,10 +111,16 @@ interface StrategyTemplateEntry {
   createdAt?: string;
 }
 
-interface TaskResultEntry {
+export interface ContextAssemblerTaskResultEntry {
   task_description: string;
   outcome: string;
   success: boolean;
+}
+
+interface ContextAssemblerVectorSearchResult {
+  id: string;
+  text: string;
+  similarity: number;
 }
 
 export interface ContextAssemblerDeps {
@@ -127,18 +133,18 @@ export interface ContextAssemblerDeps {
       dims: string[],
       tags: string[],
       max?: number
-    ): Promise<WorkingMemorySelection>;
+    ): Promise<ContextAssemblerWorkingMemorySelection>;
     selectForWorkingMemorySemantic?(
       goalId: string,
       query: string,
       dims: string[],
       tags: string[],
       max?: number
-    ): Promise<WorkingMemorySelection>;
+    ): Promise<ContextAssemblerWorkingMemorySelection>;
   };
   knowledgeManager?: {
-    getRelevantKnowledge?(goalId: string): Promise<KnowledgeEntry[]>;
-    loadKnowledge?(goalId: string, tags?: string[]): Promise<KnowledgeEntry[]>;
+    getRelevantKnowledge?(goalId: string): Promise<ContextAssemblerKnowledgeEntry[]>;
+    loadKnowledge?(goalId: string, tags?: string[]): Promise<ContextAssemblerKnowledgeEntry[]>;
   };
   contextProvider?: {
     buildWorkspaceContextItems?(
@@ -146,14 +152,14 @@ export interface ContextAssemblerDeps {
       dimensionName: string
     ): Promise<Array<{ label: string; content: string }>>;
   };
-  reflectionGetter?: (goalId: string, limit?: number) => Promise<ReflectionEntry[]>;
-  strategyTemplateSearch?: (query: string, topK?: number) => Promise<StrategyTemplateEntry[]>;
+  reflectionGetter?: (goalId: string, limit?: number) => Promise<ContextAssemblerReflectionEntry[]>;
+  strategyTemplateSearch?: (query: string, topK?: number) => Promise<ContextAssemblerStrategyTemplateEntry[]>;
   vectorIndex?: {
     search(
       query: string,
       topK?: number,
       threshold?: number
-    ): Promise<Array<{ id: string; text: string; similarity: number; metadata?: Record<string, unknown> }>>;
+    ): Promise<ContextAssemblerVectorSearchResult[]>;
   };
   budgetTokens?: number;
   budgetAllocator?: (totalBudget: number) => BudgetAllocation;
@@ -243,7 +249,9 @@ export class ContextAssembler {
 
     // Overrides are percentages; convert to absolute tokens
     const result = { ...base };
-    for (const [cat, pct] of Object.entries(overrides) as [keyof BudgetAllocation, number][]) {
+    for (const cat of Object.keys(overrides) as BudgetCategory[]) {
+      const pct = overrides[cat];
+      if (pct === undefined) continue;
       result[cat] = Math.floor(this.budget * (pct / 100));
     }
     return result;
@@ -382,7 +390,7 @@ export class ContextAssembler {
     const result = await this.deps.memoryLifecycle.selectForWorkingMemory(goalId, dims, []);
     if (!result?.lessons?.length) return "";
 
-    let lessons = result.lessons;
+    let lessons: ContextAssemblerLessonEntry[] = [...result.lessons];
 
     // Apply stale filtering only when we have more entries than needed
     const budgetedMax = 5; // default lesson slot max
@@ -416,7 +424,7 @@ export class ContextAssembler {
   private async buildKnowledge(goalId: string): Promise<string> {
     if (!this.deps.knowledgeManager && !this.deps.vectorIndex) return "";
 
-    let entries: KnowledgeEntry[] = [];
+    let entries: ContextAssemblerKnowledgeEntry[] = [];
 
     if (this.deps.knowledgeManager?.getRelevantKnowledge) {
       entries = await this.deps.knowledgeManager.getRelevantKnowledge(goalId);
@@ -435,7 +443,7 @@ export class ContextAssembler {
     if (!this.deps.strategyTemplateSearch) return "";
     const query = goalState?.active_strategy?.hypothesis ?? goalState?.title ?? "";
     if (!query) return "";
-    let templates = await this.deps.strategyTemplateSearch(query, 3);
+    let templates: ContextAssemblerStrategyTemplateEntry[] = [...await this.deps.strategyTemplateSearch(query, 3)];
     if (!templates?.length) return "";
 
     if (this.deps.vectorIndex) {
@@ -553,13 +561,13 @@ export class ContextAssembler {
   }
 }
 
-function isTaskResultEntryArray(value: unknown): value is TaskResultEntry[] {
+function isTaskResultEntryArray(value: unknown): value is ContextAssemblerTaskResultEntry[] {
   return Array.isArray(value) && value.every(isTaskResultEntry);
 }
 
-function isTaskResultEntry(value: unknown): value is TaskResultEntry {
+function isTaskResultEntry(value: unknown): value is ContextAssemblerTaskResultEntry {
   if (!value || typeof value !== "object") return false;
-  const candidate = value as Partial<TaskResultEntry>;
+  const candidate = value as Partial<ContextAssemblerTaskResultEntry>;
   return (
     typeof candidate.task_description === "string" &&
     typeof candidate.outcome === "string" &&
