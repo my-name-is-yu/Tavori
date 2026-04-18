@@ -1,6 +1,5 @@
 import React from "react";
-import { Writable } from "node:stream";
-import { render } from "ink";
+import { renderToString } from "ink";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ReportView } from "../report-view.js";
 import { ReportSchema } from "../../../base/types/report.js";
@@ -45,35 +44,17 @@ describe("ReportView", () => {
       },
     });
 
-    let output = "";
-    const stdout = new Writable({
-      write(chunk, _encoding, callback) {
-        output += chunk.toString();
-        callback();
-      },
-    }) as Writable & { columns: number; rows: number };
-    stdout.columns = 80;
-    stdout.rows = 24;
-
-    const screen = render(
+    const output = renderToString(
       React.createElement(ReportView, {
         report,
         onDismiss: () => {},
       }),
-      {
-        patchConsole: false,
-        stdout,
-        stderr: process.stderr,
-      },
+      { columns: 80 },
     );
-
-    await new Promise<void>((resolve) => setImmediate(resolve));
 
     expect(output).toContain("File Diff");
     expect(output).toContain("src/example.ts");
     expect(output).toContain("-before");
     expect(output).toContain("+after");
-
-    screen.unmount();
   });
 });
