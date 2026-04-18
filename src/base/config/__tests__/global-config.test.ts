@@ -30,6 +30,13 @@ describe("loadGlobalConfig", () => {
       await expect(loadGlobalConfig()).resolves.toMatchObject({
         daemon_mode: false,
         no_flicker: true,
+        interactive_automation: {
+          enabled: false,
+          default_desktop_provider: "codex_app",
+          default_browser_provider: "manus_browser",
+          default_research_provider: "perplexity_research",
+          require_approval: "always",
+        },
       });
     });
   });
@@ -46,6 +53,62 @@ describe("loadGlobalConfig", () => {
       await expect(loadGlobalConfig()).resolves.toMatchObject({
         daemon_mode: false,
         no_flicker: false,
+        interactive_automation: {
+          enabled: false,
+        },
+      });
+    });
+  });
+
+  it("preserves interactive automation settings from config.json", async () => {
+    await withTempPulseedHome(async (tmpDir) => {
+      await fs.writeFile(
+        path.join(tmpDir, "config.json"),
+        JSON.stringify({
+          interactive_automation: {
+            enabled: true,
+            default_desktop_provider: "codex_app",
+            require_approval: "write",
+            denied_apps: ["Bank"],
+          },
+        }, null, 2),
+        "utf8",
+      );
+
+      const { getConfigKeys, loadGlobalConfig } = await import("../global-config.js");
+      await expect(loadGlobalConfig()).resolves.toMatchObject({
+        interactive_automation: {
+          enabled: true,
+          default_desktop_provider: "codex_app",
+          default_browser_provider: "manus_browser",
+          default_research_provider: "perplexity_research",
+          require_approval: "write",
+          denied_apps: ["Bank"],
+        },
+      });
+      expect(getConfigKeys()).toContain("interactive_automation");
+    });
+  });
+
+  it("loads interactive automation settings synchronously for tool registration", async () => {
+    await withTempPulseedHome(async (tmpDir) => {
+      await fs.writeFile(
+        path.join(tmpDir, "config.json"),
+        JSON.stringify({
+          interactive_automation: {
+            enabled: true,
+            denied_apps: ["Protected App"],
+          },
+        }, null, 2),
+        "utf8",
+      );
+
+      const { loadGlobalConfigSync } = await import("../global-config.js");
+      expect(loadGlobalConfigSync()).toMatchObject({
+        interactive_automation: {
+          enabled: true,
+          denied_apps: ["Protected App"],
+        },
       });
     });
   });

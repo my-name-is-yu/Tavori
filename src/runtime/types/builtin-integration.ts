@@ -1,6 +1,10 @@
-export type BuiltinIntegrationId = "soil-display" | "mcp-bridge" | "foreign-plugin-bridge";
+export type BuiltinIntegrationId =
+  | "soil-display"
+  | "mcp-bridge"
+  | "foreign-plugin-bridge"
+  | "interactive-automation";
 
-export type BuiltinIntegrationKind = "display" | "bridge";
+export type BuiltinIntegrationKind = "display" | "bridge" | "automation";
 
 export type BuiltinIntegrationStatus = "available" | "disabled";
 

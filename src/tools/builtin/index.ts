@@ -83,6 +83,17 @@ export { RemoveScheduleTool } from "../schedule/RemoveScheduleTool/RemoveSchedul
 export { ResumeScheduleTool } from "../schedule/ResumeScheduleTool/ResumeScheduleTool.js";
 export { RunScheduleTool } from "../schedule/RunScheduleTool/RunScheduleTool.js";
 export { UpdateScheduleTool } from "../schedule/UpdateScheduleTool/UpdateScheduleTool.js";
+export {
+  BrowserGetStateTool,
+  BrowserRunWorkflowTool,
+  DesktopClickTool,
+  DesktopGetAppStateTool,
+  DesktopListAppsTool,
+  DesktopTypeTextTool,
+  ResearchAnswerWithSourcesTool,
+  ResearchWebTool,
+} from "../automation/index.js";
+import type { InteractiveAutomationToolPolicy } from "../automation/index.js";
 
 import { GlobTool } from "../fs/GlobTool/GlobTool.js";
 import { GrepTool } from "../fs/GrepTool/GrepTool.js";
@@ -166,6 +177,16 @@ import { RemoveScheduleTool } from "../schedule/RemoveScheduleTool/RemoveSchedul
 import { ResumeScheduleTool } from "../schedule/ResumeScheduleTool/ResumeScheduleTool.js";
 import { RunScheduleTool } from "../schedule/RunScheduleTool/RunScheduleTool.js";
 import { UpdateScheduleTool } from "../schedule/UpdateScheduleTool/UpdateScheduleTool.js";
+import {
+  BrowserGetStateTool,
+  BrowserRunWorkflowTool,
+  DesktopClickTool,
+  DesktopGetAppStateTool,
+  DesktopListAppsTool,
+  DesktopTypeTextTool,
+  ResearchAnswerWithSourcesTool,
+  ResearchWebTool,
+} from "../automation/index.js";
 import type { AdapterRegistry } from "../../orchestrator/execution/adapter-layer.js";
 import type { SessionManager } from "../../orchestrator/execution/session-manager.js";
 import type { ObservationEngine } from "../../platform/observation/observation-engine.js";
@@ -177,6 +198,12 @@ import type { PluginLoader } from "../../runtime/plugin-loader.js";
 import type { ScheduleEngine } from "../../runtime/schedule/engine.js";
 import type { TrustManager } from "../../platform/traits/trust-manager.js";
 import type { IEmbeddingClient } from "../../platform/knowledge/embedding-client.js";
+import { loadGlobalConfigSync } from "../../base/config/global-config.js";
+import {
+  createDefaultInteractiveAutomationRegistry,
+  type CodexAppComputerUseBridge,
+  type InteractiveAutomationRegistry,
+} from "../../runtime/interactive-automation/index.js";
 
 export interface BuiltinToolDeps {
   stateManager?: StateManager;
@@ -191,6 +218,9 @@ export interface BuiltinToolDeps {
   scheduleEngine?: ScheduleEngine;
   embeddingClient?: IEmbeddingClient | null;
   embeddingModel?: string;
+  interactiveAutomationRegistry?: InteractiveAutomationRegistry;
+  interactiveAutomationPolicy?: InteractiveAutomationToolPolicy;
+  codexAppComputerUseBridge?: CodexAppComputerUseBridge;
 }
 
 /** All built-in tools, sorted alphabetically by name. */
@@ -323,6 +353,38 @@ export function createBuiltinTools(deps?: BuiltinToolDeps): ITool[] {
       new PauseScheduleTool(deps.scheduleEngine),
       new ResumeScheduleTool(deps.scheduleEngine),
       new RunScheduleTool(deps.scheduleEngine),
+    );
+  }
+
+  const interactiveAutomationConfig = loadGlobalConfigSync().interactive_automation;
+  const shouldRegisterInteractiveAutomation =
+    deps?.interactiveAutomationRegistry !== undefined || interactiveAutomationConfig.enabled;
+  const interactiveAutomationRegistry = shouldRegisterInteractiveAutomation
+    ? deps?.interactiveAutomationRegistry
+      ?? createDefaultInteractiveAutomationRegistry({
+        codexAppBridge: deps?.codexAppComputerUseBridge,
+        defaultProviders: {
+          desktop: interactiveAutomationConfig.default_desktop_provider,
+          browser: interactiveAutomationConfig.default_browser_provider,
+          research: interactiveAutomationConfig.default_research_provider,
+        },
+      })
+    : undefined;
+  const interactiveAutomationPolicy = deps?.interactiveAutomationPolicy ?? {
+    requireApproval: interactiveAutomationConfig.require_approval,
+    allowedApps: interactiveAutomationConfig.allowed_apps,
+    deniedApps: interactiveAutomationConfig.denied_apps,
+  };
+  if (interactiveAutomationRegistry) {
+    tools.push(
+      new BrowserGetStateTool(interactiveAutomationRegistry, interactiveAutomationPolicy),
+      new BrowserRunWorkflowTool(interactiveAutomationRegistry, interactiveAutomationPolicy),
+      new DesktopClickTool(interactiveAutomationRegistry, interactiveAutomationPolicy),
+      new DesktopGetAppStateTool(interactiveAutomationRegistry, interactiveAutomationPolicy),
+      new DesktopListAppsTool(interactiveAutomationRegistry, interactiveAutomationPolicy),
+      new DesktopTypeTextTool(interactiveAutomationRegistry, interactiveAutomationPolicy),
+      new ResearchAnswerWithSourcesTool(interactiveAutomationRegistry, interactiveAutomationPolicy),
+      new ResearchWebTool(interactiveAutomationRegistry, interactiveAutomationPolicy),
     );
   }
 
