@@ -8,7 +8,7 @@
 export interface ConfigKeyMeta {
   label: string;
   description: string;
-  type: "boolean" | "number" | "string";
+  type: "boolean" | "number" | "string" | "object";
   effects: string[];
   requirements: string[];
   risks: string[];
@@ -59,6 +59,27 @@ export const CONFIG_METADATA: Record<string, ConfigKeyMeta> = {
     revert: "pulseed config set no_flicker false",
     appliesAt: "immediate",
     requiresExplicitApproval: false,
+  },
+  interactive_automation: {
+    label: "Interactive Automation",
+    description: "Desktop, browser, and research automation provider settings",
+    type: "object",
+    effects: [
+      "PulSeed can route selected tasks to configured desktop, browser, and research automation providers",
+      "Desktop and browser mutation tools can interact with local or remote user interfaces",
+      "Research tools can call a configured research provider for sourced answers",
+    ],
+    requirements: [
+      "Provider credentials or host bridges must be configured before non-noop providers become available",
+      "Desktop providers may require local app accessibility permissions",
+    ],
+    risks: [
+      "Misconfigured GUI automation can click, type, or submit data in the wrong application",
+      "Remote research or browser providers may send task content to third-party services",
+    ],
+    revert: "pulseed config set interactive_automation '{\"enabled\":false}'",
+    appliesAt: "next_session",
+    requiresExplicitApproval: true,
   },
 };
 

@@ -71,6 +71,25 @@ export class ToolExecutor {
         Date.now() - startTime,
       );
     }
+    if (semanticResult.status === "needs_approval" && tool.metadata.tags.includes("automation")) {
+      const approvalRequest = {
+        toolName: tool.metadata.name,
+        input,
+        reason: semanticResult.reason,
+        permissionLevel: tool.metadata.permissionLevel,
+        isDestructive: tool.metadata.isDestructive,
+        reversibility: "unknown",
+        ...(callId ? { callId } : {}),
+      } as const;
+      await context.onApprovalRequested?.(approvalRequest);
+      const approved = await context.approvalFn(approvalRequest);
+      if (!approved) {
+        return this.failResult(
+          `User denied approval: ${semanticResult.reason}`,
+          Date.now() - startTime,
+        );
+      }
+    }
 
     // --- Gate 3: Permission Manager (3-layer) ---
     const permResult = await this.permissionManager.check(tool, input, context);
